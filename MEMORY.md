@@ -10,10 +10,13 @@ Current implementation is development tooling only, not a forum HTTP/API/UI.
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.
 Dependency-free checks pass on Node 24.19.0; this is not an application build.
 Real integration and persistence checks pass on macOS arm64 using Linux/arm64
-containers under Docker Desktop.
-Other runtime platforms, CI, and managed-provider operations remain unvalidated. See
-bootstrap Lore task `LC-20261011-R161` for verification and limits. Do not weaken product revision,
-privacy, retry, or recovery requirements because bootstrap tests pass.
+containers under Docker Desktop. The same bootstrap checks and real suites passed
+on Ubuntu 24.04 (Linux/amd64) for `4865058` in
+[CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771).
+Other runtime platforms, managed-provider operations, and product validation remain
+open. See bootstrap Lore task `LC-20261011-R161` for the original adoption scope.
+Do not weaken product revision, privacy, retry, or recovery requirements because
+bootstrap tests pass.
 
 `.env.local` and `.local/` are ignored generated state. Initialization never replaces
 passwords silently; persistent volumes retain their own credentials. Runtime and
@@ -30,7 +33,8 @@ expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.
 `test:persistence` separately interrupts local services to check committed rows,
 history, bucket settings, and exact object versions through stop/start/recreation.
-Its restart uses `up --no-recreate --wait`; Linux CI rejected `start --wait`.
+Its restart uses `up --no-recreate --wait`; Linux CI rejected `start --wait`
+(Lore-ID: LC-20261012-AYAB).
 Unchanged container IDs prove that this phase reuses the stopped containers.
 Persistence checks do not rerun storage setup between phases or remove volumes;
 they clean up only their own scratch data. CLI transfer files are uniquely named

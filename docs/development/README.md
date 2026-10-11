@@ -11,8 +11,11 @@ Use a local Docker engine, the Docker Compose plugin (v2 or later), and Node.js
 24.19.0 from `.nvmrc`. The dependency-free checks passed under Node 24.19.0 and
 22.22.2 in the adoption environment. Real integration and persistence passed with
 Docker Desktop engine 29.8.2, Compose 5.5.1, and linux/arm64 images on macOS arm64.
-CI and other runtime platforms remain unvalidated. These results do not validate
-the later application or its future dependencies.
+[CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)
+for `4865058` also passed on Ubuntu 24.04 (Linux/amd64) with Node 24.19.0: all 40
+checks and the real integration and persistence suites. Other runtime platforms,
+managed providers, and product behavior remain unvalidated. These results do not
+validate the later application or its future dependencies.
 `npm ci --ignore-scripts` installs the dependency-free tool package. The lockfile
 is real, generated offline; it intentionally contains no application dependencies.
 
@@ -20,14 +23,14 @@ The Compose profile pins these tags to immutable image-index digests:
 
 | Service | Image | Status |
 |---|---|---|
-| PostgreSQL | `postgres:18.4-bookworm` | Official image; major matches the architecture. Real roles, migrations and persistence passed on linux/arm64. |
+| PostgreSQL | `postgres:18.4-bookworm` | Official image; major matches the architecture. Real roles, migrations and persistence passed on Linux/arm64 and Linux/amd64. |
 | S3-compatible storage | `chrislusf/seaweedfs:4.48` | Single-node `mini` mode, versioning initialized through the S3 API. Local choice only. |
 | Local S3 setup/check client | `public.ecr.aws/aws-cli/aws-cli:2.31.0` | One-shot CLI containers, not an AWS account or application dependency. |
 
-All three images were pulled and executed locally. Exact image-index pins are in
-[compose.yaml](../../compose.yaml). Index pins
-allow native platform selection without following a moving tag. The published
-amd64 manifests have been identified but not executed; repeat the checks in CI.
+All three images were pulled and executed as Linux/arm64 locally and Linux/amd64
+in the linked CI run. Exact image-index pins are in [compose.yaml](../../compose.yaml).
+Index pins allow native platform selection without following a moving tag.
+Repeat the checks when changing image pins or runtimes and on additional platforms.
 
 ## Commands
 
@@ -175,10 +178,11 @@ replay, browser CORS, or revocation.
 
 These checks do not test all multipart edge cases, application authorization,
 publication transactions, backup/restore, or hosted-provider compatibility.
-Those are explicit backlog gates. The local Docker-backed assertions passed on
-macOS arm64 using Linux/arm64 containers. Bootstrap Lore task `LC-20261011-R161`
-records the commands, failures, fixes, and verification limits. Find the record
-with `git log --all --fixed-strings --grep='Lore-ID: LC-20261011-R161'`.
+Those are explicit backlog gates. The Docker-backed assertions passed on macOS
+arm64 using Linux/arm64 containers and in the Ubuntu 24.04 (Linux/amd64) CI run linked
+above. Bootstrap Lore task `LC-20261011-R161` records the original adoption;
+`LC-20261012-AYAB` records the Compose restart compatibility fix. Find the original
+record with `git log --all --fixed-strings --grep='Lore-ID: LC-20261011-R161'`.
 Local smoke success is not product acceptance, a cloud-agent pilot, or a guarantee
 that another S3-compatible provider behaves identically.
 

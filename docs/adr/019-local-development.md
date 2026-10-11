@@ -1,6 +1,9 @@
 # ADR-019: Local database and object-storage development profile
 
-Status: bootstrap implementation choice; Node 24 and local linux/arm64 integration/persistence validated. CI and managed-provider validation remain open.
+Status: bootstrap implementation choice; Node 24 tooling, integration, and
+persistence validated on macOS arm64 using Linux/arm64 containers and Ubuntu 24.04
+(Linux/amd64) CI. Managed-provider and product validation remain open.
+
 Scope: developer environment and CI only; not a product-policy or production-provider decision.
 
 ## Decision and rationale
@@ -13,9 +16,10 @@ repository's `.mjs` conventions. The proposed application remains TypeScript/Nod
 
 Pin the observed multi-platform image indexes after successful local validation.
 Record their selected platform manifests separately: an index pin fixes the set of
-images while allowing native architecture selection. Only linux/arm64 has run;
-published amd64 manifests are not evidence of an amd64 pass. Review pins when
-updating a dependency, and rerun the same checks on each supported runtime platform.
+images while allowing native architecture selection. The pinned images have run
+as Linux/arm64 locally and Linux/amd64 in CI; other platforms remain unvalidated.
+Review pins when updating a dependency, and rerun the same checks on each supported
+runtime platform.
 
 Copy the unchanged PostgreSQL role hook from its read-only host mount to a
 container-local mode-0644 file before invoking the official entrypoint. A local
@@ -61,15 +65,25 @@ persistence through stop/start and recreation. Bootstrap Lore task
 `LC-20261011-R161` records the verification results, earlier access failures, and
 initialization/transfer regressions.
 
+[CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)
+on Ubuntu 24.04 (Linux/amd64)
+passed for `4865058` with Node 24.19.0: all 40 checks and both real integration and
+persistence suites. All three images reported `linux/amd64`. The first CI attempt
+rejected `start --wait`; Lore task `LC-20261012-AYAB` changed the restart to
+`up --no-recreate --wait`, retaining the health wait and unchanged-container-ID
+assertion. The successful run verified retained data, versioning, and credentials
+through restart and forced recreation.
+
 Require first pull, engine/platform identification, initialization, the real local
 smoke suite, signed GET checks, and persistent-volume stop/start and recreation
 checks. The persistence command must inspect retained versioning without running
 setup again, so initialization cannot mask a loss of stored configuration. It
 removes only its own scratch resources and keeps volumes. Separate this service
-interruption from the ordinary smoke command. CI includes both commands, but has
-not run in this task. Repeat against the same pinned indexes on intended CI
-platforms before declaring those platforms supported. Signed upload/version-specific
-grant validation and managed-provider tests remain independent gates before dependent features.
+interruption from the ordinary smoke command. CI runs both commands. Repeat these
+checks when changing image pins or runtimes and on additional platforms before
+declaring those configurations validated. Signed upload/version-specific grant
+validation, managed-provider tests, and product/architecture AC/AV scenarios remain
+independent gates before dependent features or claims of product validation.
 
 No Git staging, commit, push, or workflow run is authorized merely by this document.
 Follow the installed repository instructions and the user's explicit permissions.

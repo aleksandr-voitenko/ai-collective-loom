@@ -75,11 +75,13 @@ publication concurrency, and coordinated backup/restore require subsequent tests
 Node 24 checks and real-service integration/persistence passed on macOS arm64
 using Linux/arm64 containers under Docker Desktop. Bootstrap Lore task
 `LC-20261011-R161` records the verification results, initial failures, and fixes.
-CI and other container platforms have not been exercised.
+[Linux/amd64 CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)
+passed for `4865058` on Ubuntu 24.04 with Node 24.19.0: all 40 checks, real
+PostgreSQL/S3 integration, and persistence through stop/start and container recreation.
 
 The local images are pinned to the observed immutable multi-platform image indexes.
-The exact references are in [compose.yaml](compose.yaml); amd64 execution remains
-an open gate on the intended CI platform.
+The exact references are in [compose.yaml](compose.yaml). All three images have
+executed as Linux/arm64 locally and Linux/amd64 in CI; other platforms remain unvalidated.
 The managed production storage provider remains open; it must pass the required
 S3/versioning operations. Local SeaweedFS does not select production hosting.
 

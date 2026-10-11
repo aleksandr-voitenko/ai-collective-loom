@@ -12,8 +12,12 @@ Node 24.19.0 dependency-free checks, Compose startup, real PostgreSQL/S3 integra
 and stop/start/container-recreation persistence passed on macOS arm64 using
 Linux/arm64 containers. Bootstrap Lore task `LC-20261011-R161` records the results,
 failures, and fixes; [compose.yaml](../../compose.yaml) pins the image indexes.
-The application, CI, and amd64 runtime have not
-been exercised; run the same required checks on the intended CI platform.
+[Linux/amd64 CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)
+passed for `4865058` on Ubuntu 24.04 with Node 24.19.0, including all 40 checks,
+real integration, and persistence across stop/start and container recreation.
+This validates the bootstrap on that CI platform; application behavior and
+product/architecture AC/AV scenarios remain unvalidated. Additional platforms
+and future runtime/image changes require their own checks.
 Validate the remaining S3 presigned-upload/version-specific grant contract before
 using signed grants in application code. No
 managed-provider compatibility has been certified. No application dependency
