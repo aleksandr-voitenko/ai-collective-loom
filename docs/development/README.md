@@ -150,10 +150,12 @@ Cleanup failures are failures, not a successful test exit. It never deletes a bu
 uniquely named scratch table/row using the migrator and application roles, stores
 two staging versions and one final version, then verifies their stored lengths
 and exact contents
-before and after `docker compose stop`/`start --wait` and
+before and after `docker compose stop`/`up -d --no-recreate --wait` and
 `up --force-recreate --wait`. It also compares migration history and credentials,
 checks that both buckets retain versioning, and confirms that container IDs really
-change on recreation. It does not rerun storage initialization between phases,
+change on recreation. The restart phase uses `up --no-recreate --wait` because
+some Compose versions lack `start --wait`; unchanged IDs prove container reuse.
+It does not rerun storage initialization between phases,
 which could hide lost bucket settings. Named volumes are never removed. Only
 scratch resources created by the test are cleaned up; cleanup errors fail the
 command. Services remain running after a successful run. Do not run this while

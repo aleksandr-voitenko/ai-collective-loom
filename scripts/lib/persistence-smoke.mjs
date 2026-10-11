@@ -65,7 +65,9 @@ export async function persistenceSmoke({ root, config, tool, waitForStorage }) {
     const originalContainers = containerIds();
     assert.equal(originalContainers.length, 2, "Both local services must be running.");
     tool.compose(["stop", "postgres", "s3"]);
-    tool.compose(["start", "--wait", "--wait-timeout", "90", "postgres", "s3"]);
+    // Linux CI's Compose lacks start --wait. Reuse the stopped containers through
+    // up's supported health wait; unchanged IDs below still prove a true restart.
+    tool.compose(["up", "-d", "--no-recreate", "--wait", "--wait-timeout", "90", "postgres", "s3"]);
     assert.deepEqual(containerIds(), originalContainers, "Stop/start must reuse containers.");
     await verify("stop/start");
     tool.compose(["up", "-d", "--force-recreate", "--wait", "--wait-timeout", "90", "postgres", "s3"]);

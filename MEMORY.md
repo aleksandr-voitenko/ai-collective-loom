@@ -30,6 +30,8 @@ expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.
 `test:persistence` separately interrupts local services to check committed rows,
 history, bucket settings, and exact object versions through stop/start/recreation.
+Its restart uses `up --no-recreate --wait`; Linux CI rejected `start --wait`.
+Unchanged container IDs prove that this phase reuses the stopped containers.
 Persistence checks do not rerun storage setup between phases or remove volumes;
 they clean up only their own scratch data. CLI transfer files are uniquely named
 and immutable to avoid an observed Docker Desktop host-file fixture limitation.
