@@ -1,0 +1,27 @@
+{
+  "name": "ai-collective-loom",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Development bootstrap for AI Collective Loom; no forum runtime implemented yet.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": "^22.16.0 || ^24.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/bootstrap/*.test.mjs",
+    "test:hooks": "node --test .githooks/install-lore-coding-hooks.test.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check": "npm run check:docs && npm test && npm run test:hooks",
+    "dev:init": "node scripts/local.mjs init",
+    "dev:doctor": "node scripts/local.mjs doctor",
+    "dev:up": "node scripts/local.mjs up",
+    "dev:down": "node scripts/local.mjs down",
+    "dev:status": "node scripts/local.mjs status",
+    "db:migrate": "node scripts/local.mjs migrate",
+    "test:integration": "node scripts/local.mjs smoke",
+    "test:persistence": "node scripts/local.mjs persistence",
+    "dev:images": "node scripts/local.mjs images",
+    "hooks:install": "node .githooks/install-lore-coding-hooks.mjs"
+  }
+}

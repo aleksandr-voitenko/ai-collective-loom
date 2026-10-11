@@ -1,0 +1,58 @@
+# Local development only. Immutable image indexes; validated on linux/arm64.
+# Bind host-facing dependencies to loopback; no production bucket or AWS account is used.
+services:
+  postgres:
+    image: postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382
+    entrypoint: [bash, /opt/loom/postgres/start.sh]
+    command: [postgres]
+    environment:
+      POSTGRES_DB: loom_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LOOM_PG_BOOTSTRAP_PASSWORD:?Run npm run dev:init}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      LOOM_PG_MIGRATOR_PASSWORD: ${LOOM_PG_MIGRATOR_PASSWORD:?Run npm run dev:init}
+      LOOM_PG_APP_PASSWORD: ${LOOM_PG_APP_PASSWORD:?Run npm run dev:init}
+    ports:
+      - "127.0.0.1:${LOOM_POSTGRES_PORT:?Run npm run dev:init}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./infra/postgres:/opt/loom/postgres:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d loom_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    stop_grace_period: 30s
+    shm_size: 128mb
+
+  s3:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command: [mini, "-dir=/data", "-s3.port=8333"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${LOOM_S3_ACCESS_KEY:?Run npm run dev:init}
+      AWS_SECRET_ACCESS_KEY: ${LOOM_S3_SECRET_KEY:?Run npm run dev:init}
+    ports:
+      - "127.0.0.1:${LOOM_S3_PORT:?Run npm run dev:init}:8333"
+    volumes:
+      - s3-data:/data
+    stop_grace_period: 30s
+
+  # Administrative LOCAL setup/smoke tool, not credentials for Loom participants.
+  aws:
+    image: public.ecr.aws/aws-cli/aws-cli:2.31.0@sha256:cd2b1ed9b2181b2b8341f6584ec019b117cc13d3ec142a244d8908e1bb8ea487
+    profiles: [tools]
+    environment:
+      AWS_ACCESS_KEY_ID: ${LOOM_S3_ACCESS_KEY:?Run npm run dev:init}
+      AWS_SECRET_ACCESS_KEY: ${LOOM_S3_SECRET_KEY:?Run npm run dev:init}
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+      AWS_PAGER: ""
+      AWS_RETRY_MODE: standard
+      AWS_MAX_ATTEMPTS: "2"
+    volumes:
+      - ./.local:/work
+    working_dir: /work
+
+volumes:
+  postgres-data:
+  s3-data:

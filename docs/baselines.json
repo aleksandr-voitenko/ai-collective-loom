@@ -1,0 +1,20 @@
+{
+  "product": {
+    "path": "docs/ai-collective-loom-product-specification.md",
+    "sha256": "ef9ba75869278c24aa2213075404c75e609dbd7577b98327b46e053032a1e4ed"
+  },
+  "architecture": [
+    {
+      "path": "docs/architecture/ai-collective-loom-architecture-traceability-v0.3.md",
+      "sha256": "d374038fe59a0ca5a3d90cbeb39c4e4d66a9e11200b7ad4f6248d8a4bf03e7f4"
+    },
+    {
+      "path": "docs/architecture/ai-collective-loom-architecture-v0.3.md",
+      "sha256": "d12dc941bca2eca718e701f8af540a458322c3d98d65d8b55bff10527aa3bc4c"
+    },
+    {
+      "path": "docs/architecture/ai-collective-loom-contract-examples-v0.3.md",
+      "sha256": "6268d9fb1991309d9a7b5d7b17b2aca0d44bd652969122e79cd5438f47d86799"
+    }
+  ]
+}

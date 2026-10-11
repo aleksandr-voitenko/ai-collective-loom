@@ -1,0 +1,52 @@
+name: Bootstrap checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - name: Check bootstrap JavaScript syntax
+        run: find scripts tests/bootstrap -name '*.mjs' -print0 | xargs -0 -n 1 node --check
+      - run: bash -n infra/postgres/10-roles.sh && bash -n infra/postgres/start.sh
+
+  local-integration:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run dev:init
+      - run: npm run dev:doctor
+      - run: npm run dev:up
+      - run: npm run test:integration
+      - run: npm run test:persistence
+      - name: Show local image IDs
+        if: always()
+        run: npm run dev:images
+      - name: Stop the ephemeral runner's local services
+        if: always()
+        run: npm run dev:down
