@@ -126,8 +126,11 @@ Add new migrations after existing versions rather than rewriting or inserting be
 
 The runner uses one `psql` connection and transaction, a transaction-scoped advisory
 lock, and explicit lock/statement deadlines. A failed migration rolls back its
-transaction. Files must not contain psql meta-commands or manage transactions. The
-source checks are hygiene, not a SQL sandbox. All migrations are trusted reviewed
+transaction. Files must not contain psql meta-commands or top-level transaction
+control. Statement validation skips comments and quoted text, so quoted procedural
+bodies are accepted in both single-line and multiline form. See the
+[migration guide](../../db/README.md) for quoting assumptions and validation limits.
+The source checks are hygiene, not a SQL sandbox. All migrations are trusted reviewed
 repository code. Large/nontransactional migrations and production upgrades require
 a later migration procedure; an application rollback is not database rollback.
 
@@ -137,6 +140,14 @@ a later migration procedure; an application rollback is not database rollback.
 configuration, migration-plan generation, safe invocation and reset rules, and the
 existing hook-installer plan tests. These do not connect to databases or validate
 container runtime behavior.
+
+`npm run test:migrations:postgres` requires a local Docker engine and uses the pinned
+PostgreSQL image in a disposable UUID-named container with memory-backed storage,
+fresh test credentials, and no host ports. It checks procedural SQL, atomic rollback
+and history, migration ordering and immutability, ahead/behind-history refusal, and
+role separation. It cleans up only its test container and never uses existing
+development volumes or `.env.local`. This suite also runs in the CI integration job;
+it fails rather than substituting a database mock when Docker/PostgreSQL is unavailable.
 
 `npm run test:integration` requires previously started local services and fails
 when they are absent. It checks real authenticated application-role access,

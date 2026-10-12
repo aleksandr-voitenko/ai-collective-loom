@@ -69,6 +69,10 @@ persistence suite checks committed rows, migration history, versioned bytes and
 bucket settings across stop/start and container recreation. Both fail when Docker or services are unavailable;
 there is no silent fallback to a storage mock.
 
+`npm run test:migrations:postgres` checks migration validation and execution against
+an isolated PostgreSQL container with temporary storage. It leaves development
+services and data intact; see the [migration guide](db/README.md).
+
 These suites do not certify a hosted provider, production security, browser
 usability, or product acceptance. Signed upload replay, version-specific grants,
 publication concurrency, and coordinated backup/restore require subsequent tests.

@@ -20,6 +20,7 @@
     "dev:status": "node scripts/local.mjs status",
     "db:migrate": "node scripts/local.mjs migrate",
     "test:integration": "node scripts/local.mjs smoke",
+    "test:migrations:postgres": "node --test tests/integration/migrations.test.mjs",
     "test:persistence": "node scripts/local.mjs persistence",
     "dev:images": "node scripts/local.mjs images",
     "hooks:install": "node .githooks/install-lore-coding-hooks.mjs"

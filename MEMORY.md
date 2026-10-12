@@ -23,6 +23,12 @@ passwords silently; persistent volumes retain their own credentials. Runtime and
 migration database roles are separate. Current SQL creates grants/metadata only,
 not the proposed product schema. Migration checksums and application history are
 different concepts. Ordinary stop retains volumes; reset requires explicit consent.
+Migration hygiene checks SQL statement heads outside comments/quoted text, allowing
+quoted procedural bodies while rejecting psql and top-level transaction control.
+It assumes default PostgreSQL string settings and trusted reviewed files, not a
+hostile-SQL sandbox; see `db/README.md`. `test:migrations:postgres` uses a disposable
+local PostgreSQL container with memory-backed storage and fresh credentials to
+check procedural execution, rollback/history, and runner/role invariants in CI.
 
 Root npm scripts have no registry dependencies. `npm run check` covers docs,
 bootstrap units, and the existing hook-installer plan tests. Integration uses real

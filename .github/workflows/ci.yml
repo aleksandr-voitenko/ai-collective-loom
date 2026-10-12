@@ -23,7 +23,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
       - name: Check bootstrap JavaScript syntax
-        run: find scripts tests/bootstrap -name '*.mjs' -print0 | xargs -0 -n 1 node --check
+        run: find scripts tests/bootstrap tests/integration -name '*.mjs' -print0 | xargs -0 -n 1 node --check
       - run: bash -n infra/postgres/10-roles.sh && bash -n infra/postgres/start.sh
 
   local-integration:
@@ -42,6 +42,7 @@ jobs:
       - run: npm run dev:init
       - run: npm run dev:doctor
       - run: npm run dev:up
+      - run: npm run test:migrations:postgres
       - run: npm run test:integration
       - run: npm run test:persistence
       - name: Show local image IDs

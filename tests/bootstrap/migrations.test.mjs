@@ -21,6 +21,103 @@ test("migration source cannot contain psql commands or top-level transaction con
   for (const sql of ["\\! echo bad", "SELECT 1;\n\\connect elsewhere", "BEGIN;", " COMMIT;", "ROLLBACK;", "START TRANSACTION;"]) assert.throws(() => describeMigration("0001_a.sql", sql));
 });
 
+for (const [name, sql] of [
+  ["multiline PL/pgSQL function", "CREATE FUNCTION loom.probe() RETURNS integer LANGUAGE plpgsql AS $$\nBEGIN\n  RETURN 1;\nEND;\n$$;"],
+  ["single-line PL/pgSQL function", "CREATE FUNCTION loom.probe() RETURNS integer LANGUAGE plpgsql AS $$ BEGIN RETURN 1; END; $$;"],
+  ["multiline DO body", "DO $$\nBEGIN\n  PERFORM 1;\nEND;\n$$;"],
+  ["single-line DO body", "DO $$ BEGIN PERFORM 1; END; $$;"],
+  ["tagged body with inner quoting", String.raw`DO $Body_1$
+BEGIN
+  PERFORM $inner$COMMIT; \connect elsewhere$inner$;
+  PERFORM '$body_1$';
+END;
+$Body_1$;`],
+  ["Unicode dollar tag", "DO $проба$\nBEGIN\n  PERFORM 1;\nEND;\n$проба$;"],
+  ["single-quoted procedural body", "DO '\nBEGIN\n  PERFORM ''COMMIT;'';\nEND;\n';"],
+]) {
+  test(`migration validation accepts a ${name}`, () => {
+    assert.equal(describeMigration("0002_probe.sql", sql).sql, sql);
+    assert.ok(migrationSql([{ filename: "0002_probe.sql", sql }]).includes(sql));
+  });
+}
+
+test("migration validation ignores command text in comments and quoted values", () => {
+  for (const sql of [
+    "-- BEGIN; COMMIT; \\connect elsewhere\nSELECT 1;",
+    "/*\nBEGIN;\n\\connect elsewhere\n/* nested ; COMMIT; */\nROLLBACK;\n*/ SELECT 1;",
+    "SELECT '\nBEGIN;\nCOMMIT;\n\\connect elsewhere\n';",
+    'SELECT 1 AS "\nBEGIN;\nCOMMIT;\n\\connect elsewhere\n";',
+    "SELECT 'it''s text; COMMIT;', 1 AS \"name\"\"; ROLLBACK;\";",
+    String.raw`SELECT E'it\'s text; COMMIT; \\connect elsewhere';`,
+    String.raw`SELECT 'a backslash\'; SELECT 1;`,
+    "SELECT $$\nBEGIN;\nCOMMIT;\n\\connect elsewhere\n$$;",
+  ]) assert.equal(describeMigration("0002_probe.sql", sql).sql, sql);
+});
+
+test("migration validation accepts ordinary SQL formatting and non-transaction commands", () => {
+  for (const sql of [
+    "\n SELECT\n  1; SELECT 2;\n",
+    "SELECT CASE WHEN true THEN 1\nEND;",
+    "SELECT 1 AS begin_value, 2 AS commit$count;",
+    "SELECT 1 AS name$tag$; SELECT 2;",
+    "PREPARE probe AS SELECT 1; EXECUTE probe; DEALLOCATE probe;",
+    "SET LOCAL statement_timeout = '1s'; SET search_path = loom, pg_catalog;",
+    "SELECT 1; /* trailing comment */\n-- COMMIT;",
+  ]) assert.equal(describeMigration("0002_probe.sql", sql).sql, sql);
+});
+
+test("escape strings retain their quoting rules when continued across lines", () => {
+  for (const gap of ["\n", "\r\n", " -- continuation\n", "\n-- continuation\n"]) {
+    const sql = `SELECT E'first'${gap}` + String.raw`'it\'s text; COMMIT;';`;
+    assert.equal(describeMigration("0002_probe.sql", sql).sql, sql);
+    assert.throws(() => describeMigration("0002_probe.sql", `${sql} COMMIT;`), /must not control psql or transaction boundaries/);
+  }
+});
+
+for (const command of [
+  "BEGIN", "BEGIN WORK", "START TRANSACTION", "COMMIT", "COMMIT AND CHAIN",
+  "END", "ROLLBACK", "ABORT", "SAVEPOINT probe", "RELEASE SAVEPOINT probe",
+  "ROLLBACK TO SAVEPOINT probe", "PREPARE TRANSACTION 'probe'",
+  "COMMIT PREPARED 'probe'", "ROLLBACK PREPARED 'probe'",
+  "SET TRANSACTION READ ONLY", "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY",
+]) {
+  test(`migration validation rejects top-level ${command}`, () => {
+    for (const sql of [
+      `${command};`, `SELECT 1; ${command};`, `SELECT 1;\n${command.toLowerCase()};`,
+      `/* leading comment */ ${command};`, `;; -- comment\n${command}`,
+      `SELECT '; not a boundary'; /* nested /* ; */ comment */ ${command};`,
+      `SELECT 1; ${command.replaceAll(" ", " /* separator */\n")};`,
+      `DO $$ BEGIN PERFORM 1; END; $$; ${command};`,
+    ]) {
+      assert.throws(() => describeMigration("0002_probe.sql", sql), /must not control psql or transaction boundaries/, sql);
+      assert.throws(() => migrationSql([{ filename: "0002_probe.sql", sql }]), /must not control psql or transaction boundaries/, sql);
+    }
+  });
+}
+
+test("psql meta-commands are rejected after SQL and comments as well as at line starts", () => {
+  for (const sql of [
+    "\\! echo bad", "SELECT 1;\n\\connect elsewhere", "SELECT 1; \\connect elsewhere",
+    "SELECT 1 \\g", "/* comment */ \\i elsewhere.sql", "SELECT 1; -- comment\n\\quit",
+  ]) assert.throws(() => describeMigration("0002_probe.sql", sql), /must not control psql or transaction boundaries/, sql);
+});
+
+test("a transaction command after quoted semicolons is still rejected", () => {
+  for (const sql of [
+    "SELECT 'it''s ; BEGIN;'; COMMIT;",
+    String.raw`SELECT E'it\'s ; BEGIN;'; COMMIT;`,
+    String.raw`SELECT 'a backslash\'; COMMIT;`,
+    'SELECT 1 AS "name""; BEGIN;"; COMMIT;',
+    "SELECT $tag$; BEGIN; $other$; COMMIT; $tag$; COMMIT;",
+  ]) assert.throws(() => describeMigration("0002_probe.sql", sql), /must not control psql or transaction boundaries/, sql);
+});
+
+test("unterminated quoted text and block comments cannot swallow runner SQL", () => {
+  for (const sql of ["SELECT 'unfinished", 'SELECT "unfinished', "SELECT $$unfinished", "SELECT $Tag$unfinished$tag$", "SELECT 1; /* unfinished /* nested */"]) {
+    assert.throws(() => describeMigration("0002_probe.sql", sql), /Unterminated/, sql);
+  }
+});
+
 test("runner uses one transaction, serializes migrations, and retains real psql controls", () => {
   const sql = migrationSql([describeMigration("0001_a.sql", "CREATE TABLE loom.example(id integer);\n")]);
   assert.ok(sql.startsWith("\\set ON_ERROR_STOP on\nBEGIN;\n"));
