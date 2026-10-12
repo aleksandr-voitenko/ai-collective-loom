@@ -5,11 +5,20 @@ unchanged. Architecture v0.3 and companions are in `docs/architecture/`; use
 `docs/README.md` for source priority and the implementation backlog for open gates.
 The architecture is a proposal; its acceptance mappings are not executed results.
 
-Current implementation is development tooling only, not a forum HTTP/API/UI.
+Current implementation is an application runtime/contract foundation: one
+TypeScript/Fastify package with React 19/Data Mode/Vite, controlled v1 schemas,
+OpenAPI 3.0.3, and an operational status browser. Participant authentication,
+policy/mutations, domain schema, storage operations, jobs, and an agent participation
+API remain unimplemented. There is no default administrator or identity-header
+bypass. See `src/README.md`, ADR-002, ADR-003, and the implementation backlog.
+Runtime foundation decisions and verification: Lore-ID `LC-20261012-LMP4`.
+Application commands require Node 24.19.0. `dev` still initializes dependencies;
+`app:dev`, `app:build`, `app:start`, and `app:typecheck` serve/check the release.
+
 `scripts/local.mjs` manages an explicitly local Compose project. PostgreSQL 18.4
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.
-Dependency-free checks pass on Node 24.19.0; this is not an application build.
-Real integration and persistence checks pass on macOS arm64 using Linux/arm64
+Earlier dependency-free bootstrap checks passed on Node 24.19.0. Bootstrap real
+integration and persistence checks passed on macOS arm64 using Linux/arm64
 containers under Docker Desktop. The same bootstrap checks and real suites passed
 on Ubuntu 24.04 (Linux/amd64) for `4865058` in
 [CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771).
@@ -30,10 +39,21 @@ hostile-SQL sandbox; see `db/README.md`. `test:migrations:postgres` uses a dispo
 local PostgreSQL container with memory-backed storage and fresh credentials to
 check procedural execution, rollback/history, and runner/role invariants in CI.
 
-Root npm scripts have no registry dependencies. `npm run check` covers docs,
-bootstrap units, and the existing hook-installer plan tests. Integration uses real
-local dependencies; it is separate and never reported passed when unavailable.
-Application dependencies and their lockfile entries are a subsequent task.
+The actual package manifest/lockfile now pin application and test dependencies.
+`npm run check` retains docs, bootstrap units and hook tests, and adds application
+typechecking, HTTP/router tests, and build. `test:app:postgres` uses temporary
+PostgreSQL storage and compiled HTTP processes to verify app-role readiness,
+parameter binding, rollback, safe failures, database loss, graceful shutdown, and
+Vite browser-module/API proxy separation. Application verification is local
+Node 24/macOS arm64 with Linux/arm64 PostgreSQL; its updated CI remains unperformed.
+The database pool is private; transaction callbacks own one checked-out client,
+explicit values, and no automatic retries. Controllers use only the health boundary.
+Requests reject unknown fields/coercion/default insertion; schemas are controlled
+code. Errors/owned diagnostics omit credentials, SQL, payloads, and exception details.
+The public health routes report coarse availability only. Future domain readiness
+and participant authorization require their own operation/schema checks.
+Integration uses real local dependencies; it is separate and never reported passed
+when unavailable.
 `test:integration` includes failed-migration rollback and signed GET probes;
 expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.

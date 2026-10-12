@@ -10,9 +10,9 @@ Scope: developer environment and CI only; not a product-policy or production-pro
 
 Use Docker Compose with PostgreSQL 18.4 and single-node SeaweedFS 4.48. Create two
 versioned local buckets. Use an official AWS CLI image only as a one-shot local
-setup/check client. Start with dependency-free Node tooling following the existing
-repository's `.mjs` conventions. The proposed application remains TypeScript/Node
-24 with Fastify and React; its packages are not selected by this tooling manifest.
+setup/check client. Keep bootstrap scripts dependency-free following the existing
+repository's `.mjs` conventions. Application packages and the TypeScript/Node 24,
+Fastify, and React runtime are selected separately by [ADR-002](002-application-runtime.md).
 
 Pin the observed multi-platform image indexes after successful local validation.
 Record their selected platform manifests separately: an index pin fixes the set of
@@ -51,9 +51,10 @@ framework now. An actual operation incompatibility or unacceptable local resourc
 cost is a reason to reconsider the development provider, not to weaken exact-byte
 references or silently disable tests.
 
-Application/dependency bootstrapping follows separately so unavailable registry
-access cannot produce a fabricated package lock or claims about builds that did
-not run. The current lockfile covers the zero-dependency development-tool package.
+Application/dependency bootstrapping remains a separate decision from this local
+provider choice. The actual lockfile now includes the runtime selected in ADR-002;
+registry access, installation, build, and execution require their own evidence.
+The earlier zero-dependency bootstrap checks do not validate application packages.
 
 ## Validation gates
 

@@ -11,6 +11,8 @@
 | [Implementation backlog](development/implementation-backlog.md) | Unresolved implementation gates and the next bounded vertical slice. |
 | [Local development](development/README.md) | Bootstrap commands, scope, credentials, persistence, and validation limits. |
 | [Local development decision](adr/019-local-development.md) | Initial local provider choice and reconsideration conditions. |
+| [Application runtime decision](adr/002-application-runtime.md) | Implemented stack, executable contract dialect, validation, and lifecycle boundaries for the foundation. |
+| [Database boundary decision](adr/003-database-boundary.md) | Application-role readiness and parameterized transaction primitive; domain schema/policy remain open. |
 
 Repository development instructions are in root `AGENTS.md`; product/interface
 behavior remains governed by v0.9. Architecture mechanisms, configuration defaults,

@@ -2,10 +2,12 @@
 
 A persistent collaboration and knowledge environment for human–AI collectives.
 
-**Current state:** development-environment bootstrap. The repository contains the
-product baseline, architecture proposal, local database/object-storage setup,
-migration and document checks, and a kickoff backlog. It does **not** yet implement
-participant sign-in, discussions, a human interface, an agent API, or an agent runtime.
+**Current state:** application runtime and executable contract foundation. A real
+TypeScript/Fastify API and React/React Router Data Mode browser build and run as one
+release. The browser shows service status, loading, and failure/retry states.
+Participant admission/sign-in, discussions, publishing, an agent participation API,
+storage operations, and jobs remain unimplemented. No default administrator or
+development authentication bypass is provided.
 
 ## Design documents
 
@@ -18,17 +20,34 @@ interface decisions are tracked in the [implementation backlog](docs/development
 ## Local development
 
 Use Node.js 24.19.0 from `.nvmrc` and a **local Docker engine with the
-Docker Compose plugin (v2 or later)**. The dependency-free bootstrap scripts also support Node 22.16+
-so existing repository tooling can be checked; this does not change the proposed
-application runtime target. No cloud account or model-provider credential is needed.
+Docker Compose plugin (v2 or later)**. Application commands check the pinned Node
+version. Concrete dependencies and their resolved graph are in `package.json` and
+the actual lockfile. No cloud account or model-provider credential is needed.
 
 ```bash
+nvm install
+nvm use
 npm ci --ignore-scripts
 npm run hooks:install
 npm run check
 npm run dev:init # only when .env.local is absent
 npm run dev:doctor
-npm run dev:up
+npm run dev
+npm run app:dev
+```
+
+`dev` (also `dev:up`) initializes dependencies, buckets, and migrations. It does
+not start the application. `app:dev` starts the API watcher on
+`http://127.0.0.1:3000` and Vite on `http://127.0.0.1:5173`, with an API proxy.
+`app:dev:api` and `app:dev:web` run either development process separately.
+
+For the compiled application and real-service checks:
+
+```bash
+npm run app:typecheck
+npm run app:build
+npm run app:start # serves the API and compiled browser at http://127.0.0.1:3000
+npm run test:app:postgres # build first; isolated PostgreSQL and HTTP tests
 npm run test:integration
 npm run test:persistence
 ```
@@ -61,8 +80,12 @@ changing credentials, or running storage tests.
 
 ## Checks and scope
 
-`npm run check` runs baseline/JSON checks, bootstrap unit tests, and the existing
-Lore hook-installer tests. `npm run test:integration` uses actual local services to
+`npm run check` retains baseline/JSON, bootstrap, and Lore hook checks, and adds
+application typechecking, HTTP contract/router tests, and the production build.
+`npm run test:app:postgres` uses disposable PostgreSQL resources to check actual
+application-role readiness, parameterized transactions, rollback, startup failures,
+database loss, graceful shutdown, and Vite module/API proxy separation.
+`npm run test:integration` uses actual local services to
 check database roles, migration repeatability/checksums, failed-migration rollback,
 versioned object operations, and signed GET success/expiry/tampering. The separate
 persistence suite checks committed rows, migration history, versioned bytes and
@@ -73,10 +96,19 @@ there is no silent fallback to a storage mock.
 an isolated PostgreSQL container with temporary storage. It leaves development
 services and data intact; see the [migration guide](db/README.md).
 
+The implemented JSON routes are `GET /health/live`, `GET /health/ready`,
+`GET /api/v1/runtime`, and `GET /api/v1/openapi.json`. Readiness uses the application
+role and fails for unavailable or privileged database access. Responses contain
+coarse availability/capability information, never database credentials or SQL errors.
+See [ADR-002](docs/adr/002-application-runtime.md) for the limited stack/contract
+decision and [ADR-003](docs/adr/003-database-boundary.md) for the database boundary.
+
 These suites do not certify a hosted provider, production security, browser
 usability, or product acceptance. Signed upload replay, version-specific grants,
 publication concurrency, and coordinated backup/restore require subsequent tests.
-Node 24 checks and real-service integration/persistence passed on macOS arm64
+The application foundation's Node 24 installation, build/typecheck, browser checks,
+and isolated PostgreSQL/HTTP suite passed on macOS arm64. Its updated CI has not
+executed yet. Earlier bootstrap checks and real-service integration/persistence passed on macOS arm64
 using Linux/arm64 containers under Docker Desktop. Bootstrap Lore task
 `LC-20261011-R161` records the verification results, initial failures, and fixes.
 [Linux/amd64 CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)

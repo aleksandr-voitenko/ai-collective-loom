@@ -15,19 +15,20 @@ failures, and fixes; [compose.yaml](../../compose.yaml) pins the image indexes.
 [Linux/amd64 CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)
 passed for `4865058` on Ubuntu 24.04 with Node 24.19.0, including all 40 checks,
 real integration, and persistence across stop/start and container recreation.
-This validates the bootstrap on that CI platform; application behavior and
-product/architecture AC/AV scenarios remain unvalidated. Additional platforms
+This validates the bootstrap on that CI platform; it does not validate application
+behavior or product/architecture AC/AV scenarios. Additional platforms
 and future runtime/image changes require their own checks.
 Validate the remaining S3 presigned-upload/version-specific grant contract before
 using signed grants in application code. No
-managed-provider compatibility has been certified. No application dependency
-versions have been installed or approved by this dependency-free bootstrap.
+managed-provider compatibility has been certified. Application dependencies are now
+installed separately from the bootstrap in the runtime foundation described by
+[ADR-002](../adr/002-application-runtime.md) and [ADR-003](../adr/003-database-boundary.md).
 
 ## Foundation tasks, before dependent features
 
 | Work | Closure evidence | Source anchors |
 |---|---|---|
-| Application skeleton and executable contracts | Pin/install TypeScript, Fastify, React/router/build tooling and database/storage clients; extend the lockfile; add actual web/API health and safe errors without an authentication bypass. Build/typecheck and test the real handlers. | Architecture §§3, 14, 17; API-01–07 |
+| Application skeleton and executable contracts | Runtime foundation implemented: exact TypeScript/Fastify/React/Data Mode/Vite and pg packages, actual lockfile, operational API/browser, strict schemas/OpenAPI 3.0.3, safe errors, role readiness and transaction primitives. Local build/typecheck, transport/router, and isolated PostgreSQL/HTTP checks exercise these boundaries. Participant contracts/authentication and storage-client/version-grant compatibility remain open; no product API-01–07 or AC/AV completion is inferred. | Architecture §§3, 14, 17; ADR-002, ADR-003; API-01–07 |
 | Publication/idempotency primitive | Serialize the participant/operation/key before new-write preconditions. Force two requests to see an initially missing outcome and then converge on one result. Test rollback and lost acknowledgement. | Architecture §§7.1–7.4; API-05, AC14, AV01 |
 | Fenced job-output publication | Check the current claim generation in the same protected finalization as output associations. Resume an expired worker after a replacement finished; inspect both job state and published outputs. | Architecture §7.5; OPS-03 |
 | Committed event ordering | Exercise concurrent transactions, rollback and killed connections around the commit-tail clock; measure contention. Do not use allocated sequence IDs as committed coverage. | Architecture §7.3; ATT-08, AC08 |

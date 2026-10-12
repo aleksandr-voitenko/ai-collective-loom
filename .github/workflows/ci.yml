@@ -1,4 +1,4 @@
-name: Bootstrap checks
+name: Bootstrap and application checks
 
 on:
   push:
@@ -42,6 +42,8 @@ jobs:
       - run: npm run dev:init
       - run: npm run dev:doctor
       - run: npm run dev:up
+      - run: npm run app:build
+      - run: npm run test:app:postgres
       - run: npm run test:migrations:postgres
       - run: npm run test:integration
       - run: npm run test:persistence

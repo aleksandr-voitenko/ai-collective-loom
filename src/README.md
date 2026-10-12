@@ -1,17 +1,24 @@
 # Application implementation boundary
 
-No runtime code is implemented in this bootstrap. This directory reserves the
-application root without adding fictitious endpoints, dummy accounts, or a mock
-forum presented as a functioning service.
+This directory contains the application runtime foundation: a TypeScript/Fastify
+API, a React/React Router Data Mode browser, and controlled v1 contracts. It does
+not contain participant authentication, domain mutations, storage operations, jobs,
+or an agent participation API. No dummy accounts or forum records are created.
 
-Use the architecture's logical boundaries when the first slice is implemented:
-`server/modules/`, `server/http/`, `web/`, `jobs/`, and `contracts/`. These are code
-modules in one release, not separate microservices or mandatory npm workspaces.
-Create directories when they contain real code rather than filling a tree with
-placeholder classes. The local development tools in `scripts/` are not the product
-API, storage adapter, worker execution framework, or agent runtime.
+`server/http/` owns request validation, safe errors, operational routes, and OpenAPI
+generation. `server/db/` owns the private PostgreSQL pool, readiness probe, and
+checked-out transaction connection. Controllers receive only the health boundary;
+they do not execute unrestricted SQL. `contracts/v1.ts` supplies controlled schemas
+and derived types to both server and browser. `web/` owns Data Mode routing, API
+response checks, loading, and failure/retry views.
 
-Install and pin the actual application dependencies before implementing those
-entry points, and extend the existing lockfile. Product rules, runtime configuration,
-source authorization, and immutable publication behavior must not be inferred
-from a development health check or an example fixture.
+The server build emits `dist/server/` and `dist/contracts/`; Vite emits `dist/web/`.
+`app:start` serves both from one application release. Development uses separate API
+and Vite processes from the same package. Domain `server/modules/` and `jobs/`
+directories will be created when real operations exist; no empty module tree or npm
+workspace split is required.
+
+Read [ADR-002](../docs/adr/002-application-runtime.md) and
+[ADR-003](../docs/adr/003-database-boundary.md) before extending these boundaries.
+Product policy and immutable publication guarantees remain unimplemented; a health
+check or transport fixture is not evidence of participant authorization.
