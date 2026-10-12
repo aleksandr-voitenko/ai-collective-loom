@@ -12,7 +12,9 @@
 | [Local development](development/README.md) | Bootstrap commands, scope, credentials, persistence, and validation limits. |
 | [Local development decision](adr/019-local-development.md) | Initial local provider choice and reconsideration conditions. |
 | [Application runtime decision](adr/002-application-runtime.md) | Implemented stack, executable contract dialect, validation, and lifecycle boundaries for the foundation. |
-| [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary and minimal internal publication schema; complete domain/authentication remain open. |
+| [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary, minimal internal publication schema and additive identity prototype; complete domain/participant interfaces remain open. |
+| [Identity/admission decision record](adr/004-identity-admission-prototype.md) | Approved requirements separated from six unapproved, executable synthetic policy candidates. |
+| [Identity prototype evidence](development/identity-prototype.md) | Disposable PostgreSQL/passkey/cookie/bearer checks and limits; production routes and real enrollment remain disabled. |
 | [Transactional publication decision](adr/006-transactional-publication.md) | Executable lock classes, atomic publication, commit tail and durable intents; worker fencing remains required. |
 | [Publication recovery decision](adr/015-publication-reconciliation.md) | Canonical scoped attempts, reference-only resolution, disclosure and retention limits. |
 

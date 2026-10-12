@@ -38,7 +38,8 @@ test("unsupported production query fields and identity headers do not create aut
     assert.equal(body.statusCode, 400);
     assert.deepEqual(body.json().error.fields, [{ location: "body", path: "", rule: "unsupported_body" }]);
   }
-  for (const path of ["/api/v1/community", "/api/v1/discussions", "/fixture/validation", "/fixture/fault"]) {
+  for (const path of ["/api/v1/community", "/api/v1/discussions", "/fixture/validation", "/fixture/fault",
+    "/prototype/identity/accounts", "/prototype/identity/signin/start", "/prototype/identity/bootstrap", "/prototype/identity/reconcile"]) {
     const response = await app.inject({ method: "POST", url: path, headers: { "x-loom-participant": "administrator", "x-request-id": "client-supplied-id" }, payload: {} });
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().error.code, "not_found");

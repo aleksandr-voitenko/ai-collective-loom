@@ -1,7 +1,8 @@
 # ADR-003: Immediate application database boundary
 
-Status: implemented for the runtime boundary and internal publication foundation.
-The imported proposal's complete domain schema, authentication and participant
+Status: implemented for the runtime boundary, internal publication foundation and
+an additive synthetic identity prototype. The imported proposal's complete domain
+schema, production authentication and participant
 interfaces remain unimplemented. Its snapshot is unchanged.
 
 ## Decision
@@ -54,8 +55,23 @@ identity factory. JSON-shaped identities cannot forge its runtime registry. The
 factory does not authenticate a credential; real authentication integration must
 establish identity before invoking it. The operation rechecks stored account,
 credential ownership/state, owning lifecycle and author/editor/admin rights under
-locks. No public route, default identity, token issuance or trusted header is added.
+locks. No production identity route, default identity or trusted header is enabled.
+The dormant [ADR-004 prototype](004-identity-admission-prototype.md) now verifies
+passkey/session/agent credentials before invoking that factory. It shares current
+account/credential/channel/expiry/parent-passkey checks with publication; enrollment
+tickets and legacy internal fixtures cannot authenticate through either channel.
+No participant routes are registered by normal startup.
 See [ADR-015](015-publication-reconciliation.md) for canonical input and safe recovery.
+
+Additive `0003_identity_prototype.sql` preserves `0001`/`0002` and existing rows.
+Legacy minimal records retain the `internal` kind for trusted publication fixtures.
+New controlled accounts are human or agent and have separate issuance records.
+Verifiers, public keys/counters, challenge consumption, nickname reservations,
+initialization, identity outcomes and restricted administrative audits live in the
+application schema. No account or capability is seeded. Immutable reference-only
+outcomes and audit/reservation rows have restricted grants. Administrative effects
+do not advance the public activity clock, avoiding leakage of account operations.
+The exact test profile remains unapproved; additive schema presence does not enable it.
 
 ## Readiness and lifecycle
 
@@ -87,13 +103,15 @@ migrations and its own fixture only in that database. Tests exercise
 application-role parameter binding, identical backend/transaction IDs, rollback
 after a real SQL error, unusable expired scopes, migrator refusal, safe startup
 failures, database loss, compiled HTTP/browser assets, and shutdown ordering.
-No fixture table or mutation route is installed in the development/production
-application schema or route inventory.
+Fixture records exist only in disposable databases; normal startup installs no
+fixture-only table or mutation route.
 
 The publication suite additionally verifies atomic rows/identities, authority
 ordering, connection termination, tail ordering and recovery through real PostgreSQL.
 It reproduced an unhandled checked-out connection failure before the owner-listener
-repair. Domain constructors/authentication, full lifecycle policy, workers/fenced
+repair. The identity suite adds real verifier/proof, authority and recovery tests
+on disposable application-role resources; it does not enroll real participants.
+Domain constructors, production identity interfaces, approved lifecycle policy, workers/fenced
 outputs, backup/restore, provider TLS/deployment and hosted-provider validation
 remain gates before retaining real participant material. No existing development
 data or volumes are used for the publication fixtures.

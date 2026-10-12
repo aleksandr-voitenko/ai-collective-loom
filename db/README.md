@@ -10,6 +10,11 @@ immutable revisions, commit-tail clock, events, intents and outcomes. It creates
 participant/credential/admin records. Authentication and public mutation routes
 are still unavailable. This migration was verified only on isolated resources;
 existing development data is not automatically migrated by application startup.
+Additive `0003_identity_prototype.sql` extends those envelopes with credential
+verifiers/expiry/parent sessions, nickname reservations, controlled initialization,
+WebAuthn public keys/challenges, safe identity outcomes and restricted audits.
+It seeds no account or capability and preserves `0001`/`0002`. Identity routes
+remain private test fixtures pending the [ADR-004 policy review](../docs/adr/004-identity-admission-prototype.md).
 
 Use unique four-digit versions and do not edit applied migrations. The runner
 checks filename and SHA-256 against `loom_migrations.history`, rejects unknown
@@ -59,3 +64,10 @@ idempotency/authority ordering, response-loss recovery and clock failure behavio
 It prints labeled synthetic contention measurements. See
 [ADR-006](../docs/adr/006-transactional-publication.md) and
 [ADR-015](../docs/adr/015-publication-reconciliation.md) before extending this boundary.
+
+`npm run test:identity:postgres` uses a separate UUID-named tmpfs PostgreSQL container,
+fresh credentials and the application role for account/credential operations. Its
+private software authenticator signs actual WebAuthn assertions; no fixture is
+registered by normal startup. It checks committed identity rows, retries, races,
+recovery, current authority and sampled secret disclosure. Development credentials,
+containers and volumes are not used or reset.

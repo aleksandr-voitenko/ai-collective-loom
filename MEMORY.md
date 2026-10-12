@@ -8,10 +8,13 @@ The architecture is a proposal; its acceptance mappings are not executed results
 Current implementation is an application runtime/contract foundation: one
 TypeScript/Fastify package with React 19/Data Mode/Vite, controlled v1 schemas,
 OpenAPI 3.0.3, and an operational status browser, plus an internal atomic text
-publication/reconciliation module. Participant authentication, public mutations,
+publication/reconciliation module and a dormant controlled identity prototype.
+Production participant authentication, public mutations,
 complete domain schema/policy, storage operations, workers, and an agent participation
-API remain unimplemented. There is no default administrator or identity-header
-bypass. See `src/README.md`, ADR-002, ADR-003, and the implementation backlog.
+API remain unimplemented. Private identity HTTP fixtures use disposable accounts;
+six concrete policy candidates in ADR-004 are unapproved. There is no default
+administrator or identity-header bypass. See `src/README.md`, ADR-002, ADR-003,
+ADR-004 and the implementation backlog.
 Runtime foundation decisions and verification: Lore-ID `LC-20261012-LMP4`.
 Application commands require Node 24.19.0. `dev` still initializes dependencies;
 `app:dev`, `app:build`, `app:start`, and `app:typecheck` serve/check the release.
@@ -34,6 +37,11 @@ migration database roles are separate. New `0002_publication_foundation.sql` cre
 minimal authority/resource envelopes, immutable text revisions, clock/events,
 outbox intents and reference-only outcomes; it seeds no participants/credentials.
 This is not the complete product schema. Applied migrations remain immutable.
+Additive `0003_identity_prototype.sql` supplies verifier/expiry/parent-session
+metadata, initialization, nickname reservations, passkeys/challenges and private
+identity outcomes/audit. It seeds no account or capability. Legacy records remain
+`internal` for trusted publication fixtures and cannot authenticate through either
+transport. No identity migration was applied to existing development data in this task.
 Migration checksums and application history are
 different concepts. Ordinary stop retains volumes; reset requires explicit consent.
 Migration hygiene checks SQL statement heads outside comments/quoted text, allowing
@@ -58,6 +66,11 @@ The public health routes report coarse availability only. Future domain readines
 and participant authorization require their own operation/schema checks.
 `server/modules/publication/` is internal and absent from production HTTP routes.
 Its opaque actor factory is a trusted verified-identity boundary, not authentication.
+The dormant identity verifier now calls it after opaque token or WebAuthn proof
+verification; normal startup imports neither identity operations nor test fixtures.
+`server/application/` shares absent-row attempt mutexes and current actor checks.
+Account first, then sorted credential/parent `FOR SHARE` guards recheck channel,
+ownership, state, expiry and current role; enrollment tickets cannot publish.
 It rechecks actor/credential, containment, author/editor/admin rights and base
 revision under the ADR-006 guards. Exact retained attempts resolve before stale
 new-write checks; read-only reconciliation can disclose only eligible references.
@@ -71,6 +84,23 @@ errors between queries are transaction-owned and discard the failed client.
 Outbox intents are durable but no worker effects run. Generation-fenced output
 publication remains mandatory before the first consumer is enabled.
 Publication protocol and recovery decisions: Lore-ID `LC-20261012-6OTQ`.
+Identity account creation, separate one-time issuance and restricted audits commit
+on the same application-role transaction owner. Retry/status contains safe IDs and
+current status, never a saved secret; explicit replacement stays on the same
+participant. Administration uses guard `(0x4c4f4f4d, 2)` before sorted participant
+updates, separately from the publication clock. Passkey verification is outside
+SQL; challenge consumption commits before verification, ticket state/counters are
+rechecked before binding/session insertion. Parent revocation invalidates sessions.
+Bootstrap/recovery require distinct deployment capability verifiers and have no
+HTTP route; initialization closes new bootstrap attempts permanently. Operator
+custody/rotation and human recovery proof are still unimplemented procedures.
+`test:identity:postgres` uses tmpfs PostgreSQL, private HTTP cookie/bearer requests,
+actual ES256 software signatures and barriers for account/ticket/counter races,
+reply loss, rollback, lifecycle authority and sampled disclosure checks. See
+`docs/development/identity-prototype.md` and ADR-004/ADR-015. Actual browser/device
+passkey trials, administrator UI, real enrollment, approved limits/retention and
+distributed abuse controls remain open; synthetic tests do not complete AC45/AC54.
+Identity prototype decisions and verification: Lore-ID `LC-20261012-9JJH`.
 Integration uses real local dependencies; it is separate and never reported passed
 when unavailable.
 `test:integration` includes failed-migration rollback and signed GET probes;

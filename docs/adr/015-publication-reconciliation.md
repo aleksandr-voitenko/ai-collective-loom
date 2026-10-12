@@ -1,6 +1,7 @@
 # ADR-015: Internal publication attempt and safe reconciliation
 
-Status: implemented for the internal `revision.publish` operation. No public
+Status: implemented for the internal `revision.publish` operation, with the scoped
+identity prototype extension below. No public
 mutation/status routes or client-persisted attempt UI are enabled.
 
 ## Semantic identity
@@ -75,3 +76,51 @@ client durable intent, recovery vocabulary and reviewed retention are still requ
 before participant mutation routes. See architecture §§7.4–7.6, product API-05,
 EDT-03–06 and SEC-01–08; this does not mark the complete AC14/AC31 or AV01 fixtures
 as executed through participant interfaces.
+
+## Identity prototype extension
+
+[ADR-004](004-identity-admission-prototype.md) keeps account creation separate from
+credential issuance. Both reuse the existing transaction owner and extracted
+absent-row attempt mutex. An administrator's current participant ID, a fixed
+operation kind and UUID key define the attempt, independent of the credential used.
+The five controlled kinds are account creation, state/role change, rename,
+credential issuance and revocation; reconciliation accepts only that known set.
+Reauthorization requires current administrator authority before disclosing an outcome.
+
+`identity-prototype-v1` hashes a fixed JSON tuple of every accepted substantive
+field. Creation includes exact display nickname, participant kind and role;
+issuance includes target participant, credential kind, enrollment purpose, label
+and selected replacement ID/null. State/role, rename and revoke include their
+target and complete requested change. UUID spelling is canonicalized; display case
+remains substantive, while nickname reservation uses ASCII lower case. Credentials,
+request IDs, key and generated secrets are excluded. Unknown fields and coercion
+are rejected. A changed request with the same key conflicts.
+
+Identity outcomes store safe participant/credential references, digest/version and
+operation identity, with their private audit in the same transaction. They have no
+authored body, public activity event or recoverable secret. A separate table is
+necessary: publication outcomes require a revision/source event, and synthesizing
+those for private account administration would expose inappropriate shared activity.
+Exact retries resolve saved references before new nickname/quota checks. Safe status
+is read from current credential state/expiry; suspended or revoked administrators
+cannot recover outcomes through stale sessions or bearer credentials.
+
+Only a **fresh successful COMMIT** may return the generated agent/enrollment secret.
+A committed issuance retry/status returns IDs, current state and `revoke_and_replace`,
+never the original secret or an automatically issued successor. An unknown/lost
+acknowledgement is reconciled with that same key. The administrator can then revoke
+and deliberately replace the uncertain credential on the same participant. Lost
+account replies likewise reconcile the original account without another participant.
+
+Bootstrap precedes any participant actor and therefore uses an explicit fixed
+deployment scope with separate bootstrap/recovery capability proofs and audit
+classes. A singleton initialization row closes new bootstrap attempts permanently;
+recovery issues a ticket for its existing first-administrator identity. It does not
+create another account or promote/demote/reactivate it. This exception is offline
+trusted deployment code, absent even from private HTTP fixtures.
+
+Identity outcomes/audits/reservations have no production cleanup or approved
+retention in this prototype. Private controlled races, post-COMMIT reply loss,
+rollback, credential replacement and revoked authority are observed in the
+[identity evidence](../development/identity-prototype.md). Real-user recovery proof,
+operator custody/rotation and policy approval remain gates before exposure.

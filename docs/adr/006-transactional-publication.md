@@ -1,7 +1,7 @@
 # ADR-006: Shared publication transaction and commit tail
 
 Status: implemented for the internal text-revision operation and durable intents.
-Public mutations, complete domain constructors, lifecycle operations and workers
+Public mutations, complete domain constructors, resource lifecycle operations and workers
 remain unimplemented. The imported architecture snapshot is unchanged.
 
 ## Decision
@@ -30,7 +30,7 @@ this same tail protocol. This does not implement a participant change-feed API.
 | Order | Guard and obligations |
 |---|---|
 | 1 | Transaction advisory mutex over JSON `[loom.publication.attempt, participant, revision.publish, key]`, hashed by PostgreSQL to the 64-bit namespace. It exists before any outcome row. Hash collisions only serialize unrelated attempts; the persisted scope remains exact. |
-| 2 | Participant then credential `FOR SHARE`, before checking current state, credential ownership and role. Status/role/revocation changes require the conflicting exclusive guard. |
+| 2 | Participant `FOR SHARE`, then credential and parent-passkey rows in UUID order with `FOR SHARE`, before checking current state, credential ownership/channel/expiry and role. Status/role/revocation changes require the conflicting exclusive guard. |
 | 3 | Shared two-integer structure advisory guard `(0x4c4f4f4d, 1)`, disjoint from the attempt namespace. Ownership/area movement must take its exclusive form before resource guards. |
 | 4 | Discover the complete owning chain, then lock UUIDs in sorted order. A new publication takes `FOR UPDATE` on its target and `FOR SHARE` on containers/areas. Resolution uses shared guards. Rewalk and validate the locked dependency set; a changed set aborts for retry with the same identity. |
 | 5 | Check editor membership under the resource guard; editor-list writers take that resource's exclusive guard. Lock selected revision availability with `FOR SHARE`. Lifecycle changes require the conflicting resource/revision guards. |
@@ -41,6 +41,16 @@ observe PostgreSQL blocking, not just a chosen SQL lock name. A 1500 ms local lo
 timeout bounds waits; deadlock/serialization/lock-timeout failures return a safe
 same-attempt retry category. The operation does not silently retry or mint a key.
 These defaults are not approved product latency or load limits.
+
+The attempt mutex and actor check now live in `server/application/` and are reused
+by the dormant identity prototype. Its administrative writers take the separate
+two-integer guard `(0x4c4f4f4d, 2)`, then sorted participant `FOR UPDATE` locks,
+before checking role/last-administrator state and locking affected credentials.
+That serial guard avoids opposite actor/target lock upgrades and protects the
+prototype's administrator-count policy. It never acquires the publication clock.
+Account/credential/audit outcomes are private identity effects, not shared activity.
+No contested identity guard is introduced after a publication takes the clock.
+See [ADR-004](004-identity-admission-prototype.md) for the unapproved policy profile.
 
 ## Outbox boundary
 

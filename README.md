@@ -7,7 +7,9 @@ TypeScript/Fastify API and React/React Router Data Mode browser build and run as
 release. The browser shows service status, loading, and failure/retry states. An
 internal publication foundation now commits text revisions, pointers, source events,
 durable outbox intents and safe retry outcomes together. It has no public route.
-Participant-facing admission/sign-in, discussions, publishing, an agent participation API,
+An identity/admission prototype verifies passkeys, opaque sessions and agent credentials
+against disposable accounts; its routes are private test fixtures and its policy
+choices await review. Participant-facing admission/sign-in, discussions, publishing, an agent participation API,
 storage operations, and jobs remain unimplemented. No default administrator or
 development authentication bypass is provided.
 
@@ -51,6 +53,7 @@ npm run app:build
 npm run app:start # serves the API and compiled browser at http://127.0.0.1:3000
 npm run test:app:postgres # build first; isolated PostgreSQL and HTTP tests
 npm run test:publication:postgres # build first; isolated concurrency/fault tests and tail metrics
+npm run test:identity:postgres # disposable identity protocol and signed passkey fixtures
 npm run test:integration
 npm run test:persistence
 ```
@@ -112,6 +115,12 @@ inspects persisted rows through controlled concurrency, stage failures, process
 loss and backend termination. Its printed synthetic metrics are not production
 capacity approval. No worker effects run; generation-fenced output publication
 remains required before enabling the first consumer.
+
+The [identity prototype guide](docs/development/identity-prototype.md) records
+bootstrap/admission, verifier-only issuance, safe recovery, cookie/bearer authority,
+and real PostgreSQL race/disclosure checks. [ADR-004](docs/adr/004-identity-admission-prototype.md)
+contains six concrete **unapproved** policy candidates. Normal startup exposes no
+identity routes, and no real participants may be enrolled under that synthetic profile.
 
 These suites do not certify a hosted provider, production security, browser
 usability, or product acceptance. Signed upload replay, version-specific grants,

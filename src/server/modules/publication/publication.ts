@@ -3,6 +3,8 @@ import type { SqlTransaction } from '../../db/postgres.js';
 import { identityOf, type ActorContext } from './actor.js';
 import { PublicationError } from './errors.js';
 import { canonicalAttemptKey, operationKind, preparePublication, semanticVersion } from './input.js';
+import { lockAttempt } from '../../application/attempt.js';
+import { currentAuthority } from '../../application/authority.js';
 
 interface Transactions { transaction<T>(operation: (transaction: SqlTransaction) => Promise<T>): Promise<T> }
 interface Resource {
@@ -24,12 +26,9 @@ const structureGuard = 1;
 const resourceColumns = 'id, kind, owner_resource_id, original_author_id, state, publication_open, current_revision_id';
 
 async function lockActor(tx: SqlTransaction, actor: ActorContext) {
-  const identity = identityOf(actor);
-  const participant = await tx.query<{ state: string; role: string }>('SELECT state, role FROM loom.participants WHERE id = $1 FOR SHARE', [identity.participantId]);
-  const credential = await tx.query<{ participant_id: string; state: string }>('SELECT participant_id, state FROM loom.participant_credentials WHERE id = $1 FOR SHARE', [identity.credentialId]);
-  if (participant.rows[0]?.state !== 'active' || credential.rows[0]?.state !== 'active'
-    || credential.rows[0].participant_id !== identity.participantId) throw new PublicationError('unavailable');
-  return { ...identity, administrator: participant.rows[0].role === 'administrator' };
+  const authority = await currentAuthority(tx, actor);
+  if (!authority) throw new PublicationError('unavailable');
+  return authority;
 }
 
 async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution'): Promise<Resource[]> {
@@ -78,11 +77,7 @@ async function requireRevision(tx: SqlTransaction, resourceId: string, revisionI
   if (!result.rowCount) throw new PublicationError('unavailable');
 }
 async function beginAttempt(tx: SqlTransaction, participantId: string, key: string): Promise<Outcome | undefined> {
-  await tx.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED', []);
-  await tx.query("SELECT set_config('lock_timeout', $1, true)", ['1500ms']);
-  // An advisory mutex exists even when the durable outcome row does not. Hash
-  // collisions only serialize unrelated attempts; the SQL scope remains exact.
-  await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [JSON.stringify(['loom.publication.attempt', participantId, operationKind, key])]);
+  await lockAttempt(tx, participantId, operationKind, key);
   return (await tx.query<Outcome>('SELECT id, resource_id, revision_id, semantic_version, request_digest FROM loom.idempotency_records WHERE participant_id = $1 AND operation_kind = $2 AND idempotency_key = $3', [participantId, operationKind, key])).rows[0];
 }
 function result(outcome: Pick<Outcome, 'id' | 'resource_id' | 'revision_id'>, idempotency: CommittedPublication['idempotency']): CommittedPublication {

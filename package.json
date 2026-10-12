@@ -33,12 +33,14 @@
     "app:typecheck": "node scripts/check-runtime.mjs && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.tests.json",
     "test:app": "node scripts/check-runtime.mjs && node --import tsx --test tests/unit/*.test.ts tests/contract/*.test.ts tests/web/*.test.tsx",
     "test:app:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/application.test.ts",
-    "test:publication:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/publication.test.ts"
+    "test:publication:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/publication.test.ts",
+    "test:identity:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity.test.ts"
   },
   "dependencies": {
     "@fastify/static": "10.1.6",
     "@fastify/swagger": "9.9.2",
     "@fastify/type-provider-typebox": "5.2.0",
+    "@simplewebauthn/server": "14.0.3",
     "@sinclair/typebox": "0.34.52",
     "fastify": "5.12.5",
     "pg": "8.23.1",

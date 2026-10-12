@@ -45,6 +45,7 @@ jobs:
       - run: npm run app:build
       - run: npm run test:app:postgres
       - run: npm run test:publication:postgres
+      - run: npm run test:identity:postgres
       - run: npm run test:migrations:postgres
       - run: npm run test:integration
       - run: npm run test:persistence

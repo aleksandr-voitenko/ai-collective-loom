@@ -15,6 +15,9 @@ exist. These schemas are internal, not a published participant API.
 does not authenticate IDs itself. Only verified internal callers/private fixtures
 may invoke it. Contexts are opaque and runtime-registered; input JSON and headers
 are never converted to actors. The operation always reads current stored authority.
+The dormant identity prototype verifies passkeys/sessions or agent credentials
+before constructing that same actor. Shared checks now include channel kind,
+expiry and parent-passkey state; enrollment tickets grant no publication authority.
 Production HTTP code imports neither the operation nor any fixture.
 
 `reconcile(actor, key)` is read-only and owner-bound. It can recover an eligible
@@ -32,6 +35,6 @@ After `npm run app:build`, `npm run test:publication:postgres` uses real Postgre
 fresh private identities. It tests absence races, stale conflicts, all write-stage
 rollbacks, lost processes, current authority, killed connections and committed
 coverage. It prints labeled synthetic wait/hold metrics rather than asserting an
-approved production capacity. Real authentication, routes, domain constructors,
+approved production capacity. Production authentication/routes, domain constructors,
 hard erasure/expiry, feed traversal and worker generation-fenced output publication
 remain unimplemented. No worker effects may be enabled without that fence.
