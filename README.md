@@ -4,8 +4,10 @@ A persistent collaboration and knowledge environment for human–AI collectives.
 
 **Current state:** application runtime and executable contract foundation. A real
 TypeScript/Fastify API and React/React Router Data Mode browser build and run as one
-release. The browser shows service status, loading, and failure/retry states.
-Participant admission/sign-in, discussions, publishing, an agent participation API,
+release. The browser shows service status, loading, and failure/retry states. An
+internal publication foundation now commits text revisions, pointers, source events,
+durable outbox intents and safe retry outcomes together. It has no public route.
+Participant-facing admission/sign-in, discussions, publishing, an agent participation API,
 storage operations, and jobs remain unimplemented. No default administrator or
 development authentication bypass is provided.
 
@@ -48,13 +50,14 @@ npm run app:typecheck
 npm run app:build
 npm run app:start # serves the API and compiled browser at http://127.0.0.1:3000
 npm run test:app:postgres # build first; isolated PostgreSQL and HTTP tests
+npm run test:publication:postgres # build first; isolated concurrency/fault tests and tail metrics
 npm run test:integration
 npm run test:persistence
 ```
 
 `dev:init` creates ignored `.env.local` credentials without overwriting an existing
 file. `dev:up` starts PostgreSQL and SeaweedFS, enables versioning on the two local
-buckets, and applies the bootstrap migration. It does not start a forum service.
+buckets, and applies the ordered SQL migrations. It does not start a forum service.
 Initial image downloads require internet access.
 
 PostgreSQL is exposed at `127.0.0.1:54320`; the local S3 endpoint is
@@ -102,10 +105,17 @@ role and fails for unavailable or privileged database access. Responses contain
 coarse availability/capability information, never database credentials or SQL errors.
 See [ADR-002](docs/adr/002-application-runtime.md) for the limited stack/contract
 decision and [ADR-003](docs/adr/003-database-boundary.md) for the database boundary.
+The internal publication operation and its lock/tail/recovery contract are in
+[ADR-006](docs/adr/006-transactional-publication.md) and
+[ADR-015](docs/adr/015-publication-reconciliation.md). `test:publication:postgres`
+inspects persisted rows through controlled concurrency, stage failures, process
+loss and backend termination. Its printed synthetic metrics are not production
+capacity approval. No worker effects run; generation-fenced output publication
+remains required before enabling the first consumer.
 
 These suites do not certify a hosted provider, production security, browser
 usability, or product acceptance. Signed upload replay, version-specific grants,
-publication concurrency, and coordinated backup/restore require subsequent tests.
+full participant publication journeys, and coordinated backup/restore require subsequent tests.
 The application foundation's Node 24 installation, build/typecheck, browser checks,
 and isolated PostgreSQL/HTTP suite passed on macOS arm64. Its updated CI has not
 executed yet. Earlier bootstrap checks and real-service integration/persistence passed on macOS arm64

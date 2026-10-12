@@ -12,7 +12,9 @@
 | [Local development](development/README.md) | Bootstrap commands, scope, credentials, persistence, and validation limits. |
 | [Local development decision](adr/019-local-development.md) | Initial local provider choice and reconsideration conditions. |
 | [Application runtime decision](adr/002-application-runtime.md) | Implemented stack, executable contract dialect, validation, and lifecycle boundaries for the foundation. |
-| [Database boundary decision](adr/003-database-boundary.md) | Application-role readiness and parameterized transaction primitive; domain schema/policy remain open. |
+| [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary and minimal internal publication schema; complete domain/authentication remain open. |
+| [Transactional publication decision](adr/006-transactional-publication.md) | Executable lock classes, atomic publication, commit tail and durable intents; worker fencing remains required. |
+| [Publication recovery decision](adr/015-publication-reconciliation.md) | Canonical scoped attempts, reference-only resolution, disclosure and retention limits. |
 
 Repository development instructions are in root `AGENTS.md`; product/interface
 behavior remains governed by v0.9. Architecture mechanisms, configuration defaults,

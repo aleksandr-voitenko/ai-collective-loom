@@ -7,8 +7,9 @@ The architecture is a proposal; its acceptance mappings are not executed results
 
 Current implementation is an application runtime/contract foundation: one
 TypeScript/Fastify package with React 19/Data Mode/Vite, controlled v1 schemas,
-OpenAPI 3.0.3, and an operational status browser. Participant authentication,
-policy/mutations, domain schema, storage operations, jobs, and an agent participation
+OpenAPI 3.0.3, and an operational status browser, plus an internal atomic text
+publication/reconciliation module. Participant authentication, public mutations,
+complete domain schema/policy, storage operations, workers, and an agent participation
 API remain unimplemented. There is no default administrator or identity-header
 bypass. See `src/README.md`, ADR-002, ADR-003, and the implementation backlog.
 Runtime foundation decisions and verification: Lore-ID `LC-20261012-LMP4`.
@@ -29,8 +30,11 @@ bootstrap tests pass.
 
 `.env.local` and `.local/` are ignored generated state. Initialization never replaces
 passwords silently; persistent volumes retain their own credentials. Runtime and
-migration database roles are separate. Current SQL creates grants/metadata only,
-not the proposed product schema. Migration checksums and application history are
+migration database roles are separate. New `0002_publication_foundation.sql` creates
+minimal authority/resource envelopes, immutable text revisions, clock/events,
+outbox intents and reference-only outcomes; it seeds no participants/credentials.
+This is not the complete product schema. Applied migrations remain immutable.
+Migration checksums and application history are
 different concepts. Ordinary stop retains volumes; reset requires explicit consent.
 Migration hygiene checks SQL statement heads outside comments/quoted text, allowing
 quoted procedural bodies while rejecting psql and top-level transaction control.
@@ -52,6 +56,21 @@ Requests reject unknown fields/coercion/default insertion; schemas are controlle
 code. Errors/owned diagnostics omit credentials, SQL, payloads, and exception details.
 The public health routes report coarse availability only. Future domain readiness
 and participant authorization require their own operation/schema checks.
+`server/modules/publication/` is internal and absent from production HTTP routes.
+Its opaque actor factory is a trusted verified-identity boundary, not authentication.
+It rechecks actor/credential, containment, author/editor/admin rights and base
+revision under the ADR-006 guards. Exact retained attempts resolve before stale
+new-write checks; read-only reconciliation can disclose only eligible references.
+ADR-015 defines the narrow canonical text input and retention/erasure limits.
+The transactional clock is acquired last and held through events/intents/outcome
+and COMMIT; no sequences or new domain guards define its committed upper bound.
+`test:publication:postgres` uses tmpfs PostgreSQL and private process fixtures for
+atomicity, concurrency, authority, lost acknowledgements and killed connections;
+synthetic tail metrics do not approve production capacity. Checked-out connection
+errors between queries are transaction-owned and discard the failed client.
+Outbox intents are durable but no worker effects run. Generation-fenced output
+publication remains mandatory before the first consumer is enabled.
+Publication protocol and recovery decisions: Lore-ID `LC-20261012-6OTQ`.
 Integration uses real local dependencies; it is separate and never reported passed
 when unavailable.
 `test:integration` includes failed-migration rollback and signed GET probes;

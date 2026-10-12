@@ -5,6 +5,11 @@ and runtime privileges. Ordered SQL files in `migrations/` are executed by
 `npm run db:migrate` through the migrator, on one connection and transaction.
 The first migration sets future table/sequence grants only; it does not claim an
 implemented product schema.
+`0002_publication_foundation.sql` adds the internal text publication envelopes,
+immutable revisions, commit-tail clock, events, intents and outcomes. It creates no
+participant/credential/admin records. Authentication and public mutation routes
+are still unavailable. This migration was verified only on isolated resources;
+existing development data is not automatically migrated by application startup.
 
 Use unique four-digit versions and do not edit applied migrations. The runner
 checks filename and SHA-256 against `loom_migrations.history`, rejects unknown
@@ -47,3 +52,10 @@ test credentials, then removes only that container. It does not use `.env.local`
 existing development containers, or development volumes, and fails if Docker or
 PostgreSQL is unavailable. The CI integration job runs it separately from the
 database/S3 smoke and persistence suites.
+
+`npm run test:publication:postgres` applies current migrations in its own disposable
+PostgreSQL database and checks the actual application operation's atomic rows,
+idempotency/authority ordering, response-loss recovery and clock failure behavior.
+It prints labeled synthetic contention measurements. See
+[ADR-006](../docs/adr/006-transactional-publication.md) and
+[ADR-015](../docs/adr/015-publication-reconciliation.md) before extending this boundary.

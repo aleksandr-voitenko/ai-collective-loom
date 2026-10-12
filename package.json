@@ -32,7 +32,8 @@
     "app:start": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local dist/server/main.js",
     "app:typecheck": "node scripts/check-runtime.mjs && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.tests.json",
     "test:app": "node scripts/check-runtime.mjs && node --import tsx --test tests/unit/*.test.ts tests/contract/*.test.ts tests/web/*.test.tsx",
-    "test:app:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/application.test.ts"
+    "test:app:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/application.test.ts",
+    "test:publication:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/publication.test.ts"
   },
   "dependencies": {
     "@fastify/static": "10.1.6",

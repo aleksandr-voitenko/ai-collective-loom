@@ -45,9 +45,15 @@ FROM pg_roles AS r WHERE r.rolname = current_user;
     const client = await this.#pool.connect();
     let active = true;
     let discard = false;
+    let connectionFailure: Error | undefined;
+    const observeConnectionFailure = (error: Error) => { connectionFailure ??= error; discard = true; };
+    // Pool error handlers cover idle pooled clients, not a checked-out client
+    // between queries. Its transaction owner must observe fatal socket errors.
+    client.on("error", observeConnectionFailure);
     const transaction: SqlTransaction = {
       query: async <Row extends QueryResultRow>(text: string, parameters: readonly unknown[]) => {
         if (!active) throw new Error("Transaction connection is no longer available.");
+        if (connectionFailure) throw connectionFailure;
         return client.query<Row>(text, [...parameters]);
       },
     };
@@ -55,17 +61,21 @@ FROM pg_roles AS r WHERE r.rolname = current_user;
       await client.query("BEGIN");
       const result = await operation(transaction);
       active = false;
+      if (connectionFailure) throw connectionFailure;
       await client.query("COMMIT");
       return result;
     } catch (error) {
       active = false;
-      try { await client.query("ROLLBACK"); }
-      catch { discard = true; }
+      if (!connectionFailure) {
+        try { await client.query("ROLLBACK"); }
+        catch { discard = true; }
+      }
       // A failed COMMIT can have an unknown outcome even if ROLLBACK responds.
       throw error;
     } finally {
       active = false;
       client.release(discard);
+      client.removeListener("error", observeConnectionFailure);
     }
   }
 

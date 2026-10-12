@@ -4,10 +4,16 @@
 
 The bootstrap prepares a local database and S3-compatible storage. The separate
 application foundation now builds a TypeScript/Fastify API and a React/Data Mode
-browser. Participant sign-in, policy/mutations, storage operations, durable jobs,
+browser. Participant sign-in, full policy/public mutations, storage operations, durable jobs,
 an agent participation API, and the full content schema remain in the
 [backlog](implementation-backlog.md). No production provider or passkey recovery
 policy is selected here.
+
+The internal publication foundation now atomically writes text revisions, current
+pointers, ordered source events, durable outbox intents and safe retry outcomes.
+Only trusted server code/private fixtures can supply actors; no public mutation,
+authentication bypass or worker is enabled. Current authority is rechecked under
+locks. The complete domain/authored representation remains a later contract.
 
 Use a local Docker engine, the Docker Compose plugin (v2 or later), and Node.js
 24.19.0 from `.nvmrc`. The dependency-free checks passed under Node 24.19.0 and
@@ -132,9 +138,10 @@ An image being present locally is not proof that its integration checks passed.
 The local PostgreSQL database is `loom_dev`. The initialization account is
 `postgres`; it is not the future application account. `loom_migrator` owns the
 application and migration schemas. `loom_app` can use the application schema and
-future granted tables, but is not a superuser and cannot create schema objects or
-read the migration history schema. No domain tables or participant records are
-created by the current migration.
+granted tables, but is not a superuser and cannot create schema objects or
+read the migration history schema. Migration `0002_publication_foundation.sql`
+adds minimal publication/authority tables and seeds only the infrastructure clock;
+it creates no participant or credential records.
 
 The S3 keys in `.env.local` are **local administrative tooling credentials** for
 initialization and smoke checks. They are not participant API credentials or a
@@ -196,6 +203,27 @@ processes and removes only its own database container.
 It does not use development credentials/volumes or register fixture routes in the
 production application. Unavailable Docker/PostgreSQL fails the check.
 
+After building, `npm run test:publication:postgres` creates a separate tmpfs PostgreSQL database
+with fresh roles/credentials and a random loopback port. It applies current
+migrations there and uses minimal private participants/resources. It inspects
+revision/pointer/event/intent/outcome identities, scoped exact retries, changed
+input, stale new writes, six write-stage rollbacks, current-authority/containment
+locks, lost response processes and backend termination around the ordered tail.
+Only the control connection for catalog/fault injection is privileged; publication
+and policy tests use `loom_app`. Production routes import no fixture/actor shortcut.
+The suite prints clearly labeled synthetic one/eight-writer measurements on
+distinct resources with 128-byte text, including clock wait and hold through COMMIT.
+These are local measurements, not a supported production workload or complete
+feed/worker acceptance. Unavailable Docker fails the check; existing volumes and
+development credentials are not used or reset. CI retains its old suites and adds
+this check, but its updated execution remains unperformed until separately run.
+
+Read [ADR-003](../adr/003-database-boundary.md),
+[ADR-006](../adr/006-transactional-publication.md), and
+[ADR-015](../adr/015-publication-reconciliation.md) before extending lock classes,
+semantic inputs, lifecycle/retention or worker effects. First-consumer output
+publication must be generation-fenced in its protected finalization transaction.
+
 `npm run test:migrations:postgres` requires a local Docker engine and uses the pinned
 PostgreSQL image in a disposable UUID-named container with memory-backed storage,
 fresh test credentials, and no host ports. It checks procedural SQL, atomic rollback
@@ -242,9 +270,9 @@ time and scheduling delays. Every attempt starts a new request; this does not te
 termination of in-flight downloads, version-specific signed grants, signed PUT
 replay, browser CORS, or revocation.
 
-These checks do not test all multipart edge cases, application authorization,
-publication transactions, backup/restore, or hosted-provider compatibility.
-Those are explicit backlog gates. The bootstrap Docker-backed assertions passed on macOS
+The database/S3 bootstrap smoke and persistence checks do not test all multipart
+edge cases or full participant authorization/publication journeys, backup/restore,
+or hosted-provider compatibility. Those are explicit backlog gates. The bootstrap Docker-backed assertions passed on macOS
 arm64 using Linux/arm64 containers and in the Ubuntu 24.04 (Linux/amd64) CI run linked
 above. Bootstrap Lore task `LC-20261011-R161` records the original adoption;
 `LC-20261012-AYAB` records the Compose restart compatibility fix. Find the original
