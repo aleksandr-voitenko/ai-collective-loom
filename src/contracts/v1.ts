@@ -7,10 +7,10 @@ export const ReadyResponse = Type.Object({ status: Type.Literal("ready") }, { ..
 export const RuntimeResponse = Type.Object({
   name: Type.Literal("AI Collective Loom"),
   api_version: Type.Literal("v1"),
-  stage: Type.Literal("foundation"),
+  stage: Type.Union([Type.Literal("foundation"),Type.Literal('synthetic-participation')]),
   capabilities: Type.Object({
-    participant_authentication: Type.Literal(false),
-    participant_mutations: Type.Literal(false),
+    participant_authentication: Type.Boolean(),
+    participant_mutations: Type.Boolean(),
   }, closed),
 }, { ...closed, $id: "loom.v1.runtime" });
 

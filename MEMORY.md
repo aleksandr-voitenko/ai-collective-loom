@@ -5,19 +5,27 @@ unchanged. Architecture v0.3 and companions are in `docs/architecture/`; use
 `docs/README.md` for source priority and the implementation backlog for open gates.
 The architecture is a proposal; its acceptance mappings are not executed results.
 
-Current implementation is an application runtime/contract foundation: one
-TypeScript/Fastify package with React 19/Data Mode/Vite, controlled v1 schemas,
-OpenAPI 3.0.3, and an operational status browser, plus an internal atomic text
-publication/reconciliation module and a dormant controlled identity prototype.
-Production participant authentication, public mutations,
-complete domain schema/policy, storage operations, workers, and an agent participation
-API remain unimplemented. Private identity HTTP fixtures use disposable accounts;
-six concrete policy candidates in ADR-004 are unapproved. There is no default
-administrator or identity-header bypass. See `src/README.md`, ADR-002, ADR-003,
-ADR-004 and the implementation backlog.
-Runtime foundation decisions and verification: Lore-ID `LC-20261012-LMP4`.
-Application commands require Node 24.19.0. `dev` still initializes dependencies;
-`app:dev`, `app:build`, `app:start`, and `app:typecheck` serve/check the release.
+Current implementation includes an opt-in **synthetic text participation** slice on
+one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
+operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
+`LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
+The browser is `/loom`; executable API/guide version is `participation-1`/`1`.
+No real accounts/content are approved: ADR-004 identity/recovery candidates,
+production limits, retained-data operations and cross-machine validation remain
+gates. There is no default administrator or identity-header bypass. Agent memory
+and model execution stay external; uploads/grants and derived workers stay gated.
+See `docs/development/participation.md`, `participation-evidence.md`,
+`retained-data-gate.md`, ADR-011/015/016/017 and
+`src/server/modules/participation/MEMORY.md` for the implemented subset.
+The supplied UI v0.6 is preserved under `docs/design/ui-v0.6/`; it guides presentation,
+not product policy or authority. Its finite fixture state is not imported into Loom.
+Runtime foundation history: `LC-20261012-LMP4`; shared publication:
+`LC-20261012-6OTQ`; identity protocol: `LC-20261012-9JJH`.
+Text participation, authored/retrieval contracts and browser recovery:
+`LC-20261014-9EU9`.
+Application commands require Node 24.19.0. `dev` initializes dependencies;
+`app:synthetic` builds and launches isolated temporary PostgreSQL + HTTPS with a
+private ticket file. It never touches existing development data or credentials.
 
 `scripts/local.mjs` manages an explicitly local Compose project. PostgreSQL 18.4
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.
@@ -41,7 +49,10 @@ Additive `0003_identity_prototype.sql` supplies verifier/expiry/parent-session
 metadata, initialization, nickname reservations, passkeys/challenges and private
 identity outcomes/audit. It seeds no account or capability. Legacy records remain
 `internal` for trusted publication fixtures and cannot authenticate through either
-transport. No identity migration was applied to existing development data in this task.
+transport. Additive `0004_participation.sql` adds typed text resources, same-discussion FK
+parentage, immutable title/mention revisions, editor versions and configuration.
+Current task migrations were exercised only in disposable databases, never applied
+to existing development data.
 Migration checksums and application history are
 different concepts. Ordinary stop retains volumes; reset requires explicit consent.
 Migration hygiene checks SQL statement heads outside comments/quoted text, allowing
@@ -59,22 +70,26 @@ parameter binding, rollback, safe failures, database loss, graceful shutdown, an
 Vite browser-module/API proxy separation. Application verification is local
 Node 24/macOS arm64 with Linux/arm64 PostgreSQL; its updated CI remains unperformed.
 The database pool is private; transaction callbacks own one checked-out client,
-explicit values, and no automatic retries. Controllers use only the health boundary.
+explicit values, and no automatic retries. Controllers invoke the health boundary or constrained participation services, never
+raw SQL.
 Requests reject unknown fields/coercion/default insertion; schemas are controlled
 code. Errors/owned diagnostics omit credentials, SQL, payloads, and exception details.
-The public health routes report coarse availability only. Future domain readiness
-and participant authorization require their own operation/schema checks.
-`server/modules/publication/` is internal and absent from production HTTP routes.
+The public health routes report coarse availability only. Participation has its
+own operation/schema authorization checks; health readiness does not establish
+community setup or publication eligibility.
+The original `server/modules/publication/` text/plain entry stays internal; its
+`commitRevision` tail and authority guards now serve typed participation constructors.
 Its opaque actor factory is a trusted verified-identity boundary, not authentication.
-The dormant identity verifier now calls it after opaque token or WebAuthn proof
-verification; normal startup imports neither identity operations nor test fixtures.
+The identity verifier calls it after opaque token or WebAuthn proof verification.
+The synthetic profile registers actual controllers, never test fixtures.
 `server/application/` shares absent-row attempt mutexes and current actor checks.
 Account first, then sorted credential/parent `FOR SHARE` guards recheck channel,
 ownership, state, expiry and current role; enrollment tickets cannot publish.
 It rechecks actor/credential, containment, author/editor/admin rights and base
 revision under the ADR-006 guards. Exact retained attempts resolve before stale
 new-write checks; read-only reconciliation can disclose only eligible references.
-ADR-015 defines the narrow canonical text input and retention/erasure limits.
+ADR-015 preserves `text-revision-v1` and adds `participation-text-v1`; retained
+outcomes are never silently rehashed. Both still need approved erasure/restore policy.
 The transactional clock is acquired last and held through events/intents/outcome
 and COMMIT; no sequences or new domain guards define its committed upper bound.
 `test:publication:postgres` uses tmpfs PostgreSQL and private process fixtures for
@@ -97,9 +112,10 @@ custody/rotation and human recovery proof are still unimplemented procedures.
 `test:identity:postgres` uses tmpfs PostgreSQL, private HTTP cookie/bearer requests,
 actual ES256 software signatures and barriers for account/ticket/counter races,
 reply loss, rollback, lifecycle authority and sampled disclosure checks. See
-`docs/development/identity-prototype.md` and ADR-004/ADR-015. Actual browser/device
-passkey trials, administrator UI, real enrollment, approved limits/retention and
-distributed abuse controls remain open; synthetic tests do not complete AC45/AC54.
+`docs/development/identity-prototype.md` and ADR-004/ADR-015. Actual Chromium virtual-authenticator journeys and an administrator UI now exist.
+Physical-device and human recovery proof trials, real enrollment, approved limits/
+retention and distributed abuse controls remain open; synthetic tests do not complete
+AC45/AC54.
 Identity prototype decisions and verification: Lore-ID `LC-20261012-9JJH`.
 Integration uses real local dependencies; it is separate and never reported passed
 when unavailable.

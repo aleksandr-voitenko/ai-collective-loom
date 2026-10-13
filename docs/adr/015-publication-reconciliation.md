@@ -1,8 +1,8 @@
 # ADR-015: Internal publication attempt and safe reconciliation
 
-Status: implemented for the internal `revision.publish` operation, with the scoped
-identity prototype extension below. No public
-mutation/status routes or client-persisted attempt UI are enabled.
+Status: implemented for internal `revision.publish`, the identity prototype and the
+opt-in synthetic `participation-1` HTTP/browser slice. Production retention and
+destructive-restore recovery remain unapproved. The original digest stays supported.
 
 ## Semantic identity
 
@@ -71,11 +71,11 @@ suppression and exact-revision suppression. A private child process is killed af
 commit and before sending its logical result; a new connection resolves the same
 IDs without another revision/event/intent/outcome.
 
-Public authentication/authorization integration, full document/file/entity contracts,
-client durable intent, recovery vocabulary and reviewed retention are still required
-before participant mutation routes. See architecture §§7.4–7.6, product API-05,
-EDT-03–06 and SEC-01–08; this does not mark the complete AC14/AC31 or AV01 fixtures
-as executed through participant interfaces.
+The participation extension below supplies authentication, minimal authored entities,
+durable intent and recovery vocabulary for synthetic routes. Full document/file
+contracts and reviewed retention remain gates before real use. See architecture
+§§7.4–7.6, product API-05, EDT-03–06 and SEC-01–08; this does not complete the whole
+AC14/AC31 or AV01 scenario.
 
 ## Identity prototype extension
 
@@ -123,4 +123,42 @@ Identity outcomes/audits/reservations have no production cleanup or approved
 retention in this prototype. Private controlled races, post-COMMIT reply loss,
 rollback, credential replacement and revoked authority are observed in the
 [identity evidence](../development/identity-prototype.md). Real-user recovery proof,
-operator custody/rotation and policy approval remain gates before exposure.
+operator custody/rotation and policy approval remain gates before real exposure.
+
+## Text participation extension
+
+`participation-text-v1` introduces closed operation-specific requests for
+`community.setup`, `discussion.create`, `reply.create`, `artifact.create` and
+`revision.publish`. Hash the version, fixed operation kind and canonical semantic
+object: every accepted field except the key participates, including target IDs,
+title, exact text, format, entities and expected base. UUIDs become lower case;
+entity arrays sort by token; object key order is irrelevant. Exact text and token
+spelling remain substantive. Do not recalculate earlier `text-revision-v1` outcomes
+or reinterpret their `text/plain` bodies as participant Markdown.
+
+Constructors, the new revision/title/mention rows, conditional pointer, ordered
+event, outbox intent and saved outcome share the existing transaction and final
+`commitRevision` tail. No second publication protocol, notification delivery or
+browser-only authority is introduced. Setup also creates the two ordinary root
+areas, overview/editor and versioned singleton configuration atomically. Its
+configuration guard is `(0x4c4f4f4d,3)`, before its own resource insertions and clock.
+The common structure guard remains the authority for containment changes.
+
+`POST /operations/status` is authenticated, owner-scoped and read-only. It takes
+the same attempt mutex and returns safe original references under live read
+eligibility. Exact mutation retries additionally recheck current action rights;
+closure/editor removal may deny retry while allowing read-only reconciliation.
+Both channels suppress ineligible result references. `not_recorded` is still
+uncertain. Success means committed source publication only; projection is disabled.
+
+Configuration/editor-list mutations keep expected numeric versions and immutable
+private audit outcomes with all semantic fields hashed. They do not append a
+content revision or public activity for private administration. A changed request
+under the same kind/key conflicts. Only administrators manage artifact editor lists.
+
+The browser stores intent before dispatch; the standalone external client fsyncs
+its journal before sending. Both scope it to origin, instance and participant.
+Actual tests discard a committed response and restart client processes before
+recovering the original IDs. See [ADR-017](017-browser-participation-recovery.md)
+and the [slice evidence](../development/participation-evidence.md). Automatic expiry,
+erasure and recovery after rollback of committed history remain closed gates.

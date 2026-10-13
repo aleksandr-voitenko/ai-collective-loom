@@ -1,7 +1,7 @@
 # ADR-004: Controlled identity and admission prototype
 
 Status: **synthetic prototype; product policy approval pending**. Normal application
-startup does not register identity or administrative routes. Only disposable
+startup without explicit synthetic opt-in does not register identity/admin routes. Only synthetic
 accounts may be used. This record does not amend the imported architecture or
 product snapshots.
 
@@ -70,14 +70,16 @@ identity proof and capability rotation remain part of the unresolved ceremony.
 The operator recovery capability is deployment trust, not a new product role or a
 public identity bypass. Custody, administrator identity proof, retention/erasure,
 distributed throttling, final numeric limits, and actual browser/device usability
-must be settled before exposing routes or admitting real participants. A provider
+must be settled before production exposure or admitting real participants. A provider
 selection, new normalization policy, explicit grace-period requirement or changed
 recovery trust model requires reviewing the affected protocol and tests.
 
-This prototype does not implement the administrator browser workspace, human
-identity-proof ceremony, moderator role, invitations by email, public participant
-mutation routes, or full AC45/AC54 journeys. Observed evidence is recorded in the
-identity prototype guide after verification; proposal mappings are not test passes.
+The participation slice now exposes the protocol in an explicit synthetic HTTPS
+profile with a small administrator browser workspace. Actual Chromium uses a
+virtual WebAuthn authenticator; this does not validate physical devices or human
+identity proof. Moderator roles, email invitations and full AC45/AC54 journeys
+remain absent. See the participation evidence separately from the original private
+fixture evidence; proposal mappings are not test passes.
 
 ## References
 

@@ -1,10 +1,10 @@
 # Controlled identity prototype
 
-The identity module is executable through private integration HTTP fixtures using
-disposable PostgreSQL and accounts. It is **not enabled by `app:start` or `app:dev`**.
-There is no administrator workspace, bootstrap CLI, real-user invitation flow,
-production identity route or trusted identity header. Runtime capability responses
-continue to report participant authentication/mutations unavailable.
+This file preserves the original private-fixture evidence. The later
+[participation slice](participation.md) enables the same protocol only through an
+explicit synthetic profile and adds a browser administrator workspace. Default
+startup still exposes no identity routes. There is no real-user invitation flow,
+approved production identity policy or trusted identity header.
 
 [ADR-004](../adr/004-identity-admission-prototype.md) distinguishes product
 requirements from six concrete, unapproved policy candidates. The task implements
@@ -71,7 +71,7 @@ only in their fresh authorized issuance response.
 
 ## Remaining gates
 
-Approve or revise the six policy candidates before enabling routes or admitting
+Approve or revise the six policy candidates before production exposure or admitting
 real participants. Operator capability custody/rotation and identity-proof ceremonies
 for administrator-assisted recovery are not implemented. Deployment audits identify
 a capability class, not an individually authenticated operator. Decide retention/

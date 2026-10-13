@@ -2,16 +2,19 @@
 
 A persistent collaboration and knowledge environment for human–AI collectives.
 
-**Current state:** application runtime and executable contract foundation. A real
-TypeScript/Fastify API and React/React Router Data Mode browser build and run as one
-release. The browser shows service status, loading, and failure/retry states. An
-internal publication foundation now commits text revisions, pointers, source events,
-durable outbox intents and safe retry outcomes together. It has no public route.
-An identity/admission prototype verifies passkeys, opaque sessions and agent credentials
-against disposable accounts; its routes are private test fixtures and its policy
-choices await review. Participant-facing admission/sign-in, discussions, publishing, an agent participation API,
-storage operations, and jobs remain unimplemented. No default administrator or
-development authentication bypass is provided.
+**Current state:** a working text participation preview, available only through an
+explicit synthetic profile. Administrators initialize a community and admit human
+and agent accounts. A React browser and direct HTTPS clients share discussion,
+reply, text-artifact, exact-revision and safe-retry operations. Lost responses can
+be reconciled without duplicate publication. Identity policies, production limits
+and retained-data operations still require review, so use synthetic content only.
+Normal startup keeps the original operational foundation. No default administrator,
+identity-header bypass, file uploads, worker effects or model execution is enabled.
+
+For the isolated browser preview, run `npm run app:synthetic` after installing
+dependencies, Node 24.19.0, OpenSSL and Docker. See the
+[participation guide](docs/development/participation.md) for enrollment, the actual
+API, an external client and [verification evidence](docs/development/participation-evidence.md).
 
 ## Design documents
 
@@ -54,6 +57,9 @@ npm run app:start # serves the API and compiled browser at http://127.0.0.1:3000
 npm run test:app:postgres # build first; isolated PostgreSQL and HTTP tests
 npm run test:publication:postgres # build first; isolated concurrency/fault tests and tail metrics
 npm run test:identity:postgres # disposable identity protocol and signed passkey fixtures
+npm run test:participation:postgres # actual HTTPS journey and standalone agent client
+npx playwright install chromium
+npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:integration
 npm run test:persistence
 ```
@@ -102,7 +108,7 @@ there is no silent fallback to a storage mock.
 an isolated PostgreSQL container with temporary storage. It leaves development
 services and data intact; see the [migration guide](db/README.md).
 
-The implemented JSON routes are `GET /health/live`, `GET /health/ready`,
+The default-profile JSON routes are `GET /health/live`, `GET /health/ready`,
 `GET /api/v1/runtime`, and `GET /api/v1/openapi.json`. Readiness uses the application
 role and fails for unavailable or privileged database access. Responses contain
 coarse availability/capability information, never database credentials or SQL errors.
@@ -119,12 +125,14 @@ remains required before enabling the first consumer.
 The [identity prototype guide](docs/development/identity-prototype.md) records
 bootstrap/admission, verifier-only issuance, safe recovery, cookie/bearer authority,
 and real PostgreSQL race/disclosure checks. [ADR-004](docs/adr/004-identity-admission-prototype.md)
-contains six concrete **unapproved** policy candidates. Normal startup exposes no
-identity routes, and no real participants may be enrolled under that synthetic profile.
+contains six concrete **unapproved** policy candidates. Startup without an explicit
+synthetic profile exposes no identity routes; no real participants may be enrolled
+under the synthetic profile. The enabled release adds documented `/api/v1/identity`,
+community and text-participation routes and `/loom` browser views.
 
 These suites do not certify a hosted provider, production security, browser
-usability, or product acceptance. Signed upload replay, version-specific grants,
-full participant publication journeys, and coordinated backup/restore require subsequent tests.
+usability, or full product acceptance. Signed upload replay, version-specific grants,
+cross-machine trials and coordinated backup/restore require subsequent tests.
 The application foundation's Node 24 installation, build/typecheck, browser checks,
 and isolated PostgreSQL/HTTP suite passed on macOS arm64. Its updated CI has not
 executed yet. Earlier bootstrap checks and real-service integration/persistence passed on macOS arm64

@@ -1,8 +1,8 @@
 # ADR-006: Shared publication transaction and commit tail
 
-Status: implemented for the internal text-revision operation and durable intents.
-Public mutations, complete domain constructors, resource lifecycle operations and workers
-remain unimplemented. The imported architecture snapshot is unchanged.
+Status: implemented for internal revisions and synthetic text participation. Typed
+discussion/opening/reply/artifact/setup operations reuse this same tail. Complete
+domain/lifecycle operations and workers remain unimplemented; the import is unchanged.
 
 ## Decision
 
@@ -29,8 +29,8 @@ this same tail protocol. This does not implement a participant change-feed API.
 
 | Order | Guard and obligations |
 |---|---|
-| 1 | Transaction advisory mutex over JSON `[loom.publication.attempt, participant, revision.publish, key]`, hashed by PostgreSQL to the 64-bit namespace. It exists before any outcome row. Hash collisions only serialize unrelated attempts; the persisted scope remains exact. |
-| 2 | Participant `FOR SHARE`, then credential and parent-passkey rows in UUID order with `FOR SHARE`, before checking current state, credential ownership/channel/expiry and role. Status/role/revocation changes require the conflicting exclusive guard. |
+| 1 | Transaction advisory mutex over JSON `[loom.publication.attempt, participant, operation_kind, key]`, hashed by PostgreSQL to the 64-bit namespace. It exists before any outcome row. Hash collisions only serialize unrelated attempts; the persisted scope remains exact. The original internal kind remains `revision.publish`. |
+| 2 | Participant `FOR SHARE` (all declared mention IDs and actor sorted for participation), then credential and parent-passkey rows in UUID order with `FOR SHARE`, before checking current state, ownership/channel/expiry and role. State/role/revocation changes require the conflicting exclusive guard. |
 | 3 | Shared two-integer structure advisory guard `(0x4c4f4f4d, 1)`, disjoint from the attempt namespace. Ownership/area movement must take its exclusive form before resource guards. |
 | 4 | Discover the complete owning chain, then lock UUIDs in sorted order. A new publication takes `FOR UPDATE` on its target and `FOR SHARE` on containers/areas. Resolution uses shared guards. Rewalk and validate the locked dependency set; a changed set aborts for retry with the same identity. |
 | 5 | Check editor membership under the resource guard; editor-list writers take that resource's exclusive guard. Lock selected revision availability with `FOR SHARE`. Lifecycle changes require the conflicting resource/revision guards. |
@@ -43,7 +43,7 @@ same-attempt retry category. The operation does not silently retry or mint a key
 These defaults are not approved product latency or load limits.
 
 The attempt mutex and actor check now live in `server/application/` and are reused
-by the dormant identity prototype. Its administrative writers take the separate
+by the synthetic identity protocol. Its administrative writers take the separate
 two-integer guard `(0x4c4f4f4d, 2)`, then sorted participant `FOR UPDATE` locks,
 before checking role/last-administrator state and locking affected credentials.
 That serial guard avoids opposite actor/target lock upgrades and protects the
@@ -80,7 +80,7 @@ local Docker/network overhead and print observed percentiles/throughput. They
 establish neither a production envelope nor full workload throughput. Reconsider
 the single tail if representative workload evidence requires a different design;
 any replacement must preserve committed coverage. The retained backlog still
-requires full feed, projection, worker, authentication and product validation.
+requires full feed, projection, worker, production identity and product validation.
 
 See architecture §§7.1–7.6 and ADR-015 for the inherited semantics and retry scope;
 this record selects the executable mechanism rather than restating the architecture.

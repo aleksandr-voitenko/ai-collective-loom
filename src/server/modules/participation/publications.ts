@@ -1,0 +1,384 @@
+import { randomUUID, createHash } from "node:crypto";
+import { Value } from "@sinclair/typebox/value";
+import type { TSchema } from "@sinclair/typebox";
+import {
+  DiscussionInput,
+  ReplyInput,
+  ArtifactInput,
+  RevisionInput,
+  SetupInput,
+  type AuthoredContent,
+} from "../../../contracts/participation.js";
+import { parseAuthored, validUnicode } from "../../../contracts/authored.js";
+import { lockAttempt } from "../../application/attempt.js";
+import type { SqlTransaction } from "../../db/postgres.js";
+import { identityOf, type ActorContext } from "../publication/actor.js";
+import { PublicationError } from "../publication/errors.js";
+import { canonicalAttemptKey } from "../publication/input.js";
+import {
+  lockActor,
+  lockContext,
+  authorizePublication,
+  requireRevision,
+  commitRevision,
+  result,
+  safeError,
+  type Transactions,
+  type Outcome,
+  type Resource,
+  type Reconciliation,
+} from "../publication/publication.js";
+
+const schemas: Record<string, TSchema> = {
+  "discussion.create": DiscussionInput,
+  "reply.create": ReplyInput,
+  "artifact.create": ArtifactInput,
+  "revision.publish": RevisionInput,
+  "community.setup": SetupInput,
+};
+export type PublicationKind = keyof typeof schemas;
+export const participationSemanticVersion = "participation-text-v1";
+type Request = {
+  idempotency_key: string;
+  area_id?: string;
+  discussion_id?: string;
+  parent_id?: string;
+  resource_id?: string;
+  expected_revision_id?: string;
+  title?: string | null;
+  content?: AuthoredContent;
+  overview?: AuthoredContent;
+  community_name?: string;
+  ordinary_area_name?: string;
+  proposal_area_name?: string;
+};
+
+function ordered(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(ordered);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, item]) => [key, ordered(item)]),
+    );
+  return value;
+}
+export function digestRequest(kind: string, value: unknown) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([participationSemanticVersion, kind, ordered(value)]),
+    )
+    .digest("hex");
+}
+function prepare(kind: string, value: unknown) {
+  const schema = schemas[kind];
+  if (!schema || !Value.Check(schema, value))
+    throw new PublicationError("invalid_input");
+  const input = structuredClone(value) as Request;
+  for (const [key, field] of Object.entries(input))
+    if (
+      (key.endsWith("_id") || key === "idempotency_key") &&
+      typeof field === "string"
+    )
+      (input as Record<string, unknown>)[key] = field.toLowerCase();
+  const content = input.content ?? input.overview!;
+  content.mentions.forEach((entity) => {
+    entity.participant_id = entity.participant_id.toLowerCase();
+  });
+  // Entity order is not semantic. Text, token spelling, line endings and spaces are.
+  content.mentions.sort((a, b) => (a.token < b.token ? -1 : a.token > b.token ? 1 : 0));
+  try {
+    parseAuthored(content);
+  } catch {
+    throw new PublicationError("invalid_input");
+  }
+  for (const text of [
+    input.title,
+    input.community_name,
+    input.ordinary_area_name,
+    input.proposal_area_name,
+  ]) {
+    if (text && (text.includes("\0") || !validUnicode(text) || !text.trim()))
+      throw new PublicationError("invalid_input");
+  }
+  const { idempotency_key: _key, ...semantic } = input;
+  return { input, content, digest: digestRequest(kind, semantic) };
+}
+async function outcome(
+  tx: SqlTransaction,
+  participant: string,
+  kind: string,
+  key: string,
+) {
+  await lockAttempt(tx, participant, kind, key);
+  return (
+    await tx.query<Outcome>(
+      "SELECT id, resource_id, revision_id, semantic_version, request_digest FROM loom.idempotency_records WHERE participant_id=$1 AND operation_kind=$2 AND idempotency_key=$3",
+      [participant, kind, key],
+    )
+  ).rows[0];
+}
+function open(chain: Resource[]) {
+  if (chain.some((resource) => !resource.publication_open))
+    throw new PublicationError("forbidden");
+}
+export class ParticipationPublications {
+  constructor(private readonly database: Transactions) {}
+
+  async publish(actorContext: ActorContext, kind: string, value: unknown) {
+    const { input, content, digest } = prepare(kind, value),
+      identity = identityOf(actorContext);
+    try {
+      return await this.database.transaction(async (tx) => {
+        const saved = await outcome(
+          tx,
+          identity.participantId,
+          kind,
+          input.idempotency_key,
+        );
+        // All participant locks precede credential/resource guards in UUID order.
+        for (const id of [
+          ...new Set([
+            identity.participantId,
+            ...content.mentions.map((m) => m.participant_id),
+          ]),
+        ].sort()) {
+          await tx.query(
+            "SELECT id FROM loom.participants WHERE id=$1 FOR SHARE",
+            [id],
+          );
+        }
+        const actor = await lockActor(tx, actorContext);
+        if (kind === "community.setup" && !actor.administrator)
+          throw new PublicationError("forbidden");
+        if (saved) {
+          const chain = await lockContext(tx, saved.resource_id, "resolution");
+          await requireRevision(tx, saved.resource_id, saved.revision_id);
+          if (kind === "revision.publish")
+            await authorizePublication(tx, actor, chain);
+          else open(chain);
+          if (
+            saved.semantic_version !== participationSemanticVersion ||
+            saved.request_digest !== digest
+          )
+            throw new PublicationError("idempotency_conflict");
+          return result(saved, "replayed");
+        }
+        for (const mention of content.mentions) {
+          const found = await tx.query(
+            "SELECT id FROM loom.participants WHERE id=$1 AND state='active' AND kind IN ('human','agent')",
+            [mention.participant_id],
+          );
+          if (!found.rowCount) throw new PublicationError("invalid_input");
+        }
+        let chain: Resource[],
+          resourceId: string,
+          title = input.title ?? null;
+        if (kind === "revision.publish") {
+          chain = await lockContext(tx, input.resource_id!, "publication");
+          const resource = chain[0]!;
+          if (!resource.current_revision_id)
+            throw new PublicationError("unavailable");
+          await requireRevision(tx, resource.id, resource.current_revision_id);
+          await authorizePublication(tx, actor, chain);
+          if (resource.current_revision_id !== input.expected_revision_id)
+            throw new PublicationError(
+              "revision_conflict",
+              resource.current_revision_id,
+            );
+          const old = (
+            await tx.query<{ title: string | null }>(
+              "SELECT title FROM loom.revisions WHERE id=$1",
+              [resource.current_revision_id],
+            )
+          ).rows[0]!;
+          if ((old.title === null) !== (title === null))
+            throw new PublicationError("invalid_input");
+          resourceId = resource.id;
+        } else if (kind === "community.setup") {
+          await tx.query(
+            "SELECT pg_advisory_xact_lock($1::integer,$2::integer)",
+            [0x4c4f4f4d, 3],
+          );
+          const settings = (
+            await tx.query<{ version: number }>(
+              "SELECT version FROM loom.community_settings WHERE id=1 FOR UPDATE",
+              [],
+            )
+          ).rows[0];
+          if (!settings || settings.version !== 0)
+            throw new PublicationError("idempotency_conflict");
+          const areaId = randomUUID(),
+            proposalId = randomUUID();
+          for (const [id, name, description] of [
+            [
+              areaId,
+              input.ordinary_area_name!,
+              "Shared work, questions, and ideas.",
+            ],
+            [
+              proposalId,
+              input.proposal_area_name!,
+              "Proposals and feedback about this community.",
+            ],
+          ]) {
+            await tx.query(
+              "INSERT INTO loom.resources(id,kind) VALUES ($1,'area')",
+              [id],
+            );
+            await tx.query(
+              "INSERT INTO loom.areas(id,title,description) VALUES ($1,$2,$3)",
+              [id, name, description],
+            );
+          }
+          resourceId = await this.createResource(
+            tx,
+            actor.participantId,
+            "artifact",
+            areaId,
+          );
+          await tx.query("INSERT INTO loom.artifacts VALUES ($1)", [
+            resourceId,
+          ]);
+          await tx.query("INSERT INTO loom.resource_editors VALUES ($1,$2)", [
+            resourceId,
+            actor.participantId,
+          ]);
+          await tx.query(
+            "UPDATE loom.community_settings SET version=1, community_name=$1, overview_id=$2, proposal_area_id=$3 WHERE id=1",
+            [input.community_name, resourceId, proposalId],
+          );
+          await tx.query(
+            "INSERT INTO loom.participation_audit(id,actor_id,actor_credential_id,operation_kind,target_id,idempotency_key,request_digest,result_version) VALUES ($1,$2,$3,$4,$5,$6,$7,1)",
+            [
+              randomUUID(),
+              actor.participantId,
+              actor.credentialId,
+              kind,
+              resourceId,
+              input.idempotency_key,
+              digest,
+            ],
+          );
+          chain = await lockContext(tx, resourceId, "publication");
+          title = "Community overview";
+        } else {
+          const owners =
+            kind === "reply.create"
+              ? await lockContext(tx, input.parent_id!, "resolution")
+              : await lockContext(tx, input.area_id!, "resolution", ["area"]);
+          open(owners);
+          let ownerId = input.area_id!;
+          if (kind === "reply.create") {
+            const parent = owners[0]!;
+            const row = (
+              await tx.query<{ discussion_id: string }>(
+                "SELECT discussion_id FROM loom.contributions WHERE id=$1",
+                [parent.id],
+              )
+            ).rows[0];
+            if (
+              parent.kind !== "contribution" ||
+              row?.discussion_id !== input.discussion_id ||
+              !parent.current_revision_id
+            )
+              throw new PublicationError("unavailable");
+            await requireRevision(tx, parent.id, parent.current_revision_id);
+            ownerId = row!.discussion_id;
+          } else if (kind === "discussion.create") {
+            ownerId = await this.createResource(
+              tx,
+              actor.participantId,
+              "discussion",
+              input.area_id!,
+            );
+          } else if (kind !== "artifact.create")
+            throw new PublicationError("invalid_input");
+          const resourceKind =
+            kind === "artifact.create" ? "artifact" : "contribution";
+          resourceId = await this.createResource(
+            tx,
+            actor.participantId,
+            resourceKind,
+            ownerId,
+          );
+          if (kind === "discussion.create")
+            await tx.query("INSERT INTO loom.discussions VALUES ($1,$2)", [
+              ownerId,
+              resourceId,
+            ]);
+          if (resourceKind === "contribution")
+            await tx.query(
+              "INSERT INTO loom.contributions(id,discussion_id,parent_id) VALUES ($1,$2,$3)",
+              [resourceId, ownerId, input.parent_id ?? null],
+            );
+          else {
+            await tx.query("INSERT INTO loom.artifacts VALUES ($1)", [
+              resourceId,
+            ]);
+            await tx.query("INSERT INTO loom.resource_editors VALUES ($1,$2)", [
+              resourceId,
+              actor.participantId,
+            ]);
+          }
+          // New rows are owned by this transaction. Existing owner locks were taken
+          // before insertion; no competing transaction can yet see these identities.
+          chain = await lockContext(tx, resourceId, "publication");
+        }
+        return commitRevision(
+          tx,
+          actor,
+          chain,
+          {
+            idempotency_key: input.idempotency_key,
+            expected_revision_id: input.expected_revision_id ?? null,
+            content,
+            title,
+            mentions: content.mentions,
+          },
+          { kind, version: participationSemanticVersion, digest },
+        );
+      });
+    } catch (error) {
+      return safeError(error);
+    }
+  }
+  private async createResource(
+    tx: SqlTransaction,
+    actor: string,
+    kind: string,
+    owner: string,
+  ) {
+    const id = randomUUID();
+    await tx.query(
+      "INSERT INTO loom.resources(id,kind,owner_resource_id,original_author_id) VALUES ($1,$2,$3,$4)",
+      [id, kind, owner, actor],
+    );
+    return id;
+  }
+  async reconcile(
+    actor: ActorContext,
+    kind: string,
+    key: string,
+  ): Promise<Reconciliation> {
+    if (!schemas[kind]) throw new PublicationError("invalid_input");
+    key = canonicalAttemptKey(key);
+    try {
+      return await this.database.transaction(async (tx) => {
+        const saved = await outcome(
+          tx,
+          identityOf(actor).participantId,
+          kind,
+          key,
+        );
+        await lockActor(tx, actor);
+        if (!saved) return { operation_state: "not_recorded" };
+        await lockContext(tx, saved.resource_id, "resolution");
+        await requireRevision(tx, saved.resource_id, saved.revision_id);
+        return result(saved, "replayed");
+      });
+    } catch (error) {
+      return safeError(error);
+    }
+  }
+}

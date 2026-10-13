@@ -34,7 +34,10 @@
     "test:app": "node scripts/check-runtime.mjs && node --import tsx --test tests/unit/*.test.ts tests/contract/*.test.ts tests/web/*.test.tsx",
     "test:app:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/application.test.ts",
     "test:publication:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/publication.test.ts",
-    "test:identity:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity.test.ts"
+    "test:identity:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity.test.ts",
+    "test:participation:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/participation.test.ts",
+    "test:e2e": "node scripts/check-runtime.mjs && playwright test",
+    "app:synthetic": "npm run app:build && node --import tsx scripts/synthetic-participation.ts"
   },
   "dependencies": {
     "@fastify/static": "10.1.6",
@@ -43,6 +46,7 @@
     "@simplewebauthn/server": "14.0.3",
     "@sinclair/typebox": "0.34.52",
     "fastify": "5.12.5",
+    "markdown-it": "15.0.2",
     "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -50,6 +54,7 @@
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "13.1.0",
+    "@playwright/test": "1.64.0",
     "@testing-library/react": "16.3.3",
     "@types/jsdom": "30.0.0",
     "@types/node": "24.19.2",

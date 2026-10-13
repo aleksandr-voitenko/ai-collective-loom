@@ -1,0 +1,848 @@
+.loom-app {
+  --bg: #f8f9f6;
+  --side: #f0f3ee;
+  --ink: #202d28;
+  --muted: #637169;
+  --line: #dce3db;
+  --accent: #256b52;
+  --tint: #e5f0e8;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    14px/1.55 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Arial,
+    sans-serif;
+}
+.loom-app * {
+  box-sizing: border-box;
+}
+.loom-app a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.loom-app a:hover {
+  text-decoration: underline;
+}
+.loom-app button,
+.loom-app input,
+.loom-app select,
+.loom-app textarea {
+  font: inherit;
+}
+.loom-app button,
+.loom-app .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 13px;
+  color: var(--ink);
+  background: white;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 38px;
+}
+.loom-app button:hover {
+  background: #edf3ec;
+}
+.loom-app button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.loom-app .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.loom-app .primary:hover {
+  background: #18533d;
+}
+.loom-app :focus-visible {
+  outline: 3px solid #438463;
+  outline-offset: 3px;
+}
+.loom-app .icon {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+}
+.loom-app h1 {
+  font-size: 29px;
+  font-weight: 630;
+  letter-spacing: -0.8px;
+  line-height: 1.25;
+  margin: 0 0 12px;
+}
+.loom-app h2 {
+  font-size: 19px;
+  font-weight: 630;
+  line-height: 1.35;
+  margin: 0 0 16px;
+}
+.loom-app h3 {
+  font-size: 14px;
+  font-weight: 650;
+  margin: 0 0 5px;
+}
+.loom-app p {
+  margin: 0 0 14px;
+}
+.loom-app p:last-child {
+  margin-bottom: 0;
+}
+.loom-app .subtitle {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 680px;
+}
+.loom-app .eyebrow {
+  text-transform: uppercase;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+}
+.loom-app .sidebar {
+  width: 224px;
+  position: fixed;
+  inset: 0 auto 0 0;
+  background: var(--side);
+  border-right: 1px solid var(--line);
+  padding: 27px 15px 18px;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+}
+.loom-app .brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 9px 30px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 650;
+}
+.loom-app .brand small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  font-weight: 450;
+  color: var(--muted);
+}
+.loom-app .loom-mark {
+  width: 30px;
+  height: 32px;
+  display: grid;
+  grid-template-columns: repeat(3, 5px);
+  gap: 3px;
+  align-items: center;
+  position: relative;
+  transform: rotate(-9deg);
+}
+.loom-app .loom-mark i {
+  height: 26px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.loom-app .loom-mark:after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 11px;
+  width: 29px;
+  height: 6px;
+  background: var(--side);
+  border-top: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(-24deg);
+}
+.loom-app .community-name {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  padding: 0 3px 19px;
+  margin: 0 8px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.loom-app nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 6px;
+  padding: 11px 12px;
+  color: #4d5d53;
+  margin: 3px 0;
+  font-size: 13px;
+}
+.loom-app nav a.active {
+  color: #18533d;
+  background: #dfeadd;
+  font-weight: 650;
+}
+.loom-app nav a:hover {
+  background: #e6ece3;
+  text-decoration: none;
+}
+.loom-app .side-spacer {
+  flex: 1;
+  min-height: 60px;
+}
+.loom-app .help-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.loom-app .account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 16px 7px 0;
+}
+.loom-app .account strong {
+  display: block;
+  font-size: 12px;
+}
+.loom-app .account small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.loom-app .account button {
+  margin-left: auto;
+  background: none;
+  padding: 5px;
+  border: 0;
+}
+.loom-app .workspace {
+  margin-left: 224px;
+}
+.loom-app .topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 0 34px;
+  font-size: 12px;
+  background: var(--bg);
+  gap: 15px;
+}
+.loom-app .release-label {
+  color: var(--muted);
+  font-size: 11px;
+}
+.loom-app main.page {
+  display: block;
+  padding: 32px 34px 70px;
+  max-width: 1250px;
+  margin: auto;
+  min-height: calc(100vh - 64px);
+}
+.loom-app .header-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.loom-app .breadcrumb {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 24px;
+}
+.loom-app .breadcrumb a {
+  color: var(--muted);
+}
+.loom-app .card,
+.loom-app .collection {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.loom-app .list-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  width: 100%;
+  text-align: left;
+}
+.loom-app .collection > div:last-child > .list-row {
+  border-bottom: 0;
+}
+.loom-app .list-row:hover {
+  background: #fafcf8;
+  text-decoration: none;
+}
+.loom-app .list-row .icon {
+  color: var(--accent);
+}
+.loom-app .list-row div {
+  flex: 1;
+  min-width: 0;
+}
+.loom-app .list-row p,
+.loom-app .list-row small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.loom-app .list-row time {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.loom-app .pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  padding: 18px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.loom-app .pagination div {
+  display: flex;
+  gap: 9px;
+}
+.loom-app .pagination button {
+  font-size: 12px;
+}
+.loom-app .empty-state {
+  padding: 38px 25px;
+  text-align: center;
+  color: var(--muted);
+}
+.loom-app .empty-state h3 {
+  font-size: 17px;
+  color: var(--ink);
+}
+.loom-app .about,
+.loom-app .section {
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
+  margin-top: 26px;
+}
+.loom-app details > summary {
+  cursor: pointer;
+  color: #486153;
+  font-size: 13px;
+  padding: 5px 0;
+  margin-bottom: 15px;
+}
+.loom-app .reading-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 32px;
+  align-items: start;
+}
+.loom-app .right-rail {
+  font-size: 12px;
+  color: var(--muted);
+}
+.loom-app .right-rail h3 {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.loom-app hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 20px 0;
+}
+.loom-app .post {
+  padding: 24px 26px;
+}
+.loom-app .author-line {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin-bottom: 18px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.loom-app .author-line time {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+.loom-app .avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  width: 30px;
+  border-radius: 50%;
+  background: #ece4d8;
+  color: #796749;
+  font-size: 10px;
+  font-weight: 650;
+  flex-shrink: 0;
+}
+.loom-app .avatar.agent {
+  border-radius: 8px;
+  background: #e7edf5;
+  color: #5b7495;
+}
+.loom-app .author-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  border: 1px solid #dce2ec;
+  background: #f0f3f8;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #627489;
+}
+.loom-app .prose {
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  color: #36463b;
+}
+.loom-app .prose p {
+  margin-bottom: 14px;
+}
+.loom-app .prose h1 {
+  font-size: 25px;
+}
+.loom-app .prose h2 {
+  font-size: 21px;
+}
+.loom-app .prose blockquote {
+  border-left: 2px solid #bfd0bd;
+  background: #f7f9f5;
+  margin: 14px 0;
+  padding: 8px 15px;
+  color: var(--muted);
+}
+.loom-app pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 18px;
+  background: #f4f6f3;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.loom-app code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.loom-app .mention {
+  background: var(--tint);
+  color: var(--accent);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.loom-app .post-footer {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  border-top: 1px solid #edf0e9;
+  padding-top: 13px;
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.loom-app .post-footer a {
+  color: var(--muted);
+}
+.loom-app .text-button {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  padding: 4px 0;
+  min-height: 30px;
+  font-size: 12px;
+}
+.loom-app .discussion-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  margin: 27px 0 6px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.loom-app .discussion-controls h2 {
+  font-size: 15px;
+  margin: 0;
+  color: var(--ink);
+}
+.loom-app .discussion-controls h2 span {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.loom-app .comment {
+  padding: 23px 0 0;
+}
+.loom-app .comment .prose {
+  padding-left: 39px;
+  font-size: 13px;
+}
+.loom-app .comment .post-footer {
+  margin: 8px 0 0 39px;
+  padding: 0;
+  border: 0;
+}
+.loom-app .comment .author-line {
+  margin-bottom: 9px;
+}
+.loom-app .comment-children {
+  border-left: 1px solid #d6dfd1;
+  padding-left: 25px;
+  margin-left: 13px;
+}
+.loom-app .branch-link {
+  display: inline-block;
+  margin: 6px 0 10px 39px;
+  font-size: 12px;
+}
+.loom-app .parent-context {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+.loom-app .focus-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 15px;
+  border: 1px solid #d2e1cd;
+  background: #eaf2e8;
+  border-radius: 7px;
+  margin-bottom: 17px;
+  font-size: 12px;
+}
+.loom-app .ancestors {
+  margin-bottom: 20px;
+}
+.loom-app .ancestor-row {
+  display: block;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.loom-app .empty-replies {
+  padding: 20px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.loom-app .composer {
+  padding: 22px;
+  margin: 22px 0;
+}
+.loom-app .composer h2 {
+  font-size: 17px;
+}
+.loom-app label {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  margin: 0 0 17px;
+}
+.loom-app input:not([type="checkbox"]),
+.loom-app textarea,
+.loom-app select {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-top: 7px;
+  min-height: 41px;
+}
+.loom-app input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.loom-app textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+.loom-app textarea:disabled,
+.loom-app input:disabled {
+  background: #f5f7f3;
+  color: var(--muted);
+}
+.loom-app .composer-tools {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 17px;
+}
+.loom-app .composer details {
+  margin-top: 14px;
+}
+.loom-app .notice {
+  padding: 15px 17px;
+  border: 1px solid #e8d9b7;
+  border-radius: 6px;
+  background: #fbf4e6;
+  color: #805c20;
+  font-size: 13px;
+  margin-bottom: 18px;
+  overflow-wrap: anywhere;
+}
+.loom-app .notice button {
+  margin: 8px 8px 0 0;
+}
+.loom-app .notice strong {
+  display: block;
+  margin-bottom: 7px;
+}
+.loom-app .notice.neutral {
+  background: #f0f6ef;
+  border-color: #d9e4d5;
+  color: #486153;
+}
+.loom-app .notice.error {
+  background: #fcf0ee;
+  border-color: #e6c9c4;
+  color: #963f3e;
+}
+.loom-app .fineprint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 18px;
+}
+.loom-app .signin {
+  max-width: 660px;
+  margin: 60px auto;
+}
+.loom-app .signin h1 {
+  font-size: 38px;
+}
+.loom-app .signin .card {
+  padding: 30px;
+  margin-top: 32px;
+}
+.loom-app .signin details {
+  margin-top: 25px;
+}
+.loom-app .admin-card {
+  padding: 25px;
+  margin: 24px 0;
+  max-width: 850px;
+}
+.loom-app .admin-card > button {
+  margin-right: 10px;
+}
+.loom-app .guide-text {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.loom-app .mobile-menu {
+  display: none;
+}
+.loom-app .navigation-drawer {
+  height: 100dvh;
+  max-height: none;
+  width: 290px;
+  max-width: 90vw;
+  margin: 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  padding: 24px 16px;
+  background: var(--side);
+}
+.loom-app .navigation-drawer[open] {
+  display: flex;
+  flex-direction: column;
+}
+.loom-app .drawer-close {
+  margin-bottom: 22px;
+}
+.loom-app dialog::backdrop {
+  background: #202d2866;
+}
+.loom-app .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #202d2866;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.loom-app .modal {
+  background: white;
+  border-radius: 10px;
+  padding: 25px;
+  max-width: 520px;
+}
+.loom-app .modal button {
+  margin: 10px 8px 0 0;
+}
+.loom-app .skip-link {
+  position: fixed;
+  top: -60px;
+  left: 12px;
+  background: white;
+  border: 2px solid var(--accent);
+  padding: 10px;
+  z-index: 100;
+}
+.loom-app .skip-link:focus {
+  top: 12px;
+}
+@media (max-width: 1100px) {
+  .loom-app .reading-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .loom-app .right-rail {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .loom-app .sidebar {
+    display: none;
+  }
+  .loom-app .workspace {
+    margin-left: 0;
+  }
+  .loom-app .topbar {
+    height: 58px;
+    padding: 0 18px;
+    justify-content: flex-start;
+  }
+  .loom-app .topbar .release-label {
+    margin-left: auto;
+  }
+  .loom-app .mobile-menu {
+    display: inline-flex;
+    background: transparent;
+    border: 0;
+    padding: 4px;
+    min-height: 32px;
+  }
+  .loom-app main.page {
+    padding: 25px 18px 55px;
+  }
+  .loom-app h1 {
+    font-size: 27px;
+  }
+  .loom-app .header-line {
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 23px;
+  }
+  .loom-app .header-line > button {
+    margin-left: auto;
+  }
+  .loom-app .post {
+    padding: 20px 18px;
+  }
+  .loom-app .post .prose {
+    font-size: 13px;
+  }
+  .loom-app .comment-children {
+    margin-left: 7px;
+    padding-left: 12px;
+  }
+  .loom-app .comment .prose {
+    padding-left: 0;
+  }
+  .loom-app .comment .post-footer {
+    margin-left: 0;
+  }
+  .loom-app .branch-link {
+    margin-left: 0;
+  }
+  .loom-app .list-row {
+    padding: 18px 14px;
+    gap: 11px;
+    flex-wrap: wrap;
+  }
+  .loom-app .list-row time {
+    font-size: 11px;
+  }
+  .loom-app .pagination {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .loom-app .composer,
+  .loom-app .admin-card {
+    padding: 18px;
+  }
+  .loom-app .composer-tools {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .loom-app .signin {
+    margin: 25px auto;
+  }
+  .loom-app .signin h1 {
+    font-size: 31px;
+  }
+  .loom-app .signin .card {
+    padding: 22px;
+  }
+  .loom-app .author-line time {
+    font-size: 10px;
+  }
+  .loom-app .post-footer {
+    gap: 17px;
+  }
+}
+
+.loom-app nav {
+  display: block;
+}
+.loom-app .notice {
+  margin-top: 0;
+}
+.loom-app .button {
+  margin-top: 0;
+}
+.loom-app .list-row input[type="checkbox"] {
+  width: auto;
+}
+.loom-app .admin-card .list-row {
+  flex-wrap: wrap;
+}
+.loom-app .topic-tabs {
+  display: flex;
+  gap: 25px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+.loom-app .topic-tabs button {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 12px 0;
+  color: var(--muted);
+}
+.loom-app .topic-tabs button[aria-pressed="true"] {
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+  font-weight: 650;
+}

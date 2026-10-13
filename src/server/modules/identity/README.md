@@ -4,8 +4,9 @@
 `IdentityAdministration` implements controlled initialization, admission, account
 state/role changes, renaming, issuance, revocation and safe reconciliation. They
 share the publication actor registry and `server/application/` transaction guards.
-Normal startup imports neither class and exposes no identity routes. The executable
-HTTP adapter and software authenticator are private `tests/helpers/` fixtures.
+The explicit synthetic profile registers the real `server/http/identity.ts` adapter.
+Without opt-in no identity routes are registered. Software authenticators and
+fault controls remain private test helpers; there is no HTTP bootstrap bypass.
 
 An account is created without a credential. Issuance is a separate scoped attempt;
 only a fresh committed issuance returns its secret. Retry/reconciliation returns

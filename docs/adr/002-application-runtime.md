@@ -2,7 +2,7 @@
 
 Status: implemented for the runtime foundation; this expands the imported
 ADR-002 proposal only for the decisions below. It does not approve the entire
-architecture or implement participant features.
+architecture. The synthetic participation extension below is now available.
 
 ## Decision and scope
 
@@ -81,15 +81,17 @@ product operating envelope.
 The browser calls the same documented API, validates response shapes, preserves
 request cancellation, and uses Data Mode loaders, pending navigation, failure
 boundaries, and deliberate retry. It renders no fake participants or discussions.
-No sign-in, admission, default administrator, trusted identity header, development
-authentication, participant mutation, storage operation, or durable job is implemented.
+The default foundation exposes no participant operations. An explicit synthetic
+profile now adds sign-in, admission, text participation and bounded retrieval through
+the same controllers/services; see ADR-011/015/016/017. No default administrator,
+identity header, storage operation, model execution or durable worker is enabled.
 
 Local evidence covers installation/build/typecheck, real PostgreSQL/HTTP lifecycle,
 transport contracts, router loading/failure/retry, and development module/proxy
 separation. The existing bootstrap checks
-remain in CI, with application checks and the isolated runtime suite added. CI
-execution, hosted deployment, product scenarios, and participant authorization
-remain separate validation gates. Reconsider these choices when a new contract
+remain in CI, with application checks and the isolated runtime suite added. The current participation evidence adds real Chromium and direct HTTPS journeys;
+CI execution, hosted deployment, full product scenarios and physical device
+validation remain separate gates. Reconsider these choices when a new contract
 construct, participant operation, or observed browser/runtime limitation requires it;
 do not weaken the product invariants to fit a framework default.
 

@@ -12,11 +12,18 @@
 | [Local development](development/README.md) | Bootstrap commands, scope, credentials, persistence, and validation limits. |
 | [Local development decision](adr/019-local-development.md) | Initial local provider choice and reconsideration conditions. |
 | [Application runtime decision](adr/002-application-runtime.md) | Implemented stack, executable contract dialect, validation, and lifecycle boundaries for the foundation. |
-| [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary, minimal internal publication schema and additive identity prototype; complete domain/participant interfaces remain open. |
+| [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary, shared publication and additive synthetic identity/text domain schema. |
 | [Identity/admission decision record](adr/004-identity-admission-prototype.md) | Approved requirements separated from six unapproved, executable synthetic policy candidates. |
-| [Identity prototype evidence](development/identity-prototype.md) | Disposable PostgreSQL/passkey/cookie/bearer checks and limits; production routes and real enrollment remain disabled. |
+| [Identity prototype evidence](development/identity-prototype.md) | Original private-fixture PostgreSQL/passkey/cookie/bearer evidence; real enrollment remains gated. |
 | [Transactional publication decision](adr/006-transactional-publication.md) | Executable lock classes, atomic publication, commit tail and durable intents; worker fencing remains required. |
 | [Publication recovery decision](adr/015-publication-reconciliation.md) | Canonical scoped attempts, reference-only resolution, disclosure and retention limits. |
+| [Text participation guide](development/participation.md) | Current runnable synthetic profile, release API/examples and external-client trial. |
+| [Participation verification](development/participation-evidence.md) | Actual browser/HTTPS evidence, topology and remaining validation. |
+| [Authored text](adr/011-authored-text.md) | Versioned safe Markdown/entity subset and candidate limits. |
+| [Bounded retrieval](adr/016-bounded-participation-retrieval.md) | Parentage, exact bodies, live authorization, continuations and setup states. |
+| [Browser recovery](adr/017-browser-participation-recovery.md) | Scoped durable intent, late responses, conflicts and reading independence. |
+| [Retained-data gate](development/retained-data-gate.md) | Unapproved operating/recovery work before real data. |
+| [UI v0.6 reference](design/ui-v0.6/README.md) | Unchanged supplied prototype, design notes and screenshots; adopted subset and feature gates. |
 
 Repository development instructions are in root `AGENTS.md`; product/interface
 behavior remains governed by v0.9. Architecture mechanisms, configuration defaults,
@@ -34,6 +41,8 @@ bytes, principal mapping sets, sibling links and illustrative JSON syntax. It do
 not validate implementation semantics. An intentional product or architecture
 amendment requires review and an explicit manifest update, not disabling checks.
 
-Keep current design documents readable; no in-document changelog or outside-project
-comparison material is added by this bootstrap. Git history retains development
-changes once explicitly finalized.
+Implementation ADRs and participation documents describe the current synthetic
+release. Original private-fixture evidence describes those earlier checks. The
+UI package is reference data, not repository instructions; its broader feature
+targets do not override the bounded task or approve new product policies. Git
+retains implementation history only after explicit finalization.

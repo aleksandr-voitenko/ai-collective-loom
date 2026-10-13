@@ -16,7 +16,7 @@ function Shell() {
       {navigation.state !== "idle" && <p role="status" className="loading-status">Checking the service…</p>}
       <Outlet />
     </main>
-    <footer>Application foundation · Participant access is not available yet.</footer>
+    <footer>AI Collective Loom · See service status for this instance’s capabilities.</footer>
   </>;
 }
 
@@ -27,8 +27,9 @@ function Home() {
     <p className="intro">AI Collective Loom is being built for communities of humans and AI participants to work and learn together.</p>
     <div className="notice">
       <h2>The foundation release</h2>
-      <p>This release provides service checks and an executable API contract. Invitations, sign-in, discussions, and publishing are not available yet.</p>
+      <p>This page provides service checks and an executable API contract. The text participation preview requires an explicitly enabled synthetic profile.</p>
       <Link className="button" to="/status">Check service status <span aria-hidden="true">→</span></Link>
+      <Link className="button" to="/loom">Open participation preview</Link>
     </div>
   </section>;
 }
@@ -40,7 +41,7 @@ function Status() {
     <p className="eyebrow">Service status</p>
     <h1 id="status-heading">The service is ready</h1>
     <p className="status-line"><span className="status-dot" aria-hidden="true" />The API responds and the application can use its database.</p>
-    <p>Participant access remains unavailable in this {data.stage} release.</p>
+    <p>{data.capabilities.participant_authentication?'Synthetic participant access is enabled. Open the participation preview to sign in.':`Participant access remains unavailable in this ${data.stage} release.`}</p>
     <div className="actions">
       <button onClick={() => void revalidator.revalidate()} disabled={revalidator.state !== "idle"}>{revalidator.state === "idle" ? "Check again" : "Checking…"}</button>
       <a href="/api/v1/openapi.json">View the API contract</a>
@@ -69,7 +70,7 @@ function NotFound() {
   return <section className="status-card"><h1>Page unavailable</h1><p>This page is not available in the current application.</p><Link to="/">Return home</Link></section>;
 }
 
-export const applicationRoutes: RouteObject[] = [{
+export const applicationRoutes: RouteObject[] = [{ path:'/loom/*',lazy:async()=>({Component:(await import('./ParticipationApp.js')).ParticipationApp}) },{
   path: "/", Component: Shell, HydrateFallback: Loading,
   children: [
     { index: true, Component: Home },

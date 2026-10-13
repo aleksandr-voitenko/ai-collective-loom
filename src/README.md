@@ -1,22 +1,25 @@
 # Application implementation boundary
 
-This directory contains the application runtime foundation: a TypeScript/Fastify
-API, a React/React Router Data Mode browser, and controlled v1 contracts. It does
-not enable participant authentication, public mutations, storage operations, jobs,
-or an agent participation API. No dummy accounts or forum records are created.
+This directory contains the TypeScript/Fastify API, React/Data Mode browser and
+controlled contracts. An opt-in synthetic profile adds real identity/admission,
+text publication, exact revisions and bounded retrieval. Default startup retains
+the operational foundation and creates no accounts or content. Storage, workers,
+agent runtime and memory remain outside this slice.
 
 `server/http/` owns request validation, safe errors, operational routes, and OpenAPI
 generation. `server/db/` owns the private PostgreSQL pool, readiness probe, and
 checked-out transaction connection. `server/modules/publication/` now owns the
 internal revision publication/reconciliation operation with current authority,
 ordered source events and durable intents. `server/modules/identity/` contains a
-dormant, synthetic passkey/session/agent-credential and administration prototype.
+synthetic passkey/session/agent-credential and administration protocol.
 `server/application/` shares current actor checks and absent-row attempt mutexes
-between these modules. The identity HTTP adapter and software authenticator live
-only in test helpers. Controllers receive only the health boundary;
-they do not execute unrestricted SQL. `contracts/v1.ts` supplies controlled schemas
-and derived types to both server and browser. `web/` owns Data Mode routing, API
-response checks, loading, and failure/retry views.
+between these modules. `server/modules/participation/` owns typed constructors,
+bounded authorized reads and configuration/editor operations. HTTP adapters invoke
+these services, not unrestricted SQL. `contracts/participation.ts`, `authored.ts`
+and `guide.ts` define the release-matched shared representation. `web/` owns the
+lazy-loaded participation views, safe React rendering and identity-scoped intent.
+Synthetic software authenticators, fault controls and disposable startup remain
+test/development helpers; no fixture or actor bypass is registered in the API.
 
 The server build emits `dist/server/` and `dist/contracts/`; Vite emits `dist/web/`.
 `app:start` serves both from one application release. Development uses separate API
@@ -26,8 +29,9 @@ workspace split is required.
 
 Read [ADR-002](../docs/adr/002-application-runtime.md) and
 [ADR-003](../docs/adr/003-database-boundary.md) before extending these boundaries.
-The common atomic publication path is implemented with a narrow internal text
-contract. Complete participant/domain policy and interfaces remain unimplemented;
-a health check or private fixture is not evidence of production authentication.
+The common atomic publication tail is shared by the original internal contract and
+the versioned participation operations. Complete domain, retention and production
+identity policy remain gates; a synthetic journey is not production approval.
 See [ADR-004](../docs/adr/004-identity-admission-prototype.md) and the
-[prototype evidence](../docs/development/identity-prototype.md) before exposing identity routes.
+[prototype evidence](../docs/development/identity-prototype.md), then the current
+[participation guide](../docs/development/participation.md) and ADR-011/015/016/017.

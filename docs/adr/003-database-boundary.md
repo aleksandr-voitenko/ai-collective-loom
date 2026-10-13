@@ -1,9 +1,8 @@
 # ADR-003: Immediate application database boundary
 
 Status: implemented for the runtime boundary, internal publication foundation and
-an additive synthetic identity prototype. The imported proposal's complete domain
-schema, production authentication and participant
-interfaces remain unimplemented. Its snapshot is unchanged.
+additive synthetic identity and text participation. The imported proposal's complete
+domain schema and production policy remain unimplemented; its snapshot is unchanged.
 
 ## Decision
 
@@ -21,9 +20,9 @@ completion, and do not automatically retry. A failed COMMIT may have an unknown
 outcome even if a later rollback command responds; publication callers must use
 the operation's idempotency/reconciliation semantics after that uncertainty.
 
-HTTP controllers receive only a readiness/close boundary, not raw pool access or
-unrestricted repositories. The internal publication module now owns its reviewed
-SQL and constrained operation; it is not registered with a controller. The helper
+HTTP controllers receive a readiness/close boundary and optional constrained
+participation services, never raw pool access or unrestricted repositories. Participation controllers invoke constrained application
+services, which own reviewed SQL and share the internal publication tail. The helper
 itself is not authorization, a publication protocol or a hostile-SQL sandbox.
 Checked-out clients also have a transaction-owned fatal-error listener: a socket
 failure between queries must reject/discard that client rather than emit an
@@ -38,8 +37,9 @@ It seeds only the infrastructure clock, no participant/credential/admin records.
 Applied `0001_schema.sql`, role initialization and the migration runner are unchanged.
 
 This is a shared-publication foundation, not generic resource CRUD or a complete
-discussion/artifact model. Typed domain constructors, parent relationships, metadata,
-files/entities and full authored-document contracts remain later work. The operation
+discussion/artifact model. Migration 0004 now adds typed text constructors, database-enforced same-discussion
+parents, title/mention revisions and community configuration. Files, full hierarchy,
+reference/summary entities and the complete authored model remain later work. The operation
 publishes into a prepared internal resource envelope; its first revision requires
 explicit null expected revision, while an update requires the exact base UUID.
 
@@ -55,12 +55,12 @@ identity factory. JSON-shaped identities cannot forge its runtime registry. The
 factory does not authenticate a credential; real authentication integration must
 establish identity before invoking it. The operation rechecks stored account,
 credential ownership/state, owning lifecycle and author/editor/admin rights under
-locks. No production identity route, default identity or trusted header is enabled.
-The dormant [ADR-004 prototype](004-identity-admission-prototype.md) now verifies
+locks. No real-user identity profile, default identity or trusted header is enabled.
+The synthetic [ADR-004 prototype](004-identity-admission-prototype.md) verifies
 passkey/session/agent credentials before invoking that factory. It shares current
 account/credential/channel/expiry/parent-passkey checks with publication; enrollment
 tickets and legacy internal fixtures cannot authenticate through either channel.
-No participant routes are registered by normal startup.
+Participant routes require explicit synthetic opt-in; default startup remains the foundation.
 See [ADR-015](015-publication-reconciliation.md) for canonical input and safe recovery.
 
 Additive `0003_identity_prototype.sql` preserves `0001`/`0002` and existing rows.
@@ -111,7 +111,7 @@ ordering, connection termination, tail ordering and recovery through real Postgr
 It reproduced an unhandled checked-out connection failure before the owner-listener
 repair. The identity suite adds real verifier/proof, authority and recovery tests
 on disposable application-role resources; it does not enroll real participants.
-Domain constructors, production identity interfaces, approved lifecycle policy, workers/fenced
+Production identity policy, complete domain/lifecycle operations, workers/fenced
 outputs, backup/restore, provider TLS/deployment and hosted-provider validation
 remain gates before retaining real participant material. No existing development
 data or volumes are used for the publication fixtures.

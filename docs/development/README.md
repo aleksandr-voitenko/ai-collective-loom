@@ -3,17 +3,19 @@
 ## Scope and prerequisites
 
 The bootstrap prepares a local database and S3-compatible storage. The separate
-application foundation now builds a TypeScript/Fastify API and a React/Data Mode
-browser. Participant sign-in, full policy/public mutations, storage operations, durable jobs,
-an agent participation API, and the full content schema remain in the
+application builds a TypeScript/Fastify API and a React/Data Mode browser. An
+explicit synthetic text participation profile now adds real passkey admission,
+agent HTTPS publication and recovery; see [its guide](participation.md). Production
+policy, storage operations, durable jobs and the full domain schema remain in the
 [backlog](implementation-backlog.md). No production provider or passkey recovery
 policy is selected here.
 
 The internal publication foundation now atomically writes text revisions, current
 pointers, ordered source events, durable outbox intents and safe retry outcomes.
-Only trusted server code/private fixtures can supply actors; no public mutation,
-authentication bypass or worker is enabled. Current authority is rechecked under
-locks. The complete domain/authored representation remains a later contract.
+Only verified identity code/private fixtures can supply actors. The synthetic
+HTTP profile uses the same publication tail, current authority under locks and
+the versioned authored subset in ADR-011. No authentication bypass or worker is
+enabled. Complete domain/file/reference support remains a later contract.
 
 Use a local Docker engine, the Docker Compose plugin (v2 or later), and Node.js
 24.19.0 from `.nvmrc`. The dependency-free checks passed under Node 24.19.0 and
@@ -111,11 +113,16 @@ not as extra entries in `.env.local`. Shell values take precedence.
 | `LOOM_DATABASE_NAME` | `loom_dev` |
 | `LOOM_DATABASE_USER` | `loom_app`; the actual connection must pass the application privilege boundary. |
 | `LOOM_PG_APP_PASSWORD` | Required; generated in `.env.local` or supplied by the deployment environment. |
+| `LOOM_PARTICIPATION_PROFILE` | Unset keeps foundation; only `synthetic` is supported. Real enrollment is not approved. |
+| `LOOM_ORIGIN` | Exact HTTPS origin required with the synthetic profile; supplies WebAuthn RP/origin and cookie checks. |
+| `LOOM_TLS_KEY_FILE`, `LOOM_TLS_CERT_FILE` | Optional server TLS files, supplied together; a reviewed HTTPS proxy can terminate TLS instead. No secret bytes are logged. |
 
 Vite does not load `.env.local` or export server credentials. Its same-origin proxy
 targets the API's IPv4/IPv6 loopback bind under `/api/` and `/health/`; other browser modules remain
 Vite requests. Hosted database TLS, reverse-proxy/deployment configuration,
-participant authentication, and production operation remain later gates.
+production identity policy and production operation remain later gates. The
+isolated `app:synthetic` launcher provides its own localhost TLS and database;
+do not point that helper at retained development data.
 
 ```bash
 npm run db:migrate
@@ -126,7 +133,7 @@ npm run dev:down
 
 `down` retains both named volumes and `.env.local`. Dependency containers do not
 start the application. Application health/status is implemented by the separate
-runtime; participant onboarding and a remote agent participation API are not.
+runtime; synthetic participant onboarding and HTTPS APIs require explicit opt-in.
 
 `dev:images` reports each configured image reference, local image ID, repository
 digests, and OS/architecture, including the one-shot AWS CLI image. Run it after
@@ -184,6 +191,14 @@ repository code. Large/nontransactional migrations and production upgrades requi
 a later migration procedure; an application rollback is not database rollback.
 
 ## Tests and their limits
+
+The new `test:participation:postgres` uses actual HTTPS (not Fastify injection) and
+isolated PostgreSQL for the text journey, bounds and standalone external-client
+process recovery. `test:e2e` runs actual Chromium/native WebAuthn with virtual
+authenticators, built application assets and separate disposable databases.
+Install Chromium with `npx playwright install chromium` and build first. See
+[participation evidence](participation-evidence.md) for observed results and topology;
+same-machine HTTP success is not a cross-machine agent trial.
 
 `npm run check` runs source-digest/mapping/JSON checks, native Node tests of local
 configuration, migration-plan generation, safe invocation and reset rules, and the

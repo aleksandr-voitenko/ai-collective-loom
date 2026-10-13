@@ -7,14 +7,23 @@ The first migration sets future table/sequence grants only; it does not claim an
 implemented product schema.
 `0002_publication_foundation.sql` adds the internal text publication envelopes,
 immutable revisions, commit-tail clock, events, intents and outcomes. It creates no
-participant/credential/admin records. Authentication and public mutation routes
-are still unavailable. This migration was verified only on isolated resources;
+participant/credential/admin records. Its original internal contract is preserved.
+This migration was verified only on isolated resources;
 existing development data is not automatically migrated by application startup.
 Additive `0003_identity_prototype.sql` extends those envelopes with credential
 verifiers/expiry/parent sessions, nickname reservations, controlled initialization,
 WebAuthn public keys/challenges, safe identity outcomes and restricted audits.
-It seeds no account or capability and preserves `0001`/`0002`. Identity routes
-remain private test fixtures pending the [ADR-004 policy review](../docs/adr/004-identity-admission-prototype.md).
+It seeds no account or capability and preserves `0001`/`0002`. Identity routes are
+opt-in and synthetic pending the [ADR-004 policy review](../docs/adr/004-identity-admission-prototype.md).
+
+Additive `0004_participation.sql` adds typed areas/discussions/contributions/artifacts,
+the same-discussion parent FK, unique opening, immutable mention rows and revision
+titles, editor-list versions, private configuration audit and an instance/config
+singleton. It seeds configuration identity only, not a community or administrator.
+An authorized setup operation publishes the overview through the shared tail.
+The new migration was exercised on isolated fresh databases; application startup
+does not apply it to existing development data. Read the
+[retained-data gate](../docs/development/retained-data-gate.md) before an upgrade.
 
 Use unique four-digit versions and do not edit applied migrations. The runner
 checks filename and SHA-256 against `loom_migrations.history`, rejects unknown

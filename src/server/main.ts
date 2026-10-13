@@ -2,6 +2,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { ConfigurationError, readConfiguration, readMode } from "./config.js";
 import { PostgresDatabase } from "./db/postgres.js";
 import { createApplication } from "./http/app.js";
+import { readFile } from 'node:fs/promises';
+import { participationProfile } from './participation-profile.js';
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
   const configuration = readConfiguration();
@@ -30,8 +32,14 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   process.once("SIGINT", signal);
   process.once("SIGTERM", signal);
   try {
+    const tlsKey=process.env.LOOM_TLS_KEY_FILE,tlsCertificate=process.env.LOOM_TLS_CERT_FILE;
+    if(Boolean(tlsKey)!==Boolean(tlsCertificate))throw new ConfigurationError('LOOM_TLS_KEY_FILE and LOOM_TLS_CERT_FILE must be supplied together.');
     app = await createApplication({
       database, ...(mode === "web" ? { browserRoot: fileURLToPath(new URL("../web/", import.meta.url)) } : {}),
+      participation: participationProfile(database),
+      ...(tlsKey && tlsCertificate ? { tls: {
+        key: await readFile(tlsKey,'utf8'),cert: await readFile(tlsCertificate,'utf8'),
+      } } : {}),
     });
     if (!await database.isReady()) throw new Error("Database is not ready.");
     if (shutdown) return;
