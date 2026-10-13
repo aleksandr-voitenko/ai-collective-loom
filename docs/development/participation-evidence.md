@@ -156,10 +156,52 @@ approval and physical devices; representative capacity/abuse controls; retention
 erasure, backup/restore epochs and upgrade operating procedures; hierarchical
 topic management, typed references/summaries, personal collections/reading/feeds;
 storage version/grant compatibility and worker fenced outputs. Administrative
-identity lists retain their documented 100-row prototype bound. Updated Linux CI
-is configured but has not run. Existing retained-service S3/persistence suites were
-not rerun because this slice changes neither storage nor that environment; isolated
-migration, runtime, publication, identity and participation suites were used.
+identity lists retain their documented 100-row prototype bound. At the original local
+verification, updated Linux CI had not run. Existing retained-service S3/persistence
+suites were not rerun locally because this slice changes neither storage nor that
+environment; isolated migration, runtime, publication, identity and participation
+suites were used.
 
 The [retained-data gate](retained-data-gate.md) is still unapproved. Synthetic success
 does not settle it, and no real-data or deployment authorization is inferred.
+
+## CI follow-up — 14 October 2026
+
+For commit `14c4e8333b2d98c701b1618b0d56a16039469e74`, the
+[push workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479478697)
+passed both jobs on Ubuntu 24.04/Linux amd64, including all five browser journeys
+(25.9 seconds) and the retained migration/S3/persistence steps. The duplicate
+[PR workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479509322)
+failed during E2E server teardown after the late-publication/account-change test;
+its body assertions had completed. The error was `Tearing down "server" exceeded
+the test timeout of 90000ms`. Four other journeys passed. Subsequent integration
+steps in that failed job were skipped; the successful push run supplies their evidence.
+
+The same unchanged late-publication test reproduced the failure locally on repeat
+7 of 10: nine passed and one failed with the identical teardown timeout. A separate
+bounded probe showed that both pre-handshake TCP and established TLS sockets with
+no HTTP request keep `app.close()` and database-close hooks pending until the client
+socket closes. The CI log contains no socket trace; this mechanism was reproduced
+locally rather than inferred solely from the timeout.
+
+The fixture had no browser-context/server dependency. For the existing argument
+order, teardown could wait for the server while the browser context remained alive.
+The context fixture now explicitly depends on the server and closes the context in
+`finally` before server teardown. A regression holds a real, CA-verified TLS socket
+without an HTTP request and ties its lifetime to the browser context. It failed
+with the original ordering at the 90-second teardown limit, then passed after the
+fix. This models the connection lifetime deterministically; it does not claim to
+force Chromium's speculative-connection scheduling.
+
+`npm run test:e2e -- --grep 'browser-owned TLS preconnection|a late committed publication' --repeat-each 10`
+passed **20 tests in 47.6 seconds** after the fix. The normal `npm run test:e2e`
+then passed **all 6 tests in 19.7 seconds**, including browser-process restart and
+the new regression. Typechecking also passed. Production code, request draining,
+application shutdown deadlines, existing assertions, retries,
+worker count and the normal 90-second test timeout are unchanged. This repair only
+orders test-client disposal before server disposal; it does not force-close server
+connections or ignore teardown errors.
+
+At commit preparation, the fixture repair had local verification only; its new
+GitHub CI run remained pending. The original failed run is retained above.
+Fixture task record: `LC-20261014-WZF5`.

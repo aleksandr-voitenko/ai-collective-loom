@@ -67,8 +67,12 @@ The actual package manifest/lockfile now pin application and test dependencies.
 typechecking, HTTP/router tests, and build. `test:app:postgres` uses temporary
 PostgreSQL storage and compiled HTTP processes to verify app-role readiness,
 parameter binding, rollback, safe failures, database loss, graceful shutdown, and
-Vite browser-module/API proxy separation. Application verification is local
-Node 24/macOS arm64 with Linux/arm64 PostgreSQL; its updated CI remains unperformed.
+Vite browser-module/API proxy separation. Application verification includes local
+Node 24/macOS arm64 with Linux/arm64 PostgreSQL and a full passing Ubuntu 24.04
+Linux/amd64 push run for `14c4e83` (CI `38479478697`). The duplicate PR run exposed
+an intermittent browser-fixture teardown failure; see the CI follow-up in
+`docs/development/participation-evidence.md`. This does not establish a cross-machine
+agent trial or approve production policy.
 The database pool is private; transaction callbacks own one checked-out client,
 explicit values, and no automatic retries. Controllers invoke the health boundary or constrained participation services, never
 raw SQL.

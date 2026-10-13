@@ -134,8 +134,12 @@ These suites do not certify a hosted provider, production security, browser
 usability, or full product acceptance. Signed upload replay, version-specific grants,
 cross-machine trials and coordinated backup/restore require subsequent tests.
 The application foundation's Node 24 installation, build/typecheck, browser checks,
-and isolated PostgreSQL/HTTP suite passed on macOS arm64. Its updated CI has not
-executed yet. Earlier bootstrap checks and real-service integration/persistence passed on macOS arm64
+and isolated PostgreSQL/HTTP suite passed on macOS arm64. The full
+[Linux/amd64 push run for `14c4e83`](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479478697)
+also passed. A duplicate PR run exposed an intermittent browser-fixture teardown
+failure; see the [CI follow-up](docs/development/participation-evidence.md#ci-follow-up--14-october-2026)
+for the reproduction and repair evidence.
+Earlier bootstrap checks and real-service integration/persistence passed on macOS arm64
 using Linux/arm64 containers under Docker Desktop. Bootstrap Lore task
 `LC-20261011-R161` records the verification results, initial failures, and fixes.
 [Linux/amd64 CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)

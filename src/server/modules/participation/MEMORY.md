@@ -57,5 +57,9 @@ Tests: `test:participation:postgres` (real TLS/SQL/standalone processes), `test:
 rendering/recovery units plus retained identity/publication/runtime/migration suites.
 Build before real browser/runtime suites; do not run a cleaning build concurrently
 with tests that spawn compiled files. Fixtures own fresh tmpfs containers only.
+The E2E context fixture depends on the server and explicitly closes the browser
+context first. A TLS preconnection without an HTTP request can otherwise block
+graceful server teardown; the deterministic socket regression covers that order
+(`LC-20261014-WZF5`).
 No logged/screenshot credential secret, reset, deployment or physical-device trial
 is implied. See `docs/development/participation-evidence.md` for actual results.

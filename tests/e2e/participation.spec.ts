@@ -10,12 +10,23 @@ import { randomUUID } from "node:crypto";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { connect as connectTls } from "node:tls";
+import { once } from "node:events";
 import { syntheticServer } from "../helpers/participation-server.js";
 import { httpClient } from "../helpers/participation-http.js";
 
 const test = base.extend<{
   server: Awaited<ReturnType<typeof syntheticServer>>;
 }>({
+  context: async ({ context, server: _server }, use) => {
+    // The explicit server dependency orders this cleanup first. A speculative
+    // TLS connection can otherwise keep server.close() waiting on a live client.
+    try {
+      await use(context);
+    } finally {
+      await context.close();
+    }
+  },
   server: async ({}, use) => {
     const server = await syntheticServer();
     try {
@@ -152,6 +163,26 @@ const text = (value: string) => ({
   format: "loom-markdown-v1",
   text: value,
   mentions: [],
+});
+
+test("browser-owned TLS preconnection closes before server teardown", async ({
+  context,
+  server,
+}) => {
+  // Hold a real TLS connection without sending HTTP, with the browser context's
+  // lifetime. This deterministically models a speculative browser connection;
+  // Node's HTTP idle-connection cleanup does not close this socket.
+  const connection = connectTls({
+    host: "127.0.0.1",
+    port: Number(new URL(server.origin).port),
+    servername: "localhost",
+    ca: await readFile(server.directory + "/cert.pem", "utf8"),
+  });
+  context.once("close", () => connection.destroy());
+  await once(connection, "secureConnect");
+  expect(connection.authorized).toBe(true);
+  // Successful fixture teardown is the assertion: server-first cleanup deadlocks
+  // until this context closes.
 });
 
 test("administrator setup/admission, human discussion, direct HTTP agent, nesting, revisions and responsive reading", async ({

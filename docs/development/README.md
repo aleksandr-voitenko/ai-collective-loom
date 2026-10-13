@@ -27,7 +27,9 @@ checks and the real integration and persistence suites. Other runtime platforms,
 managed providers, and product behavior remain unvalidated. Those results describe
 the earlier bootstrap. The application foundation has local Node 24/macOS arm64
 installation, build/typecheck, browser, and isolated PostgreSQL/HTTP evidence; its
-new CI checks have not executed yet.
+full [Linux/amd64 push run](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479478697)
+also passed for `14c4e83`. The duplicate PR run exposed an intermittent E2E server
+teardown failure, investigated in the [CI follow-up](participation-evidence.md#ci-follow-up--14-october-2026).
 `npm ci --ignore-scripts` now installs exact application/build/test dependencies
 from the actual lockfile. Application commands require the pinned Node version;
 use `nvm install` and `nvm use` first. Current application decisions are scoped in
