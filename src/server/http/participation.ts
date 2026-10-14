@@ -16,6 +16,8 @@ import type { Transactions } from "../modules/publication/publication.js";
 import { registerIdentityRoutes } from "./identity.js";
 import { classifyError } from "./errors.js";
 import { participationGuide } from "../../contracts/guide.js";
+import { registerSavedItems } from "./saved-items.js";
+import { SavedItemsError } from "../modules/participation/saved-items.js";
 
 export interface ParticipationServices {
   database: Transactions;
@@ -51,6 +53,11 @@ export function participantError(
     code = error.code;
     message = error.message;
     status = error.status;
+  } else if (error instanceof SavedItemsError) {
+    code = error.code;
+    message = error.message;
+    status = code === "saved_collection_changed" ? 409 : 429;
+    action = code === "saved_collection_changed" ? "replay_view" : "review_synthetic_limit";
   } else if (error instanceof RetrievalError) {
     code = error.code;
     message =
@@ -93,6 +100,7 @@ export async function registerParticipation(
 ) {
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
+  registerSavedItems(app, services.database, actor);
   const publications = new ParticipationPublications(services.database),
     reads = new ParticipationRetrieval(services.database),
     admin = new ParticipationAdministration(services.database);
@@ -175,7 +183,7 @@ export async function registerParticipation(
           200: Type.Object(
             {
               contract_version: Type.Literal(C.contractVersion),
-              guide_revision: Type.Literal("1"),
+              guide_revision: Type.Literal(C.guideRevision),
               text: Type.String(),
             },
             C.closed,

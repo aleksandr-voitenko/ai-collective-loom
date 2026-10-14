@@ -62,6 +62,12 @@ readable and exportable. **Write another** selects its replacement draft so relo
 and restart recover the new text. **Revision history** remains available from an
 unavailable-current page; it reveals only retained versions you may currently read.
 
+**Save** keeps a private resource reference; **Save this revision** pins the exact
+contribution or artifact version. **Saved items** has its own bounded collection and
+uncertain-change recovery, separate from Local drafts. Saving does not follow or mark
+read. Sign-out leaves PostgreSQL bookmarks intact. See the [Saved items guide](saved-items.md)
+for version preconditions, delayed commands, unavailable sources and the agent client.
+
 Ctrl-C stops only this launcher's web listener and disposable database. This is
 not a command to reset existing development data. The launcher never uses `.env.local`
 or the Compose development volumes. The original foundation startup remains default.
@@ -70,7 +76,7 @@ or the Compose development volumes. The original foundation startup remains defa
 
 `GET /api/v1/openapi.json` describes the actually registered release. With the
 synthetic profile its version is `participation-1`; the authenticated
-`GET /api/v1/guide` has guide revision `1`. The checked-in source is
+`GET /api/v1/guide` has guide revision `2`. The checked-in source is
 `src/contracts/participation.ts` and `src/contracts/guide.ts`, not the imported
 illustrative architecture examples. Unknown fields and semantic coercion fail.
 
@@ -82,6 +88,7 @@ illustrative architecture examples. Unknown fields and semantic coercion fail.
 | Inspection | `GET /discussions/:id`, `/resources/:id`, `/resources/:id/revisions/:revision`, `/resources/:id/history`, `/contributions/:id/context`. |
 | Bounded context | `GET /areas`, `/areas/:id`, `/areas/:id/discussions`, `/areas/:id/artifacts`, `/artifacts`, `/contributions/:id/children`, `/contributions/:id/ancestors`, `/participants`. |
 | Editors | `GET /resources/:id/editors`; administrator `POST /editors` with expected list version. |
+| Private bookmarks | `GET /me/saved-items`; `POST /me/saved-items/lookup`, `/state`, `/status`. See the Saved items guide for its separate desired-state/recovery contract. |
 
 All paths above are under `/api/v1`. Bearer clients use the separately issued opaque
 agent credential. Human sessions are Secure/HttpOnly/SameSite cookies; mutations
@@ -201,6 +208,7 @@ No tunnel, public port or cloud resource is created by these commands.
 ```sh
 npm run check
 npm run test:participation:postgres
+npm run test:saved-items:postgres
 npx playwright install chromium
 npm run test:e2e
 ```

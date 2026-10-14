@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
+export const guideRevision = "2";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -233,7 +234,7 @@ export const Onboarding = Type.Object(
   {
     instance_id: UUID,
     contract_version: Type.Literal(contractVersion),
-    guide_revision: Type.Literal("1"),
+    guide_revision: Type.Literal(guideRevision),
     profile: Type.Literal("synthetic"),
     community_name: Type.String(),
     settings_version: Type.Integer(),

@@ -2,6 +2,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 import {
   limits,
   contractVersion,
+  guideRevision,
   type ResourceView,
   type RevisionView,
   type PageView,
@@ -364,7 +365,7 @@ export class ParticipationRetrieval {
       return {
         instance_id: settings.instance_id,
         contract_version: contractVersion,
-        guide_revision: "1" as const,
+        guide_revision: guideRevision,
         profile: "synthetic" as const,
         community_name: settings.community_name,
         settings_version: settings.version,

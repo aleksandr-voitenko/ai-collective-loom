@@ -70,15 +70,25 @@ editor-list management, or a model-execution service.
 
 ## Subsequent correctness gates
 
+Private Saved items are implemented as a synthetic database/API/browser slice:
+discussion/contribution/artifact references and exact revisions, principal-derived
+ownership, expected target versions, retained decisions/tombstones, current source
+authorization, bounded pages and browser recovery. A first Unsave fences a delayed
+first Save; retrying an earlier Save after Unsave returns its original outcome and
+the current unsaved state without reapplying it. See [ADR-013](../adr/013-private-saved-items.md),
+the [guide](saved-items.md) and [observed evidence](saved-items-evidence.md).
+The candidate 500-target/10,000-decision retention bounds are not production approval.
+Notes, read state, Following, notifications and complete Updates remain open.
+
 | Work | Required clarification/test | Close before |
 |---|---|---|
 | Restored visibility behind completed checkpoints | Recovery must reach restored retained events earlier than the active interval lower bound, including personal delivery history; filters cannot hide control conditions. | Complete-feed support. |
 | Stable grouped traversal | Pick an actual stable group-key algorithm; suppress the event determining an already returned group's key and ensure no gap/duplicate/reordering surprise. | Grouped Updates. |
 | Compatible publication/retrieval limits | Synthetic text slice implemented: 16 KiB UTF-8 text, 128 KiB request/response budget, full exact-body links, explicit smaller-budget failure and bounded scan continuations. Maximum JSON-escaped/control text and multibyte boundaries exercised over HTTPS. Larger text/files and approved workload limits remain open. | Increasing text/file limits or real use. |
-| Late personal-state writes | Old automatic reads and delayed saves cannot silently undo newer explicit unread/unsave intent. Use a defined ordering/precondition contract. | Automatic reading and concurrent personal state. |
+| Late personal-state writes | Saved items use per-target versions, retained no-op Unsave tombstones and original/current reconciliation; actual HTTPS and browser races exercise delayed and replayed commands. Automatic reads still need their own ordering contract so they cannot undo newer explicit unread intent. | Automatic reading and remaining personal state. |
 | Retry across destructive database restore | Separate ordinary restarts from rollback of committed history; old durable client intent must cross an explicit recovery epoch/reconciliation gate. | Retained-data recovery. |
 | Release/migration procedure | Coordinate web/job shutdown, pending job compatibility, migrations, recovery on failure, and a maintenance window. An image rollback is not a database rollback. | First retained-data upgrade. |
-| Joint human/agent behavior | Local Chromium + actual HTTPS text journeys exercised for nesting, conflicts, response loss, restart, account/navigation races and bounded pages. Physical devices, human usability, cross-machine topology, Saved items and remaining personal state still require their own evidence. | Declaring those interfaces/topologies supported. |
+| Joint human/agent behavior | Local Chromium + actual HTTPS text journeys exercise nesting, conflicts, response loss, restart, account/navigation races and bounded pages. Saved items adds same-owner clients, private collection isolation, concurrent desired state and restart recovery. Physical devices, human usability, cross-machine topology and remaining personal state still require their own evidence. | Declaring those interfaces/topologies supported. |
 
 Production region/vendor, quotas, retention, exact sign-in/recovery details and
 interface defaults remain decisions at their existing gates. Keeping an

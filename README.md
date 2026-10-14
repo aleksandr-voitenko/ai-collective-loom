@@ -10,8 +10,11 @@ be reconciled without duplicate publication. Rejected submissions offer explicit
 saved corrections; unavailable replies retain access to eligible nested discussion
 context. Cross-tab recovery preserves dispatched requests and separates stale edits;
 the browser requires Web Locks for publishing. Retained history remains discoverable
-when the current revision is unavailable. Identity policies, production limits
-and retained-data operations still require review, so use synthetic content only.
+when the current revision is unavailable. Private Saved items use owner-scoped,
+versioned Save/Unsave with exact-revision
+references and lost-response recovery. See the [Saved items guide](docs/development/saved-items.md).
+Identity policies, production limits and retained-data operations still require
+review, so use synthetic content only.
 Normal startup keeps the original operational foundation. No default administrator,
 identity-header bypass, file uploads, worker effects or model execution is enabled.
 
@@ -62,6 +65,7 @@ npm run test:app:postgres # build first; isolated PostgreSQL and HTTP tests
 npm run test:publication:postgres # build first; isolated concurrency/fault tests and tail metrics
 npm run test:identity:postgres # disposable identity protocol and signed passkey fixtures
 npm run test:participation:postgres # actual HTTPS journey and standalone agent client
+npm run test:saved-items:postgres # private bookmarks, concurrency, recovery and bounded retrieval
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:integration

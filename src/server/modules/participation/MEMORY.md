@@ -1,6 +1,6 @@
 # Text participation boundary
 
-`publications.ts`, `retrieval.ts`, `administration.ts` implement the synthetic
+`publications.ts`, `retrieval.ts`, `administration.ts`, `saved-items.ts` implement the synthetic
 `participation-1` slice. Controllers are in `server/http/participation.ts` and
 `identity.ts`; shared schemas/guide/parser are in `src/contracts/`.
 
@@ -87,3 +87,29 @@ graceful server teardown; the deterministic socket regression covers that order
 (`LC-20261014-WZF5`).
 No logged/screenshot credential secret, reset, deployment or physical-device trial
 is implied. See `docs/development/participation-evidence.md` for actual results.
+
+Saved items (ADR-013): HTTP `/api/v1/me/saved-items` derives every owner from the
+principal. `saved-state-v1` hashes target, desired boolean and expected target version;
+retain applied and version-conflict outcomes separately from current state. Version 0
+means absent; every applied command advances it, including an initial Unsave. Never
+delete an unsaved tombstone or reapply an old accepted Save on exact retry. Attempt
+guard → current actor → owner bookmark guard → bounded shared source guards. These
+transactions never acquire the shared publication clock or emit its side effects.
+Migration 0005 enforces target kinds, discussion-opening membership, revision ownership
+and owner/target uniqueness; immutable identities/outcomes have restricted grants.
+Known owner references may show a safe unavailable entry and permit Unsave after
+suppression; no cached source metadata is stored or replayed. Exact revisions never
+retarget. Saved lookups/decisions fit the hard response cap. Listing selects at most
+26 candidates/resolves 25, with 32-resource owner-chain limit, stable target-ID order
+and an owner collection version. Changed membership invalidates the cursor explicitly;
+source changes reauthorize each projection. Caps include 500 tombstones and 10,000
+decisions, with no auto expiry. Restart invalidates process-local cursors only.
+`web/SavedItems.tsx` reuses the journal and adds a short per-target lock before initial
+intent creation; do not hold either Web Lock across network work. It keeps Saved
+recovery separate from publication drafts, guards late view/identity/version responses,
+invalidates in-flight collection reads on journal changes, and preserves failed-page
+retry positions. Sign-out removes local intent, not server
+bookmarks. Tests: `test:saved-items:postgres`, `e2e/saved-items.spec.ts`; the external
+`scripts/saved-items-client.mjs` persists immutable fsynced intent. Guide revision 2
+documents the actual subset and limits; production and cross-machine gates remain.
+Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.

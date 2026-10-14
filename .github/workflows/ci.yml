@@ -47,6 +47,7 @@ jobs:
       - run: npm run test:publication:postgres
       - run: npm run test:identity:postgres
       - run: npm run test:participation:postgres
+      - run: npm run test:saved-items:postgres
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - run: npm run test:migrations:postgres
