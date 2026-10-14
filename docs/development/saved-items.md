@@ -104,8 +104,12 @@ versions. Current view/identity ownership and monotonically observed target vers
 guard late responses. Reload all tabs after upgrading the synthetic preview.
 
 **Check saved status** and **Retry same change** are available beside the resource
-and in Saved items. A rejected form request can be explicitly dismissed. Local records
-share the existing 32-record/1 MiB journal cap with publication drafts, with no silent
+and in Saved items. A known first-attempt form or retention-limit rejection remains
+explicitly rejected across reload. **Dismiss rejected change** removes only that
+Saved record, preserving unrelated drafts. A refusal after a lost response or another
+tab's retry cannot release the original uncertainty; keep its exact intent. This also
+applies to uncertain records from an older client. Local records share the existing
+32-record/1 MiB journal cap with publication drafts, with no silent
 eviction. Export is available in the participation guide and sign-out dialog. Sign-out
 clears local recovery after that opportunity, but leaves server bookmarks intact;
 clearing local intent does not roll back a possibly committed Save/Unsave.

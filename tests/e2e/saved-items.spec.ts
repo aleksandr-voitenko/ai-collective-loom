@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { syntheticServer } from '../helpers/participation-server.js';
+import type { Intent } from '../../src/web/participation-client.js';
 
 const test=base.extend<{server:Awaited<ReturnType<typeof syntheticServer>>}>({
   context:async({context,server:_server},use)=>{try{await use(context);}finally{await context.close();}},
@@ -40,6 +41,22 @@ async function setup(page:Page,context:BrowserContext,server:Awaited<ReturnType<
 }
 function control(page:Page,kind:string,id:string,revision=''){return page.locator(`[data-saved-target="${kind}:${id}:${revision}"]`).first();}
 function barrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return{promise,release};}
+
+async function recoveryRecords(page: Page): Promise<Intent[]> {
+  return page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('loom.intent.'))
+    .map(key => JSON.parse(localStorage.getItem(key)!)).sort((a, b) => a.key.localeCompare(b.key)));
+}
+async function fillSavedTargetLimit(server: Awaited<ReturnType<typeof syntheticServer>>, discussion: string, opening: string) {
+  // Real retained tombstones reach the unchanged server quota; no HTTP refusal is mocked.
+  await server.database.transaction(tx => tx.query(`WITH resources AS (
+    INSERT INTO loom.resources(id,kind,owner_resource_id,original_author_id)
+    SELECT gen_random_uuid(),'contribution',$1,$2 FROM generate_series(1,500) RETURNING id
+  ), contributions AS (
+    INSERT INTO loom.contributions(id,discussion_id,parent_id) SELECT id,$1,$3 FROM resources RETURNING id
+  ) INSERT INTO loom.saved_items(id,participant_id,target_kind,resource_id,content_resource_id,version)
+    SELECT gen_random_uuid(),$2,'contribution',id,id,1 FROM contributions`,
+  [discussion, server.administratorId, opening]));
+}
 
 test('browser saves resource and exact references, keeps R1 after R2, and renders private desktop/mobile collection',async({page,context,server},info)=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
@@ -232,6 +249,114 @@ test('bounded collection retries failed next page and isolates navigation and ac
     await expect(page.locator('.saved-row')).toHaveCount(1);
     expect((await server.observer.query('SELECT count(*)::int AS n FROM loom.saved_items WHERE participant_id=$1 AND saved',[server.administratorId])).rows[0].n).toBe(14);
   }finally{finish.release();}
+});
+
+test('first Saved quota refusal survives reload as rejected and dismisses only its own record', async ({ page, context, server }) => {
+  const d = await setup(page, context, server);
+  await fillSavedTargetLimit(server, d.discussion, d.resource);
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  await expect(page.getByRole('button', { name: 'Save discussion', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Reply', exact: true }).click();
+  const text = 'Keep this unpublished reply through a server quota refusal.';
+  await page.getByRole('textbox', { name: 'Your reply', exact: true }).fill(text);
+  await expect.poll(async () => (await recoveryRecords(page)).some(record =>
+    record.kind === 'reply.create' && (record.body.content as { text: string }).text === text)).toBe(true);
+  const before = await recoveryRecords(page);
+
+  const refused = page.waitForResponse(response => response.url().endsWith(saved + '/state'));
+  await page.getByRole('button', { name: 'Save discussion', exact: true }).click();
+  const response = await refused;
+  expect(response.status()).toBe(429);
+  expect((await response.json()).error.code).toBe('saved_limit_reached');
+  await expect(control(page, 'discussion', d.discussion).getByText('This change was rejected.', { exact: true })).toBeVisible();
+  const rejected = (await recoveryRecords(page)).find(record => record.kind === 'saved.set')!;
+  expect(rejected.state).toBe('rejected');
+  expect((await api(page, saved + '/status', { idempotency_key: rejected.key })).operation_state).toBe('not_recorded');
+  expect((await api(page, saved + '/lookup', rejected.body.target)).version).toBe(0);
+
+  await page.reload();
+  await expect(control(page, 'discussion', d.discussion).getByRole('button', { name: 'Dismiss rejected change' })).toBeVisible();
+  await page.getByRole('link', { name: 'Saved items', exact: true }).click();
+  await expect(page.getByText('This change was rejected.', { exact: true })).toBeVisible();
+  expect((await recoveryRecords(page)).find(record => record.key === rejected.key)).toEqual(rejected);
+  await page.getByRole('button', { name: 'Dismiss rejected change' }).click();
+  await expect(page.getByRole('heading', { name: 'Unconfirmed changes' })).not.toBeVisible();
+  expect(await recoveryRecords(page)).toEqual(before);
+  expect((await server.observer.query('SELECT count(*)::int AS n FROM loom.saved_items WHERE participant_id=$1', [server.administratorId])).rows[0].n).toBe(500);
+  expect((await server.observer.query('SELECT count(*)::int AS n FROM loom.saved_operations WHERE participant_id=$1', [server.administratorId])).rows[0].n).toBe(0);
+  await page.goto(server.origin + '/loom/help');
+  await page.getByRole('link', { name: /^reply.create · draft/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Your reply', exact: true })).toHaveValue(text);
+});
+
+test('lost Saved quota response stays uncertain after reload, absent status and refused exact retry', async ({ page, context, server }) => {
+  const d = await setup(page, context, server);
+  await fillSavedTargetLimit(server, d.discussion, d.resource);
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  const lost = barrier();
+  await page.route('**' + saved + '/state', async route => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(429);
+    expect((await response.json()).error.code).toBe('saved_limit_reached');
+    await route.abort('connectionfailed'); lost.release();
+  });
+  await page.getByRole('button', { name: 'Save discussion', exact: true }).click();
+  await lost.promise;
+  await expect(control(page, 'discussion', d.discussion).getByText('We couldn’t confirm whether this saved-item change completed.')).toBeVisible();
+  const original = (await recoveryRecords(page)).find(record => record.kind === 'saved.set')!;
+  await page.unrouteAll({ behavior: 'wait' });
+  await page.reload();
+  const controls = control(page, 'discussion', d.discussion);
+  await controls.getByRole('button', { name: 'Check saved status' }).click();
+  await expect(controls.getByText(/No outcome is recorded yet/)).toBeVisible();
+  const refused = page.waitForResponse(response => response.url().endsWith(saved + '/state'));
+  await controls.getByRole('button', { name: 'Retry same change' }).click();
+  const response = await refused;
+  expect(response.status()).toBe(429);
+  expect(response.request().postDataJSON()).toEqual(original.body);
+  await expect(controls.getByRole('alert')).toContainText('retention limit');
+  await expect(controls.getByRole('button', { name: 'Retry same change' })).toBeEnabled();
+  await expect(controls.getByRole('button', { name: 'Dismiss rejected change' })).not.toBeVisible();
+  const retained = (await recoveryRecords(page)).find(record => record.key === original.key)!;
+  expect(retained.state).toBe('uncertain');
+  expect(retained.body).toEqual(original.body);
+  await page.reload();
+  await expect(controls.getByText('We couldn’t confirm whether this saved-item change completed.')).toBeVisible();
+  expect((await recoveryRecords(page)).find(record => record.key === original.key)).toEqual(retained);
+});
+
+test('a competing Saved retry prevents a late first quota refusal from releasing uncertainty', async ({ page, context, server }) => {
+  const d = await setup(page, context, server);
+  await fillSavedTargetLimit(server, d.discussion, d.resource);
+  const url = server.origin + '/loom/discussion/' + d.discussion;
+  await page.goto(url);
+  const other = await context.newPage(); await other.goto(url);
+  const refused = barrier(), release = barrier();
+  await page.route('**' + saved + '/state', async route => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(429);
+    refused.release(); await release.promise; await route.fulfill({ response });
+  });
+  try {
+    await page.getByRole('button', { name: 'Save discussion', exact: true }).click();
+    await refused.promise;
+    const original = (await recoveryRecords(page)).find(record => record.kind === 'saved.set')!;
+    const retryResponse = other.waitForResponse(response => response.url().endsWith(saved + '/state'));
+    await control(other, 'discussion', d.discussion).getByRole('button', { name: 'Retry same change' }).click();
+    const response = await retryResponse;
+    expect(response.status()).toBe(429);
+    expect(response.request().postDataJSON()).toEqual(original.body);
+    await expect(control(other, 'discussion', d.discussion).getByRole('alert')).toContainText('retention limit');
+    const retried = (await recoveryRecords(other)).find(record => record.key === original.key)!;
+    expect(retried.state).toBe('uncertain');
+    expect(retried.sequence).toBeGreaterThan(original.sequence);
+    release.release(); await page.unrouteAll({ behavior: 'wait' });
+    await expect(control(page, 'discussion', d.discussion).getByRole('button', { name: 'Retry same change' })).toBeEnabled();
+    expect((await recoveryRecords(page)).find(record => record.key === original.key)).toEqual(retried);
+    for (const client of [page, other]) {
+      await expect(control(client, 'discussion', d.discussion).getByRole('button', { name: 'Dismiss rejected change' })).not.toBeVisible();
+    }
+  } finally { release.release(); await page.unrouteAll({ behavior: 'wait' }); await other.close(); }
 });
 
 test('local journal failure prevents Save dispatch and preserves existing publication drafts',async({page,context,server})=>{

@@ -142,6 +142,14 @@ not-recorded response keeps it. A conflict shows current state and requires anot
 deliberate choice, never automatic re-keying/rebasing. Local drafts remain a separate
 view; Saved items owns bookmark recovery. Export includes both sorts of local intent.
 
+A known first-dispatch `saved_limit_reached` refusal becomes a rejected local record,
+retained across reload until **Dismiss rejected change** removes just that record.
+The server refuses before recording a decision; this does not loosen retention caps
+or delete tombstones. A lost response, a refusal on a later uncertain retry, or a
+late first refusal after another tab has retried still retains uncertainty. The
+journal's current-owner and sequence guards apply unchanged; older uncertain
+records are not reclassified from a later refusal or `not_recorded` status.
+
 Every read/action has identity and mounted-view ownership. Read sequence numbers
 reject older overlapping refreshes; observed server target versions cannot decrease.
 Cross-tab journal events refresh target state and announce collection changes, without

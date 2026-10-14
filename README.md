@@ -12,7 +12,8 @@ context. Cross-tab recovery preserves dispatched requests and separates stale ed
 the browser requires Web Locks for publishing. Retained history remains discoverable
 when the current revision is unavailable. Private Saved items use owner-scoped,
 versioned Save/Unsave with exact-revision
-references and lost-response recovery. See the [Saved items guide](docs/development/saved-items.md).
+references and lost-response recovery. Known first-attempt quota rejections can be
+dismissed individually without losing publication drafts. See the [Saved items guide](docs/development/saved-items.md).
 Identity policies, production limits and retained-data operations still require
 review, so use synthetic content only.
 Normal startup keeps the original operational foundation. No default administrator,

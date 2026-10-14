@@ -109,7 +109,10 @@ intent creation; do not hold either Web Lock across network work. It keeps Saved
 recovery separate from publication drafts, guards late view/identity/version responses,
 invalidates in-flight collection reads on journal changes, and preserves failed-page
 retry positions. Sign-out removes local intent, not server
-bookmarks. Tests: `test:saved-items:postgres`, `e2e/saved-items.spec.ts`; the external
+bookmarks. First-dispatch `saved_limit_reached` is a dismissible rejected record;
+later uncertain retries and stale first refusals remain uncertain under journal
+sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
+`e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent. Guide revision 2
 documents the actual subset and limits; production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.

@@ -101,6 +101,7 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       "forbidden",
       "nickname_conflict",
       "credential_limit",
+      "saved_limit_reached",
     ].includes(error.code)
   );
 }

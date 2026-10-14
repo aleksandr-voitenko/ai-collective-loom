@@ -132,3 +132,49 @@ UI reference sources are preserved. The UI import README is the current integrat
 note, not an edit to the supplied prototype. Existing data has not been migrated,
 reset or deleted. These local results support the reviewable Saved items change;
 finalization and push were separately authorized after implementation review.
+
+## PR #2 quota recovery correction — 14 October 2026
+
+The [review finding](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/2#discussion_r4267235097)
+at `9ae326b2491bf7d6171683117493db655c5c5020` identified a browser recovery gap:
+`saved_limit_reached` was missing from the explicit first-dispatch rejection list.
+A real HTTP 429 quota refusal therefore left the saved local intent uncertain,
+without selective dismissal. The existing SQL quota test stopped at the HTTP
+boundary; the browser storage-failure test failed before dispatch. Neither checked
+the persisted intent after a server quota refusal.
+
+The classifier now recognizes that code under its existing first-attempt and
+known-outcome conditions. No quota, server mutation/decision, journal version/owner
+guard, timeout or retry setting changes. The release guide, ADR-017 and scoped memory
+explain selective dismissal and conservative handling of older uncertain records.
+Lore-ID: `LC-20261014-8GYV`.
+
+On the same local synthetic topology described above, using Node 24.19.0:
+
+- Before the fix, `node --import tsx --test tests/unit/participation-client.test.ts`
+  failed the added quota-code assertion (7 passed, 1 failed). After the fix all
+  8 tests passed, including unknown-outcome, retry, identity and sequence guards.
+- Before the fix, `npm run test:e2e -- tests/e2e/saved-items.spec.ts --grep quota`
+  received the real `429 saved_limit_reached` and failed at the missing **This
+  change was rejected** notice. The other two new conservative scenarios passed.
+  After the fix all three passed in 9.6 seconds, without retries or timeout changes.
+- The first browser regression creates 500 retained tombstones through the real
+  application-role database, then Saves a new discussion. Rejection survives
+  reload and navigation to Saved items. Dismissal removes only that local record;
+  the complete unrelated publication draft is unchanged and reopens with its text.
+  SQL still contains all 500 tombstones and zero Saved operation decisions.
+- The other regressions discard a real quota response, reload, check absent status
+  and retry the exact request; or hold the first refusal while a second tab retries.
+  Both retain the same uncertain key/body without a dismissal action. The late first
+  refusal cannot overwrite the newer retry's journal sequence.
+- `npm run check` passed: 64 bootstrap, 5 hook and 31 application tests, plus
+  typechecking/build and preserved baseline checks.
+- `npm run test:e2e` passed **29/29** browser tests in 1.4 minutes (18 participation,
+  11 Saved scenarios), with one worker, zero retries and no skips.
+- `npm run test:saved-items:postgres` passed **10/10** Node tests, covering quota
+  refusal, exact recovery, ownership, concurrency, bounded retrieval and restart.
+
+Existing server, migration and storage behavior is unchanged. Their broader suites
+remain in CI; results for the pushed repair will be recorded on the PR. Existing
+development data and imported baselines are untouched. This remains same-machine,
+synthetic validation, with cross-machine and production operating gates still open.
