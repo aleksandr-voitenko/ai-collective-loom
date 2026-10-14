@@ -211,11 +211,14 @@ npm run test:participation:postgres
 npm run test:saved-items:postgres
 npx playwright install chromium
 npm run test:e2e
+npm run test:browser-diagnostics
 ```
 
 Build before running real suites. They create their own isolated databases and
 synthetic identities. Playwright controls actual Chromium and a virtual WebAuthn
 authenticator, with an explicit test-only self-signed-certificate exception. It
-captures synthetic desktop/mobile screenshots, not one-time credential screens.
+exercises synthetic desktop/mobile reading. The browser command retains validated
+structured diagnostics, excluding screenshots and raw reporter attachments from
+the upload candidate; see the [diagnostic guide](browser-diagnostics.md).
 See [observed evidence](participation-evidence.md) and the
 [retained-data gate](retained-data-gate.md) for limits and outstanding work.

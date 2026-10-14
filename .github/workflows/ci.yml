@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      verify_failure_upload:
+        description: Run controlled browser failures to verify artifact upload (run must fail)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +43,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
+      - name: Prepare browser diagnostic status
+        run: node scripts/prepare-browser-diagnostics.mjs
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run dev:init
       - run: npm run dev:doctor
@@ -49,7 +56,23 @@ jobs:
       - run: npm run test:participation:postgres
       - run: npm run test:saved-items:postgres
       - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser-diagnostics
       - run: npm run test:e2e
+      - name: Exercise controlled browser failure before upload
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_failure_upload
+        run: npm run test:e2e -- --config tests/diagnostics/playwright.config.ts
+      - name: Validate browser diagnostic upload candidate
+        id: browser_diagnostics
+        if: always()
+        run: node scripts/approve-browser-diagnostics.mjs
+      - name: Preserve approved browser diagnostics
+        if: always() && steps.browser_diagnostics.outputs.ready == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: browser-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          path: browser-diagnostics/approved/*.json
+          if-no-files-found: error
+          retention-days: 3
       - run: npm run test:migrations:postgres
       - run: npm run test:integration
       - run: npm run test:persistence

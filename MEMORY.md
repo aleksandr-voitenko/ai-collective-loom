@@ -130,6 +130,9 @@ AC45/AC54.
 Identity prototype decisions and verification: Lore-ID `LC-20261012-9JJH`.
 Integration uses real local dependencies; it is separate and never reported passed
 when unavailable.
+Browser checks use a containing runner and allowlisted failure bundles; raw reporter
+output/attachments are not approved artifacts. See `tests/MEMORY.md` and
+`docs/development/browser-diagnostics.md` for collection, teardown and CI gates.
 `test:integration` includes failed-migration rollback and signed GET probes;
 expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.

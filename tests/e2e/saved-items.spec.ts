@@ -1,15 +1,12 @@
-import { test as base, expect, chromium, type Page, type BrowserContext } from '@playwright/test';
+import type { Page, BrowserContext } from '@playwright/test';
+import { test, expect } from '../helpers/browser-fixtures.js';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { syntheticServer } from '../helpers/participation-server.js';
+import type { syntheticServer } from '../helpers/participation-server.js';
 import type { Intent } from '../../src/web/participation-client.js';
 
-const test=base.extend<{server:Awaited<ReturnType<typeof syntheticServer>>}>({
-  context:async({context,server:_server},use)=>{try{await use(context);}finally{await context.close();}},
-  server:async({},use)=>{const server=await syntheticServer();try{await use(server);}finally{await server.close();}},
-});
 const authenticators=new WeakMap<Page,{remove:()=>Promise<unknown>}>();
 async function enter(page:Page,context:BrowserContext,origin:string,ticket:string){
   await authenticators.get(page)?.remove();
@@ -92,9 +89,9 @@ test('browser saves resource and exact references, keeps R1 after R2, and render
   expect(errors).toEqual([]);
 });
 
-test('lost Save acknowledgement survives a browser process restart and retry after Unsave',async({server})=>{
+test('lost Save acknowledgement survives a browser process restart and retry after Unsave',async({server,diagnostics})=>{
   const directory=await mkdtemp(join(tmpdir(),'loom-saved-browser-'));
-  let context=await chromium.launchPersistentContext(directory,{ignoreHTTPSErrors:true,headless:true});
+  let context=await diagnostics.launchPersistentContext(directory,{ignoreHTTPSErrors:true,headless:true});
   try{
     let page=await context.newPage();const d=await setup(page,context,server);
     await page.goto(server.origin+'/loom/discussion/'+d.discussion);
@@ -107,7 +104,7 @@ test('lost Save acknowledgement survives a browser process restart and retry aft
     await expect(control(page,'discussion',d.discussion).getByText('We couldn’t confirm whether this saved-item change completed.')).toBeVisible();
     const current=await api(page,saved+'/lookup',original.target);
     await api(page,saved+'/state',{idempotency_key:randomUUID(),target:original.target,saved:false,expected_version:current.version});
-    await context.close();context=await chromium.launchPersistentContext(directory,{ignoreHTTPSErrors:true,headless:true});
+    await context.close();context=await diagnostics.launchPersistentContext(directory,{ignoreHTTPSErrors:true,headless:true});
     page=await context.newPage();await page.goto(server.origin+'/loom/saved');
     await expect(page.getByRole('heading',{name:'Unconfirmed changes'})).toBeVisible();
     let retried:any;page.on('request',request=>{if(request.url().endsWith(saved+'/state'))retried=request.postDataJSON();});
