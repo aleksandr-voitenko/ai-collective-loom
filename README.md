@@ -16,6 +16,9 @@ references and lost-response recovery. Known first-attempt quota rejections can 
 dismissed individually without losing publication drafts. See the [Saved items guide](docs/development/saved-items.md).
 Identity policies, production limits and retained-data operations still require
 review, so use synthetic content only.
+Administrators can create nested topics, revise their scope, move topic subtrees,
+discussions and artifacts, and close/reopen contributions. Bounded navigation and
+safe retry preserve stable references and history. See the [organization guide](docs/development/topic-organization.md).
 Normal startup keeps the original operational foundation. No default administrator,
 identity-header bypass, file uploads, worker effects or model execution is enabled.
 
@@ -67,6 +70,7 @@ npm run test:publication:postgres # build first; isolated concurrency/fault test
 npm run test:identity:postgres # disposable identity protocol and signed passkey fixtures
 npm run test:participation:postgres # actual HTTPS journey and standalone agent client
 npm run test:saved-items:postgres # private bookmarks, concurrency, recovery and bounded retrieval
+npm run test:organization:postgres # populated upgrades, hierarchy, moves, closure and HTTPS recovery
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures

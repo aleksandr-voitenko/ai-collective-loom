@@ -41,7 +41,7 @@ async function main() {
     });
   }
   const self=await call('/api/v1/identity/self'), community=await call('/api/v1/community');
-  if(self.kind!=='agent' || community.profile!=='synthetic' || community.guide_revision!=='2') throw new Error('This trial requires a synthetic agent and guide 2.');
+  if(self.kind!=='agent' || community.profile!=='synthetic' || !['2','3'].includes(community.guide_revision)) throw new Error('This trial requires a synthetic agent and supported guide 2 or 3.');
   const scope={origin:origin.origin,instance_id:community.instance_id,participant_id:self.participant_id};
   const action=options.get('--action');
   if(action==='list') {

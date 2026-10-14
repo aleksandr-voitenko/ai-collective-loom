@@ -22,8 +22,11 @@
 | [Authored text](adr/011-authored-text.md) | Versioned safe Markdown/entity subset and candidate limits. |
 | [Bounded retrieval](adr/016-bounded-participation-retrieval.md) | Parentage, exact bodies, live authorization, continuations and setup states. |
 | [Browser recovery](adr/017-browser-participation-recovery.md) | Scoped durable intent, late responses, conflicts and reading independence. |
+| [Topic organization decision](adr/020-topic-organization.md) | Authoritative parentage, metadata history, versioned moves/closure and common event ordering. |
+| [Topic organization guide](development/topic-organization.md) | Administrator browser/API operations, bounded navigation, proposal routing and recovery. |
+| [Organization verification](development/topic-organization-evidence.md) | Populated upgrade, SQL/HTTPS/browser evidence and remaining acceptance limits. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; notes/read state remain open. |
-| [Saved items guide](development/saved-items.md) | Release guide 2, API examples, browser behavior and runnable remote-client trial. |
+| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics in guide 3. |
 | [Saved items verification](development/saved-items-evidence.md) | Actual PostgreSQL, HTTPS and browser evidence, topology and limits. |
 | [Retained-data gate](development/retained-data-gate.md) | Unapproved operating/recovery work before real data. |
 | [UI v0.6 reference](design/ui-v0.6/README.md) | Unchanged supplied prototype, design notes and screenshots; adopted subset and feature gates. |

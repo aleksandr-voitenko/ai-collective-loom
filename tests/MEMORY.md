@@ -42,3 +42,14 @@ normal browser suite; expect a failed step/run and a successful approved upload.
 It defaults off and never applies to push/PR runs. Contract: `LC-20261014-3D4P`.
 Local bundle validation does not verify hosted upload. See the testing guide and
 `docs/development/browser-diagnostics-evidence.md` for observed results/limits.
+
+Organization scenarios use the same fixtures/runner; the closed vocabulary includes
+organization routes, `organization.spec.ts` and four organization control categories.
+Diagnostic files use compact JSON so the expanded vocabulary fits the unchanged
+128 KiB document envelope. Maximum capture and full-bundle serialization are checked
+alongside the original canary/lifecycle/refusal probes. Explicit synthetic screenshots
+are curated separately, never included in the approved diagnostic upload candidate.
+`integration/organization.test.ts` verifies populated pre-0006 upgrade, current
+cookie/bearer authority, immutable identities/scopes, exclusive/shared structure-lock
+barriers in both commit orders, quotas, replay, rollback and restart. Its quota data
+is synthetic fixture state, not a supported product mutation or data-reset procedure.

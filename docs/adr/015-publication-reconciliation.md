@@ -180,3 +180,21 @@ metadata; each current source projection still uses the common reading policy. A
 known unavailable target can be unsaved without reading it. No shared-publication
 disclosure or retry requirement is weakened. Synthetic quotas and restore/erasure
 limitations are specified in ADR-013 and the release guide revision 2.
+
+## Organization extension
+
+[ADR-020](020-topic-organization.md) uses `organization-v1`, scoped by participant,
+explicit operation kind and key. Every semantic field, including resource and
+hierarchy preconditions, participates. Exact committed retry precedes new version
+checks; immutable original state and freshly authorized current state are distinct.
+K1→B, K2→C, retry K1 leaves C current. Current administrator authority is required
+for both mutation and status; suppressed targets or original scopes are withheld.
+Audit contains IDs/versions/time, not metadata bodies or credentials. Area metadata
+history has its own attributed snapshots, separate from administrative audit.
+
+Optional `proposal_context` on ordinary discussion creation binds an affected area
+and expected community-settings version. It is included only when supplied, so
+existing participation-text-v1 digests remain identical. Its stable reference is
+retained on the discussion and exposed only when the area remains readable. There
+is no proposal workflow or special authority. Changing the designated destination
+rejects the frozen request; an exact committed retry still resolves its old outcome.

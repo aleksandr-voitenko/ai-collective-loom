@@ -102,6 +102,10 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       "nickname_conflict",
       "credential_limit",
       "saved_limit_reached",
+      "organization_conflict",
+      "organization_limit",
+      "organization_cycle",
+      "proposal_route_changed",
     ].includes(error.code)
   );
 }

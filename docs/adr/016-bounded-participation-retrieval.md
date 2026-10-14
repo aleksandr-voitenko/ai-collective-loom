@@ -1,7 +1,8 @@
 # ADR-016: Bounded participation retrieval
 
-Status: implemented for `participation-1` synthetic interfaces. Search, feeds,
-complete topic hierarchies and reference discovery remain separate gates.
+Status: implemented for `participation-1` synthetic interfaces, with bounded topic
+hierarchy browsing added by ADR-020. Search, feeds and general reference discovery
+remain separate gates.
 
 ## Choices
 
@@ -75,8 +76,14 @@ it does not create a topic or privileged workflow.
 
 The small browser uses bounded pages and exact body requests. Direct-topic artifact
 rows omit repeated location; the global list includes the authorized topic title.
-This slice has two root areas and no area-creation/move API, so descendant browsing
-and repeated-leaf hierarchical paths remain feature gates.
+Setup creates two root areas; administrators can subsequently create and reorganize
+nested topics through ADR-020. `/organization/children` lists roots or direct
+subtopics; `/organization/destinations` returns bounded full ancestor paths to
+distinguish repeated leaf names. Resource organization metadata includes the current
+parent, versions, local/effective closure and discoverable proposal/contact routes.
+Current-placement area/discussion/artifact cursors now include the hierarchy epoch;
+organization changes return explicit `invalid_cursor`/`replay_view`. Restarting a
+view preserves drafts. This is not a complete activity-feed interval contract.
 
 These choices implement architecture §§5.3, 12, 14 and the first backlog milestone.
 Reconsider indexes, limits and ordering with representative workload measurements;

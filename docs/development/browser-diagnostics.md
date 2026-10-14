@@ -80,10 +80,10 @@ continues to be asserted by the application scenarios themselves.
 | Events per test | Last 256; `events_dropped` is explicit. |
 | Contexts/pages per test | 8 contexts, 16 pages including closed persistent contexts; overflow marks capture incomplete. |
 | Pending requests | 64 active and 64 retained pre-close descriptors; overflow marks capture incomplete. |
-| View inspection | First 128 buttons, 9 fixed control categories; counts cap at 32, button truncation is explicit. |
+| View inspection | First 128 buttons, 13 fixed control categories including organization confirmation/recovery; counts cap at 32, button truncation is explicit. |
 | Snapshot time | 200 ms Chromium execution deadline and 400 ms host deadline per page; context pages sampled concurrently. Failure/timeout is explicit. |
 | Reporter steps | 16, retaining failed steps preferentially; omitted count is explicit. |
-| JSON document | 128 KiB serialized UTF-8, checked before parsing and writing. Oversize capture becomes a safe incomplete fallback. |
+| JSON document | 128 KiB serialized UTF-8 in compact JSON, checked before parsing and writing. Oversize capture becomes a safe incomplete fallback. |
 | Whole candidate | First 128 planned tests, up to 128 bundles plus the run manifest; below 17 MiB including the approval record. Omitted tests remain counted. |
 | Hosted retention | 3 days for prompt triage without long-lived browser-derived artifacts. |
 
@@ -139,7 +139,7 @@ disclosure and teardown probes are required before adding capture fields or medi
 
 `not_started`, a run left `running`, missing/unfinished collector or a capture issue
 means collection is incomplete. Probe runs are identified by `diagnostics.probe.ts`;
-application runs name the participation/Saved specs. No artifact delivery is
+application runs name the participation/Saved/organization specs. No artifact delivery is
 promised after hard runner loss, forced kill, unavailable validation tools or
 artifact-service failure. Local checks do not establish a hosted upload; that
 requires an authorized workflow run.

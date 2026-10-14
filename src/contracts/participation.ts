@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "2";
+export const guideRevision = "3";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -39,7 +39,9 @@ export const Content = Type.Object(
 export type AuthoredContent = Static<typeof Content>;
 const attempt = { idempotency_key: UUID };
 export const DiscussionInput = Type.Object(
-  { ...attempt, area_id: UUID, title: Title, content: Content },
+  { ...attempt, area_id: UUID, title: Title, content: Content,
+    proposal_context: Type.Optional(Type.Object({ affected_area_id: Type.Optional(UUID), expected_settings_version: Type.Integer({ minimum: 0 }) }, closed)),
+  },
   closed,
 );
 export const ReplyInput = Type.Object(
@@ -149,6 +151,7 @@ export const Resource = Type.Object(
     area_title: Type.String(),
     discussion_id: NullableId,
     parent_id: NullableId,
+    affected_area_id: Type.Optional(UUID),
     can_edit: Type.Boolean(),
     publication_open: Type.Boolean(),
     full_content_url: Type.String(),

@@ -31,7 +31,7 @@ export async function lockActor(tx: SqlTransaction, actor: ActorContext) {
   return authority;
 }
 
-export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution' | 'reply-traversal', allowedKinds = ['contribution', 'summary', 'artifact'], maxResources?: number): Promise<Resource[]> {
+export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution' | 'reply-traversal', allowedKinds = ['contribution', 'summary', 'artifact'], maxResources = 32): Promise<Resource[]> {
   await tx.query('SELECT pg_advisory_xact_lock_shared($1::integer, $2::integer)', [structureNamespace, structureGuard]);
   const discovered = await tx.query<{ id: string }>(`WITH RECURSIVE owners AS (
     SELECT id, owner_resource_id FROM loom.resources WHERE id = $1

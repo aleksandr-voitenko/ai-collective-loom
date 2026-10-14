@@ -1,8 +1,19 @@
 # ADR-006: Shared publication transaction and commit tail
 
-Status: implemented for internal revisions and synthetic text participation. Typed
+Status: implemented for internal revisions, synthetic text participation and topic
+organization (ADR-020). Typed
 discussion/opening/reply/artifact/setup operations reuse this same tail. Complete
 domain/lifecycle operations and workers remain unimplemented; the import is unchanged.
+
+Organization uses the existing exclusive structure guard before validating parentage,
+subtree bounds and versions. Ordinary publication retains its shared form. Setup
+keeps configuration-before-structure order and advances the hierarchy epoch when
+creating areas. Proposal-bound discussion creation takes configuration then shared
+structure guards so a designation change cannot race a frozen proposal destination.
+Metadata edits, moves and explicit local closure commands use the same short clock
+tail with structural events/outbox intents and immutable organization decisions.
+They acquire no domain guards after the clock. All owner walks now have a 32-resource
+bound; deep legacy structures fail explicitly before unbounded locking.
 
 ## Decision
 

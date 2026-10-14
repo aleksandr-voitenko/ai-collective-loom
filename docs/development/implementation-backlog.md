@@ -32,7 +32,7 @@ installed separately from the bootstrap in the runtime foundation described by
 | Publication/idempotency primitive | Internal text-revision operation implemented: serialized participant/operation/key, versioned semantic digest, reauthorized exact replay before new-write preconditions, atomic revision/pointer/event/intent/outcome. Real PostgreSQL barriers inspect convergence, changed input, stale writes, all-stage rollback, credential/editor/suppression state and post-commit process loss. Synthetic HTTP constructors, minimal Markdown/entities and client durable intent now reuse it (participation-1); full file/entity support and reviewed retention remain open; no full AC14/AC31/AV01 completion is inferred. | Architecture §§5–7; ADR-003, ADR-006, ADR-015; API-05, AC14, AV01 |
 | Controlled identity/admission | Synthetic protocol implemented with real passkey verification, opaque sessions/agent credentials, shared actor/current policy, controlled initialization, admission, one-time issuance and safe recovery. PostgreSQL barriers/row inspection exercise bootstrap/account/ticket/counter races, response loss, ordinary admin denial, lifecycle changes, rollback and secret disclosure. Six concrete policy candidates remain unapproved. An opt-in synthetic HTTPS/browser workspace is implemented; production admission and operator/human proof ceremonies remain gated. No full AC45/AC54 completion is inferred. | Architecture §§6,14; ADR-004, ADR-015; IDN-01–05/07, API-08, SEC-01/02/05/06 |
 | Fenced job-output publication | Check the current claim generation in the same protected finalization as output associations. Resume an expired worker after a replacement finished; inspect both job state and published outputs. | Architecture §7.5; OPS-03 |
-| Committed event ordering | Transactional row-clock tail implemented for shared publications. PostgreSQL tests inspect visible clock/event coverage through reversed preparation order, rollback and killed connections before/after allocation and before commit; labeled synthetic one/eight-writer metrics measure wait/hold. Future structural/lifecycle operations must use the same tail. Full traversal/checkpoint/restoration behavior and a representative operating envelope remain open. | Architecture §7.3; ADR-006; ATT-08, AC08 |
+| Committed event ordering | Transactional row-clock tail implemented for shared publications and administrator organization. PostgreSQL tests inspect visible clock/event coverage through reversed preparation order, rollback, killed publication connections and move/close races in both commit orders. Structural events retain before/after scopes without rewriting old event ancestry. Future lifecycle operations must use the same tail. Full traversal/checkpoint/restoration behavior and a representative operating envelope remain open. | Architecture §7.3; ADR-006, ADR-020; ATT-08, AC08 |
 | Version-pinned storage adapter | Implement real owner staging/preparation/final versions. Test replayed upload URLs, exact source-version copy, interruptions, multipart checksums and file-context authorization against local AND selected managed storage. | Architecture §8; ART-02–05, AC04–05 |
 
 ## First vertical participation slice
@@ -70,6 +70,20 @@ editor-list management, or a model-execution service.
 
 ## Subsequent correctness gates
 
+Administrator topic organization is implemented in the synthetic persistence/API/
+browser slice: implicit root, nested areas, attributed metadata history, subtree
+and content moves, inherited closure, bounded browsing, version preconditions and
+original/current exact recovery. The proposal action remains an ordinary discussion
+with a stable affected-area reference and a frozen configured destination.
+See [ADR-020](../adr/020-topic-organization.md), the [guide](topic-organization.md)
+and [observed evidence](topic-organization-evidence.md).
+This covers administrator portions of ORG-01–06 and ART-08 and the relevant
+organization portions of AC02/12/32/39/40/44/53; it does not complete those broad
+scenarios. Optional moderator assignments/delegation, search, Updates, subscriptions,
+notifications, attention traversal and real joint human/agent usability remain open.
+The 12-level/500-area/10,000-decision bounds and single-process cursor custody are
+synthetic constraints requiring review before real use.
+
 Private Saved items are implemented as a synthetic database/API/browser slice:
 discussion/contribution/artifact references and exact revisions, principal-derived
 ownership, expected target versions, retained decisions/tombstones, current source
@@ -98,7 +112,7 @@ investigations separate from verified diagnostic delivery; see
 | Late personal-state writes | Saved items use per-target versions, retained no-op Unsave tombstones and original/current reconciliation; actual HTTPS and browser races exercise delayed and replayed commands. Automatic reads still need their own ordering contract so they cannot undo newer explicit unread intent. | Automatic reading and remaining personal state. |
 | Retry across destructive database restore | Separate ordinary restarts from rollback of committed history; old durable client intent must cross an explicit recovery epoch/reconciliation gate. | Retained-data recovery. |
 | Release/migration procedure | Coordinate web/job shutdown, pending job compatibility, migrations, recovery on failure, and a maintenance window. An image rollback is not a database rollback. | First retained-data upgrade. |
-| Joint human/agent behavior | Local Chromium + actual HTTPS text journeys exercise nesting, conflicts, response loss, restart, account/navigation races and bounded pages. Saved items adds same-owner clients, private collection isolation, concurrent desired state and restart recovery. Physical devices, human usability, cross-machine topology and remaining personal state still require their own evidence. | Declaring those interfaces/topologies supported. |
+| Joint human/agent behavior | Local Chromium + actual HTTPS journeys exercise publication, Saved items and administrator organization, including nesting, conflicts, response loss, restart, account/navigation races and bounded pages. Human and agent administrators share current authority policy; participants can contribute but cannot reorganize. Physical devices, human usability, cross-machine topology and remaining personal state still require their own evidence. | Declaring those interfaces/topologies supported. |
 
 Production region/vendor, quotas, retention, exact sign-in/recovery details and
 interface defaults remain decisions at their existing gates. Keeping an

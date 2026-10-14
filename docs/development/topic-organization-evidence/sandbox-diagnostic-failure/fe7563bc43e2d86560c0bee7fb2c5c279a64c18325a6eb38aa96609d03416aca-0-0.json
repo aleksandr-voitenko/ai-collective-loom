@@ -1,0 +1,132 @@
+{
+  "schema": "loom-browser-diagnostic-1",
+  "metadata": {
+    "commit": "4279c8abe75a0721a043ddd049502041caed12d0",
+    "dirty": true,
+    "node": "24.19.0",
+    "playwright": "1.64.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "run": "local",
+    "attempt": 0,
+    "job": "local"
+  },
+  "result": {
+    "status": "failed",
+    "duration_ms": 4,
+    "errors": 1,
+    "attachments_omitted": 1,
+    "steps": [
+      {
+        "ms": 10,
+        "duration_ms": 0,
+        "category": "fixture",
+        "action": "other",
+        "file": "browser-fixtures.ts",
+        "line": 5,
+        "failed": false
+      },
+      {
+        "ms": 10,
+        "duration_ms": 3,
+        "category": "fixture",
+        "action": "other",
+        "file": "diagnostics.probe.ts",
+        "line": 11,
+        "failed": true
+      },
+      {
+        "ms": 7,
+        "duration_ms": 6,
+        "category": "hook",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": true
+      },
+      {
+        "ms": 14,
+        "duration_ms": 0,
+        "category": "fixture",
+        "action": "other",
+        "file": "diagnostics.probe.ts",
+        "line": 11,
+        "failed": false
+      },
+      {
+        "ms": 14,
+        "duration_ms": 0,
+        "category": "fixture",
+        "action": "other",
+        "file": "browser-fixtures.ts",
+        "line": 5,
+        "failed": false
+      },
+      {
+        "ms": 13,
+        "duration_ms": 3,
+        "category": "hook",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": false
+      },
+      {
+        "ms": 16,
+        "duration_ms": 1,
+        "category": "hook",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": false
+      }
+    ],
+    "steps_dropped": 0
+  },
+  "capture": {
+    "schema": "loom-browser-capture-1",
+    "test": {
+      "id": "fe7563bc43e2d86560c0bee7fb2c5c279a64c18325a6eb38aa96609d03416aca",
+      "file": "diagnostics.probe.ts",
+      "line": 82,
+      "column": 1,
+      "repeat": 0,
+      "retry": 0
+    },
+    "complete": false,
+    "chromium": "unknown",
+    "issues": [
+      "collector_unfinished"
+    ],
+    "events": [
+      {
+        "ms": 1,
+        "kind": "fixture",
+        "context": 0,
+        "page": 0,
+        "navigation": 0,
+        "request": 0,
+        "route": "unknown",
+        "method": "none",
+        "status": 0,
+        "detail": "server_starting"
+      },
+      {
+        "ms": 4,
+        "kind": "fixture",
+        "context": 0,
+        "page": 0,
+        "navigation": 0,
+        "request": 0,
+        "route": "unknown",
+        "method": "none",
+        "status": 0,
+        "detail": "collector_finished"
+      }
+    ],
+    "events_dropped": 0,
+    "pages": [],
+    "pending": [],
+    "connections": 0
+  }
+}

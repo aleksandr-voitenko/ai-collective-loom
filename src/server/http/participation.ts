@@ -18,6 +18,8 @@ import { classifyError } from "./errors.js";
 import { participationGuide } from "../../contracts/guide.js";
 import { registerSavedItems } from "./saved-items.js";
 import { SavedItemsError } from "../modules/participation/saved-items.js";
+import { registerOrganization } from "./organization.js";
+import { OrganizationError } from "../modules/participation/organization-context.js";
 
 export interface ParticipationServices {
   database: Transactions;
@@ -53,6 +55,11 @@ export function participantError(
     code = error.code;
     message = error.message;
     status = error.status;
+  } else if (error instanceof OrganizationError) {
+    code = error.code;
+    message = error.message;
+    status = code === "organization_limit" ? 429 : 409;
+    action = code === "organization_limit" ? "review_synthetic_limit" : "refresh_and_review";
   } else if (error instanceof SavedItemsError) {
     code = error.code;
     message = error.message;
@@ -101,6 +108,7 @@ export async function registerParticipation(
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
   registerSavedItems(app, services.database, actor);
+  registerOrganization(app, services.database, actor);
   const publications = new ParticipationPublications(services.database),
     reads = new ParticipationRetrieval(services.database),
     admin = new ParticipationAdministration(services.database);

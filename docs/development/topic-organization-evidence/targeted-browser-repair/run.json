@@ -1,0 +1,45 @@
+{
+  "schema": "loom-browser-run-1",
+  "metadata": {
+    "commit": "4279c8abe75a0721a043ddd049502041caed12d0",
+    "dirty": true,
+    "node": "24.19.0",
+    "playwright": "1.64.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "run": "local",
+    "attempt": 0,
+    "job": "local"
+  },
+  "state": "completed",
+  "status": "passed",
+  "planned": 2,
+  "ended": 2,
+  "omitted": 0,
+  "tests": [
+    {
+      "test": {
+        "id": "dd424abce0d0ca73e9b192f813a8df8f6d4ef77bb1eae13661706f66fdd68d82",
+        "file": "organization.spec.ts",
+        "line": 111,
+        "column": 1,
+        "repeat": 0,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2964
+    },
+    {
+      "test": {
+        "id": "ed43fd2907fd274115b05657e9257c0ddc93975f321ae2502f6bd208b7ef3667",
+        "file": "organization.spec.ts",
+        "line": 123,
+        "column": 1,
+        "repeat": 0,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2452
+    }
+  ]
+}
