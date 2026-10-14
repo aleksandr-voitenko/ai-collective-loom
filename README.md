@@ -69,9 +69,15 @@ npm run test:participation:postgres # actual HTTPS journey and standalone agent 
 npm run test:saved-items:postgres # private bookmarks, concurrency, recovery and bounded retrieval
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
+npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures
 npm run test:integration
 npm run test:persistence
 ```
+
+Browser failures produce bounded JSON in `browser-diagnostics/approved/`.
+The [diagnostic guide](docs/development/browser-diagnostics.md) explains safe
+capture, intentional probes and CI retention. Raw reports and screenshots are
+excluded from that upload path.
 
 `dev:init` creates ignored `.env.local` credentials without overwriting an existing
 file. `dev:up` starts PostgreSQL and SeaweedFS, enables versioning on the two local

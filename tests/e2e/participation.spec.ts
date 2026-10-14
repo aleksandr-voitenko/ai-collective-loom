@@ -1,7 +1,4 @@
 import {
-  test as base,
-  expect,
-  chromium,
   type Page,
   type BrowserContext,
   type CDPSession,
@@ -12,30 +9,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect as connectTls } from "node:tls";
 import { once } from "node:events";
-import { syntheticServer } from "../helpers/participation-server.js";
+import type { syntheticServer } from "../helpers/participation-server.js";
+import { test, expect } from "../helpers/browser-fixtures.js";
 import { httpClient } from "../helpers/participation-http.js";
 
-const test = base.extend<{
-  server: Awaited<ReturnType<typeof syntheticServer>>;
-}>({
-  context: async ({ context, server: _server }, use) => {
-    // The explicit server dependency orders this cleanup first. A speculative
-    // TLS connection can otherwise keep server.close() waiting on a live client.
-    try {
-      await use(context);
-    } finally {
-      await context.close();
-    }
-  },
-  server: async ({}, use) => {
-    const server = await syntheticServer();
-    try {
-      await use(server);
-    } finally {
-      await server.close();
-    }
-  },
-});
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
 async function authenticator(page: Page, context: BrowserContext) {
   const previous = authenticators.get(page);
@@ -454,9 +431,10 @@ test("a late committed publication cannot repopulate another identity or route a
 
 test("lost committed response survives actual browser process restart and exact retry without duplication", async ({
   server,
+  diagnostics,
 }, testInfo) => {
   const directory = await mkdtemp(join(tmpdir(), "loom-browser-restart-"));
-  let context = await chromium.launchPersistentContext(directory, {
+  let context = await diagnostics.launchPersistentContext(directory, {
     ignoreHTTPSErrors: true,
     headless: true,
     viewport: { width: 1440, height: 1000 },
@@ -490,7 +468,7 @@ test("lost committed response survives actual browser process restart and exact 
     const original = posted!;
     expect(original.idempotency_key).toBeTruthy();
     await context.close();
-    context = await chromium.launchPersistentContext(directory, {
+    context = await diagnostics.launchPersistentContext(directory, {
       ignoreHTTPSErrors: true,
       headless: true,
       viewport: { width: 1440, height: 1000 },
@@ -1003,6 +981,7 @@ test("review regression: rejected admission preserves editable correction and un
 
 test("review regression: corrected conflict drafts survive navigation and browser process restart", async ({
   server,
+  diagnostics,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "loom-conflict-restart-"));
   const options = {
@@ -1010,7 +989,7 @@ test("review regression: corrected conflict drafts survive navigation and browse
     headless: true,
     viewport: { width: 1440, height: 1000 },
   };
-  let context = await chromium.launchPersistentContext(directory, options);
+  let context = await diagnostics.launchPersistentContext(directory, options);
   try {
     let page = await context.newPage();
     await enter(page, context, server.origin, server.ticket);
@@ -1073,7 +1052,7 @@ test("review regression: corrected conflict drafts survive navigation and browse
       "Corrected text survives restart",
     );
     await context.close();
-    context = await chromium.launchPersistentContext(directory, options);
+    context = await diagnostics.launchPersistentContext(directory, options);
     page = await context.newPage();
     await page.goto(correctedUrl);
     await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
@@ -1354,10 +1333,11 @@ test("review regression: a stale tab preserves separate edits without overwritin
 for (const kind of ["artifacts", "discussions", "replies"] as const)
   test(`review regression: Write another selects the replacement ${kind} draft across browser restart`, async ({
     server,
+    diagnostics,
   }) => {
     const directory = await mkdtemp(join(tmpdir(), "loom-next-draft-"));
     const options = { ignoreHTTPSErrors: true, headless: true };
-    let context = await chromium.launchPersistentContext(directory, options);
+    let context = await diagnostics.launchPersistentContext(directory, options);
     try {
       let page = await context.newPage();
       await enter(page, context, server.origin, server.ticket);
@@ -1428,7 +1408,7 @@ for (const kind of ["artifacts", "discussions", "replies"] as const)
         "Second body survives restart",
       );
       await context.close();
-      context = await chromium.launchPersistentContext(directory, options);
+      context = await diagnostics.launchPersistentContext(directory, options);
       page = await context.newPage();
       await page.goto(nextUrl);
       await expect(page.getByLabel(label, { exact: true })).toHaveValue(

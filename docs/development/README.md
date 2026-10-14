@@ -202,6 +202,13 @@ Install Chromium with `npx playwright install chromium` and build first. See
 [participation evidence](participation-evidence.md) for observed results and topology;
 same-machine HTTP success is not a cross-machine agent trial.
 
+`npm run test:browser-diagnostics` verifies the failure path with isolated,
+intentionally failing browser children. The normal browser command retains only
+bounded, validated JSON in `browser-diagnostics/approved/`; raw reports and images
+are removed after normal exit. CI preserves the approved bundle after failed steps
+with three-day retention. See the [diagnostic contract](browser-diagnostics.md)
+for bounds, sensitive-data exclusions, incomplete capture and upload limitations.
+
 `npm run check` runs source-digest/mapping/JSON checks, native Node tests of local
 configuration, migration-plan generation, safe invocation and reset rules, and the
 existing hook-installer plan tests. It also typechecks the application/tests, runs

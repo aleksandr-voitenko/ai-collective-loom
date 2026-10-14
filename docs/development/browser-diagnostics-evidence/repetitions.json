@@ -1,0 +1,261 @@
+{
+  "schema": "loom-browser-run-1",
+  "metadata": {
+    "commit": "d0413b20b8fcf0695316c2769c7e684d8bf2f558",
+    "dirty": true,
+    "node": "24.19.0",
+    "playwright": "1.64.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "run": "local",
+    "attempt": 0,
+    "job": "local"
+  },
+  "state": "completed",
+  "status": "passed",
+  "planned": 20,
+  "ended": 20,
+  "omitted": 0,
+  "tests": [
+    {
+      "test": {
+        "id": "b702fd1c9d101c504394fc578a0edf0a3974b2b5351dc9ef8abff363349bce4c",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 0,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 3589
+    },
+    {
+      "test": {
+        "id": "b9d2c1645afd0c78b3d46c704f2b6aa8326c8bac09fc09e9c733549ceb72d301",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 0,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2089
+    },
+    {
+      "test": {
+        "id": "6fc6dbcc7aed4e6d07c364e39f2c0355068d2767dc836c48a8f9750f80a3263d",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 1,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2474
+    },
+    {
+      "test": {
+        "id": "2b62aca205cabc1da53ef3d7ed71e2f17ff576bb9b530225a2477bd11d360bd8",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 1,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2080
+    },
+    {
+      "test": {
+        "id": "bb826a5f5d07715032db4d84735bf3a90363ca60c33fe9b64f005e1eee351d19",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 2,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2471
+    },
+    {
+      "test": {
+        "id": "9786e38eeb1e8561b7eff62e3bd7190af7a6bb2e12b8b136486c993c0af5dba2",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 2,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2096
+    },
+    {
+      "test": {
+        "id": "aced0b716c33d2756f66cd6d24711cbc7b48e6117ee634cee14a4416a1504a58",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 3,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2402
+    },
+    {
+      "test": {
+        "id": "a46ccff6cd91e837642a2321a6bf644bab089b3ebdd01855d3317fcd265123be",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 3,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2068
+    },
+    {
+      "test": {
+        "id": "5d98aebf31b1b16aca5e60cdf33f03c2da686c9eeab29677a2d5b35c1b6c1fd0",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 4,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2425
+    },
+    {
+      "test": {
+        "id": "3286a7679d7e91e9d63a237243f460a6eee3234d34c1efdc3be1d2a947b5e252",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 4,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2094
+    },
+    {
+      "test": {
+        "id": "76948936a1ee78b334258e7a7cb933ce0dcb21eb060499d33e503c2cd8de403a",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 5,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2504
+    },
+    {
+      "test": {
+        "id": "7597cf9d990ee389b7c4ac6e16b67a7aff3f6fac9373cee3c4312c394ac05b9e",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 5,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2051
+    },
+    {
+      "test": {
+        "id": "72c0eeb432a2e18d554fe124877b106fd776a7cdcd9c10818c29ff39b4724f5f",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 6,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2459
+    },
+    {
+      "test": {
+        "id": "b7d5458f168b4b4e10bf7787c382fe943013c2a36277c504d5ff56c2964b4544",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 6,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2092
+    },
+    {
+      "test": {
+        "id": "e343540423f8d2d098e9ae4d2d076020b3643eff9bc12ad1effda1277aa2bb5c",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 7,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2532
+    },
+    {
+      "test": {
+        "id": "420df98cabbf20bacc8efb1101a371fdfb7040eafe82c0a70ac775169728a83e",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 7,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2081
+    },
+    {
+      "test": {
+        "id": "163fdd200d4948af69139f9e90420147dae4d9529e0a5d7fa67a57935bb202ba",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 8,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2424
+    },
+    {
+      "test": {
+        "id": "774274b3e88ce8caa02d7f1bb5c85e5f80f367c0df0f441f8fb97fa7b1ffaa83",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 8,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2064
+    },
+    {
+      "test": {
+        "id": "4a7c149549ca6a28aa5fe39f6d7c795cf471ef51b21dcdfb231284b26761c254",
+        "file": "saved-items.spec.ts",
+        "line": 121,
+        "column": 1,
+        "repeat": 9,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2391
+    },
+    {
+      "test": {
+        "id": "d7d77318b6d42bd9ade36a56ec9ef9be68620e0594fef764da2b4a7b9e30800a",
+        "file": "saved-items.spec.ts",
+        "line": 325,
+        "column": 1,
+        "repeat": 9,
+        "retry": 0
+      },
+      "status": "passed",
+      "duration_ms": 2076
+    }
+  ]
+}

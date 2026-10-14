@@ -37,7 +37,8 @@
     "test:identity:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity.test.ts",
     "test:participation:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/participation.test.ts",
     "test:saved-items:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/saved-items.test.ts",
-    "test:e2e": "node scripts/check-runtime.mjs && playwright test",
+    "test:e2e": "node scripts/browser-tests.mjs",
+    "test:browser-diagnostics": "node scripts/check-runtime.mjs && node --import tsx tests/diagnostics/verify.ts",
     "app:synthetic": "npm run app:build && node --import tsx scripts/synthetic-participation.ts"
   },
   "dependencies": {

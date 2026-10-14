@@ -4,10 +4,7 @@ export default defineConfig({
   timeout: 90000,
   fullyParallel: false,
   workers: 1,
-  reporter: [
-    ["list"],
-    ["json", { outputFile: "test-results/participation-browser.json" }],
-  ],
+  reporter: [["./tests/helpers/browser-reporter.ts"]],
   use: {
     ignoreHTTPSErrors: true,
     viewport: { width: 1440, height: 1000 },

@@ -85,6 +85,9 @@ The E2E context fixture depends on the server and explicitly closes the browser
 context first. A TLS preconnection without an HTTP request can otherwise block
 graceful server teardown; the deterministic socket regression covers that order
 (`LC-20261014-WZF5`).
+The shared fixture and persistent-context wrapper also capture bounded diagnostics
+before close; see `tests/MEMORY.md`. Use the npm browser command so raw reporter
+output/attachments stay out of the approved artifact directory.
 No logged/screenshot credential secret, reset, deployment or physical-device trial
 is implied. See `docs/development/participation-evidence.md` for actual results.
 

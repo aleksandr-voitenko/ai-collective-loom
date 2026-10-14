@@ -80,6 +80,14 @@ the [guide](saved-items.md) and [observed evidence](saved-items-evidence.md).
 The candidate 500-target/10,000-decision retention bounds are not production approval.
 Notes, read state, Following, notifications and complete Updates remain open.
 
+Browser failure diagnostics now have a closed structured contract, pre-close
+context/tab capture, local canary/failure verification and a gated CI upload path.
+The original PR #2 missing-control and `ERR_NETWORK_CHANGED` failures did not recur
+in the predeclared 10 repetitions of each scenario; their causes remain unresolved.
+Hosted artifact upload still requires an authorized workflow run. Keep those two
+investigations separate from diagnostic-delivery completion; see
+[diagnostic evidence](browser-diagnostics-evidence.md).
+
 | Work | Required clarification/test | Close before |
 |---|---|---|
 | Restored visibility behind completed checkpoints | Recovery must reach restored retained events earlier than the active interval lower bound, including personal delivery history; filters cannot hide control conditions. | Complete-feed support. |
