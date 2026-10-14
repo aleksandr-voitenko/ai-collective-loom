@@ -41,11 +41,16 @@ The Compose profile pins these tags to immutable image-index digests:
 |---|---|---|
 | PostgreSQL | `postgres:18.4-bookworm` | Official image; major matches the architecture. Real roles, migrations and persistence passed on Linux/arm64 and Linux/amd64. |
 | S3-compatible storage | `chrislusf/seaweedfs:4.48` | Single-node `mini` mode, versioning initialized through the S3 API. Local choice only. |
-| Local S3 setup/check client | `public.ecr.aws/aws-cli/aws-cli:2.31.0` | One-shot CLI containers, not an AWS account or application dependency. |
+| Local S3 setup/check client | `amazon/aws-cli:2.31.0` | AWS's official Docker Hub image; one-shot CLI containers, not an AWS account or application dependency. |
 
-All three images were pulled and executed as Linux/arm64 locally and Linux/amd64
-in the linked CI run. Exact image-index pins are in [compose.yaml](../../compose.yaml).
+The earlier bootstrap references were pulled and executed as Linux/arm64 locally
+and Linux/amd64 in the linked CI run, using ECR Public for the AWS CLI helper.
+The helper now uses Docker Hub to avoid the observed ECR Public download-quota
+failure. Its `2.31.0` index digest was independently verified on Docker Hub with
+Linux/amd64 and Linux/arm64 manifests. Exact image-index pins are in
+[compose.yaml](../../compose.yaml).
 Index pins allow native platform selection without following a moving tag.
+Storage setup, smoke/persistence checks, and `dev:images` all use that Compose pin.
 Repeat the checks when changing image pins or runtimes and on additional platforms.
 
 ## Commands

@@ -39,7 +39,7 @@ services:
 
   # Administrative LOCAL setup/smoke tool, not credentials for Loom participants.
   aws:
-    image: public.ecr.aws/aws-cli/aws-cli:2.31.0@sha256:cd2b1ed9b2181b2b8341f6584ec019b117cc13d3ec142a244d8908e1bb8ea487
+    image: amazon/aws-cli:2.31.0@sha256:3b018ce74732c98acf6f1de59b3a89587cb7f9eb6ea0d1447d1779091b2bf057
     profiles: [tools]
     environment:
       AWS_ACCESS_KEY_ID: ${LOOM_S3_ACCESS_KEY:?Run npm run dev:init}
