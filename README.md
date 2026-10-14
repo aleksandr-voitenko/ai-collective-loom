@@ -8,7 +8,9 @@ and agent accounts. A React browser and direct HTTPS clients share discussion,
 reply, text-artifact, exact-revision and safe-retry operations. Lost responses can
 be reconciled without duplicate publication. Rejected submissions offer explicit,
 saved corrections; unavailable replies retain access to eligible nested discussion
-context. Identity policies, production limits
+context. Cross-tab recovery preserves dispatched requests and separates stale edits;
+the browser requires Web Locks for publishing. Retained history remains discoverable
+when the current revision is unavailable. Identity policies, production limits
 and retained-data operations still require review, so use synthetic content only.
 Normal startup keeps the original operational foundation. No default administrator,
 identity-header bypass, file uploads, worker effects or model execution is enabled.

@@ -273,3 +273,71 @@ repairs have local verification only; GitHub CI remains pending. Cross-machine
 client validation, real identity/recovery policy, production limits and retained-data
 procedures remain pending. No existing data was reset and no cloud resources were
 created.
+
+## PR #1 second review repairs — 14 October 2026
+
+Task `LC-20261014-S0JX` addresses three validated findings against `8a8d435`:
+
+- [Stale writers](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4265453656):
+  a participant-scoped Web Lock serializes journal mutations, while record sequences
+  reject stale dispatch/removal and frozen-body changes. Stale unsent edits are saved
+  separately, with an explicit review gate and no automatic POST. Setup/admission,
+  correction, quota and cleanup use the same guard. Legacy records keep their keys
+  and exact bodies. A first refusal cannot release an intent after a concurrent retry.
+- [Write another](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4265453661):
+  save the replacement before retiring the old record and select its actual draft
+  route. Artifact, discussion and reply composers retain their target and text through
+  reload and real browser-process restart.
+- [Canonical history discovery](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4265453666):
+  unavailable current/exact pages offer the existing authorized history endpoint.
+  Tests start without an old revision ID, find eligible R1 after R2 suppression, and
+  confirm whole-resource suppression still denies history. No older body is silently
+  presented as current and no backend authorization rule changed.
+
+The original coverage used one composer at a time, correction rather than
+write-another URLs, and a pre-known exact revision URL for history. All three new
+browser regressions failed on the prior build for their intended reasons before
+repair. The actual two-tab test holds A's server-committed acknowledgement, rejects
+stale Publish and Remove actions from other views, preserves A's key/body/uncertain
+state while B types, restores B's separately blocked edits on reload, and retries A
+without a duplicate revision. Unlocking B's draft does not itself send a request.
+
+Final review also caught an implementation-stage autosave regression: after a draft
+save failed, Publish could send older text. A browser storage-failure regression
+reproduced that behavior, then passed after first dispatch was changed to durably
+capture the visible form under the same version check. Uncertain retries still use
+the original frozen body. Unsupported Web Locks fail closed before POST; read/export
+remain available. Server logout still succeeds if local cleanup fails, with an
+explicit retained-record warning.
+
+Observed on Node 24.19.0/macOS arm64, actual Chromium 156, Fastify HTTPS and isolated
+PostgreSQL 18.4 on the same Mac:
+
+| Check | Evidence |
+|---|---|
+| `npm run test:e2e` | **18 passed in 49.9 seconds** under the normal worker/timeout/retry settings, including the new regressions and all prior identity, late-response, lost-acknowledgement, conflict and teardown cases. |
+| `npm run test:participation:postgres` | **12 passed** against actual HTTPS/PostgreSQL, including cookie/bearer authorization parity, hidden-current history, bounded traversal and external-client restart. |
+| `npm run check` | Passed baseline/document checks, **64 bootstrap + 5 hook + 30 application** checks, TypeScript and build. Journal units cover concurrent stale writes, stale deletion, late outcomes after cleanup, concurrent quota, legacy records, ownership and correction failure. |
+
+After the final defensive setup/admission storage-error reporting change, both
+affected browser cases passed again (2 tests in 5.4 seconds), with typechecking and
+build passing. Final documentation checks and all 30 changed-document local links
+pass. `git diff --check` is clean.
+
+During implementation, typechecking caught tests still treating asynchronous journal
+methods as synchronous. The first application test run was interrupted after a
+reproduced Node 24 native-lock issue: a synchronously throwing callback did not release
+the lock for the next request. Returning an async callback releases it on rejection;
+the full application suite then passed. One existing admission test initially read
+storage before the asynchronous correction completed; it now waits for the observable
+unlocked form before asserting the new key. No assertion, timeout or guard was weakened.
+
+ADR-017, the executable and browser guides, README and scoped memory now describe
+the serialization and recovery transitions. All open tabs must run this release;
+mixed old/new clients and unsupported-browser publication are not supported. Root
+memory's feature boundaries remain accurate. Baselines, migrations and dependencies
+are unchanged. No retained development data was reset or cloud environment deployed.
+Cross-machine agent trials, physical passkeys, production limits and identity/
+retained-data procedures remain pending; these local trials are not remote-client
+evidence. CI for the new commit is pending at record preparation; the PR description
+will carry its actual head and completed workflow results after push.

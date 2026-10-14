@@ -931,6 +931,7 @@ test("review regression: rejected admission preserves editable correction and un
     await page
       .getByRole("button", { name: "Prepare corrected account operation" })
       .click();
+    await expect(page.getByLabel("Nickname", { exact: true })).toBeEnabled();
     const corrected = (await savedIntents(page)).find(
       (r) => r.slot === "admission",
     );
@@ -940,6 +941,13 @@ test("review regression: rejected admission preserves editable correction and un
     );
   }
   await page.getByLabel("Nickname", { exact: true }).fill("corrected_agent");
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find((r) => r.slot === "admission")?.body
+          .nickname,
+    )
+    .toBe("corrected_agent");
   await page.reload();
   await expect(page.getByLabel("Nickname", { exact: true })).toHaveValue(
     "corrected_agent",
@@ -1187,9 +1195,7 @@ test("review regression: suppressed parents preserve browser branches and eligib
     "UPDATE loom.revisions SET availability='suppressed' WHERE id=$1",
     [newer.revision_id],
   );
-  await page.goto(
-    server.origin + `/loom/resource/${child.resource_id}/${child.revision_id}`,
-  );
+  await page.goto(server.origin + `/loom/resource/${child.resource_id}`);
   await page
     .getByRole("button", { name: "Revision history", exact: true })
     .click();
@@ -1200,4 +1206,343 @@ test("review regression: suppressed parents preserve browser branches and eligib
   expect(
     await page.getByText("Suppressed current body", { exact: true }).count(),
   ).toBe(0);
+  expect(
+    await page.getByRole("button", { name: "Edit this text" }).count(),
+  ).toBe(0);
+  await page.getByRole("link", { name: /Revision 1/ }).click();
+  await expect(
+    page.getByText("Eligible nested reply", { exact: true }),
+  ).toBeVisible();
+  await server.observer.query(
+    "UPDATE loom.resources SET state='suppressed' WHERE id=$1",
+    [child.resource_id],
+  );
+  await page.goto(server.origin + `/loom/resource/${child.resource_id}`);
+  await page
+    .getByRole("button", { name: "Revision history", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Retry this page" }),
+  ).toBeVisible();
+  expect(await page.getByRole("link", { name: /Revision 1/ }).count()).toBe(0);
+});
+
+test("review regression: a stale tab preserves separate edits without overwriting dispatched intent", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await setup(page);
+  const d = await createDiscussion(page);
+  const url =
+    server.origin + `/loom/resource/${d.resource}/${d.revision}?edit=1`;
+  await page.goto(url);
+  await page
+    .getByLabel("Text", { exact: true })
+    .fill("Original request committed by A");
+  const original = (await savedIntents(page)).find(
+    (r) => r.slot === "edit:" + d.resource,
+  );
+  const other = await context.newPage();
+  await other.goto(url + "&intent=" + original.key);
+  await expect(other.getByLabel("Text", { exact: true })).toHaveValue(
+    original.body.content.text,
+  );
+  const staleList = await context.newPage();
+  await staleList.goto(server.origin + "/loom/help");
+  const originalRow = staleList.locator(".list-row").filter({
+    has: staleList.getByRole("link", { name: /revision.publish · draft/ }),
+  });
+  await expect(
+    originalRow.getByRole("button", { name: "Remove local record" }),
+  ).toBeVisible();
+  let otherPosts = 0;
+  await other.route("**/api/v1/revisions", (route) => {
+    otherPosts++;
+    return route.abort();
+  });
+  let committed!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    committed = resolve;
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/v1/revisions", async (route) => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(201);
+    committed();
+    await held;
+    await route.abort("failed");
+  });
+  try {
+    await page.getByRole("button", { name: "Publish", exact: true }).click();
+    await ready;
+    await originalRow
+      .getByRole("button", { name: "Remove local record" })
+      .click();
+    await expect(staleList.getByRole("alert")).toContainText(
+      "changed in another view",
+    );
+    await other.getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(other.getByRole("alert")).toContainText(
+      "changed in another view",
+    );
+    expect(otherPosts).toBe(0);
+    await other
+      .getByLabel("Text", { exact: true })
+      .fill("Unsent edits made in B");
+    await expect
+      .poll(
+        async () =>
+          (await savedIntents(other)).find((r) => r.key === original.key)?.body,
+      )
+      .toEqual(original.body);
+    const retained = (await savedIntents(other)).find(
+      (r) => r.key === original.key,
+    );
+    expect(retained.state).toBe("uncertain");
+    await expect(
+      other.getByText("Your changes were saved separately.", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      other.getByRole("button", { name: "Publish", exact: true }),
+    ).toBeDisabled();
+    const separate = (await savedIntents(other)).find(
+      (r) => r.key !== original.key && r.slot === original.slot,
+    );
+    expect(separate.body.content.text).toBe("Unsent edits made in B");
+    expect(separate.state).toBe("draft");
+    expect(separate.blocked_by).toBe(original.key);
+    await other.reload();
+    await expect(other.getByLabel("Text", { exact: true })).toHaveValue(
+      "Unsent edits made in B",
+    );
+    await expect(
+      other.getByRole("button", { name: "Publish", exact: true }),
+    ).toBeDisabled();
+    release();
+    await expect(
+      page.getByRole("button", { name: "Retry same publication" }),
+    ).toBeVisible();
+    await page.unrouteAll({ behavior: "wait" });
+    await page.getByRole("button", { name: "Retry same publication" }).click();
+    await expect(
+      page.getByText("Your publication is saved.", { exact: true }),
+    ).toBeVisible();
+    const result = await api(page, `/api/v1/resources/${d.resource}/history`);
+    expect((await result.json()).items).toHaveLength(2);
+    expect(
+      (await savedIntents(other)).find((r) => r.key === original.key).body,
+    ).toEqual(original.body);
+    await other
+      .getByRole("button", { name: "Continue with separate draft" })
+      .click();
+    await expect(
+      other.getByRole("button", { name: "Publish", exact: true }),
+    ).toBeEnabled();
+    expect(otherPosts).toBe(0);
+  } finally {
+    release();
+    await other.close();
+    await staleList.close();
+  }
+});
+
+for (const kind of ["artifacts", "discussions", "replies"] as const)
+  test(`review regression: Write another selects the replacement ${kind} draft across browser restart`, async ({
+    server,
+  }) => {
+    const directory = await mkdtemp(join(tmpdir(), "loom-next-draft-"));
+    const options = { ignoreHTTPSErrors: true, headless: true };
+    let context = await chromium.launchPersistentContext(directory, options);
+    try {
+      let page = await context.newPage();
+      await enter(page, context, server.origin, server.ticket);
+      await setup(page);
+      const discussion =
+        kind === "replies" ? await createDiscussion(page) : undefined;
+      const areas = await (await api(page, "/api/v1/areas")).json();
+      const area = areas.items.find(
+        (a: { title: string }) => a.title === "General",
+      );
+      const url =
+        server.origin +
+        (discussion
+          ? `/loom/discussion/${discussion.discussion}?focus=${discussion.resource}`
+          : `/loom/area/${area.id}?compose=${kind}`);
+      await page.goto(url);
+      if (discussion)
+        await page.getByRole("button", { name: "Reply", exact: true }).click();
+      else
+        await page
+          .getByLabel("Title", { exact: true })
+          .fill("First publication");
+      const label = discussion ? "Your reply" : "Text";
+      await page.getByLabel(label, { exact: true }).fill("First body");
+      const operation =
+        kind === "artifacts"
+          ? "artifact.create"
+          : kind === "discussions"
+            ? "discussion.create"
+            : "reply.create";
+      await expect
+        .poll(
+          async () =>
+            (await savedIntents(page)).find((r) => r.kind === operation)?.body
+              .content.text,
+        )
+        .toBe("First body");
+      const first = (await savedIntents(page)).find(
+        (r) => r.kind === operation,
+      );
+      await page.goto(url + "&intent=" + first.key);
+      await page
+        .getByRole("button", {
+          name: discussion ? "Post reply" : "Publish",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole("button", { name: "Write another", exact: true })
+        .click();
+      if (!discussion)
+        await page
+          .getByLabel("Title", { exact: true })
+          .fill("Second publication");
+      await page
+        .getByLabel(label, { exact: true })
+        .fill("Second body survives restart");
+      await expect
+        .poll(
+          async () =>
+            (await savedIntents(page)).find((r) => r.kind === operation)?.body
+              .content.text,
+        )
+        .toBe("Second body survives restart");
+      const nextUrl = page.url();
+      await page.reload();
+      await expect(page.getByLabel(label, { exact: true })).toHaveValue(
+        "Second body survives restart",
+      );
+      await context.close();
+      context = await chromium.launchPersistentContext(directory, options);
+      page = await context.newPage();
+      await page.goto(nextUrl);
+      await expect(page.getByLabel(label, { exact: true })).toHaveValue(
+        "Second body survives restart",
+      );
+      if (!discussion)
+        await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+          "Second publication",
+        );
+      expect(
+        (await savedIntents(page)).filter((r) => r.kind === operation),
+      ).toHaveLength(1);
+    } finally {
+      await context.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+test("publication fails closed without browser locks while retained drafts remain readable", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await setup(page);
+  const d = await createDiscussion(page);
+  await page.goto(server.origin + `/loom/resource/${d.resource}?edit=1`);
+  await page
+    .getByLabel("Text", { exact: true })
+    .fill("Retained before browser locks unavailable");
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find((r) => r.slot === "edit:" + d.resource)
+          ?.body.content.text,
+    )
+    .toBe("Retained before browser locks unavailable");
+  const before = await savedIntents(page);
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "locks", { value: undefined }),
+  );
+  await page.reload();
+  let posts = 0;
+  await page.route("**/api/v1/revisions", (route) => {
+    posts++;
+    return route.abort();
+  });
+  await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
+    "Retained before browser locks unavailable",
+  );
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Web Locks support");
+  expect(posts).toBe(0);
+  expect(await savedIntents(page)).toEqual(before);
+  await page.goto(server.origin + "/loom/help");
+  await expect(
+    page.getByRole("button", { name: "Export drafts" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Clear local drafts and sign out" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Sign in with passkey" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "Signed out, but local drafts could not be cleared",
+  );
+  expect(await savedIntents(page)).toEqual(before);
+});
+
+test("publication persists the visible text again after a failed draft save", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await setup(page);
+  const d = await createDiscussion(page);
+  await page.goto(server.origin + `/loom/resource/${d.resource}?edit=1`);
+  await page.getByLabel("Text", { exact: true }).fill("Previously saved text");
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find((r) => r.slot === "edit:" + d.resource)
+          ?.body.content.text,
+    )
+    .toBe("Previously saved text");
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (
+        key.startsWith("loom.intent.v1:") &&
+        JSON.parse(value).state === "draft"
+      )
+        throw new DOMException(
+          "Simulated draft storage failure",
+          "QuotaExceededError",
+        );
+      return set.call(this, key, value);
+    };
+  });
+  await page
+    .getByLabel("Text", { exact: true })
+    .fill("Visible text after failed autosave");
+  await expect(page.getByRole("alert")).toContainText(
+    "Simulated draft storage failure",
+  );
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await expect(
+    page.getByText("Your publication is saved.", { exact: true }),
+  ).toBeVisible();
+  const current = await (
+    await api(page, `/api/v1/resources/${d.resource}`)
+  ).json();
+  expect(current.content.text).toBe("Visible text after failed autosave");
 });

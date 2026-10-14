@@ -50,17 +50,29 @@ restore/recovery epochs are separate gates, not extensions of ordinary paginatio
 
 Browser `IntentStore` records origin/instance/participant/kind/key/body before POST,
 caps 32 records/1 MiB, fails closed without evicting uncertain work, and exports JSON.
+Mutations take a short Web Lock over that bounded journal and compare record
+sequences; view-local queues order input before dispatch. Unsupported browsers fail
+closed on writes. Stale edits become separate `blocked_by` drafts requiring explicit
+review, never automatic POSTs. Dispatch/removal reject stale versions; late outcomes
+cannot recreate removed intent or downgrade terminal state. Legacy v1 records adopt
+sequence 1 with unchanged key/body; all tabs must reload onto the same release.
 15-second transport deadlines and cancellation do not prove rollback. Known conflicts
 preserve drafts and the exact comparison revision ID across reload. Rejected fields
 stay locked until explicit correction saves a new draft before removing the old one.
 Resumed-draft URLs move to the new operation ID at that explicit correction boundary.
+Write-another replacements use the same saved-draft route as Local drafts, including
+area/composer or discussion/parent selection. Canonical unavailable-current pages
+offer independently authorized history without substituting an older current body.
 Setup/admission use the same first-dispatch rejection rule; a later refusal never
 reclassifies an uncertain attempt. One-time credential UI binds participant, kind,
 nickname and credential ID to the result and locks target selection until dismissal;
 secrets never enter intent storage. Focused branches validate discussion membership.
 Recovery/structural-traversal review repairs: `LC-20261014-6LGH` (ADR-016/017).
+Journal serialization, replacement routes and canonical history discovery:
+`LC-20261014-S0JX` (ADR-017).
 Identity generation plus view ownership guards all late results. Sign-out explicitly
-clears this identity after export opportunity. Unresolved records do not auto-expire.
+clears this identity after export opportunity; cleanup failure still invalidates the
+session and reports retained local records. Unresolved records do not auto-expire.
 `scripts/participation-client.mjs` uses a private fsynced journal and actual HTTPS;
 it is runnable elsewhere but only same-machine execution has been observed.
 

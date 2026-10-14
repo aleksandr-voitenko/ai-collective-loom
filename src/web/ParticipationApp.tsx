@@ -121,6 +121,85 @@ interface Context {
   refreshCommunity: () => void;
 }
 
+function intentUrl(record: Intent) {
+  const intent = "intent=" + encodeURIComponent(record.key),
+    body = record.body;
+  if (record.kind === "reply.create")
+    return `/loom/discussion/${body.discussion_id}?focus=${body.parent_id}&${intent}`;
+  if (record.kind === "revision.publish")
+    return `/loom/resource/${body.resource_id}?edit=1&${intent}`;
+  if (record.kind === "discussion.create" || record.kind === "artifact.create")
+    return `/loom/area/${body.area_id}?compose=${record.kind === "discussion.create" ? "discussions" : "artifacts"}&${intent}`;
+  return "/loom/admin?" + intent;
+}
+
+// Queue saves from rapid input in one view, while IntentStore serializes and
+// compares versions across tabs. Navigation may finish saving the old draft;
+// identity changes and unmounted views cannot receive its UI result.
+function useIntent(initial: () => Intent | undefined) {
+  const location = useLocation(),
+    navigate = useNavigate();
+  const [record, setRecord] = useState(initial);
+  const current = useRef(record),
+    queue = useRef(Promise.resolve()),
+    owner = useRef(identityGeneration()),
+    live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+  function update(
+    work: (record: Intent | undefined) => Promise<Intent | undefined>,
+  ) {
+    const pending = queue.current.then(async () => {
+      if (owner.current !== identityGeneration())
+        throw new DOMException("Identity changed.", "AbortError");
+      const previous = current.current;
+      const next = await work(previous);
+      current.current = next;
+      if (live.current && owner.current === identityGeneration()) {
+        setRecord(next);
+        if (
+          next &&
+          (next.blocked_by || (previous && next.key !== previous.key)) &&
+          new URLSearchParams(location.search).get("intent") !== next.key
+        ) {
+          void navigate(intentUrl(next), { replace: true });
+        }
+      }
+      return next;
+    });
+    queue.current = pending.then(
+      () => {},
+      () => {},
+    );
+    return pending;
+  }
+  return [record, update] as const;
+}
+
+function SeparateDraft({
+  record,
+  review,
+}: {
+  record: Intent | undefined;
+  review: () => void;
+}) {
+  return record?.blocked_by ? (
+    <div className="notice">
+      <strong>Your changes were saved separately.</strong>
+      <p>
+        Another view changed the original submission. Check it in Local drafts
+        before choosing to publish these changes as a new submission.
+      </p>
+      <Link to="/loom/help">Inspect local drafts</Link>{" "}
+      <button onClick={review}>Continue with separate draft</button>
+    </div>
+  ) : null;
+}
+
 export function ParticipationApp() {
   const location = useLocation(),
     navigate = useNavigate();
@@ -213,7 +292,13 @@ export function ParticipationApp() {
     if (!self) return;
     try {
       await request("/api/v1/identity/logout", { body: {}, self });
-      store?.clear();
+      try {
+        await store?.clear();
+      } catch {
+        setError(
+          "Signed out, but local drafts could not be cleared. They remain scoped to this account on this browser.",
+        );
+      }
       announceIdentityChange();
       navigate("/loom");
     } catch (failure) {
@@ -792,10 +877,9 @@ function Composer({
   heading: string;
   onCommitted?: (value: CommittedView) => void;
 }) {
-  const location = useLocation(),
-    navigate = useNavigate();
+  const location = useLocation();
   const chosen = new URLSearchParams(location.search).get("intent");
-  const [record, setRecord] = useState<Intent | undefined>(() =>
+  const [record, update] = useIntent(() =>
     context.store
       .all()
       .find((value) =>
@@ -829,7 +913,8 @@ function Composer({
       live.current = false;
     };
   }, []);
-  const locked = !!record && record.state !== "draft";
+  const locked =
+    busy || (!!record && (record.state !== "draft" || !!record.blocked_by));
   useEffect(() => {
     if (
       record?.state !== "rejected" ||
@@ -868,28 +953,22 @@ function Composer({
       },
     };
   }
-  function persist(
+  async function persist(
     nextText = text,
     nextTitle = title,
     nextMentions = mentions,
   ) {
     try {
-      const next =
-        record ??
-        context.store.create(
-          slot,
-          kind,
-          path,
-          draftBody(nextText, nextTitle, nextMentions),
-        );
-      next.body = {
-        ...draftBody(nextText, nextTitle, nextMentions),
-        idempotency_key: next.key,
-      };
-      next.state = "draft";
-      context.store.save(next);
-      setRecord({ ...next });
-      setError("");
+      const body = draftBody(nextText, nextTitle, nextMentions);
+      const next = await update((current) =>
+        context.store.saveDraft(
+          current ?? context.store.create(slot, kind, path, body),
+          body,
+        ),
+      );
+      if (live.current) {
+        setError("");
+      }
       return next;
     } catch (failure) {
       setError((failure as Error).message);
@@ -897,10 +976,14 @@ function Composer({
     }
   }
   async function confirm(found: CommittedView, intent: Intent) {
-    const next = { ...intent, state: "committed" as const, result: found };
-    context.store.save(next);
+    await update(async (current) => {
+      const next = await context.store.settle(intent, {
+        state: "committed",
+        result: found,
+      });
+      return current?.key === intent.key ? next : current;
+    });
     if (live.current) {
-      setRecord(next);
       setStatus(
         kind === "reply.create"
           ? "Your reply was posted."
@@ -910,25 +993,24 @@ function Composer({
     }
   }
   async function send() {
-    const wasUncertain = record?.state === "uncertain";
-    const intent = wasUncertain ? record : persist();
-    if (!intent) return;
-    try {
-      parseAuthored(intent.body.content as AuthoredContent);
-    } catch (failure) {
-      setError((failure as Error).message);
-      return;
-    }
-    try {
-      context.store.save({ ...intent, state: "uncertain" });
-    } catch (failure) {
-      setError((failure as Error).message);
-      return;
-    }
-    setRecord({ ...intent, state: "uncertain" });
+    if (busy || record?.blocked_by) return;
     setBusy(true);
     setError("");
+    let intent: Intent | undefined,
+      wasUncertain = false;
     try {
+      intent = await update(async (current) => {
+        wasUncertain = current?.state === "uncertain";
+        const body = draftBody();
+        const draft = current ?? context.store.create(slot, kind, path, body);
+        parseAuthored(
+          (wasUncertain ? draft.body.content : body.content) as AuthoredContent,
+        );
+        // Version comparison and the state transition occur under the journal
+        // lock. A stale Publish click cannot send a changed or newly keyed body.
+        return context.store.prepareDispatch(draft, body);
+      });
+      if (!intent) return;
       await confirm(
         await request<CommittedView>(path, {
           self: context.self,
@@ -938,8 +1020,8 @@ function Composer({
         intent,
       );
     } catch (failure) {
-      const rejected = isDefinitiveRejection(failure, wasUncertain);
-      if (rejected) {
+      const rejected = intent && isDefinitiveRejection(failure, wasUncertain);
+      if (rejected && intent) {
         const revision = (failure as ApiError).currentRevision;
         const next = {
           ...intent,
@@ -947,12 +1029,11 @@ function Composer({
           ...(revision ? { conflict_revision_id: revision } : {}),
         };
         try {
-          context.store.save(next);
+          await update(() => context.store.settle(intent!, next));
         } catch (storageFailure) {
           if (live.current) setError((storageFailure as Error).message);
           return;
         }
-        if (live.current) setRecord(next);
       }
       if (live.current)
         setError(
@@ -992,31 +1073,19 @@ function Composer({
     window.addEventListener("online", online);
     return () => window.removeEventListener("online", online);
   }, [check]);
-  function correct() {
+  async function correct() {
     if (!record || record.state !== "rejected") return;
     try {
       const revision = record.conflict_revision_id;
-      const next = context.store.correct(record, {
-        ...draftBody(),
-        ...(revision ? { expected_revision_id: revision } : {}),
-      });
+      await update((current) =>
+        context.store.correct(current!, {
+          ...draftBody(),
+          ...(revision ? { expected_revision_id: revision } : {}),
+        }),
+      );
       if (revision) setBase(revision);
-      setRecord(next);
       setCompare(undefined);
       setError("");
-      if (chosen) {
-        // A resumed draft's URL must follow the replacement operation on reload.
-        const search = new URLSearchParams(location.search);
-        search.set("intent", next.key);
-        void navigate(
-          {
-            pathname: location.pathname,
-            search: search.toString(),
-            hash: location.hash,
-          },
-          { replace: true },
-        );
-      }
     } catch (failure) {
       setError((failure as Error).message);
     }
@@ -1030,6 +1099,15 @@ function Composer({
     <section className="composer card" aria-label={heading}>
       <h2>{heading}</h2>
       <ErrorText error={error} />
+      <SeparateDraft
+        record={record}
+        review={() =>
+          void update(async (current) => {
+            const { blocked_by: _, ...next } = current!;
+            return context.store.save(next);
+          }).catch((failure) => setError(failure.message))
+        }
+      />
       {status && <p role="status">{status}</p>}
       {record?.state === "committed" ? (
         <div className="notice neutral">
@@ -1042,13 +1120,11 @@ function Composer({
             </Link>
           </p>
           <button
-            onClick={() => {
-              context.store.remove(record);
-              setRecord(undefined);
-              setText("");
-              setMentions([]);
-              setStatus("");
-            }}
+            onClick={() =>
+              void update((current) =>
+                context.store.replace(current!, draftBody("", "", [])),
+              ).catch((failure) => setError(failure.message))
+            }
           >
             Write another
           </button>
@@ -1200,10 +1276,10 @@ function Composer({
               <button onClick={correct}>Prepare corrected submission</button>
             </div>
           )}
-          {!locked && record?.state !== "rejected" && (
+          {(!record || record.state === "draft") && (
             <button
               className="primary"
-              disabled={busy || !text.trim() || (titleField && !title.trim())}
+              disabled={locked || !text.trim() || (titleField && !title.trim())}
               onClick={() => void send()}
             >
               {busy
@@ -1638,11 +1714,24 @@ function ResourcePage({
       new URLSearchParams(useLocation().search).has("edit"),
     ),
     [history, setHistory] = useState(false);
+  const historyView = (
+    <>
+      <button onClick={() => setHistory((value) => !value)}>
+        Revision history
+      </button>
+      {history && <RevisionHistory id={id} />}
+    </>
+  );
   if (error)
     return (
       <>
         <ErrorText error={error} />
         <button onClick={refresh}>Retry revision</button>
+        <p>
+          Retained revisions may still be available. Each revision has its own
+          access check.
+        </p>
+        {historyView}
       </>
     );
   if (!data) return <p role="status">Loading revision…</p>;
@@ -1731,29 +1820,32 @@ function ResourcePage({
           heading="Edit text"
         />
       )}
-      {history && (
-        <section className="section">
-          <h2>Retained revisions</h2>
-          <Collection
-            path={"/api/v1/resources/" + id + "/history"}
-            render={(item) => {
-              const revision = item as ResourceView;
-              return (
-                <Link
-                  className="list-row"
-                  to={`/loom/resource/${id}/${revision.revision_id}`}
-                >
-                  <span>Revision {revision.revision_number}</span>
-                  <span>{revision.publisher.nickname}</span>
-                  <time>{new Date(revision.created_at).toLocaleString()}</time>
-                </Link>
-              );
-            }}
-          />
-        </section>
-      )}
+      {history && <RevisionHistory id={id} />}
       {data.kind === "artifact" && <Editors id={id} context={context} />}
     </>
+  );
+}
+function RevisionHistory({ id }: { id: string }) {
+  return (
+    <section className="section">
+      <h2>Retained revisions</h2>
+      <Collection
+        path={"/api/v1/resources/" + id + "/history"}
+        render={(item) => {
+          const revision = item as ResourceView;
+          return (
+            <Link
+              className="list-row"
+              to={`/loom/resource/${id}/${revision.revision_id}`}
+            >
+              <span>Revision {revision.revision_number}</span>
+              <span>{revision.publisher.nickname}</span>
+              <time>{new Date(revision.created_at).toLocaleString()}</time>
+            </Link>
+          );
+        }}
+      />
+    </section>
   );
 }
 function Overview({ context }: { context: Context }) {
@@ -1863,8 +1955,11 @@ function Editors({ id, context }: { id: string; context: Context }) {
   );
 }
 function Administration({ context }: { context: Context }) {
-  const [setupIntent, setSetupIntent] = useState<Intent | undefined>(() =>
-    context.store.all().find((r) => r.slot === "setup"),
+  const chosen = new URLSearchParams(useLocation().search).get("intent");
+  const [setupIntent, update] = useIntent(
+    () =>
+      context.store.all().find((r) => r.slot === "setup" && r.key === chosen) ??
+      context.store.all().find((r) => r.slot === "setup"),
   );
   const [name, setName] = useState(
       String(setupIntent?.body.community_name ?? "Research commons"),
@@ -1881,46 +1976,55 @@ function Administration({ context }: { context: Context }) {
     ),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
-  const locked = busy || (!!setupIntent && setupIntent.state !== "draft");
-  function draft(patch: Record<string, unknown> = {}) {
-    const body = {
+  const locked =
+    busy ||
+    (!!setupIntent &&
+      (setupIntent.state !== "draft" || !!setupIntent.blocked_by));
+  function setupBody() {
+    return {
       community_name: name,
       ordinary_area_name: ordinary,
       proposal_area_name: proposal,
       overview: { format: "loom-markdown-v1", text: overview, mentions: [] },
-      ...patch,
     };
+  }
+  async function draft(patch: Record<string, unknown> = {}) {
+    const body = { ...setupBody(), ...patch };
     try {
       if (setupIntent && setupIntent.state !== "draft")
         throw new Error("Prepare a correction before editing this request.");
-      const record = setupIntent
-        ? {
-            ...setupIntent,
-            body: { ...body, idempotency_key: setupIntent.key },
-          }
-        : context.store.create(
-            "setup",
-            "community.setup",
-            "/api/v1/community/setup",
-            body,
-          );
-      context.store.save(record);
-      setSetupIntent(record);
-      return record;
+      return await update((current) =>
+        context.store.saveDraft(
+          current ??
+            context.store.create(
+              "setup",
+              "community.setup",
+              "/api/v1/community/setup",
+              body,
+            ),
+          body,
+        ),
+      );
     } catch (failure) {
       setError((failure as Error).message);
       return undefined;
     }
   }
   async function setup(check = false) {
-    if (busy || setupIntent?.state === "rejected") return;
-    const wasUncertain = setupIntent?.state === "uncertain";
-    const record = wasUncertain ? setupIntent : draft();
-    if (!record || (check && !wasUncertain)) return;
+    if (busy || setupIntent?.state === "rejected" || setupIntent?.blocked_by)
+      return;
+    let record: Intent | undefined,
+      wasUncertain = false;
+    setBusy(true);
     try {
-      context.store.save({ ...record, state: "uncertain" });
-      setSetupIntent({ ...record, state: "uncertain" });
-      setBusy(true);
+      if (!setupIntent) await draft();
+      record = await update(async (current) => {
+        if (!current) throw new Error("Save the setup draft before sending.");
+        wasUncertain = current.state === "uncertain";
+        if (check) return current;
+        return context.store.prepareDispatch(current, setupBody());
+      });
+      if (!record || (check && !wasUncertain)) return;
       setError("");
       const result = check
         ? await request<CommittedView | { operation_state: string }>(
@@ -1938,25 +2042,31 @@ function Administration({ context }: { context: Context }) {
             body: record.body,
           });
       if ("publication_state" in result) {
-        context.store.remove(record);
-        setSetupIntent(undefined);
+        await update(async () => {
+          await context.store.complete(record!);
+          return undefined;
+        });
         context.refreshCommunity();
       } else setError("Setup is still unconfirmed. Keep this original intent.");
     } catch (failure) {
-      if (!check && isDefinitiveRejection(failure, wasUncertain)) {
+      if (record && !check && isDefinitiveRejection(failure, wasUncertain)) {
         const rejected = { ...record, state: "rejected" as const };
-        context.store.save(rejected);
-        setSetupIntent(rejected);
+        try {
+          await update(() => context.store.settle(record!, rejected));
+        } catch (storageFailure) {
+          setError((storageFailure as Error).message);
+          return;
+        }
       }
       setError((failure as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  function correct() {
+  async function correct() {
     if (!setupIntent) return;
     try {
-      setSetupIntent(context.store.correct(setupIntent));
+      await update((current) => context.store.correct(current!));
       setError("");
     } catch (failure) {
       setError((failure as Error).message);
@@ -1967,6 +2077,15 @@ function Administration({ context }: { context: Context }) {
       <h1>Administration</h1>
       <p className="subtitle">Set up the community and admit participants.</p>
       <ErrorText error={error} />
+      <SeparateDraft
+        record={setupIntent}
+        review={() =>
+          void update(async (current) => {
+            const { blocked_by: _, ...next } = current!;
+            return context.store.save(next);
+          }).catch((failure) => setError(failure.message))
+        }
+      />
       {context.community.settings_version === 0 ? (
         <section className="card admin-card">
           <h2>Initialize the community</h2>
@@ -2029,7 +2148,7 @@ function Administration({ context }: { context: Context }) {
           ) : (
             <button
               className="primary"
-              disabled={busy}
+              disabled={busy || !!setupIntent?.blocked_by}
               onClick={() => void setup()}
             >
               {setupIntent?.state === "uncertain"
@@ -2092,8 +2211,13 @@ function Settings({ context }: { context: Context }) {
   );
 }
 function Admission({ context }: { context: Context }) {
-  const [pending, setPending] = useState<Intent | undefined>(() =>
-    context.store.all().find((r) => r.slot === "admission"),
+  const chosen = new URLSearchParams(useLocation().search).get("intent");
+  const [pending, update] = useIntent(
+    () =>
+      context.store
+        .all()
+        .find((r) => r.slot === "admission" && r.key === chosen) ??
+      context.store.all().find((r) => r.slot === "admission"),
   );
   const [nickname, setNickname] = useState(
       String(pending?.body.nickname ?? ""),
@@ -2124,8 +2248,9 @@ function Admission({ context }: { context: Context }) {
       role: string;
     }[]
   >("/api/v1/identity/accounts");
-  const locked = busy || (!!pending && pending.state !== "draft");
-  function draftAccount(patch: Record<string, unknown> = {}) {
+  const locked =
+    busy || (!!pending && (pending.state !== "draft" || !!pending.blocked_by));
+  async function draftAccount(patch: Record<string, unknown> = {}) {
     try {
       if (
         pending &&
@@ -2133,26 +2258,27 @@ function Admission({ context }: { context: Context }) {
       )
         throw new Error("Prepare a correction before editing this request.");
       const body = { nickname, kind, role: "participant", ...patch };
-      const record = pending
-        ? { ...pending, body: { ...body, idempotency_key: pending.key } }
-        : context.store.create(
-            "admission",
-            "account.create",
-            "/api/v1/identity/accounts",
-            body,
-          );
-      context.store.save(record);
-      setPending(record);
-      return record;
+      return await update((current) =>
+        context.store.saveDraft(
+          current ??
+            context.store.create(
+              "admission",
+              "account.create",
+              "/api/v1/identity/accounts",
+              body,
+            ),
+          body,
+        ),
+      );
     } catch (failure) {
       setError((failure as Error).message);
       return undefined;
     }
   }
-  function correct() {
+  async function correct() {
     if (!pending) return;
     try {
-      setPending(context.store.correct(pending));
+      await update((current) => context.store.correct(current!));
       setError("");
     } catch (failure) {
       setError((failure as Error).message);
@@ -2162,8 +2288,8 @@ function Admission({ context }: { context: Context }) {
     action: "account.create" | "credential.issue",
     check = false,
   ) {
-    if (busy || pending?.state === "rejected") return;
-    const wasUncertain = pending?.state === "uncertain";
+    if (busy || pending?.state === "rejected" || pending?.blocked_by) return;
+    let wasUncertain = false;
     const targetNickname = nickname;
     const path =
       "/api/v1/identity/" +
@@ -2178,15 +2304,17 @@ function Admission({ context }: { context: Context }) {
             label: "Synthetic participation",
             replace_credential_id: null,
           };
-    const record =
-      pending?.state === "uncertain" || action === "credential.issue"
-        ? (pending ?? context.store.create("admission", action, path, body))
-        : draftAccount();
-    if (!record || (check && !wasUncertain)) return;
+    let record: Intent | undefined;
+    setBusy(true);
     try {
-      context.store.save({ ...record, state: "uncertain" });
-      setPending({ ...record, state: "uncertain" });
-      setBusy(true);
+      record = await update(async (current) => {
+        const draft =
+          current ?? context.store.create("admission", action, path, body);
+        wasUncertain = draft.state === "uncertain";
+        if (check) return draft;
+        return context.store.prepareDispatch(draft, body);
+      });
+      if (!record || (check && !wasUncertain)) return;
       setError("");
       const result = await request<{
         operation_state: string;
@@ -2209,8 +2337,10 @@ function Admission({ context }: { context: Context }) {
             "The credential response could not be bound to its issuing account.",
           );
         setAccount(result.participant_id);
-        context.store.remove(record);
-        setPending(undefined);
+        await update(async () => {
+          await context.store.complete(record!);
+          return undefined;
+        });
         accounts.refresh();
         if (record.kind === "credential.issue") {
           if (result.secret)
@@ -2228,10 +2358,14 @@ function Admission({ context }: { context: Context }) {
         }
       } else setError("This account operation remains unconfirmed.");
     } catch (failure) {
-      if (!check && isDefinitiveRejection(failure, wasUncertain)) {
+      if (record && !check && isDefinitiveRejection(failure, wasUncertain)) {
         const rejected = { ...record, state: "rejected" as const };
-        context.store.save(rejected);
-        setPending(rejected);
+        try {
+          await update(() => context.store.settle(record!, rejected));
+        } catch (storageFailure) {
+          setError((storageFailure as Error).message);
+          return;
+        }
       }
       setError((failure as Error).message);
     } finally {
@@ -2242,6 +2376,15 @@ function Admission({ context }: { context: Context }) {
     <section className="card admin-card">
       <h2>Admit a participant</h2>
       <ErrorText error={error} />
+      <SeparateDraft
+        record={pending}
+        review={() =>
+          void update(async (current) => {
+            const { blocked_by: _, ...next } = current!;
+            return context.store.save(next);
+          }).catch((failure) => setError(failure.message))
+        }
+      />
       {issued ? (
         <div className="notice neutral">
           <strong>
@@ -2306,7 +2449,7 @@ function Admission({ context }: { context: Context }) {
           ) : !account ? (
             <button
               className="primary"
-              disabled={busy || !nickname}
+              disabled={busy || !!pending?.blocked_by || !nickname}
               onClick={() => void operate("account.create")}
             >
               {pending?.state === "uncertain"
@@ -2430,25 +2573,12 @@ function CredentialList({
 }
 function Help({ context }: { context: Context }) {
   const { data, error } = useQuery<{ text: string }>("/api/v1/guide");
+  const [failure, setFailure] = useState("");
   const [, refresh] = useState(0);
-  function resume(record: Intent) {
-    const intent = "intent=" + encodeURIComponent(record.key),
-      body = record.body;
-    if (record.kind === "reply.create")
-      return `/loom/discussion/${body.discussion_id}?focus=${body.parent_id}&${intent}`;
-    if (record.kind === "revision.publish")
-      return `/loom/resource/${body.resource_id}?edit=1&${intent}`;
-    if (
-      record.kind === "discussion.create" ||
-      record.kind === "artifact.create"
-    )
-      return `/loom/area/${body.area_id}?compose=${record.kind === "discussion.create" ? "discussions" : "artifacts"}&${intent}`;
-    return "/loom/admin";
-  }
   return (
     <>
       <h1>Participation guide</h1>
-      <ErrorText error={error} />
+      <ErrorText error={error || failure} />
       <p>
         <a href="/api/v1/openapi.json">API schema · participation-1</a>
       </p>
@@ -2468,16 +2598,18 @@ function Help({ context }: { context: Context }) {
         </button>
         {context.store.all().map((record) => (
           <div className="list-row" key={record.key}>
-            <Link to={resume(record)}>
+            <Link to={intentUrl(record)}>
               {record.kind} · {record.state} ·{" "}
               {new Date(record.created_at).toLocaleString()}
             </Link>
             {record.state !== "uncertain" && (
               <button
-                onClick={() => {
-                  context.store.remove(record);
-                  refresh((n) => n + 1);
-                }}
+                onClick={() =>
+                  void context.store
+                    .remove(record)
+                    .then(() => refresh((n) => n + 1))
+                    .catch((failure) => setFailure(failure.message))
+                }
               >
                 Remove local record
               </button>

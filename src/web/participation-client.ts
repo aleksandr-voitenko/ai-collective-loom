@@ -106,6 +106,7 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
 }
 export interface Intent {
   version: 1;
+  sequence: number;
   origin: string;
   instance_id: string;
   participant_id: string;
@@ -118,14 +119,26 @@ export interface Intent {
   created_at: string;
   result?: CommittedView;
   conflict_revision_id?: string;
+  blocked_by?: string;
+}
+export class StaleIntentError extends Error {
+  constructor() {
+    super(
+      "This submission changed in another view. Reload it before continuing.",
+    );
+  }
 }
 export class IntentStore {
   readonly prefix: string;
+  private readonly owner = identityGeneration();
   constructor(
     readonly instance: string,
     readonly participant: string,
     readonly storage: Storage = localStorage,
     readonly origin = location.origin,
+    private readonly locks:
+      | Pick<LockManager, "request">
+      | undefined = globalThis.navigator?.locks,
   ) {
     this.prefix = `loom.intent.v1:${origin}:${instance}:${participant}:`;
   }
@@ -156,6 +169,8 @@ export class IntentStore {
         typeof record.path !== "string" ||
         typeof record.kind !== "string" ||
         typeof record.created_at !== "string" ||
+        (record.blocked_by !== undefined &&
+          typeof record.blocked_by !== "string") ||
         !record.body ||
         record.body.idempotency_key !== record.key ||
         !["draft", "uncertain", "rejected", "committed"].includes(record.state)
@@ -163,17 +178,54 @@ export class IntentStore {
         throw new Error(
           "A recovery record is incompatible. Preserve it before attempting another publication.",
         );
+      // Existing v1 records predate optimistic versions; new unsaved records use 0.
+      record.sequence ??= 1;
+      if (!Number.isSafeInteger(record.sequence) || record.sequence < 1)
+        throw new Error("A recovery record has an incompatible version.");
       records.push(record);
     }
     return records.sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
-  save(record: Intent) {
+  private async locked<T>(work: () => T): Promise<T> {
+    if (!this.locks)
+      throw new Error(
+        "This browser cannot safely coordinate drafts across tabs. Use a browser with Web Locks support to publish; existing drafts can still be exported.",
+      );
+    // The whole bounded journal shares a lock so quota, replacement and cleanup
+    // cannot race. Never hold it during a network request.
+    // An async callback also releases Node 24's test lock on a rejected write.
+    return this.locks.request(this.prefix, async () => {
+      if (this.owner !== identityGeneration())
+        throw new DOMException("Identity changed.", "AbortError");
+      return work();
+    });
+  }
+  private owned(record: Intent) {
     if (
       record.origin !== this.origin ||
       record.instance_id !== this.instance ||
       record.participant_id !== this.participant
     )
       throw new Error("Draft belongs to a different account or instance.");
+  }
+  private current(record: Intent) {
+    this.owned(record);
+    const current = this.all().find((item) => item.key === record.key);
+    if ((current?.sequence ?? 0) !== record.sequence)
+      throw new StaleIntentError();
+    return current;
+  }
+  private sameRequest(a: Intent, b: Intent) {
+    return (
+      a.kind === b.kind &&
+      a.path === b.path &&
+      a.slot === b.slot &&
+      a.created_at === b.created_at &&
+      JSON.stringify(a.body) === JSON.stringify(b.body)
+    );
+  }
+  private write(record: Intent): Intent {
+    this.owned(record);
     const others = this.all().filter((item) => item.key !== record.key);
     if (
       others.length >= 32 ||
@@ -188,8 +240,100 @@ export class IntentStore {
     this.storage.setItem(key, value);
     if (this.storage.getItem(key) !== value)
       throw new Error(
-        "The publication intent could not be saved. Nothing was sent.",
+        "The recovery record could not be saved. Keep the original submission; a dispatched request may already have committed.",
       );
+    return record;
+  }
+  save(record: Intent): Promise<Intent> {
+    return this.locked(() => {
+      const current = this.current(record);
+      if (
+        current &&
+        current.state !== "draft" &&
+        (!this.sameRequest(current, record) ||
+          record.state === "draft" ||
+          (current.state !== "uncertain" && record.state !== current.state))
+      )
+        throw new StaleIntentError();
+      if (record.state === "uncertain" && record.blocked_by)
+        throw new Error(
+          "Review the separately saved changes before publishing a new submission.",
+        );
+      return this.write({ ...record, sequence: record.sequence + 1 });
+    });
+  }
+  saveDraft(record: Intent, body: Record<string, unknown>): Promise<Intent> {
+    return this.locked(() => {
+      this.owned(record);
+      const current = this.all().find((item) => item.key === record.key);
+      if (
+        (current?.sequence ?? 0) !== record.sequence ||
+        (current && current.state !== "draft")
+      ) {
+        // A stale editor's unsent work is distinct from the exact dispatched
+        // operation. Retain it, but require an explicit review before any POST.
+        const separate = this.create(
+          record.slot,
+          record.kind,
+          record.path,
+          body,
+        );
+        return this.write({ ...separate, sequence: 1, blocked_by: record.key });
+      }
+      return this.write({
+        ...record,
+        sequence: record.sequence + 1,
+        body: { ...body, idempotency_key: record.key },
+        state: "draft",
+      });
+    });
+  }
+  prepareDispatch(
+    record: Intent,
+    visibleBody: Record<string, unknown>,
+  ): Promise<Intent> {
+    // Autosave may have failed. The first dispatch must durably capture the
+    // visible form; retries must ignore form state and retain the frozen request.
+    return this.save({
+      ...record,
+      state: "uncertain",
+      body:
+        record.state === "draft"
+          ? { ...visibleBody, idempotency_key: record.key }
+          : record.body,
+    });
+  }
+  settle(
+    record: Intent,
+    outcome: { state: "committed" | "rejected" } & Partial<
+      Pick<Intent, "result" | "conflict_revision_id">
+    >,
+  ): Promise<Intent> {
+    return this.locked(() => {
+      this.owned(record);
+      const current = this.all().find((item) => item.key === record.key);
+      if (
+        !current ||
+        !this.sameRequest(current, record) ||
+        current.state === "draft"
+      )
+        throw new StaleIntentError();
+      if (outcome.state === "rejected" && current.sequence !== record.sequence)
+        return current;
+      // Concurrent status/retry responses may confirm the same operation. A late
+      // rejection must never downgrade a confirmed outcome or resurrect removal.
+      if (current.state === "committed" || current.state === "rejected")
+        return current;
+      return this.write({
+        ...current,
+        state: outcome.state,
+        ...(outcome.result ? { result: outcome.result } : {}),
+        ...(outcome.conflict_revision_id
+          ? { conflict_revision_id: outcome.conflict_revision_id }
+          : {}),
+        sequence: current.sequence + 1,
+      });
+    });
   }
   create(
     slot: string,
@@ -200,6 +344,7 @@ export class IntentStore {
     const key = crypto.randomUUID();
     return {
       version: 1,
+      sequence: 0,
       origin: this.origin,
       instance_id: this.instance,
       participant_id: this.participant,
@@ -212,30 +357,53 @@ export class IntentStore {
       created_at: new Date().toISOString(),
     };
   }
-  remove(record: Intent) {
-    this.storage.removeItem(this.prefix + record.key);
+  remove(record: Intent): Promise<void> {
+    return this.locked(() => {
+      const current = this.current(record);
+      if (!current || current.state === "uncertain")
+        throw new StaleIntentError();
+      this.storage.removeItem(this.prefix + record.key);
+    });
   }
-  correct(record: Intent, body = record.body): Intent {
-    if (
-      record.origin !== this.origin ||
-      record.instance_id !== this.instance ||
-      record.participant_id !== this.participant
-    )
-      throw new Error("Draft belongs to a different account or instance.");
-    if (
-      record.state !== "rejected" ||
-      this.all().find((r) => r.key === record.key)?.state !== "rejected"
-    )
+  complete(record: Intent): Promise<void> {
+    return this.locked(() => {
+      this.owned(record);
+      const current = this.all().find((item) => item.key === record.key);
+      if (
+        !current ||
+        current.state === "draft" ||
+        !this.sameRequest(current, record)
+      )
+        throw new StaleIntentError();
+      // Administrative success retains no one-time secret or intermediate
+      // committed UI state. The acknowledged operation can be retired directly.
+      this.storage.removeItem(this.prefix + record.key);
+    });
+  }
+  replace(record: Intent, body = record.body): Promise<Intent> {
+    return this.locked(() => {
+      const current = this.current(record);
+      if (!current || !["rejected", "committed"].includes(current.state))
+        throw new Error(
+          "Only a definitively rejected or committed request can be replaced.",
+        );
+      const next = this.create(record.slot, record.kind, record.path, body);
+      // Save first: quota or storage failure must leave the original recoverable.
+      const saved = this.write({ ...next, sequence: 1 });
+      this.storage.removeItem(this.prefix + record.key);
+      return saved;
+    });
+  }
+  async correct(record: Intent, body = record.body): Promise<Intent> {
+    if (record.state !== "rejected")
       throw new Error("Only a definitively rejected request can be corrected.");
-    const next = this.create(record.slot, record.kind, record.path, body);
-    // Persist the replacement before removing the rejected attempt. A failed
-    // storage write must leave the original recoverable, never silently lose it.
-    this.save(next);
-    this.remove(record);
-    return next;
+    return this.replace(record, body);
   }
   clear() {
-    for (const record of this.all()) this.remove(record);
+    return this.locked(() => {
+      for (const record of this.all())
+        this.storage.removeItem(this.prefix + record.key);
+    });
   }
 }
 export function exportDrafts(store: IntentStore) {

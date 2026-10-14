@@ -7,7 +7,7 @@ import {
   request,
 } from "../../src/web/participation-client.js";
 
-test("recovery storage survives a new client object and separates participant, instance and origin", () => {
+test("recovery storage survives a new client object and separates participant, instance and origin", async () => {
   const storage = new JSDOM("", { url: "https://loom.example" }).window
     .localStorage;
   const a = new IntentStore(
@@ -16,7 +16,7 @@ test("recovery storage survives a new client object and separates participant, i
     storage,
     "https://loom.example",
   );
-  const intent = a.create("reply:parent", "reply.create", "/api/v1/replies", {
+  let intent = a.create("reply:parent", "reply.create", "/api/v1/replies", {
     parent_id: "parent",
     content: {
       format: "loom-markdown-v1",
@@ -25,7 +25,7 @@ test("recovery storage survives a new client object and separates participant, i
     },
   });
   intent.state = "uncertain";
-  a.save(intent);
+  intent = await a.save(intent);
   assert.deepEqual(
     new IntentStore("instance", "alice", storage, "https://loom.example").all(),
     [intent],
@@ -45,24 +45,24 @@ test("recovery storage survives a new client object and separates participant, i
     storage,
     "https://loom.example",
   );
-  assert.throws(() => bob.save(intent), /different account/);
-  bob.clear();
+  await assert.rejects(bob.save(intent), /different account/);
+  await bob.clear();
   assert.deepEqual(a.all(), [intent]);
 });
-test("full or unreadable recovery storage refuses writes without evicting unresolved intent", () => {
+test("full or unreadable recovery storage refuses writes without evicting unresolved intent", async () => {
   const storage = new JSDOM("", { url: "https://loom.example" }).window
       .localStorage,
     a = new IntentStore("instance", "alice", storage, "https://loom.example");
   for (let i = 0; i < 32; i++) {
-    const intent = a.create("reply:" + i, "reply.create", "/api/v1/replies", {
+    let intent = a.create("reply:" + i, "reply.create", "/api/v1/replies", {
       text: "recover",
     });
     intent.state = "uncertain";
-    a.save(intent);
+    intent = await a.save(intent);
   }
   const before = a.all();
-  assert.throws(
-    () => a.save(a.create("next", "reply.create", "/api/v1/replies", {})),
+  await assert.rejects(
+    a.save(a.create("next", "reply.create", "/api/v1/replies", {})),
     /full/,
   );
   assert.deepEqual(a.all(), before);
@@ -132,32 +132,32 @@ test("only definitive first-dispatch rejection permits a corrected identity", as
     storage,
     "https://loom.example",
   );
-  const intent = store.create(
+  let intent = store.create(
     "setup",
     "community.setup",
     "/api/v1/community/setup",
     { community_name: "" },
   );
   intent.state = "uncertain";
-  store.save(intent);
-  assert.throws(() => store.correct(intent), /definitively rejected/);
+  intent = await store.save(intent);
+  await assert.rejects(store.correct(intent), /definitively rejected/);
   assert.deepEqual(store.all(), [intent]);
   intent.state = "rejected";
-  store.save(intent);
+  intent = await store.save(intent);
   const before = store.all();
-  assert.throws(
-    () => store.correct({ ...intent, participant_id: "bob" }),
+  await assert.rejects(
+    store.correct({ ...intent, participant_id: "bob" }),
     /different account/,
   );
   assert.deepEqual(store.all(), before);
-  const next = store.correct(intent);
+  const next = await store.correct(intent);
   assert.notEqual(next.key, intent.key);
   assert.equal(next.state, "draft");
   assert.deepEqual(next.body, { ...intent.body, idempotency_key: next.key });
   assert.deepEqual(store.all(), [next]);
 });
 
-test("failed correction storage keeps the original rejected attempt", () => {
+test("failed correction storage keeps the original rejected attempt", async () => {
   const storage = new JSDOM("", { url: "https://loom.example" }).window
     .localStorage;
   const store = new IntentStore(
@@ -166,16 +166,135 @@ test("failed correction storage keeps the original rejected attempt", () => {
     storage,
     "https://loom.example",
   );
-  const intent = store.create("edit", "revision.publish", "/api/v1/revisions", {
+  let intent = store.create("edit", "revision.publish", "/api/v1/revisions", {
     text: "Keep rejected text",
   });
   intent.state = "rejected";
-  store.save(intent);
+  intent = await store.save(intent);
   for (let i = 1; i < 32; i++)
-    store.save(
+    await store.save(
       store.create("other" + i, "reply.create", "/api/v1/replies", {}),
     );
   const before = store.all();
-  assert.throws(() => store.correct(intent), /full/);
+  await assert.rejects(store.correct(intent), /full/);
   assert.deepEqual(store.all(), before);
+});
+
+test("journal versions fence stale dispatch, removal and late outcomes across clients", async () => {
+  const storage = new JSDOM("", { url: "https://loom.example" }).window
+    .localStorage;
+  const a = new IntentStore(
+    "instance",
+    "alice",
+    storage,
+    "https://loom.example",
+  );
+  const b = new IntentStore(
+    "instance",
+    "alice",
+    storage,
+    "https://loom.example",
+  );
+  const draft = await a.save(
+    a.create("reply", "reply.create", "/api/v1/replies", { text: "original" }),
+  );
+  const [sent, stale] = await Promise.allSettled([
+    a.save({ ...draft, state: "uncertain" }),
+    b.save({ ...draft, body: { ...draft.body, text: "changed" } }),
+  ]);
+  assert.equal(sent.status, "fulfilled");
+  assert.equal(stale.status, "rejected");
+  const dispatched = a.all()[0]!;
+  await assert.rejects(b.remove(draft), /changed in another view/);
+  await assert.rejects(
+    b.save({ ...draft, state: "uncertain" }),
+    /changed in another view/,
+  );
+  const separate = await b.saveDraft(draft, { ...draft.body, text: "unsent" });
+  assert.equal(separate.blocked_by, draft.key);
+  assert.notEqual(separate.key, draft.key);
+  assert.equal(separate.body.text, "unsent");
+  assert.deepEqual(
+    a.all().find((r) => r.key === draft.key),
+    dispatched,
+  );
+  await assert.rejects(
+    b.save({ ...separate, state: "uncertain" }),
+    /Review the separately saved/,
+  );
+  const retry = await b.save(dispatched);
+  // The first request's refusal is no longer proof of failure after a retry.
+  assert.deepEqual(await a.settle(dispatched, { state: "rejected" }), retry);
+  const committed = await b.settle(retry, { state: "committed" });
+  assert.deepEqual(
+    await a.settle(dispatched, { state: "rejected" }),
+    committed,
+  );
+  await a.clear();
+  await assert.rejects(
+    b.settle(retry, { state: "committed" }),
+    /changed in another view/,
+  );
+  assert.deepEqual(a.all(), []);
+});
+
+test("serialized journal quota preserves existing recovery records under concurrent creation", async () => {
+  const storage = new JSDOM("", { url: "https://loom.example" }).window
+    .localStorage;
+  const store = new IntentStore(
+    "instance",
+    "alice",
+    storage,
+    "https://loom.example",
+  );
+  for (let i = 0; i < 31; i++)
+    await store.save(
+      store.create(String(i), "reply.create", "/api/v1/replies", {}),
+    );
+  const before = store.all();
+  const results = await Promise.allSettled(
+    [0, 1].map((i) =>
+      store.save(
+        store.create("new" + i, "reply.create", "/api/v1/replies", {}),
+      ),
+    ),
+  );
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  assert.equal(store.all().length, 32);
+  for (const record of before)
+    assert.deepEqual(
+      store.all().find((r) => r.key === record.key),
+      record,
+    );
+});
+
+test("legacy unresolved records retain exact request identity when adopting journal versions", async () => {
+  const storage = new JSDOM("", { url: "https://loom.example" }).window
+    .localStorage;
+  const store = new IntentStore(
+    "instance",
+    "alice",
+    storage,
+    "https://loom.example",
+  );
+  const { sequence: _, ...legacy } = store.create(
+    "reply",
+    "reply.create",
+    "/api/v1/replies",
+    { text: "legacy exact body" },
+  );
+  legacy.state = "uncertain";
+  storage.setItem(store.prefix + legacy.key, JSON.stringify(legacy));
+  const saved = await store.save(store.all()[0]!);
+  assert.deepEqual(saved.body, legacy.body);
+  assert.equal(saved.key, legacy.key);
+  assert.equal(saved.state, "uncertain");
+  await assert.rejects(
+    store.save({ ...saved, state: "draft" }),
+    /changed in another view/,
+  );
+  await assert.rejects(
+    store.save({ ...saved, body: { ...saved.body, text: "different" } }),
+    /changed in another view/,
+  );
 });

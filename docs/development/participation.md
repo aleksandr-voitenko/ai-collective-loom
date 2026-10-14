@@ -48,6 +48,19 @@ data. An uncertain publication keeps its original key/body. **Check status** is 
 read-only lookup; **Retry same reply/publication** sends that original request.
 An absent record is not proof of failure. Signing out explicitly clears this
 identity's records after an export opportunity. Reads do not mark anything read.
+If local cleanup fails, sign-out still ends the server session and reports that
+the account's browser records remain.
+
+Use a browser with Web Locks support and reload all open Loom tabs after updating
+this preview. Journal changes are serialized across tabs: stale editing preserves
+the original submission and saves your unsent changes separately. Inspect **Local
+drafts**, then choose **Continue with separate draft** if you want to prepare those
+changes for a new publication. Nothing is automatically posted. A stale Publish or
+Remove action asks you to reload rather than changing another tab's operation.
+Without browser lock support, publication fails closed; retained drafts remain
+readable and exportable. **Write another** selects its replacement draft so reload
+and restart recover the new text. **Revision history** remains available from an
+unavailable-current page; it reveals only retained versions you may currently read.
 
 Ctrl-C stops only this launcher's web listener and disposable database. This is
 not a command to reset existing development data. The launcher never uses `.env.local`
