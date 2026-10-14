@@ -55,13 +55,14 @@ include run/attempt/job, with three-day retention and unchanged read-only reposi
 permissions. No existing CI stage or application assertion is removed. The original
 browser command's failure is never turned into success.
 
-Actual hosted upload is **pending**. No workflow was dispatched or pushed for this
-task at commit preparation. Finalization adds an opt-in manual
+Hosted upload was pending at the implementation commit's preparation. Finalization
+adds an opt-in manual
 `verify_failure_upload` workflow input so an authorized run can exercise the
 existing controlled failures after the normal browser suite. That run must remain
 failed while the upload succeeds; normal push/PR checks retain all stages.
-Static workflow inspection and successful local candidate validation do not
-establish artifact-service delivery, including after a failed hosted browser step.
+Static workflow inspection and successful local candidate validation alone do not
+establish artifact-service delivery. The hosted checks below now verify that path,
+including after a failed browser step.
 
 ## Actual local topology and checks
 
@@ -97,7 +98,7 @@ Finalization repeated `npm run check` and `npm run test:browser-diagnostics`;
 both passed. The exact manual-workflow command,
 `npm run test:e2e -- --config tests/diagnostics/playwright.config.ts`, separately
 exited 1 with all eight expected failures and a validated upload candidate. This
-checks the new workflow entry point locally while hosted delivery remains pending.
+checked the new workflow entry point locally before the hosted verification below.
 
 The representative [missing-control bundle](browser-diagnostics-evidence/missing-control.json)
 is an unedited, validated **16,063-byte** output from a deliberately failing child.
@@ -150,6 +151,57 @@ cause, narrow application repair or application red/green claim. Clean local
 repetitions do not repair or explain failures on a hosted Linux runner. This task
 delivers the diagnostic capability needed for the next occurrence.
 
+## Hosted upload verified during finalization
+
+Commit `3fb90258d382df2aac8a4e0f1c11556d9d0ea518` was pushed and
+[PR #3](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/3) opened.
+The following attempt-1 runs executed on Ubuntu 24.04/Linux x64 with Node 24.19.0,
+Playwright 1.64.0 and synthetic fixtures. The PR checkout was merge revision
+`3e216206c04db70b3fd6f8c88840578ae1f3cdaa`; the push/manual checkouts were the
+implementation commit. Artifact metadata identifies these clean checkouts exactly.
+
+| Run | Observed conclusion | Uploaded artifact ID | Downloaded contents |
+|---|---|---|---|
+| [Push 38534589567](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38534589567) | Both jobs passed, including all retained integration/persistence stages. | `11879762927` | 2 JSON files, 2,042-byte ZIP, 9,057 bytes expanded; 29/29 browser results passed. |
+| [PR 38534647651](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38534647651) | Both jobs passed, including all retained integration/persistence stages. | `11878938374` | 2 JSON files, 2,040-byte ZIP, 9,057 bytes expanded; 29/29 browser results passed. |
+| [Manual failure check 38534672211](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38534672211) | Failed only at the opt-in controlled browser step. Normal browser suite, validator, upload and cleanup passed. | `11879274350` | 10 JSON files, 14,632-byte ZIP, 156,249 bytes expanded; all 8 probe failures retained. |
+
+The failed manual job `115754778157` preserves the browser step's failure rather
+than using `continue-on-error`. Later migration/storage stages are skipped in that
+intentional failure run; the two normal runs above supply their passing evidence.
+Normal artifacts contain `run.json` and `approval.json`, with no incomplete captures.
+The manual artifact adds eight hashed per-test bundles, each with exactly one
+original error. Its largest document is **80,812 bytes**, below 128 KiB.
+
+All three archives were downloaded from GitHub, checked for safe flat filenames,
+duplicate entries, symlinks and byte limits before extraction, then every JSON file
+was checked against the closed schema and expected commit/run/attempt/job metadata.
+No raw attachments, URLs, credential/storage/body fields or tested secret canaries
+were present. The failure artifact retains the missing second-tab Save control,
+401 and pending request, failed navigation, browser exception, explicit capture
+failure, truncation and persistent/explicit-context evidence. Capture omissions
+remain explicit; a failed test is not reported as a passing one.
+
+Downloaded ZIP SHA-256 digests exactly match GitHub's artifact metadata:
+
+- Push: `7c17fa11b3b875324bfd656e21d5ce7ef3fef0927c5fcb7c2a9cf68d0bc053be`.
+- PR: `7830aa01be59ea9329572b30fe7c8f41723eb9c53af60fca8de5e53633e693fc`.
+- Manual failure: `cdac7aaf32f3077ca668e7a80b7be3cb903448d5046d2c460b42a6d867e15dc3`.
+
+Each artifact has the exact name `browser-diagnostics-<run>-1-local-integration`
+and a recorded expiry 259,199 seconds after creation (three days at the service's
+timestamp precision). Expiry times are 17 October 2026 at 08:25:48, 08:26:53 and
+08:27:28 UTC respectively. These checks verify actual uploaded bytes and configured
+expiry, not future deletion or delivery after hard runner loss.
+
+Reproduction: dispatch `ci.yml` at the implementation branch with
+`verify_failure_upload=true`, confirm the failed controlled step and successful
+validator/upload, list that run's artifacts through the Actions API, download the
+reported artifact ID, and validate its complete candidate against the diagnostic
+contract. This intentionally failed workflow is evidence of failure preservation,
+not an unresolved application CI failure. Both original intermittent causes remain
+unresolved; clean hosted runs do not establish a repair.
+
 ## Corrections and preservation checks
 
 Typechecking initially caught a timer callback overload; a no-argument callback
@@ -166,8 +218,8 @@ changes application logic or weakens the application suite.
 Root and scoped memory were checked against the final fixture ownership, collector,
 runner, validation schema and actual assertions. `tests/MEMORY.md` owns the detailed
 testing boundary; root and participation memory point to it. Guides and the backlog
-separate completed local diagnostic capability from unresolved intermittent causes
-and pending hosted upload. Product/architecture imports, migrations, authentication,
+separate verified local/hosted diagnostic delivery from unresolved intermittent causes.
+Product/architecture imports, migrations, authentication,
 Saved limits and existing retained data remain unchanged. File uploads/grants,
 fenced worker output, real-identity/retention policy and cross-machine trials remain
 behind their existing gates. No product ADR or new package dependency was needed.
