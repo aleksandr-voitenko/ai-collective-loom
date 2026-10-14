@@ -95,6 +95,7 @@ test("only definitive first-dispatch rejection permits a corrected identity", as
     "revision_conflict",
     "nickname_conflict",
     "credential_limit",
+    "saved_limit_reached",
     "forbidden",
   ]) {
     assert.equal(

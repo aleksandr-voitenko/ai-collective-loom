@@ -31,12 +31,15 @@ export async function lockActor(tx: SqlTransaction, actor: ActorContext) {
   return authority;
 }
 
-export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution' | 'reply-traversal', allowedKinds = ['contribution', 'summary', 'artifact']): Promise<Resource[]> {
+export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution' | 'reply-traversal', allowedKinds = ['contribution', 'summary', 'artifact'], maxResources?: number): Promise<Resource[]> {
   await tx.query('SELECT pg_advisory_xact_lock_shared($1::integer, $2::integer)', [structureNamespace, structureGuard]);
   const discovered = await tx.query<{ id: string }>(`WITH RECURSIVE owners AS (
     SELECT id, owner_resource_id FROM loom.resources WHERE id = $1
     UNION SELECT parent.id, parent.owner_resource_id FROM loom.resources parent JOIN owners child ON parent.id = child.owner_resource_id
-  ) SELECT id FROM owners`, [targetId]);
+  ) SELECT id FROM owners LIMIT $2`, [targetId, maxResources === undefined ? null : maxResources + 1]);
+  // Bounded secondary views can fail explicitly before an unbounded lock walk.
+  // The structure guard keeps this dependency set fixed for the transaction.
+  if (maxResources !== undefined && discovered.rows.length > maxResources) throw new PublicationError('service_unavailable');
   const locked = new Map<string, Resource>();
   for (const id of discovered.rows.map(row => row.id).sort()) {
     const lock = mode === 'publication' && id === targetId ? 'FOR UPDATE' : 'FOR SHARE';

@@ -19,10 +19,15 @@ Before a retained-data environment is enabled, approve and exercise:
 3. Source/outcome/entity/audit/nickname retention and explicit erasure. Preserve
    safe deduplication tombstones or explicitly end duplicate-free recovery;
    removing an outcome row must not silently permit an old intent to publish again.
+   Private Saved items add target-version tombstones, exact/observed revision FKs
+   and retained operation decisions. Their synthetic caps have no automatic expiry.
+   Approve physical-source erasure handling without retargeting exact references or
+   allowing stale Save/Unsave replay. Logical removal tests do not certify erasure.
 4. A coordinated encrypted backup and restore drill, including revisions, outcomes,
    identity verifiers, instance identity and migrations. Restoring older committed
    history requires a recovery epoch that blocks automatic old-intent replay until
    reconciliation. The ordinary server/browser restart tests do not implement this.
+   Include private bookmark versions and decisions in the same recovery contract.
 5. A release/migration maintenance procedure: compatibility checks, admission stop,
    in-flight request drain, retained backup, migrator-only additive application,
    application-role checks and recovery on failure. Old binary rollback is not a

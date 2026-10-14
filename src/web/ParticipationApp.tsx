@@ -36,12 +36,13 @@ import {
   type Self,
 } from "./participation-client.js";
 import { AuthoredText } from "./AuthoredText.js";
+import { SaveControl, SavedItemsPage } from "./SavedItems.js";
 import "./participation.css";
 
 function Icon({
   name,
 }: {
-  name: "topic" | "artifact" | "discussion" | "help";
+  name: "topic" | "artifact" | "discussion" | "help" | "saved";
 }) {
   return (
     <svg
@@ -60,7 +61,7 @@ function Icon({
               ? "M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"
               : name === "discussion"
                 ? "M3 4h18v13H8l-5 4z"
-                : "M12 16v1M10 8a2 2 0 1 1 3 2c-1 .5-1 1-1 3M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"
+                : name === "saved" ? "M6 3h12v18l-6-4-6 4z" : "M12 16v1M10 8a2 2 0 1 1 3 2c-1 .5-1 1-1 3M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"
         }
       />
     </svg>
@@ -122,6 +123,7 @@ interface Context {
 }
 
 function intentUrl(record: Intent) {
+  if (record.kind === "saved.set") return "/loom/saved";
   const intent = "intent=" + encodeURIComponent(record.key),
     body = record.body;
   if (record.kind === "reply.create")
@@ -333,6 +335,7 @@ export function ParticipationApp() {
           <Icon name="artifact" />
           Artifacts
         </NavLink>
+        <NavLink to="/loom/saved"><Icon name="saved" />Saved items</NavLink>
         {self?.role === "administrator" && (
           <NavLink to="/loom/admin">
             <Icon name="topic" />
@@ -403,7 +406,7 @@ export function ParticipationApp() {
                 ? "Community overview"
                 : location.pathname.includes("/artifacts")
                   ? "Artifacts"
-                  : "Topics"}
+                  : location.pathname.includes("/saved") ? "Saved items" : "Topics"}
           </span>
           <span className="release-label">Synthetic preview</span>
         </header>
@@ -454,6 +457,7 @@ export function ParticipationApp() {
           clears them on this browser. Unconfirmed submissions may already be
           published.
         </p>
+        <p>Unconfirmed Saved items changes may also have completed. Server bookmarks remain saved after signing out.</p>
         <button onClick={() => store && exportDrafts(store)}>
           Export drafts
         </button>
@@ -536,6 +540,7 @@ function ActiveView({ context }: { context: Context }) {
     kind = path[0],
     id = path[1];
   if (!kind) return <Topics context={context} />;
+  if (kind === "saved") return <SavedItemsPage context={context} />;
   if (kind === "area" && id) return <AreaPage id={id} context={context} />;
   if (kind === "discussion" && id)
     return <DiscussionPage id={id} context={context} />;
@@ -1327,6 +1332,7 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
       </div>
       <div className="header-line">
         <h1>{data.opening.title}</h1>
+        <SaveControl context={context} target={{ kind: "discussion", resource_id: id }} label="discussion" />
         <Link
           className="button"
           to={"/loom/resource/" + data.opening.resource_id}
@@ -1538,6 +1544,7 @@ function ContributionBody({
         participants={data.mentioned_participants}
       />
       <div className="post-footer">
+        <SaveControl context={context} target={{ kind: "contribution", resource_id: id }} label="contribution" />
         <button
           className="text-button"
           onClick={() => setReply((value) => !value)}
@@ -1756,6 +1763,9 @@ function ResourcePage({
             {data.revision_number} · published by {data.publisher.nickname}
           </p>
         </div>
+        <SaveControl context={context} target={revision
+          ? { kind: "revision", resource_id: id, revision_id: revision }
+          : { kind: data.kind === "artifact" ? "artifact" : "contribution", resource_id: id }} />
         <button onClick={() => setHistory((value) => !value)}>
           Revision history
         </button>
@@ -1787,6 +1797,7 @@ function ResourcePage({
           </p>
         )}
         <div className="post-footer">
+          {!revision && <SaveControl context={context} target={{ kind: "revision", resource_id: id, revision_id: data.revision_id }} />}
           {data.can_edit && (
             <button
               className="text-button"
@@ -2596,7 +2607,8 @@ function Help({ context }: { context: Context }) {
         <button onClick={() => exportDrafts(context.store)}>
           Export drafts
         </button>
-        {context.store.all().map((record) => (
+        <p>Saved-item recovery shares this local storage bound and export, but is managed separately in <Link to="/loom/saved">Saved items</Link>.</p>
+        {context.store.all().filter((record) => record.kind !== "saved.set").map((record) => (
           <div className="list-row" key={record.key}>
             <Link to={intentUrl(record)}>
               {record.kind} · {record.state} ·{" "}
@@ -2617,7 +2629,7 @@ function Help({ context }: { context: Context }) {
           </div>
         ))}
         <p>
-          Updates, Following, Saved items, uploads, notifications and agent
+          Saved items are private server bookmarks, independent of these local drafts. Updates, Following, uploads, notifications and agent
           execution are outside this slice.
         </p>
       </section>

@@ -25,6 +25,14 @@ The new migration was exercised on isolated fresh databases; application startup
 does not apply it to existing development data. Read the
 [retained-data gate](../docs/development/retained-data-gate.md) before an upgrade.
 
+Additive `0005_saved_items.sql` adds owner-private target states, collection versions
+and immutable operation decisions. Unsaved tombstones preserve ordering; composite
+FKs, a target-membership trigger and NULL-aware uniqueness prevent mismatched exact
+revisions or duplicate logical targets. It seeds no bookmark. The application can
+change state/version but cannot delete retry identity or change owner/target fields.
+See [ADR-013](../docs/adr/013-private-saved-items.md). `npm run test:saved-items:postgres`
+uses fresh disposable PostgreSQL and actual HTTPS; it does not migrate existing data.
+
 Use unique four-digit versions and do not edit applied migrations. The runner
 checks filename and SHA-256 against `loom_migrations.history`, rejects unknown
 applied versions, and serializes concurrent local migration runs. Files must not

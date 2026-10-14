@@ -39,7 +39,8 @@ test("unsupported production query fields and identity headers do not create aut
     assert.deepEqual(body.json().error.fields, [{ location: "body", path: "", rule: "unsupported_body" }]);
   }
   for (const path of ["/api/v1/community", "/api/v1/discussions", "/fixture/validation", "/fixture/fault",
-    "/prototype/identity/accounts", "/prototype/identity/signin/start", "/prototype/identity/bootstrap", "/prototype/identity/reconcile"]) {
+    "/prototype/identity/accounts", "/prototype/identity/signin/start", "/prototype/identity/bootstrap", "/prototype/identity/reconcile",
+    "/api/v1/me/saved-items/state", "/api/v1/me/saved-items/lookup", "/api/v1/me/saved-items/status"]) {
     const response = await app.inject({ method: "POST", url: path, headers: { "x-loom-participant": "administrator", "x-request-id": "client-supplied-id" }, payload: {} });
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().error.code, "not_found");
@@ -47,6 +48,7 @@ test("unsupported production query fields and identity headers do not create aut
     assert.equal(response.json().error.request_id, response.headers["x-request-id"]);
     assert.equal(response.headers["cache-control"], "no-store");
   }
+  assert.equal((await app.inject('/api/v1/me/saved-items')).statusCode,404);
 });
 
 test("controlled body schemas reject unknown properties and semantic coercion", async (t) => {

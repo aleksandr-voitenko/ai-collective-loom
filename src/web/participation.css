@@ -846,3 +846,18 @@
   color: var(--accent);
   font-weight: 650;
 }
+.loom-app .saved-control { flex: 0 1 auto; max-width: 100%; font-size: 12px; }
+.loom-app .saved-control button[aria-pressed="true"] { background: var(--tint); color: var(--accent); }
+.loom-app .saved-control .fineprint { max-width: 32em; margin-top: 8px; }
+.loom-app .saved-control [role="alert"] { max-width: 32em; margin-top: 8px; }
+.loom-app .saved-row h2 { font-size: 15px; margin: 5px 0; overflow-wrap: anywhere; }
+.loom-app .saved-row > .saved-control { flex: 0 1 auto; }
+.loom-app .saved-row > div:first-child { flex: 1 1 240px; }
+.loom-app .saved-row small { text-transform: capitalize; }
+.loom-app .saved-row:last-child { border-bottom: 0; }
+.loom-app .saved-pending { padding: 14px 0; }
+.loom-app .saved-recovery { margin: 8px 0; max-width: 38em; }
+@media (max-width: 760px) {
+  .loom-app .saved-row > .saved-control { flex-basis: 100%; }
+  .loom-app .saved-collection .saved-row { align-items: flex-start; gap: 15px; }
+}

@@ -1,7 +1,8 @@
 # ADR-017: Browser participation and recovery ownership
 
 Status: implemented subset for the synthetic participation browser. This does not
-select automatic reading, Saved items, Following or feed checkpoint behavior.
+select automatic reading, Following or feed checkpoint behavior. Private Saved items
+are the separate implemented extension below.
 
 ## Durable intent
 
@@ -118,3 +119,59 @@ browser-origin storage across process restart, failed pages, conflicts and delay
 responses. They are not physical-passkey, screen-reader or human-usability studies.
 Production draft retention, offline/security policy, full reading-position recovery
 and concurrent personal state require separate decisions and evidence.
+
+## Saved items extension
+
+The Saved items destination, resource Save/Unsave controls and explicit **Save this
+revision** reuse the existing shell. Resource references follow current content;
+exact references retain their chosen revision. Metadata says **Revision current
+when saved**, never that a revision was read. Unavailable rows retain no cached title,
+author or path, and keep Unsave available under owner authority.
+
+`saved.set` intents reuse `IntentStore` without changing publication semantics. A
+short additional owner/target Web Lock prevents two same-release tabs preparing
+different unresolved local commands for one target; the existing journal lock still
+owns quota, versions and write/read-back. Network calls hold neither lock. Before
+dispatch, persist the key, target, desired boolean and expected server version as
+uncertain. No source metadata or credential is copied into this record. It shares
+the 32-record/1 MiB cap with publication recovery, with no implicit eviction.
+
+Check saved status is read-only. Retry same change reuses the frozen request. A
+recorded applied/conflict result retires that exact local intent; an uncertain or
+not-recorded response keeps it. A conflict shows current state and requires another
+deliberate choice, never automatic re-keying/rebasing. Local drafts remain a separate
+view; Saved items owns bookmark recovery. Export includes both sorts of local intent.
+
+A known first-dispatch `saved_limit_reached` refusal becomes a rejected local record,
+retained across reload until **Dismiss rejected change** removes just that record.
+The server refuses before recording a decision; this does not loosen retention caps
+or delete tombstones. A lost response, a refusal on a later uncertain retry, or a
+late first refusal after another tab has retried still retains uncertainty. The
+journal's current-owner and sequence guards apply unchanged; older uncertain
+records are not reclassified from a later refusal or `not_recorded` status.
+
+Every read/action has identity and mounted-view ownership. Read sequence numbers
+reject older overlapping refreshes; observed server target versions cannot decrease.
+Cross-tab journal events refresh target state and announce collection changes, without
+automatically publishing or reordering the collection. Late completion cannot recreate
+a removed intent or replace a new view/account. Independent clients additionally rely
+on [ADR-013's server preconditions](013-private-saved-items.md).
+
+The collection keeps one page of 12 rows and bounded cursor history. Failed page loads
+retain the previous page and exact attempted continuation for Retry; they show no
+successful empty/end state. Collection-version conflicts require Refresh collection.
+Explicit paging moves keyboard focus to the collection heading. Mobile navigation
+retains the existing modal drawer, and rows stack controls below visible identity.
+
+Explicit sign-out clears the participant's local records after the export opportunity
+and explains that uncertain bookmark changes may already have completed. Server
+bookmarks survive. An identity switch invalidates presentation and hides other-owner
+recovery; it does not silently discard their unresolved records. Clearing site data
+still loses local intent, not server bookmarks. Same-release Web Locks, synthetic
+identity/retention and destructive-restore gates remain unchanged. See
+[Saved items evidence](../development/saved-items-evidence.md).
+
+A local or cross-tab journal change invalidates an in-flight Saved collection read.
+Its late response cannot clear the refresh notice or claim current completion. The
+last bounded page remains explicitly stale until a deliberate refresh succeeds;
+failed pagination retains the attempted cursor for Retry collection.

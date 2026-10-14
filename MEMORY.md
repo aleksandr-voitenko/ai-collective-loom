@@ -9,7 +9,14 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`1`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`2`.
+Private Saved items now support discussion/contribution/artifact resource references
+and exact contribution/artifact revisions. Owners come from current authentication,
+with no administrator override. Migration 0005 retains versioned target tombstones
+and immutable applied/conflict decisions, without shared publication side effects.
+See ADR-013 and `docs/development/saved-items.md`; notes, read state, Following and
+notifications remain open. Synthetic caps are 500 target states/10,000 decisions per
+participant; expiry, erasure and destructive restore remain unapproved.
 No real accounts/content are approved: ADR-004 identity/recovery candidates,
 production limits, retained-data operations and cross-machine validation remain
 gates. There is no default administrator or identity-header bypass. Agent memory

@@ -162,3 +162,21 @@ Actual tests discard a committed response and restart client processes before
 recovering the original IDs. See [ADR-017](017-browser-participation-recovery.md)
 and the [slice evidence](../development/participation-evidence.md). Automatic expiry,
 erasure and recovery after rollback of committed history remain closed gates.
+
+## Private Saved items extension
+
+[ADR-013](013-private-saved-items.md) uses the same current authentication, scoped
+attempt mutex and transaction owner for fixed operation kind `saved.set`, with
+`saved-state-v1` semantic hashing. Private target versions and immutable decisions
+live in separate tables and never enter the shared publication clock/event/outbox.
+Owner/target versions fence delayed first commands after an opposite action; retained
+operation identity alone would not do so. Exact retries resolve before new-version
+checks, with the original decision explicitly separate from current bookmark state.
+Applied and version-conflict decisions are both retained without automatic expiry.
+
+Unlike publication status, bookmark status may show the caller's already retained
+private target identity while its source is unavailable. It returns no cached source
+metadata; each current source projection still uses the common reading policy. A
+known unavailable target can be unsaved without reading it. No shared-publication
+disclosure or retry requirement is weakened. Synthetic quotas and restore/erasure
+limitations are specified in ADR-013 and the release guide revision 2.
