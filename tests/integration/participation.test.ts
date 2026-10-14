@@ -543,6 +543,20 @@ test(
         assert.equal(full.body.content.text.length, 16384);
         assert.ok(full.bytes <= 131072);
         assert.equal(small.body.error.minimum_response_bytes, full.bytes);
+        const contextPath = `/api/v1/contributions/${maximum.body.resource_id}/context`;
+        const fullContext = await agent.client.call(contextPath);
+        assert.equal(fullContext.status, 200);
+        assert.deepEqual(fullContext.body, full.body);
+        assert.ok(fullContext.bytes <= 131072);
+        const smallContext = await agent.client.call(
+          contextPath + "?max_response_bytes=4096",
+        );
+        assert.equal(smallContext.status, 400);
+        assert.equal(smallContext.body.error.code, "response_budget_too_small");
+        assert.equal(
+          smallContext.body.error.minimum_response_bytes,
+          fullContext.bytes,
+        );
         assert.equal(
           (
             await agent.client.call("/api/v1/replies", {
@@ -561,19 +575,15 @@ test(
           content: content("🧵".repeat(4096)),
         });
         assert.equal(accepted.status, 201);
-        // Hidden envelopes exercise bounded scan work without publishing hidden prose.
+        // Suppressed revisions are omitted, unlike structural reply placeholders.
+        // Keep exercising empty pages and the 100-candidate scan budget.
         await server.database.transaction(async (tx) => {
           for (let i = 0; i < 105; i++) {
             const id = randomUUID();
             await tx.query(
-              "INSERT INTO loom.resources(id,kind,owner_resource_id,original_author_id,state) VALUES ($1,'contribution',$2,$3,'suppressed')",
-              [id, discussion, human.id],
+              "INSERT INTO loom.revisions(id,resource_id,revision_number,publisher_id,content_format,content_text,availability) VALUES ($1,$2,$3,$4,'loom-markdown-v1','Hidden scan fixture','suppressed')",
+              [id, accepted.body.resource_id, i + 2, human.id],
             );
-            await tx.query("INSERT INTO loom.contributions VALUES ($1,$2,$3)", [
-              id,
-              discussion,
-              reply,
-            ]);
           }
         });
         let cursor = "",
@@ -582,7 +592,7 @@ test(
           requests = 0;
         do {
           const page = await agent.client.call(
-            `/api/v1/contributions/${reply}/children?limit=1${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}`,
+            `/api/v1/resources/${accepted.body.resource_id}/history?limit=1${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}`,
           );
           assert.equal(page.status, 200);
           assert.ok(page.body.items.length <= 1);
@@ -715,6 +725,211 @@ test(
             encodeURIComponent(page.body.next_cursor),
         );
         assert.equal(stale.body.error.code, "invalid_cursor");
+      },
+    );
+  },
+);
+
+test(
+  "review regressions: retained history and disclosure-safe reply traversal",
+  { timeout: 180000 },
+  async (t) => {
+    const server = await syntheticServer();
+    t.after(server.close);
+    const cert = await readFile(server.directory + "/cert.pem", "utf8");
+    const admin = httpClient(server.origin, cert);
+    await admin.enroll(server.ticket);
+    const account = await admin.call("/api/v1/identity/accounts", {
+      idempotency_key: randomUUID(),
+      nickname: "review_agent",
+      kind: "agent",
+      role: "participant",
+    });
+    assert.equal(account.status, 200);
+    const issued = await admin.call("/api/v1/identity/credentials", {
+      idempotency_key: randomUUID(),
+      participant_id: account.body.participant_id,
+      kind: "agent",
+      purpose: null,
+      label: "Review agent",
+      replace_credential_id: null,
+    });
+    assert.equal(issued.status, 200);
+    const agent = httpClient(server.origin, cert, issued.body.secret);
+    await admin.call("/api/v1/community/setup", {
+      idempotency_key: randomUUID(),
+      community_name: "Review community",
+      ordinary_area_name: "General",
+      proposal_area_name: "Proposals",
+      overview: content("Review overview"),
+    });
+    const area = (await admin.call("/api/v1/areas")).body.items.find(
+      (a: { title: string }) => a.title === "General",
+    ).id;
+    const opening = (
+      await admin.call("/api/v1/discussions", {
+        idempotency_key: randomUUID(),
+        area_id: area,
+        title: "Traversal review",
+        content: content("Opening"),
+      })
+    ).body;
+    const discussion = (
+      await admin.call("/api/v1/resources/" + opening.resource_id)
+    ).body.discussion_id;
+    const parent = (
+      await admin.call("/api/v1/replies", {
+        idempotency_key: randomUUID(),
+        discussion_id: discussion,
+        parent_id: opening.resource_id,
+        content: content("Private parent body"),
+      })
+    ).body;
+    const child = (
+      await admin.call("/api/v1/replies", {
+        idempotency_key: randomUUID(),
+        discussion_id: discussion,
+        parent_id: parent.resource_id,
+        content: content("Eligible child"),
+      })
+    ).body;
+    await t.test(
+      "history remains available without disclosing a suppressed current revision",
+      async () => {
+        const current = (
+          await admin.call("/api/v1/revisions", {
+            idempotency_key: randomUUID(),
+            resource_id: child.resource_id,
+            expected_revision_id: child.revision_id,
+            title: null,
+            content: content("Hidden current revision"),
+          })
+        ).body;
+        await server.observer.query(
+          "UPDATE loom.revisions SET availability='suppressed' WHERE id=$1",
+          [current.revision_id],
+        );
+        try {
+          for (const client of [admin, agent]) {
+            const exact = await client.call(
+              `/api/v1/resources/${child.resource_id}/revisions/${child.revision_id}`,
+            );
+            assert.equal(exact.status, 200);
+            const history = await client.call(
+              `/api/v1/resources/${child.resource_id}/history?limit=1&max_response_bytes=4096`,
+            );
+            assert.equal(history.status, 200);
+            assert.deepEqual(
+              history.body.items.map(
+                (r: { revision_id: string }) => r.revision_id,
+              ),
+              [child.revision_id],
+            );
+            assert.equal(history.body.items[0].can_edit, false);
+            assert.ok(
+              !JSON.stringify(history.body).includes(current.revision_id),
+            );
+            assert.ok(
+              !JSON.stringify(history.body).includes("Hidden current revision"),
+            );
+          }
+          await server.observer.query(
+            "UPDATE loom.resources SET state='suppressed' WHERE id=$1",
+            [child.resource_id],
+          );
+          for (const client of [admin, agent])
+            assert.equal(
+              (
+                await client.call(
+                  `/api/v1/resources/${child.resource_id}/history`,
+                )
+              ).status,
+              404,
+            );
+        } finally {
+          await server.observer.query(
+            "UPDATE loom.resources SET state='active' WHERE id=$1",
+            [child.resource_id],
+          );
+          await server.observer.query(
+            "UPDATE loom.revisions SET availability='available' WHERE id=$1",
+            [current.revision_id],
+          );
+        }
+      },
+    );
+    await t.test(
+      "child pages traverse unavailable parents but never bypass discussion suppression",
+      async () => {
+        await server.observer.query(
+          "UPDATE loom.resources SET state='suppressed' WHERE id=$1",
+          [parent.resource_id],
+        );
+        assert.equal(
+          (
+            await httpClient(server.origin, cert).call(
+              `/api/v1/contributions/${parent.resource_id}/context`,
+            )
+          ).status,
+          401,
+        );
+        for (const client of [admin, agent]) {
+          const page = await client.call(
+            `/api/v1/contributions/${opening.resource_id}/children?limit=1&max_response_bytes=4096`,
+          );
+          assert.equal(page.status, 200);
+          assert.deepEqual(page.body.items, [
+            { resource_id: parent.resource_id, state: "unavailable" },
+          ]);
+          const nested = await client.call(
+            `/api/v1/contributions/${parent.resource_id}/children?limit=1`,
+          );
+          assert.equal(nested.status, 200);
+          assert.equal(nested.body.items[0].resource_id, child.resource_id);
+          assert.equal(nested.body.items[0].parent_id, parent.resource_id);
+          const context = await client.call(
+            `/api/v1/contributions/${parent.resource_id}/context?max_response_bytes=4096`,
+          );
+          assert.equal(context.status, 200);
+          assert.deepEqual(context.body, {
+            resource_id: parent.resource_id,
+            state: "unavailable",
+            discussion_id: discussion,
+            parent_id: opening.resource_id,
+          });
+          assert.equal(
+            (await client.call(`/api/v1/resources/${parent.resource_id}`))
+              .status,
+            404,
+          );
+          assert.equal(
+            (
+              await client.call(
+                `/api/v1/resources/${parent.resource_id}/history`,
+              )
+            ).status,
+            404,
+          );
+          assert.ok(
+            !JSON.stringify([page.body, nested.body, context.body]).includes(
+              "Private parent body",
+            ),
+          );
+        }
+        await server.observer.query(
+          "UPDATE loom.resources SET state='suppressed' WHERE id=$1",
+          [discussion],
+        );
+        for (const client of [admin, agent])
+          for (const path of [
+            `/api/v1/contributions/${opening.resource_id}/children`,
+            `/api/v1/contributions/${parent.resource_id}/children`,
+            `/api/v1/contributions/${parent.resource_id}/context`,
+            `/api/v1/contributions/${child.resource_id}/ancestors`,
+            `/api/v1/resources/${child.resource_id}/history`,
+            `/api/v1/resources/${child.resource_id}/revisions/${child.revision_id}`,
+          ])
+            assert.equal((await client.call(path)).status, 404, path);
       },
     );
   },

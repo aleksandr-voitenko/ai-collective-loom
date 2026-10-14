@@ -220,6 +220,23 @@ export async function registerParticipation(
         (request.params as { id: string }).id.toLowerCase(),
       ),
   );
+  app.get(
+    "/api/v1/contributions/:id/context",
+    {
+      schema: {
+        operationId: "getContributionContext",
+        params,
+        querystring: C.BudgetInput,
+        response: { ...errors, 200: C.ContributionContext },
+      },
+    },
+    async (request) =>
+      reads.contribution(
+        await actor(request),
+        (request.params as { id: string }).id.toLowerCase(),
+        (request.query as PageOptions).max_response_bytes,
+      ),
+  );
   for (const exact of [false, true])
     app.get(
       "/api/v1/resources/:id" + (exact ? "/revisions/:revision" : ""),

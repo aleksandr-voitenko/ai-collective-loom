@@ -205,3 +205,71 @@ connections or ignore teardown errors.
 At commit preparation, the fixture repair had local verification only; its new
 GitHub CI run remained pending. The original failed run is retained above.
 Fixture task record: `LC-20261014-WZF5`.
+
+## PR #1 review repairs — 14 October 2026
+
+This follow-up fixes the six validated inline findings against `1b0063f`; the
+separate PR-failure comment is outside this repair. The scope preserves exact
+uncertain retries, current authorization, retained data and the existing feature
+gates. No baseline, migration, dependency, worker or storage contract changed.
+The review handoff preceded explicit authorization to finalize and push these
+repairs. Their task record is `LC-20261014-6LGH`.
+
+| Finding | Repair and direct evidence |
+|---|---|
+| [Credential target switching](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979091) | One-time results retain participant/kind/credential identity and their displayed nickname. Browser assertions hold a real issuance response, verify account selection is disabled both during issuance and while the secret is visible, then verify dismissal permits switching. The secret is absent from saved intent. |
+| [Rejected setup/admission stuck as uncertain](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979092) | Known first-dispatch rejection permits an explicit new-key correction. Browser tests reload rejected setup, invalid/reserved nicknames and corrected drafts. A committed account response is deliberately lost; a later 403 still leaves the original key/body uncertain and status recovers it. |
+| [Lost conflict corrections](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979096) | Rejected fields stay locked until a replacement draft is saved. The conflict comparison ID survives reload. Actual Chromium navigation and browser-process restart preserve corrected title/text, which then publish against the recorded comparison revision. Unit checks verify a failed replacement write keeps the rejected attempt and another identity cannot correct it. |
+| [History blocked by suppressed current revision](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979102) | History checks each revision independently of current availability. Cookie and bearer HTTP clients retrieve R1 history after R2 suppression without R2 identity/text or edit eligibility; whole-resource suppression denies history. The browser opens the retained-history list. |
+| [Eligible replies hidden behind an unavailable parent](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979109) | Child pages retain minimal structural markers. Bounded children/ancestors and the additive contribution-context route preserve real parentage through an unavailable contribution. HTTP assertions compare exact marker fields, reject unauthenticated context reads, and show that discussion suppression denies both cookie and bearer clients. Browser nested/focused views reach the eligible child without rendering hidden parent text. |
+| [Focus target belongs to another discussion or is an artifact](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979116) | The focus view resolves contribution context and verifies discussion membership before rendering body or reply controls. The browser rejects both mismatched and artifact targets; the same contribution works in its actual discussion. |
+
+The gaps were missing transition/combination coverage: issuance plus target
+switching; definitive admin rejection versus lost-response retry; editing after a
+conflict plus restart; hidden current revision plus history discovery; suppressed
+reply parent plus eligible descendant; and an untrusted focus query plus discussion
+ownership. Existing tests exercised nearby successful paths or direct exact reads.
+
+Before repair, both new HTTP regressions failed for the intended reasons (history
+404 and an omitted parent marker). Five browser regressions likewise reached and
+failed their intended assertions. The first focus regression stopped at its fixture's
+second-discussion creation because the first composer still showed its committed
+result. The helper now explicitly chooses **Write another**. The focus defect had
+already been reproduced in the preceding read-only review; this permanent test's
+initial failure is not claimed as red-green evidence of that defect. Initial
+typechecking also caught an optional conflict-ID assignment; the final typecheck
+passes with absent IDs omitted.
+
+Final review extended conflict coverage to the operation-specific URL used by Local
+drafts. That regression failed on reload with the old revision text in place of the
+saved correction: the URL still selected the replaced operation ID. Preparing a
+correction now replaces that query ID along with the saved intent; reload, navigation
+and browser-process restart exercise the same corrected URL.
+
+Final observed checks use Node 24.19.0 and the same single-Mac, synthetic TLS /
+virtual-WebAuthn / disposable PostgreSQL topology described above:
+
+| Command | Observed result |
+|---|---|
+| `npm run check` | Passed: baseline/document checks, 64 bootstrap checks, 5 hook checks, 27 application/unit/router checks, all TypeScript projects and production build. |
+| `npm run test:e2e` | **12 passed in 34.4 seconds**, including all six original tests and six new review regressions, with operation-specific correction URLs covered. Normal worker count, timeouts and retry settings are unchanged. |
+| `npm run test:participation:postgres` | **12 passed**, including parent tests. Cookie/bearer suppression parity and disclosure assertions pass. The new context endpoint returns the maximum accepted escaped body intact under the hard cap and rejects a smaller byte budget with the measured minimum. |
+| `npm run test:publication:postgres` | **16 passed** after the shared containment guard change, including guard races, current authority, exact recovery and rollback. |
+
+The final guide's four JSON examples validate against the executable schemas;
+31 local links in changed documentation resolve. Baseline/document checks were
+rerun after the documentation updates. `git diff --check` passes.
+
+The bounded hidden-scan fixture now uses 105 suppressed **revisions**, rather than
+suppressed child envelopes: child identities intentionally remain structural
+markers. The assertions still require bounded empty-page continuation and exactly
+one eligible revision. No scan limit or assertion was weakened.
+
+ADR-016/017, the release API guide, browser participation guide, README and scoped
+participation memory were reconciled with the implemented behavior and assertions.
+Root memory's scope and feature-gate pointers remain applicable. Imported product,
+architecture and UI reference bytes are preserved. At commit preparation these
+repairs have local verification only; GitHub CI remains pending. Cross-machine
+client validation, real identity/recovery policy, production limits and retained-data
+procedures remain pending. No existing data was reset and no cloud resources were
+created.

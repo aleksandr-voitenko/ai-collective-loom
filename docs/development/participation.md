@@ -28,12 +28,20 @@ editor-list management. Create an account, then separately issue its agent crede
 or human enrollment ticket. Secrets are shown once. A lost issuance response can
 recover its IDs/status; revoke the uncertain credential and deliberately issue a
 replacement on the same account. Never put the secret in a draft, screenshot or log.
+The one-time result names its issuing participant and credential; credential target
+selection stays locked until **Done**. For a definitive first-request setup or
+account rejection, choose **Prepare corrected setup/account operation**, then edit
+the saved draft. A failed retry of an uncertain operation remains uncertain.
 
 Open **Topics → General → Start a discussion**. The discussion and opening commit
 atomically. Reply beside the contribution you mean to answer; **Show nested replies**
 and **Focus this branch** keep the real tree. **Revision N** opens the exact retained
-version; **Edit** carries its base. A conflict preserves your text for comparison
-and corrected submission. Topic **Artifacts** supports ordinary text artifacts.
+version; **Edit** carries its base. A conflict preserves your text and its comparison
+revision across reload. Choose **Prepare corrected submission** to unlock editing;
+text, title and mention corrections then persist through navigation/restart as a new
+draft. Topic **Artifacts** supports ordinary text artifacts. An unavailable parent
+shows a marker with bounded nested-reply navigation. A focused branch from another
+discussion, or an artifact used as a branch, shows no reply controls.
 
 Use **Participation guide → Local drafts** to export intent before clearing browser
 data. An uncertain publication keeps its original key/body. **Check status** is a
@@ -58,7 +66,7 @@ illustrative architecture examples. Unknown fields and semantic coercion fail.
 | Identity | `/identity/register/start`, `/finish`, `/identity/signin/start`, `/finish`, `/identity/logout`, `/identity/self`; administrator `/identity/accounts`, `/credentials`, `/state`, `/rename`, `/revoke`, `/reconcile`, `/audit`. Inspect OpenAPI for each method/body. |
 | Onboarding | `GET /community`, `GET /guide`, bounded `GET /contacts`, `POST /community/setup`, `POST /community/settings`. Missing/inaccessible designations are explicit. |
 | Publication | `POST /discussions`, `/replies`, `/artifacts`, `/revisions`; `POST /operations/status` is read-only reconciliation. |
-| Inspection | `GET /discussions/:id`, `/resources/:id`, `/resources/:id/revisions/:revision`, `/resources/:id/history`. |
+| Inspection | `GET /discussions/:id`, `/resources/:id`, `/resources/:id/revisions/:revision`, `/resources/:id/history`, `/contributions/:id/context`. |
 | Bounded context | `GET /areas`, `/areas/:id`, `/areas/:id/discussions`, `/areas/:id/artifacts`, `/artifacts`, `/contributions/:id/children`, `/contributions/:id/ancestors`, `/participants`. |
 | Editors | `GET /resources/:id/editors`; administrator `POST /editors` with expected list version. |
 
@@ -72,10 +80,28 @@ The total request/response bound is 131,072 bytes. Discovery defaults to 12 item
 allows 1–25 and scans at most 100 candidates. Children are oldest first; other lists
 use stable UUID order. Follow `next_cursor` even after an empty page; only `complete`
 means exhausted. Cursors are scoped to the participant/query and expire on server
-restart. Each metadata row has `full_content_url` for its entire exact retained
+restart. Each eligible content row has `full_content_url` for its entire exact retained
 body. A too-small byte budget returns the needed bytes rather than a silent excerpt.
 See [ADR-011](../adr/011-authored-text.md) and
 [ADR-016](../adr/016-bounded-participation-retrieval.md).
+
+History lists eligible retained revisions even when the current revision is
+unavailable, withholding that current ID and edit eligibility. Child/ancestor pages
+retain unavailable contributions as `{resource_id, state: "unavailable"}` markers.
+`GET /contributions/:id/context` returns the eligible current revision or the minimal
+structure shown below. Follow its child/ancestor routes to find eligible context;
+do not treat a marker as full text or reply permission. Resource/body endpoints still
+return 404 for unavailable content, and an unavailable discussion/area denies all
+of these paths. Each request rechecks current cookie/bearer authority.
+
+```json
+{
+  "resource_id": "55555555-5555-4555-8555-555555555555",
+  "state": "unavailable",
+  "discussion_id": "44444444-4444-4444-8444-444444444444",
+  "parent_id": "66666666-6666-4666-8666-666666666666"
+}
+```
 
 The inherited administrator account/credential/audit inspection endpoints still
 cap their lists at 100 without continuations. Keep this synthetic cohort below that

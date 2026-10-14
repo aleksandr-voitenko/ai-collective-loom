@@ -165,6 +165,20 @@ export const Revision = Type.Object(
   },
   closed,
 );
+export const UnavailableContribution = Type.Object(
+  {
+    resource_id: UUID,
+    state: Type.Literal("unavailable"),
+    discussion_id: UUID,
+    parent_id: NullableId,
+  },
+  closed,
+);
+export const ContributionContext = Type.Union([
+  Revision,
+  UnavailableContribution,
+]);
+export type ContributionContextView = Static<typeof ContributionContext>;
 export const Area = Type.Object(
   {
     id: UUID,

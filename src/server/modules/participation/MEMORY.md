@@ -30,13 +30,18 @@ with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images an
 non-HTTP(S) links do not render as active content. References/backlinks, files,
 summaries, notifications and model execution are not implemented by accepting text.
 
-Retrieval pages contain metadata + exact full-content paths. Default 12, max 25,
+Eligible retrieval rows contain metadata + exact full-content paths. Default 12, max 25,
 scan max 100, serialized response budget 4–128 KiB. Maximum escaped accepted text
 fits the 128 KiB full-body path. Empty pages may have a continuation. Child order is
 created_at/ID; other collections use UUID order, not a claimed recency/name sort.
-Ancestors are nearest-parent first with explicit unavailable entries. Exact eligible
-history may be read when current is suppressed; withhold that current revision ID
-and editing hint. No ordinary read changes receipts, delivery or source activity.
+Ancestors are nearest-parent first. Child/ancestor pages retain unavailable IDs as
+structural markers; `/contributions/:id/context` returns the current body or only
+the marker and discussion/parent IDs. `contributionOwner` uses the shared guard's
+`reply-traversal` mode: only the target contribution may be unavailable; every owner
+must remain active. Body/publication guards remain strict. History checks resource
+ownership and each exact revision independently of current-revision availability;
+withhold a suppressed current revision ID and editing hint. No ordinary read changes
+receipts, delivery or source activity. ADR-016 records the structural-disclosure scope.
 
 AES-GCM cursors bind participant/query/scope with a process-local key. Restart makes
 old cursors invalid, not old publication intents. This currently assumes one API
@@ -46,7 +51,14 @@ restore/recovery epochs are separate gates, not extensions of ordinary paginatio
 Browser `IntentStore` records origin/instance/participant/kind/key/body before POST,
 caps 32 records/1 MiB, fails closed without evicting uncertain work, and exports JSON.
 15-second transport deadlines and cancellation do not prove rollback. Known conflicts
-preserve drafts and current-version comparison; corrected intent is explicitly new.
+preserve drafts and the exact comparison revision ID across reload. Rejected fields
+stay locked until explicit correction saves a new draft before removing the old one.
+Resumed-draft URLs move to the new operation ID at that explicit correction boundary.
+Setup/admission use the same first-dispatch rejection rule; a later refusal never
+reclassifies an uncertain attempt. One-time credential UI binds participant, kind,
+nickname and credential ID to the result and locks target selection until dismissal;
+secrets never enter intent storage. Focused branches validate discussion membership.
+Recovery/structural-traversal review repairs: `LC-20261014-6LGH` (ADR-016/017).
 Identity generation plus view ownership guards all late results. Sign-out explicitly
 clears this identity after export opportunity. Unresolved records do not auto-expire.
 `scripts/participation-client.mjs` uses a private fsynced journal and actual HTTPS;

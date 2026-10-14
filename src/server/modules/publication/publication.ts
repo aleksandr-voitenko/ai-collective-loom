@@ -31,7 +31,7 @@ export async function lockActor(tx: SqlTransaction, actor: ActorContext) {
   return authority;
 }
 
-export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution', allowedKinds = ['contribution', 'summary', 'artifact']): Promise<Resource[]> {
+export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution' | 'reply-traversal', allowedKinds = ['contribution', 'summary', 'artifact']): Promise<Resource[]> {
   await tx.query('SELECT pg_advisory_xact_lock_shared($1::integer, $2::integer)', [structureNamespace, structureGuard]);
   const discovered = await tx.query<{ id: string }>(`WITH RECURSIVE owners AS (
     SELECT id, owner_resource_id FROM loom.resources WHERE id = $1
@@ -58,7 +58,10 @@ export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'p
     const row = chain[index]!;
     const owner = chain[index + 1];
     const ownerKind = row.kind === 'contribution' || row.kind === 'summary' ? 'discussion' : 'area';
-    if (row.state !== 'active' || (owner ? owner.kind !== ownerKind : row.kind !== 'area')) throw new PublicationError('unavailable');
+    // Reply ancestry is not ownership. Traversal can disclose a contribution's
+    // structural placeholder, never its body, while every owner remains active.
+    const placeholder = mode === 'reply-traversal' && index === 0 && row.kind === 'contribution';
+    if ((!placeholder && row.state !== 'active') || (owner ? owner.kind !== ownerKind : row.kind !== 'area')) throw new PublicationError('unavailable');
   }
   if (!allowedKinds.includes(chain[0]!.kind)) throw new PublicationError('unavailable');
   return chain;

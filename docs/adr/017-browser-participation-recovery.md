@@ -26,12 +26,28 @@ Typing saves a draft. Dispatch saves `uncertain` before sending; pending UI says
 is waiting for confirmation. A transport failure, 15-second deadline, navigation cancellation
 or absent status does not prove rollback. Retry uses the identical key/body; status
 is read-only. A known first-request validation/authority/base failure preserves the
-draft and offers a deliberate corrected submission with a new key. Unknown attempts
-cannot be silently re-keyed. Conflict UI fetches the reported exact current version
-for comparison and retains the attempted text.
+draft and offers a deliberate corrected submission with a new key. Rejected fields
+remain locked until **Prepare corrected submission** saves a replacement draft;
+subsequent text, title and entity edits persist normally. Save the replacement before
+removing the rejected attempt so a quota failure retains the original. Retain the
+reported conflict revision ID alongside the attempt and fetch that exact version
+for comparison after reload. When resuming a specific intent from Local drafts,
+replace its URL's intent ID with the correction's new ID so reload selects the
+saved replacement. A newer conflict still requires another explicit correction.
+
+Setup and account administration use the same first-dispatch rejection distinction,
+including invalid input and reserved nicknames, with an explicit correction action.
+Their field values are restored from the saved body. A refusal received while
+retrying an already uncertain request, an unknown-outcome error or an absent status
+does not prove the original attempt failed. Those attempts retain the same key/body
+and cannot be silently re-keyed, including records left uncertain by an older client.
 
 Credential issuance uses its existing safe recovery contract: IDs/status only on
 retry, no secret in the journal, and explicit revoke/reissue on the same account.
+The in-memory one-time result includes the issuing participant, credential ID, kind
+and displayed nickname. The secret label uses that result, not mutable form state;
+account selection is locked while an operation is pending or the secret is visible.
+The user dismisses the result before selecting another credential target.
 Configuration/editor changes retain server-side exact-attempt semantics; they are
 not advertised as browser-recoverable publications in this slice.
 
@@ -46,7 +62,11 @@ recover uncertain intent while its synthetic persistent session remains valid;
 expired/revoked credentials still require current authentication.
 
 Direct replies use pages of six, with one nested level and an explicit deeper-branch
-view. Page failure retains the visible content and cursor for deliberate retry.
+view. Focused branches verify that the contribution belongs to the route's discussion
+before showing its body or reply controls; artifacts and mismatched targets show an
+unavailable-branch state. Unavailable contribution markers retain bounded traversal
+to eligible replies, with no reply action on the marker itself. Page failure retains
+the visible content and cursor for deliberate retry.
 Success replaces a bounded page; it does not append the entire discussion to the
 DOM. Native dialogs handle mobile navigation and the sign-out choice. Exact and
 current revision routes remain distinct. There is no background read marking,

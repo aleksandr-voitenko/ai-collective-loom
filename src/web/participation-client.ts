@@ -15,6 +15,7 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly currentRevision?: string,
+    readonly operationOutcome?: "unknown",
   ) {
     super(message);
   }
@@ -69,6 +70,7 @@ export async function request<T>(
           code?: string;
           message?: string;
           current_revision_id?: string;
+          operation_outcome?: "unknown";
         };
       }
     ).error;
@@ -76,6 +78,7 @@ export async function request<T>(
       error?.code ?? "unknown",
       error?.message ?? "The request could not be completed.",
       error?.current_revision_id,
+      error?.operation_outcome,
     );
   }
   if (options.schema && !Value.Check(options.schema, value))
@@ -84,6 +87,22 @@ export async function request<T>(
       "This response does not match the participation contract.",
     );
   return value as T;
+}
+/** Only a first dispatch's explicit rejection can release an intent for correction. */
+export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
+  return (
+    !wasUncertain &&
+    error instanceof ApiError &&
+    error.operationOutcome !== "unknown" &&
+    [
+      "invalid_input",
+      "invalid_request",
+      "revision_conflict",
+      "forbidden",
+      "nickname_conflict",
+      "credential_limit",
+    ].includes(error.code)
+  );
 }
 export interface Intent {
   version: 1;
@@ -98,6 +117,7 @@ export interface Intent {
   state: "draft" | "uncertain" | "rejected" | "committed";
   created_at: string;
   result?: CommittedView;
+  conflict_revision_id?: string;
 }
 export class IntentStore {
   readonly prefix: string;
@@ -194,6 +214,25 @@ export class IntentStore {
   }
   remove(record: Intent) {
     this.storage.removeItem(this.prefix + record.key);
+  }
+  correct(record: Intent, body = record.body): Intent {
+    if (
+      record.origin !== this.origin ||
+      record.instance_id !== this.instance ||
+      record.participant_id !== this.participant
+    )
+      throw new Error("Draft belongs to a different account or instance.");
+    if (
+      record.state !== "rejected" ||
+      this.all().find((r) => r.key === record.key)?.state !== "rejected"
+    )
+      throw new Error("Only a definitively rejected request can be corrected.");
+    const next = this.create(record.slot, record.kind, record.path, body);
+    // Persist the replacement before removing the rejected attempt. A failed
+    // storage write must leave the original recoverable, never silently lose it.
+    this.save(next);
+    this.remove(record);
+    return next;
   }
   clear() {
     for (const record of this.all()) this.remove(record);

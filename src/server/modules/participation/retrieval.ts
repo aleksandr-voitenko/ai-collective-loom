@@ -5,6 +5,7 @@ import {
   type ResourceView,
   type RevisionView,
   type PageView,
+  type ContributionContextView,
 } from "../../../contracts/participation.js";
 import type { SqlTransaction } from "../../db/postgres.js";
 import type { ActorContext } from "../publication/actor.js";
@@ -237,6 +238,48 @@ export class ParticipationRetrieval {
         ) as RevisionView,
     );
   }
+  private async contributionOwner(tx: SqlTransaction, id: string) {
+    const chain = await lockContext(tx, id, "reply-traversal", [
+      "contribution",
+    ]);
+    const row = (
+      await tx.query<{ discussion_id: string; parent_id: string | null }>(
+        "SELECT discussion_id,parent_id FROM loom.contributions WHERE id=$1",
+        [id],
+      )
+    ).rows[0];
+    if (!row || row.discussion_id !== chain[1]?.id)
+      throw new PublicationError("unavailable");
+    return row;
+  }
+  contribution(
+    actor: ActorContext,
+    id: string,
+    budget?: string,
+  ): Promise<ContributionContextView> {
+    return this.run(async (tx) => {
+      const authority = await lockActor(tx, actor);
+      const ownership = await this.contributionOwner(tx, id);
+      let value: ContributionContextView;
+      try {
+        value = (await this.resource(
+          tx,
+          authority,
+          id,
+          undefined,
+          true,
+        )) as RevisionView;
+      } catch (error) {
+        if (
+          !(error instanceof PublicationError) ||
+          error.code !== "unavailable"
+        )
+          throw error;
+        value = { resource_id: id, state: "unavailable", ...ownership };
+      }
+      return fit(value, responseBudget(budget));
+    });
+  }
   area(actor: ActorContext, id: string) {
     return this.run(async (tx) => {
       await lockActor(tx, actor);
@@ -375,8 +418,9 @@ export class ParticipationRetrieval {
       const actor = await lockActor(tx, actorContext);
       if (["discussions", "artifacts"].includes(kind) && scope !== "all")
         await lockContext(tx, scope, "resolution", ["area"]);
-      if (kind === "children" || kind === "ancestors" || kind === "revisions")
-        await this.resource(tx, actor, scope);
+      if (kind === "children" || kind === "ancestors")
+        await this.contributionOwner(tx, scope);
+      if (kind === "revisions") await lockContext(tx, scope, "resolution");
       let ids: { id: string }[],
         ancestorNext: string | null = null;
       if (kind === "ancestors") {
@@ -477,8 +521,11 @@ export class ParticipationRetrieval {
             error.code !== "unavailable"
           )
             throw error;
-          if (kind === "ancestors")
+          if (kind === "ancestors" || kind === "children") {
+            // Confirm owning-discussion access before exposing structural identity.
+            await this.contributionOwner(tx, row.id);
             item = { resource_id: row.id, state: "unavailable" };
+          }
         }
         // Reserve enough for the encrypted continuation and all control metadata.
         if (

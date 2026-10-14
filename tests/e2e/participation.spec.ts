@@ -95,6 +95,11 @@ async function createDiscussion(
   await page.getByRole("link", { name: "Topics", exact: true }).first().click();
   await page.getByRole("link").filter({ hasText: "General" }).first().click();
   await page.getByRole("button", { name: "Start a discussion" }).click();
+  const another = page.getByRole("button", {
+    name: "Write another",
+    exact: true,
+  });
+  if (await another.isVisible()) await another.click();
   await page.getByLabel("Title", { exact: true }).fill(title);
   await page
     .getByLabel("Text", { exact: true })
@@ -775,4 +780,424 @@ test("overview uses ordinary artifact history/editors; text-artifact drafts surv
   await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
     "Preserve this proposal with its configured destination.",
   );
+});
+
+async function savedIntents(page: Page) {
+  return page.evaluate(() =>
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("loom.intent.v1:"))
+      .map((key) => JSON.parse(localStorage.getItem(key)!)),
+  );
+}
+
+test("review regression: issued secrets stay bound to their target during and after issuance", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await setup(page);
+  for (const [nickname, kind] of [
+    ["credential_human", "human"],
+    ["credential_agent", "agent"],
+  ]) {
+    expect(
+      (
+        await api(page, "/api/v1/identity/accounts", {
+          idempotency_key: randomUUID(),
+          nickname,
+          kind,
+          role: "participant",
+        })
+      ).status(),
+    ).toBe(200);
+  }
+  await page.reload();
+  await page.getByText("Participant accounts", { exact: true }).click();
+  const human = page
+    .locator(".list-row")
+    .filter({ hasText: "credential_human" });
+  const agent = page
+    .locator(".list-row")
+    .filter({ hasText: "credential_agent" });
+  await human.getByRole("button", { name: "Manage credentials" }).click();
+  let release!: () => void, started!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  await page.route("**/api/v1/identity/credentials", async (route) => {
+    const response = await route.fetch();
+    started();
+    await held;
+    await route.fulfill({ response });
+  });
+  try {
+    await page
+      .getByRole("button", { name: "Issue enrollment ticket", exact: true })
+      .click();
+    await ready;
+    // Boolean assertions keep one-time secrets out of failure DOM snapshots.
+    expect(
+      await agent
+        .getByRole("button", { name: "Manage credentials" })
+        .isDisabled(),
+    ).toBe(true);
+    release();
+    await expect
+      .poll(async () => page.getByLabel("Issued secret").count())
+      .toBe(1);
+    expect(
+      await agent
+        .getByRole("button", { name: "Manage credentials" })
+        .isDisabled(),
+    ).toBe(true);
+    expect(
+      await page
+        .getByText("Enrollment ticket for credential_human — shown once", {
+          exact: true,
+        })
+        .count(),
+    ).toBe(1);
+    const secret = await page.getByLabel("Issued secret").inputValue();
+    expect(JSON.stringify(await savedIntents(page)).includes(secret)).toBe(
+      false,
+    );
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await agent.getByRole("button", { name: "Manage credentials" }).click();
+    expect(await page.getByLabel("Issued secret").count()).toBe(0);
+    await expect(
+      page.getByRole("button", { name: "Issue agent credential", exact: true }),
+    ).toBeVisible();
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
+test("review regression: definitive setup rejection can be corrected after reload", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await page.getByRole("link", { name: "Administration", exact: true }).click();
+  await page.getByLabel("Community name", { exact: true }).fill("");
+  await page
+    .getByRole("button", { name: "Initialize community", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  const rejected = (await savedIntents(page)).find((r) => r.slot === "setup");
+  expect(rejected.state).toBe("rejected");
+  await page.reload();
+  await page.getByRole("button", { name: "Prepare corrected setup" }).click();
+  await page
+    .getByLabel("Community name", { exact: true })
+    .fill("Corrected community");
+  await page.reload();
+  await expect(page.getByLabel("Community name", { exact: true })).toHaveValue(
+    "Corrected community",
+  );
+  const corrected = (await savedIntents(page)).find((r) => r.slot === "setup");
+  expect(corrected.key).not.toBe(rejected.key);
+  await page
+    .getByRole("button", { name: "Initialize community", exact: true })
+    .click();
+  await expect(
+    page.getByText("Community configuration", { exact: true }),
+  ).toBeVisible();
+});
+
+test("review regression: rejected admission preserves editable correction and uncertain retries keep identity", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await setup(page);
+  for (const nickname of ["synthetic_admin", "invalid nickname!"]) {
+    await page.getByLabel("Nickname", { exact: true }).fill(nickname);
+    await page
+      .getByRole("button", { name: "Create account", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    const rejected = (await savedIntents(page)).find(
+      (r) => r.slot === "admission",
+    );
+    expect(rejected.state).toBe("rejected");
+    await page.reload();
+    await page
+      .getByRole("button", { name: "Prepare corrected account operation" })
+      .click();
+    const corrected = (await savedIntents(page)).find(
+      (r) => r.slot === "admission",
+    );
+    expect(corrected.key).not.toBe(rejected.key);
+    await expect(page.getByLabel("Nickname", { exact: true })).toHaveValue(
+      nickname,
+    );
+  }
+  await page.getByLabel("Nickname", { exact: true }).fill("corrected_agent");
+  await page.reload();
+  await expect(page.getByLabel("Nickname", { exact: true })).toHaveValue(
+    "corrected_agent",
+  );
+  let original: unknown;
+  await page.route("**/api/v1/identity/accounts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    original = route.request().postDataJSON();
+    await route.fetch();
+    await route.abort("connectionfailed");
+  });
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Retry same account creation" }),
+  ).toBeEnabled();
+  await page.unrouteAll({ behavior: "wait" });
+  await page.reload();
+  await page.route("**/api/v1/identity/accounts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    expect(route.request().postDataJSON()).toEqual(original);
+    await route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: { code: "forbidden", message: "Changed authority" },
+      }),
+    });
+  });
+  await page
+    .getByRole("button", { name: "Retry same account creation" })
+    .click();
+  await expect(
+    page.getByText("Changed authority", { exact: true }),
+  ).toBeVisible();
+  const uncertain = (await savedIntents(page)).find(
+    (r) => r.slot === "admission",
+  );
+  expect(uncertain.state).toBe("uncertain");
+  expect(uncertain.body).toEqual(original);
+  expect(
+    await page
+      .getByRole("button", { name: "Prepare corrected account operation" })
+      .count(),
+  ).toBe(0);
+  await page.unrouteAll({ behavior: "wait" });
+  await page.getByRole("button", { name: "Check account operation" }).click();
+  await expect(
+    page.getByRole("button", { name: "Issue agent credential", exact: true }),
+  ).toBeVisible();
+});
+
+test("review regression: corrected conflict drafts survive navigation and browser process restart", async ({
+  server,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "loom-conflict-restart-"));
+  const options = {
+    ignoreHTTPSErrors: true,
+    headless: true,
+    viewport: { width: 1440, height: 1000 },
+  };
+  let context = await chromium.launchPersistentContext(directory, options);
+  try {
+    let page = await context.newPage();
+    await enter(page, context, server.origin, server.ticket);
+    await setup(page);
+    const d = await createDiscussion(page);
+    const url =
+      server.origin + `/loom/resource/${d.resource}/${d.revision}?edit=1`;
+    await page.goto(url);
+    await page
+      .getByLabel("Text", { exact: true })
+      .fill("Original rejected edit");
+    await page
+      .getByLabel("Title", { exact: true })
+      .fill("Original rejected title");
+    const newer = await api(page, "/api/v1/revisions", {
+      idempotency_key: randomUUID(),
+      resource_id: d.resource,
+      expected_revision_id: d.revision,
+      title: "Competing title",
+      content: text("Competing revision"),
+    });
+    expect(newer.status()).toBe(201);
+    await page.getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(page.getByText("Your draft is preserved.")).toBeVisible();
+    expect(await page.getByLabel("Text", { exact: true }).isDisabled()).toBe(
+      true,
+    );
+    const rejected = (await savedIntents(page)).find(
+      (r) => r.slot === "edit:" + d.resource,
+    );
+    // Local drafts resumes a specific operation via this query parameter.
+    await page.goto(url + "&intent=" + rejected.key);
+    await page
+      .getByRole("button", { name: "Prepare corrected submission" })
+      .click();
+    await page
+      .getByLabel("Text", { exact: true })
+      .fill("Corrected text survives restart");
+    await page
+      .getByLabel("Title", { exact: true })
+      .fill("Corrected title survives restart");
+    const corrected = (await savedIntents(page)).find(
+      (r) => r.slot === "edit:" + d.resource,
+    );
+    expect(corrected.key).not.toBe(rejected.key);
+    expect(corrected.body.expected_revision_id).toBe(
+      (await newer.json()).revision_id,
+    );
+    const correctedUrl = page.url();
+    await page.reload();
+    await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
+      "Corrected text survives restart",
+    );
+    await page
+      .getByRole("link", { name: "Topics", exact: true })
+      .first()
+      .click();
+    await page.goto(correctedUrl);
+    await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
+      "Corrected text survives restart",
+    );
+    await context.close();
+    context = await chromium.launchPersistentContext(directory, options);
+    page = await context.newPage();
+    await page.goto(correctedUrl);
+    await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
+      "Corrected text survives restart",
+    );
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+      "Corrected title survives restart",
+    );
+    await page.getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(
+      page.getByText("Your publication is saved.", { exact: true }),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("review regression: mismatched and artifact focus never offer reply controls", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await setup(page);
+  const a = await createDiscussion(page, "Discussion A"),
+    b = await createDiscussion(page, "Discussion B");
+  for (const focus of [
+    b.resource,
+    (await (await api(page, "/api/v1/community")).json()).overview.resource_id,
+  ]) {
+    await page.goto(
+      server.origin + `/loom/discussion/${a.discussion}?focus=${focus}`,
+    );
+    await expect(
+      page.getByText("This branch is unavailable in this discussion.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(
+      await page.getByRole("button", { name: "Reply", exact: true }).count(),
+    ).toBe(0);
+    expect(await page.locator(`[data-resource-id="${focus}"]`).count()).toBe(0);
+  }
+  await page.goto(
+    server.origin + `/loom/discussion/${b.discussion}?focus=${b.resource}`,
+  );
+  await expect(
+    page.getByRole("button", { name: "Reply", exact: true }),
+  ).toBeEnabled();
+});
+
+test("review regression: suppressed parents preserve browser branches and eligible revision history", async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket);
+  await setup(page);
+  const d = await createDiscussion(page);
+  const parent = await (
+    await api(page, "/api/v1/replies", {
+      idempotency_key: randomUUID(),
+      discussion_id: d.discussion,
+      parent_id: d.resource,
+      content: text("Suppressed parent text"),
+    })
+  ).json();
+  const child = await (
+    await api(page, "/api/v1/replies", {
+      idempotency_key: randomUUID(),
+      discussion_id: d.discussion,
+      parent_id: parent.resource_id,
+      content: text("Eligible nested reply"),
+    })
+  ).json();
+  await server.observer.query(
+    "UPDATE loom.resources SET state='suppressed' WHERE id=$1",
+    [parent.resource_id],
+  );
+  await page.reload();
+  await expect(
+    page.getByText("Contribution unavailable", { exact: true }),
+  ).toBeVisible();
+  const branch = page
+    .locator(".comment-branch")
+    .filter({ hasText: "Contribution unavailable" });
+  await branch
+    .getByRole("button", { name: "Show nested replies", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(`[data-resource-id="${child.resource_id}"]`)
+      .getByText("Eligible nested reply", { exact: true }),
+  ).toBeVisible();
+  await page.goto(
+    server.origin +
+      `/loom/discussion/${d.discussion}?focus=${parent.resource_id}`,
+  );
+  await expect(
+    page.getByText("Contribution unavailable", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator(`[data-resource-id="${child.resource_id}"]`),
+  ).toBeVisible();
+  expect(
+    await page.getByText("Suppressed parent text", { exact: true }).count(),
+  ).toBe(0);
+  const newer = await (
+    await api(page, "/api/v1/revisions", {
+      idempotency_key: randomUUID(),
+      resource_id: child.resource_id,
+      expected_revision_id: child.revision_id,
+      title: null,
+      content: text("Suppressed current body"),
+    })
+  ).json();
+  await server.observer.query(
+    "UPDATE loom.revisions SET availability='suppressed' WHERE id=$1",
+    [newer.revision_id],
+  );
+  await page.goto(
+    server.origin + `/loom/resource/${child.resource_id}/${child.revision_id}`,
+  );
+  await page
+    .getByRole("button", { name: "Revision history", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Retained revisions", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /Revision 1/ })).toBeVisible();
+  expect(
+    await page.getByText("Suppressed current body", { exact: true }).count(),
+  ).toBe(0);
 });

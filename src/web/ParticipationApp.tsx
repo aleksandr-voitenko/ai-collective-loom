@@ -9,11 +9,13 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import {
   Area,
   Committed,
+  ContributionContext,
   Onboarding,
   Page,
   Revision,
   type AuthoredContent,
   type CommittedView,
+  type ContributionContextView,
   type OnboardingView,
   type PageView,
   type ResourceView,
@@ -27,6 +29,7 @@ import {
   exportDrafts,
   identityGeneration,
   invalidateIdentity,
+  isDefinitiveRejection,
   passkey,
   request,
   type Intent,
@@ -789,7 +792,9 @@ function Composer({
   heading: string;
   onCommitted?: (value: CommittedView) => void;
 }) {
-  const chosen = new URLSearchParams(useLocation().search).get("intent");
+  const location = useLocation(),
+    navigate = useNavigate();
+  const chosen = new URLSearchParams(location.search).get("intent");
   const [record, setRecord] = useState<Intent | undefined>(() =>
     context.store
       .all()
@@ -824,7 +829,29 @@ function Composer({
       live.current = false;
     };
   }, []);
-  const locked = record?.state === "uncertain" || record?.state === "committed";
+  const locked = !!record && record.state !== "draft";
+  useEffect(() => {
+    if (
+      record?.state !== "rejected" ||
+      !record.conflict_revision_id ||
+      typeof fixed.resource_id !== "string"
+    )
+      return;
+    let active = true;
+    void request<RevisionView>(
+      `/api/v1/resources/${fixed.resource_id}/revisions/${record.conflict_revision_id}`,
+      { schema: Revision },
+    )
+      .then((value) => {
+        if (active) setCompare(value);
+      })
+      .catch(() => {
+        /* The rejected text remains retained if comparison is unavailable. */
+      });
+    return () => {
+      active = false;
+    };
+  }, [record?.state, record?.conflict_revision_id, fixed.resource_id]);
   function draftBody(
     nextText = text,
     nextTitle = title,
@@ -911,30 +938,21 @@ function Composer({
         intent,
       );
     } catch (failure) {
-      const rejected =
-        !wasUncertain &&
-        failure instanceof ApiError &&
-        [
-          "invalid_input",
-          "revision_conflict",
-          "forbidden",
-          "invalid_request",
-        ].includes(failure.code);
+      const rejected = isDefinitiveRejection(failure, wasUncertain);
       if (rejected) {
-        const next = { ...intent, state: "rejected" as const };
-        context.store.save(next);
-        if (live.current) setRecord(next);
-        if (failure.currentRevision && typeof fixed.resource_id === "string") {
-          try {
-            const current = await request<RevisionView>(
-              `/api/v1/resources/${fixed.resource_id}/revisions/${failure.currentRevision}`,
-              { schema: Revision },
-            );
-            if (live.current) setCompare(current);
-          } catch {
-            /* The draft remains usable if current context is unavailable. */
-          }
+        const revision = (failure as ApiError).currentRevision;
+        const next = {
+          ...intent,
+          state: "rejected" as const,
+          ...(revision ? { conflict_revision_id: revision } : {}),
+        };
+        try {
+          context.store.save(next);
+        } catch (storageFailure) {
+          if (live.current) setError((storageFailure as Error).message);
+          return;
         }
+        if (live.current) setRecord(next);
       }
       if (live.current)
         setError(
@@ -976,16 +994,32 @@ function Composer({
   }, [check]);
   function correct() {
     if (!record || record.state !== "rejected") return;
-    context.store.remove(record);
-    const next = context.store.create(slot, kind, path, {
-      ...draftBody(),
-      ...(compare ? { expected_revision_id: compare.revision_id } : {}),
-    });
-    context.store.save(next);
-    if (compare) setBase(compare.revision_id);
-    setRecord(next);
-    setCompare(undefined);
-    setError("");
+    try {
+      const revision = record.conflict_revision_id;
+      const next = context.store.correct(record, {
+        ...draftBody(),
+        ...(revision ? { expected_revision_id: revision } : {}),
+      });
+      if (revision) setBase(revision);
+      setRecord(next);
+      setCompare(undefined);
+      setError("");
+      if (chosen) {
+        // A resumed draft's URL must follow the replacement operation on reload.
+        const search = new URLSearchParams(location.search);
+        search.set("intent", next.key);
+        void navigate(
+          {
+            pathname: location.pathname,
+            search: search.toString(),
+            hash: location.hash,
+          },
+          { replace: true },
+        );
+      }
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
   }
   function editText(value: string) {
     setText(value);
@@ -1159,8 +1193,9 @@ function Composer({
                 </>
               )}
               <p>
-                Review your text and the current version before creating a
-                corrected submission.
+                Review your text and the current version, then prepare a
+                corrected submission to unlock editing. Your changes will be
+                saved as a new draft.
               </p>
               <button onClick={correct}>Prepare corrected submission</button>
             </div>
@@ -1225,34 +1260,31 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
       </div>
       <div className="reading-grid">
         <div>
-          {focus && (
+          {focus ? (
+            <FocusedBranch id={focus} discussionId={id} context={context} />
+          ) : (
             <>
-              <div className="focus-banner">
-                <span>Focused branch</span>
-                <Link to={"/loom/discussion/" + id}>Back to conversation</Link>
+              <Contribution
+                id={data.opening.resource_id}
+                context={context}
+                opening
+                onPosted={() => setReload((n) => n + 1)}
+              />
+              <div className="discussion-controls">
+                <h2>
+                  Conversation <span>Direct replies</span>
+                </h2>
+                <span>Oldest first</span>
               </div>
-              <AncestorContext id={focus} />
+              <Children
+                key={data.opening.resource_id + reload}
+                id={data.opening.resource_id}
+                discussionId={id}
+                context={context}
+                depth={0}
+              />
             </>
           )}
-          <Contribution
-            id={focus ?? data.opening.resource_id}
-            context={context}
-            opening={!focus}
-            onPosted={() => setReload((n) => n + 1)}
-          />
-          <div className="discussion-controls">
-            <h2>
-              Conversation <span>Direct replies</span>
-            </h2>
-            <span>Oldest first</span>
-          </div>
-          <Children
-            key={(focus ?? data.opening.resource_id) + reload}
-            id={focus ?? data.opening.resource_id}
-            discussionId={id}
-            context={context}
-            depth={0}
-          />
         </div>
         <aside className="right-rail">
           <h3>About this discussion</h3>
@@ -1267,6 +1299,62 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
           </p>
         </aside>
       </div>
+    </>
+  );
+}
+function FocusedBranch({
+  id,
+  discussionId,
+  context,
+}: {
+  id: string;
+  discussionId: string;
+  context: Context;
+}) {
+  const { data, error, refresh } = useQuery<ContributionContextView>(
+    `/api/v1/contributions/${id}/context`,
+    ContributionContext,
+  );
+  const [reload, setReload] = useState(0);
+  if (error || (data && data.discussion_id !== discussionId))
+    return (
+      <div className="notice">
+        <p>This branch is unavailable in this discussion.</p>
+        <Link to={"/loom/discussion/" + discussionId}>
+          Back to conversation
+        </Link>
+        {error && <button onClick={refresh}>Retry branch</button>}
+      </div>
+    );
+  if (!data) return <p role="status">Opening branch…</p>;
+  return (
+    <>
+      <div className="focus-banner">
+        <span>Focused branch</span>
+        <Link to={"/loom/discussion/" + discussionId}>
+          Back to conversation
+        </Link>
+      </div>
+      <AncestorContext id={id} />
+      <ContributionBody
+        id={id}
+        data={data}
+        context={context}
+        onPosted={() => setReload((n) => n + 1)}
+      />
+      <div className="discussion-controls">
+        <h2>
+          Conversation <span>Direct replies</span>
+        </h2>
+        <span>Oldest first</span>
+      </div>
+      <Children
+        key={id + reload}
+        id={id}
+        discussionId={discussionId}
+        context={context}
+        depth={0}
+      />
     </>
   );
 }
@@ -1299,28 +1387,16 @@ function AncestorContext({ id }: { id: string }) {
     </details>
   );
 }
-function Contribution({
-  id,
-  context,
-  opening = false,
-  onPosted,
-}: {
+type ContributionProps = {
   id: string;
   context: Context;
   opening?: boolean;
   onPosted?: () => void;
-}) {
-  const { data, error, refresh } = useQuery<RevisionView>(
-    "/api/v1/resources/" + id,
-    Revision,
-  );
-  const [reply, setReply] = useState(() =>
-    context.store
-      .all()
-      .some(
-        (record) =>
-          record.slot === "reply:" + id && record.state !== "committed",
-      ),
+};
+function Contribution(props: ContributionProps) {
+  const { data, error, refresh } = useQuery<ContributionContextView>(
+    `/api/v1/contributions/${props.id}/context`,
+    ContributionContext,
   );
   if (error)
     return (
@@ -1330,6 +1406,29 @@ function Contribution({
       </div>
     );
   if (!data) return <p role="status">Loading contribution…</p>;
+  return <ContributionBody {...props} data={data} />;
+}
+function ContributionBody({
+  id,
+  data,
+  context,
+  opening = false,
+  onPosted,
+}: ContributionProps & { data: ContributionContextView }) {
+  const [reply, setReply] = useState(() =>
+    context.store
+      .all()
+      .some(
+        (record) =>
+          record.slot === "reply:" + id && record.state !== "committed",
+      ),
+  );
+  if ("state" in data)
+    return (
+      <div className="comment notice" data-resource-id={id}>
+        <p>Contribution unavailable</p>
+      </div>
+    );
   return (
     <article
       className={opening ? "post card" : "comment"}
@@ -1764,37 +1863,65 @@ function Editors({ id, context }: { id: string; context: Context }) {
   );
 }
 function Administration({ context }: { context: Context }) {
-  const [name, setName] = useState("Research commons"),
-    [ordinary, setOrdinary] = useState("General"),
-    [proposal, setProposal] = useState("Community organization"),
-    [overview, setOverview] = useState(
-      "Welcome to our shared workspace.\n\nUse General for questions and ongoing work. Propose organizational changes in Community organization.",
-    ),
-    [error, setError] = useState("");
   const [setupIntent, setSetupIntent] = useState<Intent | undefined>(() =>
     context.store.all().find((r) => r.slot === "setup"),
   );
+  const [name, setName] = useState(
+      String(setupIntent?.body.community_name ?? "Research commons"),
+    ),
+    [ordinary, setOrdinary] = useState(
+      String(setupIntent?.body.ordinary_area_name ?? "General"),
+    ),
+    [proposal, setProposal] = useState(
+      String(setupIntent?.body.proposal_area_name ?? "Community organization"),
+    ),
+    [overview, setOverview] = useState(
+      (setupIntent?.body.overview as AuthoredContent | undefined)?.text ??
+        "Welcome to our shared workspace.\n\nUse General for questions and ongoing work. Propose organizational changes in Community organization.",
+    ),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const locked = busy || (!!setupIntent && setupIntent.state !== "draft");
+  function draft(patch: Record<string, unknown> = {}) {
+    const body = {
+      community_name: name,
+      ordinary_area_name: ordinary,
+      proposal_area_name: proposal,
+      overview: { format: "loom-markdown-v1", text: overview, mentions: [] },
+      ...patch,
+    };
+    try {
+      if (setupIntent && setupIntent.state !== "draft")
+        throw new Error("Prepare a correction before editing this request.");
+      const record = setupIntent
+        ? {
+            ...setupIntent,
+            body: { ...body, idempotency_key: setupIntent.key },
+          }
+        : context.store.create(
+            "setup",
+            "community.setup",
+            "/api/v1/community/setup",
+            body,
+          );
+      context.store.save(record);
+      setSetupIntent(record);
+      return record;
+    } catch (failure) {
+      setError((failure as Error).message);
+      return undefined;
+    }
+  }
   async function setup(check = false) {
-    const record =
-      setupIntent ??
-      context.store.create(
-        "setup",
-        "community.setup",
-        "/api/v1/community/setup",
-        {
-          community_name: name,
-          ordinary_area_name: ordinary,
-          proposal_area_name: proposal,
-          overview: {
-            format: "loom-markdown-v1",
-            text: overview,
-            mentions: [],
-          },
-        },
-      );
+    if (busy || setupIntent?.state === "rejected") return;
+    const wasUncertain = setupIntent?.state === "uncertain";
+    const record = wasUncertain ? setupIntent : draft();
+    if (!record || (check && !wasUncertain)) return;
     try {
       context.store.save({ ...record, state: "uncertain" });
       setSetupIntent({ ...record, state: "uncertain" });
+      setBusy(true);
+      setError("");
       const result = check
         ? await request<CommittedView | { operation_state: string }>(
             "/api/v1/operations/status",
@@ -1816,6 +1943,22 @@ function Administration({ context }: { context: Context }) {
         context.refreshCommunity();
       } else setError("Setup is still unconfirmed. Keep this original intent.");
     } catch (failure) {
+      if (!check && isDefinitiveRejection(failure, wasUncertain)) {
+        const rejected = { ...record, state: "rejected" as const };
+        context.store.save(rejected);
+        setSetupIntent(rejected);
+      }
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function correct() {
+    if (!setupIntent) return;
+    try {
+      setSetupIntent(context.store.correct(setupIntent));
+      setError("");
+    } catch (failure) {
       setError((failure as Error).message);
     }
   }
@@ -1831,24 +1974,33 @@ function Administration({ context }: { context: Context }) {
             Community name
             <input
               value={name}
-              disabled={!!setupIntent}
-              onChange={(e) => setName(e.target.value)}
+              disabled={locked}
+              onChange={(e) => {
+                setName(e.target.value);
+                draft({ community_name: e.target.value });
+              }}
             />
           </label>
           <label>
             Ordinary topic
             <input
               value={ordinary}
-              disabled={!!setupIntent}
-              onChange={(e) => setOrdinary(e.target.value)}
+              disabled={locked}
+              onChange={(e) => {
+                setOrdinary(e.target.value);
+                draft({ ordinary_area_name: e.target.value });
+              }}
             />
           </label>
           <label>
             Proposal topic
             <input
               value={proposal}
-              disabled={!!setupIntent}
-              onChange={(e) => setProposal(e.target.value)}
+              disabled={locked}
+              onChange={(e) => {
+                setProposal(e.target.value);
+                draft({ proposal_area_name: e.target.value });
+              }}
             />
           </label>
           <label>
@@ -1856,15 +2008,39 @@ function Administration({ context }: { context: Context }) {
             <textarea
               rows={7}
               value={overview}
-              disabled={!!setupIntent}
-              onChange={(e) => setOverview(e.target.value)}
+              disabled={locked}
+              onChange={(e) => {
+                setOverview(e.target.value);
+                draft({
+                  overview: {
+                    format: "loom-markdown-v1",
+                    text: e.target.value,
+                    mentions: [],
+                  },
+                });
+              }}
             />
           </label>
-          <button className="primary" onClick={() => void setup()}>
-            {setupIntent ? "Retry same setup" : "Initialize community"}
-          </button>
-          {setupIntent && (
-            <button onClick={() => void setup(true)}>Check setup status</button>
+          {setupIntent?.state === "rejected" ? (
+            <div className="notice">
+              <p>Setup was rejected. Your draft is preserved.</p>
+              <button onClick={correct}>Prepare corrected setup</button>
+            </div>
+          ) : (
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => void setup()}
+            >
+              {setupIntent?.state === "uncertain"
+                ? "Retry same setup"
+                : "Initialize community"}
+            </button>
+          )}
+          {setupIntent?.state === "uncertain" && (
+            <button disabled={busy} onClick={() => void setup(true)}>
+              Check setup status
+            </button>
           )}
         </section>
       ) : (
@@ -1930,7 +2106,13 @@ function Admission({ context }: { context: Context }) {
     [account, setAccount] = useState<string | undefined>(
       pending?.body.participant_id as string | undefined,
     ),
-    [secret, setSecret] = useState(""),
+    [issued, setIssued] = useState<{
+      secret: string;
+      participant_id: string;
+      credential_id: string;
+      kind: string;
+      nickname: string;
+    }>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const accounts = useQuery<
@@ -1942,10 +2124,47 @@ function Admission({ context }: { context: Context }) {
       role: string;
     }[]
   >("/api/v1/identity/accounts");
+  const locked = busy || (!!pending && pending.state !== "draft");
+  function draftAccount(patch: Record<string, unknown> = {}) {
+    try {
+      if (
+        pending &&
+        (pending.state !== "draft" || pending.kind !== "account.create")
+      )
+        throw new Error("Prepare a correction before editing this request.");
+      const body = { nickname, kind, role: "participant", ...patch };
+      const record = pending
+        ? { ...pending, body: { ...body, idempotency_key: pending.key } }
+        : context.store.create(
+            "admission",
+            "account.create",
+            "/api/v1/identity/accounts",
+            body,
+          );
+      context.store.save(record);
+      setPending(record);
+      return record;
+    } catch (failure) {
+      setError((failure as Error).message);
+      return undefined;
+    }
+  }
+  function correct() {
+    if (!pending) return;
+    try {
+      setPending(context.store.correct(pending));
+      setError("");
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+  }
   async function operate(
     action: "account.create" | "credential.issue",
     check = false,
   ) {
+    if (busy || pending?.state === "rejected") return;
+    const wasUncertain = pending?.state === "uncertain";
+    const targetNickname = nickname;
     const path =
       "/api/v1/identity/" +
       (action === "account.create" ? "accounts" : "credentials");
@@ -1960,7 +2179,10 @@ function Admission({ context }: { context: Context }) {
             replace_credential_id: null,
           };
     const record =
-      pending ?? context.store.create("admission", action, path, body);
+      pending?.state === "uncertain" || action === "credential.issue"
+        ? (pending ?? context.store.create("admission", action, path, body))
+        : draftAccount();
+    if (!record || (check && !wasUncertain)) return;
     try {
       context.store.save({ ...record, state: "uncertain" });
       setPending({ ...record, state: "uncertain" });
@@ -1978,12 +2200,27 @@ function Admission({ context }: { context: Context }) {
           : record.body,
       });
       if (result.operation_state === "committed") {
+        if (
+          record.kind === "credential.issue" &&
+          (result.participant_id !== record.body.participant_id ||
+            !result.credential_id)
+        )
+          throw new Error(
+            "The credential response could not be bound to its issuing account.",
+          );
         setAccount(result.participant_id);
         context.store.remove(record);
         setPending(undefined);
         accounts.refresh();
         if (record.kind === "credential.issue") {
-          if (result.secret) setSecret(result.secret);
+          if (result.secret)
+            setIssued({
+              secret: result.secret,
+              participant_id: result.participant_id,
+              credential_id: result.credential_id!,
+              kind: String(record.body.kind),
+              nickname: targetNickname || result.participant_id,
+            });
           else
             setError(
               `The credential was issued, but its secret cannot be replayed. Revoke ${result.credential_id} and issue a replacement on this same account.`,
@@ -1991,6 +2228,11 @@ function Admission({ context }: { context: Context }) {
         }
       } else setError("This account operation remains unconfirmed.");
     } catch (failure) {
+      if (!check && isDefinitiveRejection(failure, wasUncertain)) {
+        const rejected = { ...record, state: "rejected" as const };
+        context.store.save(rejected);
+        setPending(rejected);
+      }
       setError((failure as Error).message);
     } finally {
       setBusy(false);
@@ -2000,20 +2242,24 @@ function Admission({ context }: { context: Context }) {
     <section className="card admin-card">
       <h2>Admit a participant</h2>
       <ErrorText error={error} />
-      {secret ? (
+      {issued ? (
         <div className="notice neutral">
           <strong>
-            {kind === "agent" ? "Agent credential" : "Enrollment ticket"} —
-            shown once
+            {issued.kind === "agent" ? "Agent credential" : "Enrollment ticket"}{" "}
+            for {issued.nickname} — shown once
           </strong>
           <p>
             Deliver through an approved private channel. It is not saved in
             browser recovery records.
           </p>
-          <textarea aria-label="Issued secret" readOnly value={secret} />
+          <p>
+            Account: <code>{issued.participant_id}</code> · Credential:{" "}
+            <code>{issued.credential_id}</code>
+          </p>
+          <textarea aria-label="Issued secret" readOnly value={issued.secret} />
           <button
             onClick={() => {
-              setSecret("");
+              setIssued(undefined);
               setAccount(undefined);
               setNickname("");
             }}
@@ -2027,28 +2273,45 @@ function Admission({ context }: { context: Context }) {
             Nickname
             <input
               value={nickname}
-              disabled={!!pending || !!account}
-              onChange={(e) => setNickname(e.target.value)}
+              disabled={locked || !!account}
+              onChange={(e) => {
+                setNickname(e.target.value);
+                draftAccount({ nickname: e.target.value });
+              }}
             />
           </label>
           <label>
             Participant type
             <select
               value={kind}
-              disabled={!!pending || !!account}
-              onChange={(e) => setKind(e.target.value)}
+              disabled={locked || !!account}
+              onChange={(e) => {
+                setKind(e.target.value);
+                draftAccount({ kind: e.target.value });
+              }}
             >
               <option value="agent">Agent</option>
               <option value="human">Human</option>
             </select>
           </label>
-          {!account ? (
+          {pending?.state === "rejected" ? (
+            <div className="notice">
+              <p>
+                The account operation was rejected. Your draft is preserved.
+              </p>
+              <button onClick={correct}>
+                Prepare corrected account operation
+              </button>
+            </div>
+          ) : !account ? (
             <button
               className="primary"
               disabled={busy || !nickname}
               onClick={() => void operate("account.create")}
             >
-              {pending ? "Retry same account creation" : "Create account"}
+              {pending?.state === "uncertain"
+                ? "Retry same account creation"
+                : "Create account"}
             </button>
           ) : (
             <>
@@ -2065,7 +2328,7 @@ function Admission({ context }: { context: Context }) {
               </button>
             </>
           )}
-          {pending && (
+          {pending?.state === "uncertain" && (
             <button
               disabled={busy}
               onClick={() =>
@@ -2089,6 +2352,7 @@ function Admission({ context }: { context: Context }) {
               {person.nickname} · {person.kind} · {person.state}
             </span>
             <button
+              disabled={busy || !!pending || !!issued}
               onClick={() => {
                 setAccount(person.id);
                 setKind(person.kind);

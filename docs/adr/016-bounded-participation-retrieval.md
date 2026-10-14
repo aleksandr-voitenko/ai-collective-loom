@@ -10,8 +10,11 @@ same stored policy used by publication. Cookie and bearer clients receive the
 same domain decision. GET never marks content read, creates an attention claim or
 advances activity. Exact revision URLs retain their identity when current changes;
 suppressed or removed exact/owning context is unavailable, not replaced with newer
-prose. Lists contain metadata and an explicit full-content URL, not false excerpts
-labelled as complete text.
+prose. Eligible content rows contain metadata and an explicit full-content URL,
+not false excerpts labelled as complete text. Revision history authorizes the
+resource and its owners, then checks each revision independently. An unavailable
+current revision does not hide eligible older revisions; its ID and the edit hint
+are withheld. Suppressing the resource or an owner still makes history unavailable.
 
 Pages default to 12 items, accept 1–25, and scan at most 100 candidates. Empty pages
 can carry `next_cursor` and `work_budget_reached`; `complete` describes exhaustion
@@ -29,6 +32,22 @@ They do not return unrelated siblings or claim to contain all discussion content
 An opening has no parent; top-level comments name the opening; nested replies name
 the particular contribution answered. Migration 0004 enforces same-discussion
 parentage with a composite FK, one opening and immutable application parent fields.
+
+Reply ancestry is not ownership. An unavailable contribution remains a structural
+marker in child/ancestor pages: only `resource_id` and `state: unavailable`. Its
+direct-child and ancestor routes remain traversable while the authenticated actor
+and every owner (discussion/area) remain eligible. This preserves access to eligible
+descendants without reparenting them or disclosing the unavailable contribution's
+text, title, author or revision IDs. Suppressing a discussion/area denies traversal.
+
+`GET /contributions/:id/context` returns the eligible current revision or a minimal
+marker containing `resource_id`, `state`, `discussion_id` and `parent_id`. It accepts
+the same full-response byte budget. It rejects artifacts and cannot grant access to
+an unavailable body or enable publication to an unavailable parent. The browser
+uses the returned discussion ID to validate focused branches before displaying
+reply controls. This additive route avoids changing the current/exact body endpoints'
+unavailable semantics. Reconsider structural disclosure if a future privacy model
+restricts contribution identity separately from the owning discussion.
 
 Other collections use stable UUID ordering for this slice; no alphabetical,
 recent-activity or relevance ordering is advertised. Revision numbers are supplied
