@@ -2,10 +2,20 @@
 
 ## Scope and prerequisites
 
-This bootstrap prepares a local database and S3-compatible storage. It does not
-implement the HTTP service or browser application. The next increment is in the
-[backlog](implementation-backlog.md). No production provider, passkey recovery
-policy, agent runtime, or full content schema is selected here.
+The bootstrap prepares a local database and S3-compatible storage. The separate
+application builds a TypeScript/Fastify API and a React/Data Mode browser. An
+explicit synthetic text participation profile now adds real passkey admission,
+agent HTTPS publication and recovery; see [its guide](participation.md). Production
+policy, storage operations, durable jobs and the full domain schema remain in the
+[backlog](implementation-backlog.md). No production provider or passkey recovery
+policy is selected here.
+
+The internal publication foundation now atomically writes text revisions, current
+pointers, ordered source events, durable outbox intents and safe retry outcomes.
+Only verified identity code/private fixtures can supply actors. The synthetic
+HTTP profile uses the same publication tail, current authority under locks and
+the versioned authored subset in ADR-011. No authentication bypass or worker is
+enabled. Complete domain/file/reference support remains a later contract.
 
 Use a local Docker engine, the Docker Compose plugin (v2 or later), and Node.js
 24.19.0 from `.nvmrc`. The dependency-free checks passed under Node 24.19.0 and
@@ -14,10 +24,16 @@ Docker Desktop engine 29.8.2, Compose 5.5.1, and linux/arm64 images on macOS arm
 [CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)
 for `4865058` also passed on Ubuntu 24.04 (Linux/amd64) with Node 24.19.0: all 40
 checks and the real integration and persistence suites. Other runtime platforms,
-managed providers, and product behavior remain unvalidated. These results do not
-validate the later application or its future dependencies.
-`npm ci --ignore-scripts` installs the dependency-free tool package. The lockfile
-is real, generated offline; it intentionally contains no application dependencies.
+managed providers, and product behavior remain unvalidated. Those results describe
+the earlier bootstrap. The application foundation has local Node 24/macOS arm64
+installation, build/typecheck, browser, and isolated PostgreSQL/HTTP evidence; its
+full [Linux/amd64 push run](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479478697)
+also passed for `14c4e83`. The duplicate PR run exposed an intermittent E2E server
+teardown failure, investigated in the [CI follow-up](participation-evidence.md#ci-follow-up--14-october-2026).
+`npm ci --ignore-scripts` now installs exact application/build/test dependencies
+from the actual lockfile. Application commands require the pinned Node version;
+use `nvm install` and `nvm use` first. Current application decisions are scoped in
+[ADR-002](../adr/002-application-runtime.md) and [ADR-003](../adr/003-database-boundary.md).
 
 The Compose profile pins these tags to immutable image-index digests:
 
@@ -68,6 +84,48 @@ metadata or fresh-volume semantics. Correct partial initialization only after
 inspecting existing roles/schema and data; startup does not automatically repair,
 rotate credentials, or reset an existing volume.
 
+`npm run dev` is an alias for this dependency-initialization flow, not the browser
+development server. Keep application startup separate:
+
+```bash
+npm run app:dev       # API watcher :3000 and Vite :5173 with a proxy
+npm run app:dev:api   # API watcher only
+npm run app:dev:web   # Vite only; API must run separately
+npm run app:typecheck
+npm run app:build
+npm run app:start     # compiled API and browser together on :3000
+```
+
+The full build cleans only generated `dist/` output. Application startup does not
+start dependencies, apply migrations, rotate credentials, or initialize users.
+Web mode requires built browser assets and application-role readiness before
+listening. API-only development does not require a browser build.
+
+Application commands read generated `.env.local` for the application password and
+PostgreSQL port. Keep that file in the bootstrap's restricted format. Supply the
+following application-only settings through the shell/deployment environment,
+not as extra entries in `.env.local`. Shell values take precedence.
+
+| Setting | Default/meaning |
+|---|---|
+| `LOOM_API_HOST` | `127.0.0.1`; also accepts `0.0.0.0` or `::1` when explicitly configured. |
+| `LOOM_API_PORT` | `3000`; `0` selects an ephemeral API port for direct runtime tests. Vite's development proxy needs a known positive port. |
+| `LOOM_DATABASE_HOST` | `127.0.0.1` |
+| `LOOM_POSTGRES_PORT` | Generated bootstrap port, or `54320` |
+| `LOOM_DATABASE_NAME` | `loom_dev` |
+| `LOOM_DATABASE_USER` | `loom_app`; the actual connection must pass the application privilege boundary. |
+| `LOOM_PG_APP_PASSWORD` | Required; generated in `.env.local` or supplied by the deployment environment. |
+| `LOOM_PARTICIPATION_PROFILE` | Unset keeps foundation; only `synthetic` is supported. Real enrollment is not approved. |
+| `LOOM_ORIGIN` | Exact HTTPS origin required with the synthetic profile; supplies WebAuthn RP/origin and cookie checks. |
+| `LOOM_TLS_KEY_FILE`, `LOOM_TLS_CERT_FILE` | Optional server TLS files, supplied together; a reviewed HTTPS proxy can terminate TLS instead. No secret bytes are logged. |
+
+Vite does not load `.env.local` or export server credentials. Its same-origin proxy
+targets the API's IPv4/IPv6 loopback bind under `/api/` and `/health/`; other browser modules remain
+Vite requests. Hosted database TLS, reverse-proxy/deployment configuration,
+production identity policy and production operation remain later gates. The
+isolated `app:synthetic` launcher provides its own localhost TLS and database;
+do not point that helper at retained development data.
+
 ```bash
 npm run db:migrate
 npm run dev:status
@@ -75,10 +133,9 @@ npm run dev:images
 npm run dev:down
 ```
 
-`down` retains both named volumes and `.env.local`. Containers do not start the
-application. Starting the browser or a remote agent is not supported by this
-bootstrap yet. Dependency configuration is not an implementation of a health or
-onboarding endpoint.
+`down` retains both named volumes and `.env.local`. Dependency containers do not
+start the application. Application health/status is implemented by the separate
+runtime; synthetic participant onboarding and HTTPS APIs require explicit opt-in.
 
 `dev:images` reports each configured image reference, local image ID, repository
 digests, and OS/architecture, including the one-shot AWS CLI image. Run it after
@@ -90,9 +147,10 @@ An image being present locally is not proof that its integration checks passed.
 The local PostgreSQL database is `loom_dev`. The initialization account is
 `postgres`; it is not the future application account. `loom_migrator` owns the
 application and migration schemas. `loom_app` can use the application schema and
-future granted tables, but is not a superuser and cannot create schema objects or
-read the migration history schema. No domain tables or participant records are
-created by the current migration.
+granted tables, but is not a superuser and cannot create schema objects or
+read the migration history schema. Migration `0002_publication_foundation.sql`
+adds minimal publication/authority tables and seeds only the infrastructure clock;
+it creates no participant or credential records.
 
 The S3 keys in `.env.local` are **local administrative tooling credentials** for
 initialization and smoke checks. They are not participant API credentials or a
@@ -126,17 +184,70 @@ Add new migrations after existing versions rather than rewriting or inserting be
 
 The runner uses one `psql` connection and transaction, a transaction-scoped advisory
 lock, and explicit lock/statement deadlines. A failed migration rolls back its
-transaction. Files must not contain psql meta-commands or manage transactions. The
-source checks are hygiene, not a SQL sandbox. All migrations are trusted reviewed
+transaction. Files must not contain psql meta-commands or top-level transaction
+control. Statement validation skips comments and quoted text, so quoted procedural
+bodies are accepted in both single-line and multiline form. See the
+[migration guide](../../db/README.md) for quoting assumptions and validation limits.
+The source checks are hygiene, not a SQL sandbox. All migrations are trusted reviewed
 repository code. Large/nontransactional migrations and production upgrades require
 a later migration procedure; an application rollback is not database rollback.
 
 ## Tests and their limits
 
+The new `test:participation:postgres` uses actual HTTPS (not Fastify injection) and
+isolated PostgreSQL for the text journey, bounds and standalone external-client
+process recovery. `test:e2e` runs actual Chromium/native WebAuthn with virtual
+authenticators, built application assets and separate disposable databases.
+Install Chromium with `npx playwright install chromium` and build first. See
+[participation evidence](participation-evidence.md) for observed results and topology;
+same-machine HTTP success is not a cross-machine agent trial.
+
 `npm run check` runs source-digest/mapping/JSON checks, native Node tests of local
 configuration, migration-plan generation, safe invocation and reset rules, and the
-existing hook-installer plan tests. These do not connect to databases or validate
-container runtime behavior.
+existing hook-installer plan tests. It also typechecks the application/tests, runs
+Fastify HTTP-contract and React router tests, and builds the release. These checks
+do not connect to a database. Contract-only body/fault routes exist solely in the
+test harness, and are absent from the production API and OpenAPI inventory.
+
+After building, `npm run test:app:postgres` creates a disposable PostgreSQL
+container with temporary storage, fresh credentials, and a random loopback port.
+It uses actual application-role connections and compiled HTTP startup. Checks
+cover parameterized transactions on one connection, rollback, expired scopes,
+privileged/unavailable startup refusal, liveness versus readiness during database
+loss, built browser assets, safe errors, request drain before database closure, and
+actual Vite module loading beside the API proxy. It closes only its own HTTP/Vite
+processes and removes only its own database container.
+It does not use development credentials/volumes or register fixture routes in the
+production application. Unavailable Docker/PostgreSQL fails the check.
+
+After building, `npm run test:publication:postgres` creates a separate tmpfs PostgreSQL database
+with fresh roles/credentials and a random loopback port. It applies current
+migrations there and uses minimal private participants/resources. It inspects
+revision/pointer/event/intent/outcome identities, scoped exact retries, changed
+input, stale new writes, six write-stage rollbacks, current-authority/containment
+locks, lost response processes and backend termination around the ordered tail.
+Only the control connection for catalog/fault injection is privileged; publication
+and policy tests use `loom_app`. Production routes import no fixture/actor shortcut.
+The suite prints clearly labeled synthetic one/eight-writer measurements on
+distinct resources with 128-byte text, including clock wait and hold through COMMIT.
+These are local measurements, not a supported production workload or complete
+feed/worker acceptance. Unavailable Docker fails the check; existing volumes and
+development credentials are not used or reset. CI retains its old suites and adds
+this check, but its updated execution remains unperformed until separately run.
+
+Read [ADR-003](../adr/003-database-boundary.md),
+[ADR-006](../adr/006-transactional-publication.md), and
+[ADR-015](../adr/015-publication-reconciliation.md) before extending lock classes,
+semantic inputs, lifecycle/retention or worker effects. First-consumer output
+publication must be generation-fenced in its protected finalization transaction.
+
+`npm run test:migrations:postgres` requires a local Docker engine and uses the pinned
+PostgreSQL image in a disposable UUID-named container with memory-backed storage,
+fresh test credentials, and no host ports. It checks procedural SQL, atomic rollback
+and history, migration ordering and immutability, ahead/behind-history refusal, and
+role separation. It cleans up only its test container and never uses existing
+development volumes or `.env.local`. This suite also runs in the CI integration job;
+it fails rather than substituting a database mock when Docker/PostgreSQL is unavailable.
 
 `npm run test:integration` requires previously started local services and fails
 when they are absent. It checks real authenticated application-role access,
@@ -176,9 +287,9 @@ time and scheduling delays. Every attempt starts a new request; this does not te
 termination of in-flight downloads, version-specific signed grants, signed PUT
 replay, browser CORS, or revocation.
 
-These checks do not test all multipart edge cases, application authorization,
-publication transactions, backup/restore, or hosted-provider compatibility.
-Those are explicit backlog gates. The Docker-backed assertions passed on macOS
+The database/S3 bootstrap smoke and persistence checks do not test all multipart
+edge cases or full participant authorization/publication journeys, backup/restore,
+or hosted-provider compatibility. Those are explicit backlog gates. The bootstrap Docker-backed assertions passed on macOS
 arm64 using Linux/arm64 containers and in the Ubuntu 24.04 (Linux/amd64) CI run linked
 above. Bootstrap Lore task `LC-20261011-R161` records the original adoption;
 `LC-20261012-AYAB` records the Compose restart compatibility fix. Find the original

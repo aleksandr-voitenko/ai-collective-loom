@@ -1,18 +1,18 @@
 {
   "name": "ai-collective-loom",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Development bootstrap for AI Collective Loom; no forum runtime implemented yet.",
+  "description": "AI Collective Loom application runtime and executable contract foundation.",
   "type": "module",
   "license": "MIT",
   "engines": {
-    "node": "^22.16.0 || ^24.0.0"
+    "node": "^24.19.0"
   },
   "scripts": {
     "test": "node --test tests/bootstrap/*.test.mjs",
     "test:hooks": "node --test .githooks/install-lore-coding-hooks.test.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "check": "npm run check:docs && npm test && npm run test:hooks",
+    "check": "npm run check:docs && npm test && npm run test:hooks && npm run app:typecheck && npm run test:app && npm run app:build",
     "dev:init": "node scripts/local.mjs init",
     "dev:doctor": "node scripts/local.mjs doctor",
     "dev:up": "node scripts/local.mjs up",
@@ -20,8 +20,51 @@
     "dev:status": "node scripts/local.mjs status",
     "db:migrate": "node scripts/local.mjs migrate",
     "test:integration": "node scripts/local.mjs smoke",
+    "test:migrations:postgres": "node --test tests/integration/migrations.test.mjs",
     "test:persistence": "node scripts/local.mjs persistence",
     "dev:images": "node scripts/local.mjs images",
-    "hooks:install": "node .githooks/install-lore-coding-hooks.mjs"
+    "hooks:install": "node .githooks/install-lore-coding-hooks.mjs",
+    "dev": "node scripts/local.mjs up",
+    "app:dev": "node scripts/application-dev.mjs",
+    "app:dev:api": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local --import tsx --watch src/server/main.ts --mode api",
+    "app:dev:web": "node scripts/check-runtime.mjs && vite",
+    "app:build": "node scripts/build-application.mjs",
+    "app:start": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local dist/server/main.js",
+    "app:typecheck": "node scripts/check-runtime.mjs && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.tests.json",
+    "test:app": "node scripts/check-runtime.mjs && node --import tsx --test tests/unit/*.test.ts tests/contract/*.test.ts tests/web/*.test.tsx",
+    "test:app:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/application.test.ts",
+    "test:publication:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/publication.test.ts",
+    "test:identity:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity.test.ts",
+    "test:participation:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/participation.test.ts",
+    "test:e2e": "node scripts/check-runtime.mjs && playwright test",
+    "app:synthetic": "npm run app:build && node --import tsx scripts/synthetic-participation.ts"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.6",
+    "@fastify/swagger": "9.9.2",
+    "@fastify/type-provider-typebox": "5.2.0",
+    "@simplewebauthn/server": "14.0.3",
+    "@sinclair/typebox": "0.34.52",
+    "fastify": "5.12.5",
+    "markdown-it": "15.0.2",
+    "pg": "8.23.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "7.18.4"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "13.1.0",
+    "@playwright/test": "1.64.0",
+    "@testing-library/react": "16.3.3",
+    "@types/jsdom": "30.0.0",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "jsdom": "30.1.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
   }
 }

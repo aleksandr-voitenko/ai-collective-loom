@@ -1,0 +1,343 @@
+# Text participation verification — 14 October 2026
+
+This records checks actually executed for the working slice. It is not an AC/AV
+completion claim or approval to retain real participant material. The reviewed
+scope is an administrator setting up/admitting, a human starting a discussion,
+an external HTTP client reading the actual parent and replying, exact revisions,
+current authorization and publication recovery through both interfaces. Existing
+authentication/shared transaction, imported baselines, data, storage and worker
+gates must remain intact. All accounts and authored content below are synthetic.
+
+## Actual topology
+
+One macOS arm64 host ran Node **24.19.0**, Fastify HTTPS, direct Node HTTPS clients,
+standalone client subprocesses and Playwright Chromium **156.0.8078.4** (build 1248).
+PostgreSQL **18.4** ran as Linux/arm64 in local Docker, on random loopback ports,
+with fresh application/migrator roles and tmpfs storage. Each real suite owned
+only its disposable resources. No existing development database, `.env.local`,
+storage bucket or retained volume was reset or migrated.
+
+The browser used actual native WebAuthn calls with Chromium virtual CTAP2
+authenticators, actual HTTPS cookies/CSRF and origin storage. Test contexts explicitly
+accepted their own self-signed localhost certificate. Node clients verified that
+certificate as their CA. Publication requests were not Fastify injections and
+no identity header/role bypass was used. The original identity suite separately
+uses its older private injection/software-signature harness.
+
+The standalone client was a separate **process on this same host**. It was not a
+cross-machine agent trial, a model-provider invocation, a physical passkey trial
+or a human usability study. No approved remotely reachable environment was supplied
+or provisioned. The runnable remote test is delivered in
+[`scripts/participation-client.mjs`](../../scripts/participation-client.mjs);
+cross-machine execution remains **pending**.
+
+## Observed results
+
+| Command | Result and what it establishes |
+|---|---|
+| `npm run check` | Passed: unchanged baseline digests/101 mappings/61 scenario IDs/42 illustrative JSON blocks; 64 bootstrap, 5 hook and 25 application/unit/router checks; typecheck and built server/browser. These counts do not claim product acceptance. |
+| `npm run test:participation:postgres` | **9 passed** including the parent test, over actual HTTPS/PostgreSQL. Setup/overview/editor rules, atomic constructors and rollback, same-discussion FK, parent/ancestor continuation, immutable/base edits, live authority, exact retry, process/server restart, compatible maximum body limits and hidden scan continuation. |
+| `npm run test:e2e` | **5 passed** in the final full Chromium run (17.8 seconds). Real setup, admission, ordinary human authorship, direct HTTP agent reply, repeated nested replies, conflicts, lost response after commit, actual browser process restart, stale route/account results, failed next-page recovery, overview editor/history and artifact/proposal drafts through navigation. |
+| `npm run test:publication:postgres` | **16 passed**, preserving absent-attempt races, shared clock/commit ordering, current authority locks, all-stage rollback and connection/process-loss recovery. Synthetic tail measurements remain capacity-unapproved. |
+| `npm run test:identity:postgres` | **22 passed**, preserving verifier-only/one-time credentials, WebAuthn proof checks, account/credential lifecycle, identity races and disclosure-safe recovery. |
+| `npm run test:app:postgres` | **9 passed** after a sequential build, including compiled HTTP/browser startup, role boundaries, safe failures, database loss, shutdown drain and Vite/API proxy separation. |
+| `npm run test:migrations:postgres` | **9 passed**, retaining procedural SQL, atomic rollback/history, immutable checksums, ordering and separate roles. New participation migration was also exercised with all current migrations by each participation/identity/publication fixture. |
+| Final `app:typecheck`, `test:app`, build and `git diff --check` | Passed after the relevant changes. No staged diff; no commit/push/deployment or existing-data reset was performed. |
+| `npm run app:synthetic` | Built and launched the documented disposable preview. CA-verified HTTPS returned synthetic runtime capabilities and the browser document (200); Ctrl-C completed cleanly. This launch smoke supplements the authenticated browser journeys above. |
+
+The complete `npm run check` passed before the last two browser-only edge repairs;
+their later build/typecheck and full five-journey browser run passed. The final
+documentation check separately reconfirms unchanged imported baselines.
+All ten reference hashes, 20 local links in the new participation/ADR/reference
+documents and three guide JSON examples were also checked successfully.
+During finalization, staged whitespace checking reported one original trailing-space
+line in the v0.6 HTML import (line 864). Its verified supplied bytes are preserved;
+all other staged files pass. The earlier unstaged check did not include new files.
+
+Important observable assertions:
+
+- A browser-admitted ordinary human creates a discussion; an issued bearer agent
+  fetches the opening's actual text/discussion ID before replying. Top-level and
+  nested child/ancestor IDs agree. A database insert with a parent from a **different
+  existing discussion** fails with FK violation, independently of HTTP validation.
+- A failure after outcome insertion rolls back the new discussion and opening.
+  Retained common-tail tests continue to inspect revision/pointer/event/intent/outcome
+  identity and rollback at each stage, not just successful status codes.
+- Human/agent forbidden edits and changed publication closure are denied under the
+  same domain policy. Editor removal prevents mutation replay but permits authorized
+  read-only recovery. Suspended credentials and suppressed contexts disclose no
+  saved source references. An old eligible revision with a newer suppressed current
+  revision remains readable without exposing that newer ID or an edit hint.
+- The browser stores intent before an intercepted request is sent. After the upstream
+  server returns 201, the test aborts delivery, closes the **browser process**, reopens
+  its persistent profile and retries exactly the same JSON/key. SQL shows one scoped
+  outcome. The standalone client separately fsyncs its journal, exits 75 after
+  discarding a committed acknowledgement, and recovers in new processes with the
+  same retained body/parent/revision. Ordinary server restart retains recovery but
+  explicitly invalidates old pagination cursors.
+- A 16,384-byte control-character body (worst JSON escaping) is accepted and retrieved
+  intact below the 131,072-byte cap. A 4,096-byte requested response budget fails
+  explicitly with the measured minimum. Multibyte text at/beyond the UTF-8 boundary
+  is accepted/rejected accordingly. More than 100 hidden candidates yields bounded
+  progress and continuation, including empty pages. GETs leave source activity
+  unchanged and no reading-state table/effect exists.
+- Actual browser delays hold successful old reads/publications across navigation
+  and identity changes. Releasing them cannot replace the new page, show old-owner
+  success or repopulate cleared drafts. A failed next-replies fetch retains visible
+  content and its retry cursor. A changed base preserves text for comparison and
+  only an explicit corrected submission creates a new key.
+
+## Visual and interaction evidence
+
+The final captures below were viewed, including the 390px mobile reading layout,
+and compared with the supplied UI v0.6. The desktop sidebar, quiet community link,
+palette, rows, avatars, nested replies and compact actions follow that reference.
+The implemented subset has working Topics/Artifacts/Administration/guide surfaces;
+unimplemented Following/Updates/Saved/search controls are not rendered as promises.
+Mobile overflow and drawer Escape/focus behavior were exercised. This is not a
+screen-reader or accessibility certification.
+
+- [Discussion desktop](participation-evidence/discussion-desktop.png)
+- [Discussion mobile](participation-evidence/discussion-mobile.png)
+- [Recovered reply](participation-evidence/recovered-reply.png)
+- [Artifact list](participation-evidence/artifacts-desktop.png)
+- [Sanitized final browser results](participation-evidence/browser-results.json)
+
+Ten user-supplied reference files were copied byte-for-byte under `docs/design/ui-v0.6/`
+and checked against their originals. Their [manifest](../design/ui-v0.6/manifest.json)
+records hashes. The supplied QA's 180/96 counts belong to the reference author;
+they are not included in our results. `PRODUCT-ALIGNMENT.md` and the reference test
+sources were not supplied, so their contents are not inferred.
+
+## Failures found and corrected
+
+The first runs exposed test locator mistakes (a status region shared with loading,
+the decorative reply arrow, and a prefilled textarea's label). The UI now gives the
+textarea a stable accessible name and hides the decorative arrow from that name.
+Tests wait for the committed result, not the draft textarea's visible text.
+
+A pending publication incorrectly displayed the uncertain-outcome notice before
+its request finished. It now shows pending confirmation separately; uncertainty
+appears after loss/failure or recovered intent. A link-label parser lookahead let a
+declared mention appear to be ordinary prose; its HTTP regression failed before
+the parser correction and passed afterward. Review added a failing exact-history
+test that exposed the suppressed-current ID, then verified the repair. Two final
+browser regressions reproduced stale already-open child lists and proposal drafts
+resumed through a different composer slot; both were repaired and the entire
+browser suite passed again.
+
+The existing router suite initially failed because eagerly importing the new route
+loaded CSS in Node; lazy route loading fixed it and reduced the initial bundle.
+One runtime regression run failed with missing compiled modules because it was
+started concurrently with a build cleaning `dist/`. The normal full runtime suite
+was rerun after build completion and passed; neither guards nor assertions were
+weakened. The original default startup and current-role protocol remain tested.
+
+## Decisions, memory and remaining gates
+
+Material working assumption: integrate v0.6's relevant visual/recovery experience
+within this first text slice; its broader fixtures and proposed timing/defaults
+do not silently authorize all Following/summary/personal-state features. Product
+v0.9 and all imported architecture baseline bytes are preserved. ADR-011/015/016/017
+record implemented choices; prior ADRs/docs are reconciled where their old “no
+participant routes/UI” status changed.
+
+Root `MEMORY.md` and `src/server/modules/participation/MEMORY.md` were checked
+against final routes, profile guards, migration grants, shared-tail call sites,
+schemas, cursor/intent code and actual assertions. They now describe opt-in
+participation, both retained digest versions, scoped recovery, fixture topology
+and the still-open gates. Inherited Lore anchors are `LC-20261012-LMP4` (runtime),
+`LC-20261012-6OTQ` (publication), `LC-20261012-9JJH` (identity) and
+`LC-20260929-5WKG` (product baseline). The participation task record is
+`LC-20261014-9EU9`; finalization adds this pointer without changing the observed checks.
+
+Remaining: remote reachable-environment trial; real identity/bootstrap/recovery
+approval and physical devices; representative capacity/abuse controls; retention,
+erasure, backup/restore epochs and upgrade operating procedures; hierarchical
+topic management, typed references/summaries, personal collections/reading/feeds;
+storage version/grant compatibility and worker fenced outputs. Administrative
+identity lists retain their documented 100-row prototype bound. At the original local
+verification, updated Linux CI had not run. Existing retained-service S3/persistence
+suites were not rerun locally because this slice changes neither storage nor that
+environment; isolated migration, runtime, publication, identity and participation
+suites were used.
+
+The [retained-data gate](retained-data-gate.md) is still unapproved. Synthetic success
+does not settle it, and no real-data or deployment authorization is inferred.
+
+## CI follow-up — 14 October 2026
+
+For commit `14c4e8333b2d98c701b1618b0d56a16039469e74`, the
+[push workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479478697)
+passed both jobs on Ubuntu 24.04/Linux amd64, including all five browser journeys
+(25.9 seconds) and the retained migration/S3/persistence steps. The duplicate
+[PR workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479509322)
+failed during E2E server teardown after the late-publication/account-change test;
+its body assertions had completed. The error was `Tearing down "server" exceeded
+the test timeout of 90000ms`. Four other journeys passed. Subsequent integration
+steps in that failed job were skipped; the successful push run supplies their evidence.
+
+The same unchanged late-publication test reproduced the failure locally on repeat
+7 of 10: nine passed and one failed with the identical teardown timeout. A separate
+bounded probe showed that both pre-handshake TCP and established TLS sockets with
+no HTTP request keep `app.close()` and database-close hooks pending until the client
+socket closes. The CI log contains no socket trace; this mechanism was reproduced
+locally rather than inferred solely from the timeout.
+
+The fixture had no browser-context/server dependency. For the existing argument
+order, teardown could wait for the server while the browser context remained alive.
+The context fixture now explicitly depends on the server and closes the context in
+`finally` before server teardown. A regression holds a real, CA-verified TLS socket
+without an HTTP request and ties its lifetime to the browser context. It failed
+with the original ordering at the 90-second teardown limit, then passed after the
+fix. This models the connection lifetime deterministically; it does not claim to
+force Chromium's speculative-connection scheduling.
+
+`npm run test:e2e -- --grep 'browser-owned TLS preconnection|a late committed publication' --repeat-each 10`
+passed **20 tests in 47.6 seconds** after the fix. The normal `npm run test:e2e`
+then passed **all 6 tests in 19.7 seconds**, including browser-process restart and
+the new regression. Typechecking also passed. Production code, request draining,
+application shutdown deadlines, existing assertions, retries,
+worker count and the normal 90-second test timeout are unchanged. This repair only
+orders test-client disposal before server disposal; it does not force-close server
+connections or ignore teardown errors.
+
+At commit preparation, the fixture repair had local verification only; its new
+GitHub CI run remained pending. The original failed run is retained above.
+Fixture task record: `LC-20261014-WZF5`.
+
+## PR #1 review repairs — 14 October 2026
+
+This follow-up fixes the six validated inline findings against `1b0063f`; the
+separate PR-failure comment is outside this repair. The scope preserves exact
+uncertain retries, current authorization, retained data and the existing feature
+gates. No baseline, migration, dependency, worker or storage contract changed.
+The review handoff preceded explicit authorization to finalize and push these
+repairs. Their task record is `LC-20261014-6LGH`.
+
+| Finding | Repair and direct evidence |
+|---|---|
+| [Credential target switching](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979091) | One-time results retain participant/kind/credential identity and their displayed nickname. Browser assertions hold a real issuance response, verify account selection is disabled both during issuance and while the secret is visible, then verify dismissal permits switching. The secret is absent from saved intent. |
+| [Rejected setup/admission stuck as uncertain](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979092) | Known first-dispatch rejection permits an explicit new-key correction. Browser tests reload rejected setup, invalid/reserved nicknames and corrected drafts. A committed account response is deliberately lost; a later 403 still leaves the original key/body uncertain and status recovers it. |
+| [Lost conflict corrections](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979096) | Rejected fields stay locked until a replacement draft is saved. The conflict comparison ID survives reload. Actual Chromium navigation and browser-process restart preserve corrected title/text, which then publish against the recorded comparison revision. Unit checks verify a failed replacement write keeps the rejected attempt and another identity cannot correct it. |
+| [History blocked by suppressed current revision](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979102) | History checks each revision independently of current availability. Cookie and bearer HTTP clients retrieve R1 history after R2 suppression without R2 identity/text or edit eligibility; whole-resource suppression denies history. The browser opens the retained-history list. |
+| [Eligible replies hidden behind an unavailable parent](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979109) | Child pages retain minimal structural markers. Bounded children/ancestors and the additive contribution-context route preserve real parentage through an unavailable contribution. HTTP assertions compare exact marker fields, reject unauthenticated context reads, and show that discussion suppression denies both cookie and bearer clients. Browser nested/focused views reach the eligible child without rendering hidden parent text. |
+| [Focus target belongs to another discussion or is an artifact](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4264979116) | The focus view resolves contribution context and verifies discussion membership before rendering body or reply controls. The browser rejects both mismatched and artifact targets; the same contribution works in its actual discussion. |
+
+The gaps were missing transition/combination coverage: issuance plus target
+switching; definitive admin rejection versus lost-response retry; editing after a
+conflict plus restart; hidden current revision plus history discovery; suppressed
+reply parent plus eligible descendant; and an untrusted focus query plus discussion
+ownership. Existing tests exercised nearby successful paths or direct exact reads.
+
+Before repair, both new HTTP regressions failed for the intended reasons (history
+404 and an omitted parent marker). Five browser regressions likewise reached and
+failed their intended assertions. The first focus regression stopped at its fixture's
+second-discussion creation because the first composer still showed its committed
+result. The helper now explicitly chooses **Write another**. The focus defect had
+already been reproduced in the preceding read-only review; this permanent test's
+initial failure is not claimed as red-green evidence of that defect. Initial
+typechecking also caught an optional conflict-ID assignment; the final typecheck
+passes with absent IDs omitted.
+
+Final review extended conflict coverage to the operation-specific URL used by Local
+drafts. That regression failed on reload with the old revision text in place of the
+saved correction: the URL still selected the replaced operation ID. Preparing a
+correction now replaces that query ID along with the saved intent; reload, navigation
+and browser-process restart exercise the same corrected URL.
+
+Final observed checks use Node 24.19.0 and the same single-Mac, synthetic TLS /
+virtual-WebAuthn / disposable PostgreSQL topology described above:
+
+| Command | Observed result |
+|---|---|
+| `npm run check` | Passed: baseline/document checks, 64 bootstrap checks, 5 hook checks, 27 application/unit/router checks, all TypeScript projects and production build. |
+| `npm run test:e2e` | **12 passed in 34.4 seconds**, including all six original tests and six new review regressions, with operation-specific correction URLs covered. Normal worker count, timeouts and retry settings are unchanged. |
+| `npm run test:participation:postgres` | **12 passed**, including parent tests. Cookie/bearer suppression parity and disclosure assertions pass. The new context endpoint returns the maximum accepted escaped body intact under the hard cap and rejects a smaller byte budget with the measured minimum. |
+| `npm run test:publication:postgres` | **16 passed** after the shared containment guard change, including guard races, current authority, exact recovery and rollback. |
+
+The final guide's four JSON examples validate against the executable schemas;
+31 local links in changed documentation resolve. Baseline/document checks were
+rerun after the documentation updates. `git diff --check` passes.
+
+The bounded hidden-scan fixture now uses 105 suppressed **revisions**, rather than
+suppressed child envelopes: child identities intentionally remain structural
+markers. The assertions still require bounded empty-page continuation and exactly
+one eligible revision. No scan limit or assertion was weakened.
+
+ADR-016/017, the release API guide, browser participation guide, README and scoped
+participation memory were reconciled with the implemented behavior and assertions.
+Root memory's scope and feature-gate pointers remain applicable. Imported product,
+architecture and UI reference bytes are preserved. At commit preparation these
+repairs have local verification only; GitHub CI remains pending. Cross-machine
+client validation, real identity/recovery policy, production limits and retained-data
+procedures remain pending. No existing data was reset and no cloud resources were
+created.
+
+## PR #1 second review repairs — 14 October 2026
+
+Task `LC-20261014-S0JX` addresses three validated findings against `8a8d435`:
+
+- [Stale writers](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4265453656):
+  a participant-scoped Web Lock serializes journal mutations, while record sequences
+  reject stale dispatch/removal and frozen-body changes. Stale unsent edits are saved
+  separately, with an explicit review gate and no automatic POST. Setup/admission,
+  correction, quota and cleanup use the same guard. Legacy records keep their keys
+  and exact bodies. A first refusal cannot release an intent after a concurrent retry.
+- [Write another](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4265453661):
+  save the replacement before retiring the old record and select its actual draft
+  route. Artifact, discussion and reply composers retain their target and text through
+  reload and real browser-process restart.
+- [Canonical history discovery](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/1#discussion_r4265453666):
+  unavailable current/exact pages offer the existing authorized history endpoint.
+  Tests start without an old revision ID, find eligible R1 after R2 suppression, and
+  confirm whole-resource suppression still denies history. No older body is silently
+  presented as current and no backend authorization rule changed.
+
+The original coverage used one composer at a time, correction rather than
+write-another URLs, and a pre-known exact revision URL for history. All three new
+browser regressions failed on the prior build for their intended reasons before
+repair. The actual two-tab test holds A's server-committed acknowledgement, rejects
+stale Publish and Remove actions from other views, preserves A's key/body/uncertain
+state while B types, restores B's separately blocked edits on reload, and retries A
+without a duplicate revision. Unlocking B's draft does not itself send a request.
+
+Final review also caught an implementation-stage autosave regression: after a draft
+save failed, Publish could send older text. A browser storage-failure regression
+reproduced that behavior, then passed after first dispatch was changed to durably
+capture the visible form under the same version check. Uncertain retries still use
+the original frozen body. Unsupported Web Locks fail closed before POST; read/export
+remain available. Server logout still succeeds if local cleanup fails, with an
+explicit retained-record warning.
+
+Observed on Node 24.19.0/macOS arm64, actual Chromium 156, Fastify HTTPS and isolated
+PostgreSQL 18.4 on the same Mac:
+
+| Check | Evidence |
+|---|---|
+| `npm run test:e2e` | **18 passed in 49.9 seconds** under the normal worker/timeout/retry settings, including the new regressions and all prior identity, late-response, lost-acknowledgement, conflict and teardown cases. |
+| `npm run test:participation:postgres` | **12 passed** against actual HTTPS/PostgreSQL, including cookie/bearer authorization parity, hidden-current history, bounded traversal and external-client restart. |
+| `npm run check` | Passed baseline/document checks, **64 bootstrap + 5 hook + 30 application** checks, TypeScript and build. Journal units cover concurrent stale writes, stale deletion, late outcomes after cleanup, concurrent quota, legacy records, ownership and correction failure. |
+
+After the final defensive setup/admission storage-error reporting change, both
+affected browser cases passed again (2 tests in 5.4 seconds), with typechecking and
+build passing. Final documentation checks and all 30 changed-document local links
+pass. `git diff --check` is clean.
+
+During implementation, typechecking caught tests still treating asynchronous journal
+methods as synchronous. The first application test run was interrupted after a
+reproduced Node 24 native-lock issue: a synchronously throwing callback did not release
+the lock for the next request. Returning an async callback releases it on rejection;
+the full application suite then passed. One existing admission test initially read
+storage before the asynchronous correction completed; it now waits for the observable
+unlocked form before asserting the new key. No assertion, timeout or guard was weakened.
+
+ADR-017, the executable and browser guides, README and scoped memory now describe
+the serialization and recovery transitions. All open tabs must run this release;
+mixed old/new clients and unsupported-browser publication are not supported. Root
+memory's feature boundaries remain accurate. Baselines, migrations and dependencies
+are unchanged. No retained development data was reset or cloud environment deployed.
+Cross-machine agent trials, physical passkeys, production limits and identity/
+retained-data procedures remain pending; these local trials are not remote-client
+evidence. CI for the new commit is pending at record preparation; the PR description
+will carry its actual head and completed workflow results after push.

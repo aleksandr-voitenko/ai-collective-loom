@@ -1,0 +1,75 @@
+import MarkdownIt, { type Token } from "markdown-it";
+import { Value } from "@sinclair/typebox/value";
+import { Content, limits, type AuthoredContent } from "./participation.js";
+
+// Parse once using the same bounded dialect in browser and server. No raw HTML,
+// image fetches, autolinking, embedded applications, or inferred @name entities.
+const markdown = new MarkdownIt("commonmark", {
+  html: false,
+  linkify: false,
+  maxNesting: 20,
+}).disable(["image", "html_block", "html_inline"]);
+markdown.validateLink = (value) => /^https?:\/\//i.test(value);
+markdown.inline.ruler.before("link", "loom_mention", (state, silent) => {
+  // Link-label lookahead must count the token's brackets normally. Consuming it
+  // in silent mode would turn a linked mention into apparently ordinary prose.
+  if (silent) return false;
+  const match = /^\[\[mention:([a-z][a-z0-9_]{0,31})\]\]/.exec(
+    state.src.slice(state.pos),
+  );
+  if (!match) return false;
+  if (!silent) {
+    const token = state.push("loom_mention", "span", 0);
+    token.content = match[1]!;
+  }
+  state.pos += match[0].length;
+  return true;
+});
+export function parseAuthored(content: AuthoredContent): Token[] {
+  if (
+    !Value.Check(Content, content) ||
+    new TextEncoder().encode(content.text).length > limits.textBytes ||
+    content.text.includes("\0") ||
+    !validUnicode(content.text)
+  )
+    throw new Error("Invalid authored text.");
+  const tokens = markdown.parse(content.text, {});
+  const entities = new Map(
+    content.mentions.map((entity) => [entity.token, entity]),
+  );
+  if (entities.size !== content.mentions.length)
+    throw new Error("Duplicate mention token.");
+  const used = new Set<string>();
+  let count = 0,
+    quoteDepth = 0;
+  const inspect = (token: Token, inLink = false) => {
+    if (++count > limits.parserTokens)
+      throw new Error("Authored text is too complex.");
+    if (token.type === "blockquote_open") quoteDepth++;
+    if (token.type === "blockquote_close") quoteDepth--;
+    if (token.type === "loom_mention") {
+      if (
+        quoteDepth ||
+        inLink ||
+        !entities.has(token.content) ||
+        used.has(token.content)
+      )
+        throw new Error("Mention must occur once in ordinary prose.");
+      used.add(token.content);
+    }
+    let link = inLink;
+    for (const child of token.children ?? []) {
+      if (child.type === "link_open") link = true;
+      inspect(child, link);
+      if (child.type === "link_close") link = false;
+    }
+  };
+  tokens.forEach((token) => inspect(token));
+  if (used.size !== entities.size)
+    throw new Error("Every mention requires one explicit prose token.");
+  return tokens;
+}
+
+export function validUnicode(text: string) {
+  return new TextDecoder().decode(new TextEncoder().encode(text)) === text;
+}

@@ -15,22 +15,24 @@ failures, and fixes; [compose.yaml](../../compose.yaml) pins the image indexes.
 [Linux/amd64 CI run 38176825771](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38176825771)
 passed for `4865058` on Ubuntu 24.04 with Node 24.19.0, including all 40 checks,
 real integration, and persistence across stop/start and container recreation.
-This validates the bootstrap on that CI platform; application behavior and
-product/architecture AC/AV scenarios remain unvalidated. Additional platforms
+This validates the bootstrap on that CI platform; it does not validate application
+behavior or product/architecture AC/AV scenarios. Additional platforms
 and future runtime/image changes require their own checks.
 Validate the remaining S3 presigned-upload/version-specific grant contract before
 using signed grants in application code. No
-managed-provider compatibility has been certified. No application dependency
-versions have been installed or approved by this dependency-free bootstrap.
+managed-provider compatibility has been certified. Application dependencies are now
+installed separately from the bootstrap in the runtime foundation described by
+[ADR-002](../adr/002-application-runtime.md) and [ADR-003](../adr/003-database-boundary.md).
 
 ## Foundation tasks, before dependent features
 
 | Work | Closure evidence | Source anchors |
 |---|---|---|
-| Application skeleton and executable contracts | Pin/install TypeScript, Fastify, React/router/build tooling and database/storage clients; extend the lockfile; add actual web/API health and safe errors without an authentication bypass. Build/typecheck and test the real handlers. | Architecture §§3, 14, 17; API-01–07 |
-| Publication/idempotency primitive | Serialize the participant/operation/key before new-write preconditions. Force two requests to see an initially missing outcome and then converge on one result. Test rollback and lost acknowledgement. | Architecture §§7.1–7.4; API-05, AC14, AV01 |
+| Application skeleton and executable contracts | Runtime foundation implemented: exact TypeScript/Fastify/React/Data Mode/Vite and pg packages, actual lockfile, operational API/browser, strict schemas/OpenAPI 3.0.3, safe errors, role readiness and transaction primitives. Local build/typecheck, transport/router, and isolated PostgreSQL/HTTP checks exercise these boundaries. Participant contracts/authentication and storage-client/version-grant compatibility remain open; no product API-01–07 or AC/AV completion is inferred. | Architecture §§3, 14, 17; ADR-002, ADR-003; API-01–07 |
+| Publication/idempotency primitive | Internal text-revision operation implemented: serialized participant/operation/key, versioned semantic digest, reauthorized exact replay before new-write preconditions, atomic revision/pointer/event/intent/outcome. Real PostgreSQL barriers inspect convergence, changed input, stale writes, all-stage rollback, credential/editor/suppression state and post-commit process loss. Synthetic HTTP constructors, minimal Markdown/entities and client durable intent now reuse it (participation-1); full file/entity support and reviewed retention remain open; no full AC14/AC31/AV01 completion is inferred. | Architecture §§5–7; ADR-003, ADR-006, ADR-015; API-05, AC14, AV01 |
+| Controlled identity/admission | Synthetic protocol implemented with real passkey verification, opaque sessions/agent credentials, shared actor/current policy, controlled initialization, admission, one-time issuance and safe recovery. PostgreSQL barriers/row inspection exercise bootstrap/account/ticket/counter races, response loss, ordinary admin denial, lifecycle changes, rollback and secret disclosure. Six concrete policy candidates remain unapproved. An opt-in synthetic HTTPS/browser workspace is implemented; production admission and operator/human proof ceremonies remain gated. No full AC45/AC54 completion is inferred. | Architecture §§6,14; ADR-004, ADR-015; IDN-01–05/07, API-08, SEC-01/02/05/06 |
 | Fenced job-output publication | Check the current claim generation in the same protected finalization as output associations. Resume an expired worker after a replacement finished; inspect both job state and published outputs. | Architecture §7.5; OPS-03 |
-| Committed event ordering | Exercise concurrent transactions, rollback and killed connections around the commit-tail clock; measure contention. Do not use allocated sequence IDs as committed coverage. | Architecture §7.3; ATT-08, AC08 |
+| Committed event ordering | Transactional row-clock tail implemented for shared publications. PostgreSQL tests inspect visible clock/event coverage through reversed preparation order, rollback and killed connections before/after allocation and before commit; labeled synthetic one/eight-writer metrics measure wait/hold. Future structural/lifecycle operations must use the same tail. Full traversal/checkpoint/restoration behavior and a representative operating envelope remain open. | Architecture §7.3; ADR-006; ATT-08, AC08 |
 | Version-pinned storage adapter | Implement real owner staging/preparation/final versions. Test replayed upload URLs, exact source-version copy, interruptions, multipart checksums and file-context authorization against local AND selected managed storage. | Architecture §8; ART-02–05, AC04–05 |
 
 ## First vertical participation slice
@@ -41,10 +43,28 @@ Both inspect the resulting revisions. A lost publication response is reconciled
 without a duplicate; the same unauthorized action is denied through human and
 agent paths. This is an internal partial release, not all 61 product scenarios.
 
+Implemented for synthetic accounts/content: ordinary areas and proposal routing,
+Community overview as a normal text artifact, atomic discussion/opening, same-
+discussion FK parentage, bounded direct children/ancestors and exact revision bodies,
+expected-base editing, safe versioned Markdown/entities, browser draft/intent
+recovery and current authority through cookie/bearer clients. The actual
+[participation guide](participation.md), [ADRs](../README.md),
+[UI reference](../design/ui-v0.6/README.md) and
+[verification evidence](participation-evidence.md) define its boundary.
+
+The runnable external client was tested against HTTPS on the same machine. An
+approved reachable environment and actual cross-machine agent trial remain pending.
+No cloud deployment or real-user policy approval is implied. The
+[retained-data procedure gate](retained-data-gate.md) is still open.
+
 Before persisting real participant material, settle the identity bootstrap and
 recovery flow, concurrent credentials, nickname normalization/reservation, the
 minimal authored representation, limits, and a measured supported operating envelope.
 Use explicit schemas for the slice rather than freezing every illustrative example.
+The [identity prototype evidence](identity-prototype.md) and
+[ADR-004 candidates](../adr/004-identity-admission-prototype.md) are now concrete
+inputs to that review. Scripted signed software-authenticator HTTP tests are not
+actual browser/device or human identity-proof trials.
 Do not reintroduce private branches, universal reviewed-state tracking, delegated
 editor-list management, or a model-execution service.
 
@@ -54,11 +74,11 @@ editor-list management, or a model-execution service.
 |---|---|---|
 | Restored visibility behind completed checkpoints | Recovery must reach restored retained events earlier than the active interval lower bound, including personal delivery history; filters cannot hide control conditions. | Complete-feed support. |
 | Stable grouped traversal | Pick an actual stable group-key algorithm; suppress the event determining an already returned group's key and ensure no gap/duplicate/reordering surprise. | Grouped Updates. |
-| Compatible publication/retrieval limits | Every maximum accepted contribution must have a bounded path to full retained content, not just an excerpt. | Publication limits. |
+| Compatible publication/retrieval limits | Synthetic text slice implemented: 16 KiB UTF-8 text, 128 KiB request/response budget, full exact-body links, explicit smaller-budget failure and bounded scan continuations. Maximum JSON-escaped/control text and multibyte boundaries exercised over HTTPS. Larger text/files and approved workload limits remain open. | Increasing text/file limits or real use. |
 | Late personal-state writes | Old automatic reads and delayed saves cannot silently undo newer explicit unread/unsave intent. Use a defined ordering/precondition contract. | Automatic reading and concurrent personal state. |
 | Retry across destructive database restore | Separate ordinary restarts from rollback of committed history; old durable client intent must cross an explicit recovery epoch/reconciliation gate. | Retained-data recovery. |
 | Release/migration procedure | Coordinate web/job shutdown, pending job compatibility, migrations, recovery on failure, and a maintenance window. An image rollback is not a database rollback. | First retained-data upgrade. |
-| Joint human/agent behavior | Test actual browser and HTTP paths for nested parentage, conflicts, identity switching, Saved items and bounded contexts. Record human/provider observations separately from scripted tests. | Declaring the affected interface supported. |
+| Joint human/agent behavior | Local Chromium + actual HTTPS text journeys exercised for nesting, conflicts, response loss, restart, account/navigation races and bounded pages. Physical devices, human usability, cross-machine topology, Saved items and remaining personal state still require their own evidence. | Declaring those interfaces/topologies supported. |
 
 Production region/vendor, quotas, retention, exact sign-in/recovery details and
 interface defaults remain decisions at their existing gates. Keeping an

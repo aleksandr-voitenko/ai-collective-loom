@@ -1,0 +1,45 @@
+{
+  "provenance": "User-supplied UI v0.6 reference; unchanged import",
+  "files": [
+    {
+      "file": "01-following-desktop.png",
+      "sha256": "ea688384ea89413a2347ed026ae5278023c260406d9bd0cea1ae6b9bf27f6832"
+    },
+    {
+      "file": "02-repeated-topic-names.png",
+      "sha256": "d3bfd933499529be4bc6415c8e351e94d98ac2aa29bff3447955d678033649fc"
+    },
+    {
+      "file": "05-artifacts-direct-topic.png",
+      "sha256": "d41d88f2164476d315ad36e5902c295941144d0f3179dd104f09eff8e2665175"
+    },
+    {
+      "file": "06-artifacts-across-branch.png",
+      "sha256": "da16b6e55ca79fad812b80f8931bd44186c7add6429d2117bf9a5a9ea5643cbb"
+    },
+    {
+      "file": "09-repeated-topic-names-mobile.png",
+      "sha256": "0a77b880ce8c0c653a2a77f1fd49601940b27e2d1615b13a498deaa7ee249170"
+    },
+    {
+      "file": "CODEX-HANDOFF.md",
+      "sha256": "a8d651018b097edfa70f6aa71a39ba955b695b92d4212da09f23678ae3b8f510"
+    },
+    {
+      "file": "DESIGN-GUIDE.md",
+      "sha256": "5df1ef7ebc1d2deede505b4729447e132e4231ed60bce9e1e2932ebafc33f197"
+    },
+    {
+      "file": "QA.md",
+      "sha256": "49ba72ed8beaf272620a7abbbf0e9d96c30cce82c5692b44f82a5a392323bd45"
+    },
+    {
+      "file": "REVIEW-NOTES.md",
+      "sha256": "303a4d5fae60c60149535cb43d7e09246f0eed4f8497e900e38e69549bdfc12f"
+    },
+    {
+      "file": "ai-collective-loom-ui-prototype-v0.6.html",
+      "sha256": "de2949f677b9f76407bb2b735a67bfc7592fda4daefa8fab33d6b724b80e971e"
+    }
+  ]
+}

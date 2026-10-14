@@ -2,13 +2,86 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, lstat } from "node:fs/promises";
 import { join } from "node:path";
 
+function validateMigrationSource(sql, filename) {
+  const boundaryError = () => new Error(`Migration must not control psql or transaction boundaries: ${filename}`);
+  let head = [];
+  const checkStatement = () => {
+    if (["BEGIN", "COMMIT", "END", "ROLLBACK", "ABORT", "SAVEPOINT", "RELEASE"].includes(head[0])
+      || (["START", "PREPARE", "SET"].includes(head[0]) && head[1] === "TRANSACTION")
+      || head.join(" ") === "SET SESSION CHARACTERISTICS AS TRANSACTION") throw boundaryError();
+    head = [];
+  };
+  // Only command heads matter. Quoted values/identifiers occupy a token without
+  // exposing their contents; comments act as whitespace, including nested ones.
+  const token = (value) => { if (head.length < 5) head.push(value); };
+  for (let i = 0; i < sql.length;) {
+    const char = sql[i];
+    if (/\s/.test(char)) { i += 1; continue; }
+    if (sql.startsWith("--", i)) {
+      i += 2;
+      while (i < sql.length && !/[\r\n]/.test(sql[i])) i += 1;
+      continue;
+    }
+    if (sql.startsWith("/*", i)) {
+      let depth = 1;
+      i += 2;
+      while (i < sql.length && depth) {
+        if (sql.startsWith("/*", i)) { depth += 1; i += 2; }
+        else if (sql.startsWith("*/", i)) { depth -= 1; i += 2; }
+        else i += 1;
+      }
+      if (depth) throw new Error(`Unterminated SQL block comment in migration: ${filename}`);
+      continue;
+    }
+    // Ordinary strings use PostgreSQL's default standard_conforming_strings=on.
+    const escapeString = /[Ee]/.test(char) && sql[i + 1] === "'";
+    if (char === "'" || char === '"' || escapeString) {
+      const quote = escapeString ? "'" : char;
+      i += escapeString ? 2 : 1;
+      let closed = false;
+      while (i < sql.length) {
+        if (escapeString && sql[i] === "\\") { i += 2; }
+        else if (sql[i] === quote) {
+          i += 1;
+          if (sql[i] === quote) i += 1;
+          else {
+            // E-string continuations keep escaping across newlines and line comments.
+            const continuation = escapeString && /^(?:[ \t\f\v]|--[^\r\n]*)*[\r\n](?:[ \t\f\v\r\n]|--[^\r\n]*[\r\n])*'/.exec(sql.slice(i));
+            if (continuation) i += continuation[0].length;
+            else { closed = true; break; }
+          }
+        } else i += 1;
+      }
+      if (!closed) throw new Error(`Unterminated SQL quoted text in migration: ${filename}`);
+      token("<quoted>");
+      continue;
+    }
+    if (char === "$") {
+      const tag = /^\$(?:[A-Za-z_\u0080-\uFFFF][A-Za-z0-9_\u0080-\uFFFF]*)?\$/.exec(sql.slice(i))?.[0];
+      if (tag) {
+        const end = sql.indexOf(tag, i + tag.length);
+        if (end === -1) throw new Error(`Unterminated SQL dollar quote in migration: ${filename}`);
+        i = end + tag.length;
+        token("<quoted>");
+        continue;
+      }
+    }
+    if (char === "\\") throw boundaryError();
+    if (char === ";") { checkStatement(); i += 1; continue; }
+    const word = /^[A-Za-z_\u0080-\uFFFF][A-Za-z0-9_$\u0080-\uFFFF]*/.exec(sql.slice(i))?.[0];
+    token(word ? word.toUpperCase() : char);
+    i += word?.length ?? 1;
+  }
+  checkStatement();
+}
+
 export function describeMigration(filename, sql) {
   const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(filename);
   if (!match) throw new Error(`Invalid migration filename: ${filename}`);
   if (!sql.trim()) throw new Error(`Empty migration: ${filename}`);
-  // Files are trusted, reviewed repository code. These are transaction/psql
-  // hygiene checks, not a parser or sandbox for arbitrary SQL.
-  if (/^\s*\\/m.test(sql) || /^\s*(?:BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION)\b/im.test(sql)) throw new Error(`Migration must not control psql or transaction boundaries: ${filename}`);
+  // Files are trusted, reviewed repository code. Scan SQL statement boundaries
+  // for transaction/psql hygiene; this is not a SQL parser or hostile-code sandbox.
+  validateMigrationSource(sql, filename);
   return { version: match[1], filename, sql, sha256: createHash("sha256").update(sql).digest("hex") };
 }
 
