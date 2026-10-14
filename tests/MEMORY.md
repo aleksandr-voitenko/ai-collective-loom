@@ -17,6 +17,8 @@ Only `browser-diagnostics/approved/*.json` may be uploaded. The containing runne
 consumes arbitrary console output and removes Playwright's private raw outputs on
 normal child exit. On hard kill, intermediates may remain unsafe; never promote
 them to artifacts. Use the npm entry point, not a reporter override/direct CLI.
+Write synthetic screenshots through Playwright's per-test `outputPath`, keeping
+them portable and inside that private cleanup boundary.
 Each run replaces this ignored test-output directory; do not run two browser
 commands concurrently in one checkout. Existing development data is not involved.
 

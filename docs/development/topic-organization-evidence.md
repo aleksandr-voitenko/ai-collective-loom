@@ -141,3 +141,37 @@ All 112 local links across the 18 changed/new Markdown files resolved, document
 baseline checks and `git diff --check` passed. At that checkpoint HEAD remained
 unchanged and the index was empty. Existing migrations and imported product/architecture/UI snapshots had
 no diff. These checks do not claim broader product acceptance.
+
+## Hosted CI follow-up
+
+The authorized task commit `d55e70bb9ab0d781e633fa7da666ab1d72c8eea5`
+(`LC-20261014-IGI9`) was pushed on the existing branch.
+[Push run 38596456075](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38596456075)
+passed the initial checks, runtime/publication/identity/participation/Saved/
+organization PostgreSQL suites and diagnostic verification on Ubuntu 24.04 x64.
+The normal browser suite finished **35/37 passed**. Subsequent migration, storage
+integration and persistence steps were skipped because that browser step failed.
+Approved diagnostic upload succeeded, and the downloaded JSON validates against
+the closed schemas. [Manifest](topic-organization-evidence/ci-first-failure/run.json)
+and both failure bundles are retained without raw browser output.
+
+The organization scenario reached its narrow move-form screenshot at line 61,
+with the signed-in shell and enabled confirmation control captured, no failed
+network request, and normal teardown. Its three screenshot destinations used the
+macOS-specific `/private/tmp` path, outside Playwright's private output directory.
+Local macOS runs had not exercised that portability gap. They now use per-test
+`outputPath`, matching the existing suites and the runner's raw-output cleanup.
+No application behavior, assertion, timeout, worker count or retry changed.
+
+The separate retained participation scenario failed on its first `/loom` request
+with the diagnostic category `network_changed`, before the application shell
+loaded. This evidence identifies the transport failure, not its underlying cause;
+the screenshot path repair does not claim to resolve it.
+
+After the path correction, `npm run app:typecheck` and the full normal
+`npm run test:e2e` passed locally: **37/37**, one worker and zero retries, including
+both scenarios that failed on the first hosted run.
+[Results](topic-organization-evidence/portable-captures-results.json) and
+[approval](topic-organization-evidence/portable-captures-approval.json) are retained.
+Documentation and diff checks also passed. Hosted verification of this follow-up
+remains pending at commit preparation (`LC-20261015-83ZU`).

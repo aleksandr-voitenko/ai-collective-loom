@@ -44,7 +44,7 @@ async function command(page:Page,id:string,kind:string,fields:Record<string,unkn
 async function records(page:Page):Promise<Intent[]> {return page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('loom.intent.')).map(k=>JSON.parse(localStorage.getItem(k)!)));}
 async function view(page:Page) {await page.getByRole('link',{name:'View current location',exact:true}).click();}
 
-test('administrator creates and edits nested topics, moves a subtree, closes/reopens by keyboard and browses narrow layouts',async({page,context,server})=>{
+test('administrator creates and edits nested topics, moves a subtree, closes/reopens by keyboard and browses narrow layouts',async({page,context,server},info)=>{
   const d=await setup(page,context,server);await page.getByRole('link',{name:'Topics',exact:true}).first().click();
   await page.getByRole('link',{name:'Create root topic',exact:true}).click();
   await page.getByLabel('Topic title',{exact:true}).fill('Research');await page.getByLabel('Scope description').fill('Shared research scope.');
@@ -58,7 +58,7 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   await expect(page.locator('.organization-form')).toContainText('from Research to General');
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:'/private/tmp/loom-organization-move-mobile.png',fullPage:true});
+  await page.screenshot({path:info.outputPath('organization-move-mobile.png'),fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('button',{name:'Confirm move',exact:true}).focus();await page.keyboard.press('Enter');await view(page);
   expect((await api(page,'/api/v1/organization/resources/'+child)).parent_id).toBe(d.general);
@@ -68,9 +68,9 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   expect((await api(page,'/api/v1/organization/resources/'+child)).local_open).toBe(false);
   await expect(page.getByRole('link',{name:'Evidence reviews',exact:true})).toBeVisible();
   await expect(page.getByText('Nothing here yet',{exact:true})).toBeVisible();
-  await page.screenshot({path:'/private/tmp/loom-organization-desktop.png',fullPage:true});
+  await page.screenshot({path:info.outputPath('organization-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Open navigation'}).click();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'Open navigation'})).toBeFocused();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'/private/tmp/loom-organization-mobile.png',fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('organization-mobile.png'),fullPage:true});
 });
 
 test('discussion and artifact move controls preserve exact revisions and use bounded contextual destinations',async({page,context,server})=>{
