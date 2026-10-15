@@ -47,8 +47,22 @@ test('summary conflict comparison failure, correction autosave failure and reloa
   const f=await setup(page,context,server);await draft(page,server.origin,f.discussion);await page.getByRole('button',{name:'Prepare declared sources',exact:true}).click();await expect(page.getByText(/Full discussion snapshot/)).toBeVisible();await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();const first=(await journal(page,'summary.create')).result;
   await page.goto(server.origin+'/loom/resource/'+first.resource_id+'?edit=1');await page.getByLabel('Text',{exact:true}).fill('Preserved conflicting draft');
   const next=await f.admin.call('/api/v1/summary-revisions',{idempotency_key:randomUUID(),resource_id:first.resource_id,expected_revision_id:first.revision_id,title:'Concurrent title',content:authored('Concurrent summary'),coverage:{carry_forward_revision_id:first.revision_id}});expect(next.status).toBe(201);
-  let fail=true;await page.route(`**/api/v1/resources/${first.resource_id}/revisions/${next.body.revision_id}`,route=>fail?route.abort('failed'):route.continue());
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Retry comparison revision'})).toBeVisible();await expect(page.getByRole('button',{name:'Prepare corrected submission'})).toBeDisabled();await page.reload();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Preserved conflicting draft');
+  let fail=true,holdReload=false;const comparisonStarted=barrier(),releaseComparison=barrier();
+  await page.route(`**/api/v1/resources/${first.resource_id}/revisions/${next.body.revision_id}`,async route=>{
+    if(holdReload){comparisonStarted.release();await releaseComparison.promise;}
+    return fail?route.abort('failed'):route.continue();
+  });
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Retry comparison revision'})).toBeVisible();await expect(page.getByRole('button',{name:'Prepare corrected submission'})).toBeDisabled();
+  holdReload=true;
+  try{
+    await page.reload();await comparisonStarted.promise;
+    await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Preserved conflicting draft');
+    await expect(page.getByRole('button',{name:'Prepare corrected submission'})).toBeDisabled();
+  }finally{releaseComparison.release();}
+  // Restored draft text can render before the comparison fetch fails. Keep the
+  // fault active until this reload has actually reached the retry state.
+  await expect(page.getByRole('button',{name:'Retry comparison revision'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Prepare corrected submission'})).toBeDisabled();
   fail=false;await page.getByRole('button',{name:'Retry comparison revision'}).click();await expect(page.getByRole('button',{name:'Prepare corrected submission'})).toBeEnabled();
   const old=(await journal(page,'summary.revise'));await page.evaluate(()=>{const original=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k.startsWith('loom.intent.v1:')&&JSON.parse(v).state==='draft'){Storage.prototype.setItem=original;throw new DOMException('Injected save failure','QuotaExceededError');}return original.call(this,k,v);};});
   await page.getByRole('button',{name:'Prepare corrected submission'}).click();await expect(page.getByLabel('Text',{exact:true})).toBeDisabled();expect((await journal(page,'summary.revise')).key).toBe(old.key);

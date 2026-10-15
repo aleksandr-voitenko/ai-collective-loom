@@ -6,6 +6,44 @@ real HTTPS, native search-worker processes and Chromium virtual WebAuthn. No exi
 development database, user account or production service was reset or deployed.
 Imported specification, architecture and UI baselines remain unchanged.
 
+## PR #8 CI follow-up — 16 October 2026
+
+The [pull-request workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38815305699)
+failed one of 62 browser tests on `72feec4`: summary conflict comparison recovery.
+The [push workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38815287042)
+passed, including the later migration, integration and persistence steps skipped
+by the failed PR job. The PR merge ref and branch head have the same source tree.
+The [approved hosted failure](discussion-summaries-evidence/ci-followup/hosted-failure/run.json)
+is retained with its bounded diagnostic bundle before hosted artifact expiry.
+
+The fixture removed its comparison-fetch fault after checking restored draft text
+on reload. That text comes from the local journal and can render before the
+asynchronous comparison request. In the hosted failure, the first request was
+aborted, the reload request returned 200, and the test then spent the unchanged
+15-second action deadline waiting for the error-only retry button. This is a test
+ordering defect; the passing push run alone was not treated as a repair.
+
+A controlled barrier delayed the reload request's route decision until after the
+old fixture cleared its fault. The [local reproduction](discussion-summaries-evidence/ci-followup/reproduction/run.json)
+failed with the same successful reload request and missing retry button. The fixed
+test keeps the fault until the reload reaches its retry UI, asserts correction is
+disabled both while the request is pending and after failure, then explicitly
+allows retry. It releases its barrier in `finally`. Application code, browser
+deadlines, workers, retries and diagnostic/disclosure guards are unchanged.
+
+The focused command
+`npm run test:e2e -- tests/e2e/summaries.spec.ts --grep 'summary conflict comparison failure'`
+then [passed](discussion-summaries-evidence/ci-followup/targeted/run.json).
+The complete normal `npm run test:e2e` subsequently
+[passed 62/62](discussion-summaries-evidence/ci-followup/browser-full/run.json),
+with one worker, zero retries and no omitted tests. `npm run check` also
+[passed](discussion-summaries-evidence/ci-followup/check.txt), including the 46
+development application tests, typecheck and build. These local runs used the
+same synthetic environment described above. No runtime or database code changed.
+The original CI failure and controlled reproduction remain recorded separately
+from passing verification. Hosted verification of the fix is pending at commit
+preparation and will be recorded on the PR.
+
 ## Review fixes — 16 October 2026
 
 The self-review found three browser gaps: a completed summary edit prevented a
