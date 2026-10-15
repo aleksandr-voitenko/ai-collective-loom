@@ -3,7 +3,8 @@
 Status: implemented for internal revisions, synthetic text participation and topic
 organization (ADR-020). Typed
 discussion/opening/reply/artifact/setup operations reuse this same tail. Complete
-domain/lifecycle operations and workers remain unimplemented; the import is unchanged.
+domain/lifecycle operations remain incomplete; the first search consumer is now
+implemented as described below. The imported architecture is unchanged.
 
 Organization uses the existing exclusive structure guard before validating parentage,
 subtree bounds and versions. Ordinary publication retains its shared form. Setup
@@ -66,16 +67,32 @@ See [ADR-004](004-identity-admission-prototype.md) for the unapproved policy pro
 ## Outbox boundary
 
 Intents contain event references and a controlled kind, not authored bodies or
-executed effects. They are unique per event/kind and immutable for ordinary
-application SQL. No worker claims, leases, outputs, notifications or indexing run.
+executed effects. They remain unique per event/kind and immutable for ordinary SQL.
+Search now owns separate `search_jobs` and discovery progress; it never marks an
+intent globally consumed. Notification/extraction and other projections remain
+disabled. The standalone Node worker and API share one application release.
 
-Before enabling the first consumer, implement a monotonically increasing claim
-generation and generation-fenced output publication. Check the current generation
-in the same protected finalization that associates outputs, then test an expired
-worker resuming after a replacement. A lease check separated from output commit
-is insufficient. Add consumer deduplication keys, retry/dead-letter handling and
-current source authorization with that consumer; intent durability is not proof
-of exactly-once external effects or completed projections.
+The first consumer implements claim generations, expiring PostgreSQL leases,
+bounded retries, retained failures and explicit administrator recovery. Finalization
+locks the source resource, exact revision, job and search-state row in that order.
+After all potentially blocking guards it verifies owner/generation/expiry, rebuild
+generation and current-source version; output association and successful job state
+commit atomically. A separate revision-ordinal guard prevents older source work
+replacing newer output. Slow preparation runs outside these transactions.
+Renewal/failure lock the job before a fresh database-time check; waiting on an
+unchanged row cannot revive an expired owner. Revision backfill deduplicates only
+revision work; separate intent identity preserves unsupported-event failures.
+
+Search backfill/rebuild scans authoritative retained typed sources in bounded batches
+and uses its independent `(event position, intent UUID)` discovery to cover
+concurrent publications and batches that split one event's intents. The
+search discovery/rebuild advisory class 4 never acquires the public clock. Source
+visibility triggers advance only a derived invalidation version while their existing
+source locks are held; their write to search state precedes any publication tail.
+No search finalizer acquires source locks after search state, preventing inversion.
+Search/rebuild does not change source activity, outcomes or other consumer progress.
+See [ADR-012](012-scoped-text-search.md) for exact bounds and selection semantics.
+This is at-least-once execution with deduplicated effects, not exactly-once execution.
 
 ## Evidence and reconsideration
 
@@ -91,7 +108,7 @@ local Docker/network overhead and print observed percentiles/throughput. They
 establish neither a production envelope nor full workload throughput. Reconsider
 the single tail if representative workload evidence requires a different design;
 any replacement must preserve committed coverage. The retained backlog still
-requires full feed, projection, worker, production identity and product validation.
+requires full feed, remaining projections, production identity and product validation.
 
 See architecture §§7.1–7.6 and ADR-015 for the inherited semantics and retry scope;
 this record selects the executable mechanism rather than restating the architecture.

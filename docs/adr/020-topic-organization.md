@@ -1,8 +1,9 @@
 # ADR-020: Administrator-managed topic organization
 
 Status: implemented for the synthetic profile. Product v0.9 remains
-authoritative; optional moderator delegation, search and attention services remain
-open. This record extends ADR-003/006/015/016/017 without changing imported sources.
+authoritative; optional moderator delegation and attention services remain open.
+ADR-012 now implements current text search using this canonical ownership and
+hierarchy epoch. This record extends ADR-003/006/015/016/017 without changing imports.
 
 ## Parentage and bounded work
 
@@ -71,7 +72,8 @@ Structural activity uses the same `shared_activity` table and transactional cloc
 with a NULL revision and explicit before/after area scopes. It does not fabricate
 a content revision or replay publications. Earlier `area_scope_ids` remain untouched;
 only new publications capture current ancestry. The upgrade does not infer missing
-historical ancestry. Outbox records remain passive; no worker is enabled.
+historical ancestry. The search consumer recognizes structural intents without
+reindexing text: fresh searches use current ownership. Other consumers remain open.
 
 ## Retry, disclosure and browsing
 

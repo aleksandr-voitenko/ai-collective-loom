@@ -4,7 +4,8 @@ This is a runnable **synthetic** partial release: an administrator initializes t
 ordinary topics and an overview, admits a human/agent, and both publish and retrieve
 real text revisions through the same HTTPS API. Identity/recovery policy, production
 limits and retained-data operations are still gates. Do not enter real personal or
-community material. No model, agent memory, upload, signed grant or worker runs.
+community material. Only the search projection worker runs; model execution, agent
+memory, uploads, signed grants and other projections remain disabled.
 
 ## Run the browser journey
 
@@ -83,7 +84,7 @@ or the Compose development volumes. The original foundation startup remains defa
 
 `GET /api/v1/openapi.json` describes the actually registered release. With the
 synthetic profile its version is `participation-1`; the authenticated
-`GET /api/v1/guide` has guide revision `3`. The checked-in source is
+`GET /api/v1/guide` has guide revision `4`. The checked-in source is
 `src/contracts/participation.ts` and `src/contracts/guide.ts`, not the imported
 illustrative architecture examples. Unknown fields and semantic coercion fail.
 
@@ -96,6 +97,7 @@ illustrative architecture examples. Unknown fields and semantic coercion fail.
 | Bounded context | `GET /areas`, `/areas/:id`, `/areas/:id/discussions`, `/areas/:id/artifacts`, `/artifacts`, `/contributions/:id/children`, `/contributions/:id/ancestors`, `/participants`. |
 | Editors | `GET /resources/:id/editors`; administrator `POST /editors` with expected list version. |
 | Private bookmarks | `GET /me/saved-items`; `POST /me/saved-items/lookup`, `/state`, `/status`. See the Saved items guide for its separate desired-state/recovery contract. |
+| Current text search | `GET /search`, `GET /search/status`; administrator health/failures and retry/rebuild under `/admin/search`. See the [search guide](search.md) for filters, exact links, explicit refresh and worker commands. |
 | Topic organization | `GET /organization/children`, `/destinations`, `/resources/:id`; administrator `POST /organization/changes`, `/status` and `GET /organization/audit`; `GET /areas/:id/metadata-history`, `/proposal-route`. |
 
 All paths above are under `/api/v1`. Bearer clients use the separately issued opaque

@@ -37,6 +37,8 @@ fresh private identities. It tests absence races, stale conflicts, all write-sta
 rollbacks, lost processes, current authority, killed connections and committed
 coverage. It prints labeled synthetic wait/hold metrics rather than asserting an
 approved production capacity. Synthetic participant routes and constructors are
-implemented separately. Production identity policy, hard erasure/expiry, feed
-traversal and worker generation-fenced output publication
-remain unimplemented. No worker effects may be enabled without that fence.
+implemented separately. Search is the first derived consumer, with lease-generation
+and source-version checks before atomic output/job finalization; see
+[ADR-012](../../../../docs/adr/012-scoped-text-search.md). It owns separate discovery
+and jobs without consuming immutable intents globally. Production identity policy,
+hard erasure/expiry, feed traversal and other projections remain unimplemented.

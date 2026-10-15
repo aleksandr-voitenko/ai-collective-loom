@@ -8,19 +8,20 @@ import { join, resolve } from 'node:path';
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
   steps: 16, tests: 128, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
-export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
+export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
   'collector_missing', 'collector_unfinished', 'page_closed_before_capture', 'page_limit', 'context_limit', 'pending_limit', 'byte_limit'];
 export const details = ['none', 'default', 'persistent', 'explicit', 'dom_ready', 'load', 'closed',
   'network_changed', 'connection_failed', 'aborted', 'timed_out', 'other_transport', 'browser_exception', 'console_error',
   'server_starting', 'server_ready', 'server_closing', 'server_closed', 'context_closing', 'context_closed', 'collector_finished'];
 export const controlNames = ['save_discussion', 'unsave_discussion', 'sign_in', 'create_passkey', 'reply',
-  'check_saved_status', 'retry_saved_change', 'retry_collection', 'sign_out', 'confirm_move', 'save_topic', 'check_organization', 'retry_organization'];
+  'check_saved_status', 'retry_saved_change', 'retry_collection', 'sign_out', 'confirm_move', 'save_topic', 'check_organization', 'retry_organization', 'search', 'refresh_search'];
 export const controlLabels = ['Save discussion', 'Unsave discussion', 'Sign in with passkey', 'Create passkey', 'Reply',
-  'Check saved status', 'Retry same change', 'Retry collection', 'Sign out', 'Confirm move', 'Save topic', 'Check organization status', 'Retry same organization change'];
+  'Check saved status', 'Retry same change', 'Retry collection', 'Sign out', 'Confirm move', 'Save topic', 'Check organization status', 'Retry same organization change', 'Search shared text', 'Refresh search'];
 const routePatterns = [
   '/loom', '/loom/saved', '/loom/admin', '/loom/help', '/loom/overview', '/loom/artifacts', '/loom/organize', '/loom/area/:id',
   '/loom/discussion/:id', '/loom/resource/:id', '/loom/resource/:id/:id',
+  '/loom/search', '/api/v1/search', '/api/v1/search/status', '/api/v1/search/authors', '/api/v1/admin/search/health', '/api/v1/admin/search/failures', '/api/v1/admin/search/rebuild', '/api/v1/admin/search/retry',
   '/api/v1/runtime', '/api/v1/identity/self', '/api/v1/identity/register/start', '/api/v1/identity/register/finish',
   '/api/v1/identity/signin/start', '/api/v1/identity/signin/finish', '/api/v1/identity/logout',
   '/api/v1/identity/accounts', '/api/v1/identity/credentials', '/api/v1/identity/state', '/api/v1/identity/rename',

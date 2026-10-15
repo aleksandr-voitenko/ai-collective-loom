@@ -873,3 +873,17 @@
 .loom-app nav.breadcrumb { display: flex; align-items: center; }
 .loom-app nav.breadcrumb a { display: inline; padding: 0; margin: 0; }
 @media (max-width: 600px) { .topic-directory .list-row { flex-wrap: wrap; } .organization-actions .button { white-space: normal; } }
+/* Search remains a readable text collection; long paths and authored fragments
+   wrap instead of widening the responsive shell. */
+.search-page form { display:grid; gap:.65rem; margin-bottom:1.5rem; }
+.search-filters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; }
+.search-page label { display:grid; gap:.35rem; }
+.search-page input,.search-page select { max-width:100%; min-width:0; }
+.search-page .search-checkbox { display:flex; align-items:center; gap:.5rem; }
+.search-page .search-checkbox input { width:auto; }
+.search-page p,.search-result,.search-admin { overflow-wrap:anywhere; }
+.search-result { padding:1.1rem 0; border-bottom:1px solid var(--line,#dfe5df); }
+.search-result h3 { margin:.4rem 0; }
+.search-result .byline { font-size:.85rem; color:#546356; }
+.search-indexing { margin:1rem 0; }
+@media(max-width:650px) { .search-filters { grid-template-columns:1fr; } }

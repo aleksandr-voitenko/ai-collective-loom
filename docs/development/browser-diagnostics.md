@@ -80,12 +80,16 @@ continues to be asserted by the application scenarios themselves.
 | Events per test | Last 256; `events_dropped` is explicit. |
 | Contexts/pages per test | 8 contexts, 16 pages including closed persistent contexts; overflow marks capture incomplete. |
 | Pending requests | 64 active and 64 retained pre-close descriptors; overflow marks capture incomplete. |
-| View inspection | First 128 buttons, 13 fixed control categories including organization confirmation/recovery; counts cap at 32, button truncation is explicit. |
+| View inspection | First 128 buttons, 15 fixed control categories including organization confirmation/recovery and search/refresh; counts cap at 32, button truncation is explicit. |
 | Snapshot time | 200 ms Chromium execution deadline and 400 ms host deadline per page; context pages sampled concurrently. Failure/timeout is explicit. |
 | Reporter steps | 16, retaining failed steps preferentially; omitted count is explicit. |
 | JSON document | 128 KiB serialized UTF-8 in compact JSON, checked before parsing and writing. Oversize capture becomes a safe incomplete fallback. |
 | Whole candidate | First 128 planned tests, up to 128 bundles plus the run manifest; below 17 MiB including the approval record. Omitted tests remain counted. |
 | Hosted retention | 3 days for prompt triage without long-lived browser-derived artifacts. |
+
+Search scenarios use the same runner and `search.spec.ts` source category. Search,
+status and administrator route templates discard query/cursor values; the validation
+suite includes those routes in canary checks and the unchanged maximum-size envelope.
 
 Collection never reads request/response bodies, headers, cookies or browser storage.
 It does not intercept application requests or hold routes, Web Locks or sockets.

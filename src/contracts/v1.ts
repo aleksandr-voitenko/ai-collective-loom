@@ -11,6 +11,7 @@ export const RuntimeResponse = Type.Object({
   capabilities: Type.Object({
     participant_authentication: Type.Boolean(),
     participant_mutations: Type.Boolean(),
+    shared_text_search: Type.Boolean(),
   }, closed),
 }, { ...closed, $id: "loom.v1.runtime" });
 
@@ -50,5 +51,5 @@ export type ValidationField = Static<typeof FieldError>;
 
 export const runtime: Runtime = {
   name: "AI Collective Loom", api_version: "v1", stage: "foundation",
-  capabilities: { participant_authentication: false, participant_mutations: false },
+  capabilities: { participant_authentication: false, participant_mutations: false, shared_text_search:false },
 };

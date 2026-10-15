@@ -20,7 +20,12 @@ Administrators can create nested topics, revise their scope, move topic subtrees
 discussions and artifacts, and close/reopen contributions. Bounded navigation and
 safe retry preserve stable references and history. See the [organization guide](docs/development/topic-organization.md).
 Normal startup keeps the original operational foundation. No default administrator,
-identity-header bypass, file uploads, worker effects or model execution is enabled.
+identity-header bypass, file uploads or model execution is enabled.
+Synthetic Search finds current discussion openings, comments and text artifacts,
+with topic, kind, original-author and publication-time filters. A recoverable Node
+worker indexes retained sources; exact reads remain available while indexing is
+incomplete. The author picker includes suspended authors whose publications remain
+readable. See the [search and worker guide](docs/development/search.md).
 
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
@@ -71,6 +76,7 @@ npm run test:identity:postgres # disposable identity protocol and signed passkey
 npm run test:participation:postgres # actual HTTPS journey and standalone agent client
 npm run test:saved-items:postgres # private bookmarks, concurrency, recovery and bounded retrieval
 npm run test:organization:postgres # populated upgrades, hierarchy, moves, closure and HTTPS recovery
+npm run test:search:postgres # leases, process loss, rebuild, current authorization and search limits
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures
@@ -138,8 +144,12 @@ The internal publication operation and its lock/tail/recovery contract are in
 [ADR-015](docs/adr/015-publication-reconciliation.md). `test:publication:postgres`
 inspects persisted rows through controlled concurrency, stage failures, process
 loss and backend termination. Its printed synthetic metrics are not production
-capacity approval. No worker effects run; generation-fenced output publication
-remains required before enabling the first consumer.
+capacity approval. Search is the first consumer: lease generation and exact source
+version checks guard the atomic output/job commit. Other projections remain disabled.
+The preview supervises its worker; type `worker stop` or `worker start` in its
+terminal to exercise recovery while HTTPS stays available. A configured synthetic
+installation can run `npm run worker:search` after building and applying migrations.
+See [search verification evidence](docs/development/search-evidence.md).
 
 The [identity prototype guide](docs/development/identity-prototype.md) records
 bootstrap/admission, verifier-only issuance, safe recovery, cookie/bearer authority,

@@ -39,12 +39,13 @@ import { OrganizationPage, TopicDirectory, TopicLocation, OrganizationActions, T
 import { OrganizationResource, type OrganizationResourceView, ProposalRoute, type ProposalRouteView } from "../contracts/organization.js";
 import { AuthoredText } from "./AuthoredText.js";
 import { SaveControl, SavedItemsPage } from "./SavedItems.js";
+import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import "./participation.css";
 
 function Icon({
   name,
 }: {
-  name: "topic" | "artifact" | "discussion" | "help" | "saved";
+  name: "topic" | "artifact" | "discussion" | "help" | "saved" | "search";
 }) {
   return (
     <svg
@@ -57,7 +58,7 @@ function Icon({
     >
       <path
         d={
-          name === "topic"
+          name === 'search' ? 'M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0' : name === "topic"
             ? "M4 3h6v6H4zM14 15h6v6h-6zM7 9v9h7"
             : name === "artifact"
               ? "M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"
@@ -220,6 +221,7 @@ export function ParticipationApp() {
           Artifacts
         </NavLink>
         <NavLink to="/loom/saved"><Icon name="saved" />Saved items</NavLink>
+        <NavLink to="/loom/search"><Icon name="search" />Search</NavLink>
         {self?.role === "administrator" && (
           <NavLink to="/loom/admin">
             <Icon name="topic" />
@@ -290,7 +292,7 @@ export function ParticipationApp() {
                 ? "Community overview"
                 : location.pathname.includes("/artifacts")
                   ? "Artifacts"
-                  : location.pathname.includes("/saved") ? "Saved items" : "Topics"}
+                  : location.pathname.includes("/saved") ? "Saved items" : location.pathname.includes("/search") ? "Search" : "Topics"}
           </span>
           <span className="release-label">Synthetic preview</span>
         </header>
@@ -426,6 +428,7 @@ function ActiveView({ context }: { context: Context }) {
   if (!kind) return <Topics context={context} />;
   if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
+  if (kind === "search") return <SearchPageViewComponent context={context} />;
   if (kind === "area" && id) return <AreaPage id={id} context={context} />;
   if (kind === "discussion" && id)
     return <DiscussionPage id={id} context={context} />;
@@ -634,6 +637,7 @@ function AreaPage({ id, context }: { id: string; context: Context }) {
         </button>
       </div>
       <p className="topic-state">{area.publication_open ? "Open to contributions" : "Closed to contributions"}{!area.publication_open && area.local_open ? " by an ancestor topic" : ""}</p>
+      <Link className="button" to={'/loom/search?topic='+id}>Search this topic</Link>
       {context.self.role === "administrator" && <OrganizationActions id={id} kind="area" localOpen={area.local_open}/>}
       <TopicDirectory key={id} parent={id}/>
       <div className="topic-tabs" role="group" aria-label="Topic content">
@@ -1944,6 +1948,7 @@ function Administration({ context }: { context: Context }) {
     <>
       <h1>Administration</h1>
       <p className="subtitle">Set up the community and admit participants.</p>
+      <SearchAdministration context={context}/>
       <ErrorText error={error} />
       <SeparateDraft
         record={setupIntent}

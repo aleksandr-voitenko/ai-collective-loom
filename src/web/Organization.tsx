@@ -9,7 +9,7 @@ function pathText(area:OrganizationResourceView) { return [...area.ancestors.map
 export function TopicLocation({area}:{area:OrganizationResourceView}) {
   return <nav className="breadcrumb" aria-label="Topic ancestry"><Link to="/loom">Topics</Link>{area.ancestors.map(parent=><span key={parent.id}> › <Link to={'/loom/area/'+parent.id}>{parent.title}</Link></span>)}<span> › {area.title}</span></nav>;
 }
-export function TopicDirectory({parent,select}:{parent?:string;select?:(area:OrganizationResourceView)=>void}) {
+export function TopicDirectory({parent,select,selectionLabel='Choose a destination'}:{parent?:string;select?:(area:OrganizationResourceView)=>void;selectionLabel?:string}) {
   const [cursor,setCursor]=useState(''),[previous,setPrevious]=useState<string[]>([]);
   const base='/api/v1/organization/'+(select?'destinations':'children');
   const query=new URLSearchParams({...(!select&&parent?{parent_id:parent}:{}),...(cursor?{cursor}:{})});
@@ -17,8 +17,8 @@ export function TopicDirectory({parent,select}:{parent?:string;select?:(area:Org
   if(result.data) last.current=result.data;
   useEffect(()=>{if(result.data && previous.length) heading.current?.focus();},[result.data]);
   const data=result.data??last.current;
-  return <section className="topic-directory" aria-label={select?'Move destinations':parent?'Subtopics':'Root topics'}>
-    <h2 tabIndex={-1} ref={heading}>{select?'Choose a destination':parent?'Subtopics':'Root topics'}</h2>
+  return <section className="topic-directory" aria-label={select?selectionLabel:parent?'Subtopics':'Root topics'}>
+    <h2 tabIndex={-1} ref={heading}>{select?selectionLabel:parent?'Subtopics':'Root topics'}</h2>
     {result.error&&<p role="alert">{result.error} The previous page may be out of date.</p>}
     {!result.data&&!result.error&&<p role="status">Loading topics…</p>}
     <div className="collection" aria-busy={!result.data&&!result.error}>
