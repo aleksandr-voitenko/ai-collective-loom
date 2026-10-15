@@ -125,7 +125,8 @@ deadlines that produced its red result. Full-suite results are recorded below.
 Approved repair-run evidence is retained in
 [normal browser results](search-evidence/review-fix-normal/run.json) and
 [diagnostic probes](search-evidence/review-fix-diagnostics/run.json). The latter's
-eight expected failures verify containment; no application failure remains unresolved.
+eight expected failures verify containment. These local runs had no unresolved
+application failures; the later hosted navigation failure is recorded below.
 
 Memory reconciliation updates root migration context, `src/server/modules/search/MEMORY.md`
 for intent/lease/author invariants, `src/server/modules/participation/MEMORY.md` for
@@ -191,6 +192,58 @@ The eight expected diagnostic failures are separately retained in
 Those probe failures are successful verification of failure handling, not unresolved
 application failures.
 
+## Hosted CI and PR #6 follow-up
+
+The [review of `6934ea2`](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/6#pullrequestreview-5530807988)
+found no source-level merge-blocking defect and requested an unchanged CI rerun,
+retention of the original failure evidence and an updated hosted-CI summary.
+There were no inline review threads or conversation comments at the scheduled
+15 October follow-up. Local and remote branch heads both remained
+`6934ea2c6322e15fc5e21b3fedac506755aa3953`; the worktree was clean.
+
+The [push workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38709239068)
+passed on that head. The [first PR attempt](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38709283437/attempts/1)
+tested merge ref `6ef0d4429ab27ea47799ca96de7c15339bd29e9d` on Ubuntu 24.04 x64,
+Node 24.19.0 and Chromium 156.0.8078.4. It passed the database/worker suites and
+diagnostic verification, but the complete browser suite finished **45/46 passed**.
+All five search browser scenarios passed. Migration, retained-service SQL/S3 and
+persistence checks were skipped after the browser failure in that attempt.
+
+The [failed run manifest](search-evidence/ci-first-failure/run.json) and
+[failure bundle](search-evidence/ci-first-failure/8685ad81a7ac6788948a46bc66e677e697e11351871eec58b5003969fe4fb3c3-0-0.json)
+identify `participation.spec.ts:170`, with the failed step at line 45:
+initial navigation to `/loom`. The request failed with `network_changed` before
+the application shell or enrollment loaded. Capture completed without issues and
+context/server teardown completed. This identifies the failure location/category;
+the underlying transport cause remains unresolved.
+
+The [second PR attempt](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38709283437/attempts/2)
+reran the failed integration job without changing code, assertions, timeouts,
+worker count or retry policy. Both workflow jobs passed. Its inspected job log
+records runtime **9**, publication **16**, identity **22**, participation **12**,
+Saved **10**, organization **15** and search/worker **46** passing tests, followed
+by diagnostic verification (eight controlled failures and four fail-closed cases).
+The complete normal browser suite passed **46/46**; the
+[retained manifest](search-evidence/ci-rerun/run.json) identifies the same merge ref.
+Migration **9/9**, retained-service SQL/S3 and stop/start/container-recreation
+persistence also passed. Those hosted checks used the ephemeral runner's services,
+not existing local development data. A passing rerun closes that immediate
+validation gate; it does not establish a repair for intermittent navigation.
+
+Both approved artifacts were downloaded and their ZIP SHA-256 digests verified:
+
+| Artifact | SHA-256 |
+|---|---|
+| First attempt, `11960227580` | `9771d56c17956b688d6bf3e0e696b9d0c8a097d4308af07e315074915d82d414` |
+| Second attempt, `11961316594` | `315e4d979b3021b3b25c7bf9a0248034e780609367283d1d3218f3022df7eacb` |
+
+The five JSON documents, including both approval records, are retained byte for
+byte beyond the three-day hosted expiry. The repository's closed validator accepted
+both complete candidates and regenerated matching approval records. No raw browser
+reports, queries, bodies, tokens, storage or traces are included. This follow-up
+changes evidence documentation only; no runtime behavior or test configuration
+changed, and no speculative application patch or new regression test was needed.
+
 ## Review boundaries
 
 Implementation choices include current-only lexical search, original-author
@@ -199,11 +252,12 @@ key custody. Multiple worker instances use database claims; this does not establ
 multi-API cursor routing. Synthetic source/job/query caps, retention/pruning, real
 identity policy and a production operating envelope remain unapproved.
 
-Hosted CI/upload for this patch, cross-machine agents, physical-device/accessibility
-studies, production load and retained-data upgrades/restores were not performed.
-The development-volume S3 smoke/persistence commands were not run: this task changes
-no S3 behavior and authorizes isolated verification, not interruption of existing
-development services. The complete relevant disposable PostgreSQL suites above ran.
+Hosted CI/upload for the implementation head is recorded above, separately from
+local execution. Cross-machine agents, physical-device/accessibility studies,
+production load and retained-data upgrades/restores remain unverified. Local
+development-volume S3 smoke/persistence commands were not run: this task changes
+no S3 behavior and does not authorize interruption of existing development services.
+The hosted runner's isolated S3/persistence checks passed as described above.
 
 Imported product/architecture digests remain unchanged. ADR-012/006, related ADRs,
 guides/backlog and root/scoped memory now describe the implemented subset. The
