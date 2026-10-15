@@ -41,7 +41,10 @@ administrator contact fallback. Review a new route deliberately; no automatic
 rerouting or proposal/voting workflow is introduced.
 The community overview's suggestion action keeps its community-wide meaning:
 it binds the configured route without attributing the suggestion to a specific
-topic, and Local drafts returns it to the overview.
+topic, and Local drafts returns it to the overview. That saved composer remains
+available after reload even if the destination closes or is unconfigured. For an
+uncertain publication, **Check status** uses the original attempt without changing
+its destination, settings or key.
 
 ## Direct API
 

@@ -71,7 +71,7 @@ function OrganizationForm({context,initial,kind,target,parent,source,epoch}:{con
   });
   const [destination,setDestination]=useState<OrganizationResourceView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[result,setResult]=useState<OrganizationResult>(),[status,setStatus]=useState('');
   const live=useRef(true),owner=useRef(identityGeneration());
-  useEffect(()=>()=>{live.current=false;},[]);
+  useEffect(()=>{live.current=true;return ()=>{live.current=false;};},[]);
   useEffect(()=>{
     if(!body.parent_id || !kind.endsWith('.move')) {setDestination(undefined);return;}
     let active=true;

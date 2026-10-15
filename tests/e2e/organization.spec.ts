@@ -170,6 +170,69 @@ test('proposal route changes and closure retain the ordinary draft, affected-are
   expect((await server.observer.query('SELECT area_id FROM loom.discussion_area_references')).rows[0].area_id).toBe(d.general);
 });
 
+for (const availability of ['closed', 'unconfigured'] as const) {
+  for (const state of ['draft', 'uncertain'] as const) {
+    test(`community-wide proposal ${state} recovers after its destination is ${availability}`, async ({page,context,server}) => {
+      const d = await setup(page,context,server);
+      await page.goto(server.origin+'/loom/overview');
+      await page.getByRole('button',{name:'Suggest an organizational change'}).click();
+      await page.getByLabel('Title',{exact:true}).fill('Retained community suggestion');
+      await page.getByLabel('Text',{exact:true}).fill('Keep this exact community-wide proposal.');
+      await expect.poll(async()=> (await records(page)).find(r=>r.slot==='proposal:community')?.body.content)
+        .toEqual(content('Keep this exact community-wide proposal.'));
+      const original = (await records(page)).find(r=>r.slot==='proposal:community')!;
+      expect(original.body.area_id).toBe(d.feedback);
+      expect(original.body.proposal_context).not.toHaveProperty('affected_area_id');
+      const before = (await server.observer.query('SELECT count(*)::int AS n FROM loom.discussions')).rows[0].n;
+      if (state === 'uncertain') {
+        await page.route('**/api/v1/discussions', async route => {
+          expect(route.request().postDataJSON()).toEqual(original.body);
+          const response = await route.fetch();
+          expect(response.status()).toBe(201);
+          await route.abort('connectionfailed');
+        });
+        await page.getByRole('button',{name:'Publish',exact:true}).click();
+        await expect(page.getByRole('button',{name:'Check status',exact:true})).toBeVisible();
+        await page.unrouteAll({behavior:'wait'});
+      }
+      if (availability === 'closed') await command(page,d.feedback,'area.close');
+      else {
+        const community = await api(page,'/api/v1/community');
+        await api(page,'/api/v1/community/settings',{
+          idempotency_key:randomUUID(),expected_version:community.settings_version,
+          community_name:community.community_name,overview_id:community.overview.resource_id,
+          proposal_area_id:null,
+        });
+      }
+      expect((await api(page,'/api/v1/community')).proposal_area)
+        .toEqual({state:availability==='closed'?'unavailable':'setup_incomplete'});
+      await page.goto(server.origin+'/loom/help');
+      await page.getByRole('link').filter({hasText:'discussion.create · '+state}).click();
+      await expect(page).toHaveURL(new RegExp('/loom/overview\\?proposal=1&intent='+original.key+'$'));
+      await page.reload();
+      await expect(page.getByText(/Keep your draft and contact an administrator/)).toBeVisible();
+      await expect(page.getByRole('link',{name:'Administrator contacts',exact:true})).toBeVisible();
+      await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Keep this exact community-wide proposal.');
+      await expect(page.getByLabel('Title',{exact:true})).toHaveValue('Retained community suggestion');
+      const retained = (await records(page)).find(r=>r.key===original.key)!;
+      expect(retained.body).toEqual(original.body);
+      expect(retained.state).toBe(state);
+      if (state === 'uncertain') {
+        const status = page.waitForRequest(r=>r.url().endsWith('/api/v1/operations/status'));
+        await page.getByRole('button',{name:'Check status',exact:true}).click();
+        expect((await status).postDataJSON()).toEqual({operation_kind:'discussion.create',idempotency_key:original.key});
+        await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+        const settled = (await records(page)).find(r=>r.key===original.key)!;
+        expect(settled.body).toEqual(original.body);
+        expect(settled.state).toBe('committed');
+      } else await expect(page.getByLabel('Text',{exact:true})).toBeEnabled();
+      expect((await server.observer.query('SELECT count(*)::int AS n FROM loom.discussions')).rows[0].n)
+        .toBe(before+(state==='uncertain'?1:0));
+      expect((await server.observer.query('SELECT count(*)::int AS n FROM loom.discussion_area_references')).rows[0].n).toBe(0);
+    });
+  }
+}
+
 test('destination pagination fails explicitly after a hierarchy change and refresh retains the move form',async({page,context,server})=>{
   const d=await setup(page,context,server);for(let i=0;i<13;i++)await create(page,'Destination '+i);
   await page.goto(server.origin+'/loom/organize?target='+d.general+'&action=area.move');await expect(page.getByRole('button',{name:'Next topics'})).toBeEnabled();

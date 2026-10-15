@@ -175,3 +175,41 @@ both scenarios that failed on the first hosted run.
 [approval](topic-organization-evidence/portable-captures-approval.json) are retained.
 Documentation and diff checks also passed. Hosted verification of this follow-up
 remains pending at commit preparation (`LC-20261015-83ZU`).
+
+## PR #5 browser recovery corrections
+
+Review of `ab7d013` identified two gaps:
+[StrictMode form liveness](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/5#discussion_r4277276377)
+and [community-wide proposal recovery](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/5#discussion_r4277276383).
+The form now restores liveness on every effect setup while retaining real-unmount
+and identity-generation guards. Existing proposal attempts remain accessible
+independently of fresh routing, with their original destination, settings and key.
+
+On Node 24.19.0/macOS arm64,
+`node --import tsx --test tests/web/organization.test.tsx` first failed both
+success/rejection busy-state assertions on the original source; unmount and
+identity cases passed. After the fix, all four pass. These use actual development
+React StrictMode, JSDOM, the real intent store and HTTP stubs. The normal Chromium
+fixture serves the production bundle, so it does not exercise that effect cycle.
+
+`npm run test:e2e -- tests/e2e/organization.spec.ts --grep 'community-wide proposal'`
+first failed all four corrected regressions at the missing composer, then passed
+all four after the fix. Actual Chromium, HTTPS and disposable PostgreSQL cover
+drafts and committed-but-unacknowledged publications with a closed or unconfigured
+destination. Local-draft resume plus reload preserves text and the entire request;
+status reconciliation keeps the original key, produces no duplicate discussion
+and invents no affected-area reference. Administrator contacts remain available.
+
+Initial fixture runs also exposed a 200-versus-201 expectation in the lost-response
+setup and stalled DOM-object assertion formatting. The status expectation now
+matches the documented creation response. Three stalled unit runs were stopped;
+boolean behavior assertions now report the intended failures without formatting
+the DOM object. The corrected regressions were rerun before application changes.
+
+`npm run check` passed 64 bootstrap, five hook and 35 application tests, typechecking,
+document checks and build. The complete normal `npm run test:e2e` passed **41/41**,
+with one worker, zero retries and validated diagnostics, including existing late
+account/navigation, stale-draft, participation and Saved scenarios. No dependency,
+migration, authority policy, timeout or normal retry setting changed. This is
+synthetic verification, not production readiness or a rendered development-browser
+trial. Hosted CI is pending at commit preparation (`LC-20261015-NXOD`).

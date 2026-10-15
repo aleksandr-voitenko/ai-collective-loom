@@ -55,3 +55,11 @@ are curated separately, never included in the approved diagnostic upload candida
 cookie/bearer authority, immutable identities/scopes, exclusive/shared structure-lock
 barriers in both commit orders, quotas, replay, rollback and restart. Its quota data
 is synthetic fixture state, not a supported product mutation or data-reset procedure.
+
+`web/organization.test.tsx` mounts actual development React in StrictMode with
+JSDOM and HTTP stubs. It checks successful/rejected command completion and delayed
+unmount/identity ownership; effect setup must restore liveness after StrictMode's
+extra cleanup. The PostgreSQL/Chromium fixture serves the production bundle and
+does not exercise that development lifecycle. Community-wide proposal recovery
+checks cover both drafts and lost committed responses after the destination is
+closed or unconfigured, retaining the original request and administrator fallback.

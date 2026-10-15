@@ -704,7 +704,8 @@ function Proposal({ context, areaId }: { context: Context; areaId?: string }) {
       setOpen(value => !value);
     }}>Suggest an organizational change →</button>
     <button className="text-button" onClick={route.refresh}>Refresh proposal route</button>
-    {open && affected && (destination ?? existing?.body.area_id) && <Composer
+    {/* A retained attempt keeps its original target even when fresh routing is unavailable. */}
+    {open && (existing || ready) && (destination ?? existing?.body.area_id) && <Composer
       context={context} kind="discussion.create" path="/api/v1/discussions" slot={"proposal:" + (areaId ?? "community")}
       fixed={{ area_id: destination ?? existing?.body.area_id, proposal_context: { ...(areaId ? {affected_area_id:areaId} : {}), expected_settings_version: version ?? (existing?.body.proposal_context as { expected_settings_version: number } | undefined)?.expected_settings_version } }}
       titleField initialText={areaId ? `Proposal concerning [this topic](${location.origin}/loom/area/${areaId})\n\n` : ''} heading="Suggest an organizational change" />}
