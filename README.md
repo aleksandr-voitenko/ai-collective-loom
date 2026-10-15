@@ -21,15 +21,21 @@ discussions and artifacts, and close/reopen contributions. Bounded navigation an
 safe retry preserve stable references and history. See the [organization guide](docs/development/topic-organization.md).
 Normal startup keeps the original operational foundation. No default administrator,
 identity-header bypass, file uploads or model execution is enabled.
-Synthetic Search finds current discussion openings, comments and text artifacts,
+Synthetic Search finds current discussion openings, comments, text artifacts and summaries,
 with topic, kind, original-author and publication-time filters. A recoverable Node
 worker indexes retained sources; exact reads remain available while indexing is
 incomplete. The author picker includes suspended authors whose publications remain
 readable. See the [search and worker guide](docs/development/search.md).
 Participants can explicitly record untyped, related-to, builds-on or contradicts
-references while publishing openings, comments and text artifacts. Exact revision
+references while publishing openings, comments, text artifacts and summaries. Exact revision
 targets, assertion history, source-owned withdrawal and bounded **Referenced by**
 views work independently of indexing. See the [recorded references guide](docs/development/recorded-references.md).
+
+Participants can publish a discussion summary with an exact, declared set of opening/comment
+revisions. Readers inspect coverage and editors; authorized editors discover gaps
+through bounded summary maintenance. See the [summary guide](docs/development/discussion-summaries.md).
+After publishing an update, editors can start another revision from the current
+summary while keeping its source declaration unchanged.
 
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
@@ -82,6 +88,7 @@ npm run test:saved-items:postgres # private bookmarks, concurrency, recovery and
 npm run test:organization:postgres # populated upgrades, hierarchy, moves, closure and HTTPS recovery
 npm run test:search:postgres # leases, process loss, rebuild, current authorization and search limits
 npm run test:references:postgres # references, populated upgrade, client recovery and read/publication races
+npm run test:summaries:postgres # canonical summaries, coverage, bounded maintenance and exact recovery
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures

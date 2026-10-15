@@ -241,3 +241,10 @@ structured diagnostics, excluding screenshots and raw reporter attachments from
 the upload candidate; see the [diagnostic guide](browser-diagnostics.md).
 See [observed evidence](participation-evidence.md) and the
 [retained-data gate](retained-data-gate.md) for limits and outstanding work.
+
+## Discussion summaries
+
+Guide 6 adds optional canonical summaries with exact source declarations, editor
+rights, bounded coverage/maintenance, references and current authored-text search.
+See the [summary guide](discussion-summaries.md) and [verification](discussion-summaries-evidence.md).
+The existing publication, Saved and organization contracts remain compatible.

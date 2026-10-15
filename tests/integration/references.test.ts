@@ -133,7 +133,7 @@ test('validation, logical uniqueness, revision ownership and Unicode budgets fai
     authored('x'.repeat(16384),[{...ref,rationale:'x'}]),
     authored('NUL',[{...ref,rationale:'\0'}]),
     authored('surrogate',[{...ref,rationale:'\ud800'}]),
-    authored('unsupported',[{...ref,target:{kind:'summary' as any,resource_id:a.resource_id}}]),
+    authored('unsupported',[{...ref,target:{kind:'file' as any,resource_id:a.resource_id}}]),
     authored('discussion revision',[{...ref,target:{kind:'discussion' as const,resource_id:a.resource_id,revision_id:a.revision_id}}]),
   ];
   for(const content of invalid){const r=await f.admin.call('/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Invalid reference',content});assert.equal(r.status,400,JSON.stringify(r.body));}

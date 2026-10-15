@@ -1,0 +1,39 @@
+
+> ai-collective-loom@0.1.0 test:references:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/references*.test.ts
+
+✔ a restarted standalone HTTPS client retains every reference field and reconciles the original publication (2323.932333ms)
+✔ ordinary human and agent editors both change and withdraw their own declarations without target editing (1929.108417ms)
+✔ reference declaration, serialized response, candidate and timeout budgets are observable (5094.089541ms)
+✔ populated pre-reference upgrade preserves old requests, mention bytes, Saved, organization, proposals and search (2293.320041ms)
+✔ bounded scans, stable ordering, filters and caller/scope/history-bound continuation disclose no hidden population (4074.456542ms)
+✔ source and target revisions invalidate current and historical pages; expiry and API restart require refresh (2153.999541ms)
+▶ reference snapshots serialize suppression, restoration, source edits and moves at deterministic barriers
+  ✔ resources suppression before guard state (11.7855ms)
+  ✔ resources suppression after guard state (49.823208ms)
+  ✔ revisions suppression before guard availability (12.182417ms)
+  ✔ revisions suppression after guard availability (24.410375ms)
+  ✔ resources suppression before guard state (6.155667ms)
+  ✔ resources suppression after guard state (20.814916ms)
+  ✔ revisions suppression before guard availability (7.97175ms)
+  ✔ revisions suppression after guard availability (20.841625ms)
+  ✔ resources suppression before guard state (7.182583ms)
+  ✔ resources suppression after guard state (19.948875ms)
+✔ reference snapshots serialize suppression, restoration, source edits and moves at deterministic barriers (1811.73975ms)
+✔ credential revocation and publication target suppression order safely under current guards (1752.027792ms)
+✔ human and agent publications record exact directed references with no target effects (2085.194708ms)
+✔ carry-forward, changes, withdrawal and moves preserve identity and distinct editor attribution (2284.751583ms)
+✔ unavailable targets carry unchanged without metadata leaks; exact history does not depend on current availability (1774.795542ms)
+✔ discussion containers, opening contributions and independently eligible nested replies have separate backlink scopes (1798.527791ms)
+✔ validation, logical uniqueness, revision ownership and Unicode budgets fail before durable publication (1701.890541ms)
+✔ rollback, concurrent retries, changed semantics and lost acknowledgements retain a single membership (1733.072791ms)
+✔ opposite cross-referencing source edits acquire complete ordered guards without lock upgrades (1590.091625ms)
+✔ both authored formats remain searchable through native worker restart and rebuild; backlinks need no index (2630.469083ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15907.272833

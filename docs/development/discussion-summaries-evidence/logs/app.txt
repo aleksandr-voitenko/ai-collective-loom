@@ -1,0 +1,23 @@
+
+> ai-collective-loom@0.1.0 test:app:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/application.test.ts
+
+▶ application runtime against isolated PostgreSQL and actual HTTP
+  ✔ application-role parameterized transactions use one connection and transaction (4.94175ms)
+  ✔ SQL failures roll back writes and the released connection remains usable (3.226417ms)
+  ✔ privileged migration credentials fail the application readiness boundary (5.783458ms)
+  ✔ compiled web/API start and serve built assets, real readiness, validation and safe errors (360.063083ms)
+  ✔ startup failures exit without listening or exposing credentials (533.277833ms)
+  ✔ development serves browser modules beside its real API proxy (635.980917ms)
+  ✔ shutdown drains an in-flight readiness request before closing its database boundary (83.864708ms)
+{"event":"database_pool_error"}
+  ✔ database loss makes readiness fail while liveness remains alive; unavailable startup fails (616.288459ms)
+✔ application runtime against isolated PostgreSQL and actual HTTP (3126.241625ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3639.007833

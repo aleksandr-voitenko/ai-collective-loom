@@ -95,7 +95,7 @@ export async function syntheticServer(
       key: await readFile(join(directory, "key.pem"), "utf8"),
       cert: await readFile(join(directory, "cert.pem"), "utf8"),
     };
-    application = await createApplication({
+    const openApplication = () => createApplication({
       database: {
         isReady: () => fixture.database.isReady(),
         close: async () => {},
@@ -105,6 +105,7 @@ export async function syntheticServer(
       tls,
       participation: { database, authentication, administration },
     });
+    application = await openApplication();
     await application.listen({ host: "127.0.0.1", port });
     return {
       ...fixture,
@@ -116,6 +117,11 @@ export async function syntheticServer(
       ticket: ticket.secret!,
       administratorId: account.participant_id,
       directory,
+      restart: async () => {
+        await application!.close();
+        application=await openApplication();
+        await application.listen({host:'127.0.0.1',port});
+      },
       close,
     };
   } catch (error) {

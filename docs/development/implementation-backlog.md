@@ -70,6 +70,19 @@ editor-list management, or a model-execution service.
 
 ## Subsequent correctness gates
 
+Discussion summaries have a synthetic database/API/browser slice for KNW-01–04
+and KNW-07: optional canonical summary, initial creator editor, explicit current
+editing rights, fixed full/partial source declarations, independent coverage
+history, safe unknown comparison and bounded maintenance. Summary references and
+current authored-text indexing reuse existing mechanisms. See [ADR-010](../adr/010-discussion-summary-coverage.md),
+the [guide](discussion-summaries.md) and [observed evidence](discussion-summaries-evidence.md).
+AC51/52 and applicable summary/source portions of AC10/31/37/38/54/55/57/59 are
+bounded scripted journeys, not broad scenario closure. KNW-05 change notes,
+notifications, files, reservations, full moderation UI, representative human and
+provider-agent trials, retained-data recovery and production capacity remain open.
+The 100-source/10-summary scan and preparation retention/custody limits are
+synthetic choices requiring review before larger workloads.
+
 Administrator topic organization is implemented in the synthetic persistence/API/
 browser slice: implicit root, nested areas, attributed metadata history, subtree
 and content moves, inherited closure, bounded browsing, version preconditions and
@@ -86,7 +99,7 @@ synthetic constraints requiring review before real use.
 
 Scoped current text search and its first recoverable worker are implemented in the
 synthetic database/API/browser slice. The supported SRCH-01–07 portions and remaining
-summary/file/private-note/history work are stated individually in the
+file/private-note/history work are stated individually in the
 [search guide](search.md), with [ADR-012](../adr/012-scoped-text-search.md) and
 [observed evidence](search-evidence.md). Current placement and exact source versions
 govern results; a stale index never authorizes old or suppressed text. Explicit
@@ -97,11 +110,12 @@ single-process API cursors, retention/pruning and measured production envelope
 remain review gates; same-machine clients/workers are not a cross-machine trial.
 
 Recorded references have a synthetic persistence/API/browser slice for openings,
-comments and text artifacts (DIS-06/REF-01–03). Exact scopes, source-owned changes/
+comments, text artifacts and summaries (DIS-06/REF-01–03). Exact scopes, source-owned changes/
 withdrawal, assertion/editor attribution and direct bounded backlinks extend
 SRCH-07 without another worker. See [ADR-021](../adr/021-recorded-references.md),
 the [guide](recorded-references.md) and [evidence](recorded-references-evidence.md).
-Summary/coverage/change-note, file/path and private-note integration remain open.
+Change-note, file/path and private-note integration remain open. Summaries and
+coverage use ADR-010; coverage membership itself is not a reference assertion.
 Reference portions of AC27–30/33/34/37/39 do not complete those broad scenarios.
 Production capacity, multi-API custody and cross-machine trials remain gates.
 

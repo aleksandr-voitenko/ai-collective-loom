@@ -1,0 +1,26 @@
+
+> ai-collective-loom@0.1.0 test:participation:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/participation.test.ts
+
+▶ synthetic participation over real HTTPS and PostgreSQL
+  ✔ setup discovery, atomic overview publication, and release schemas (235.79725ms)
+  ✔ human creates discussion/opening atomically; HTTP agent retrieves actual parent and nests replies (269.531167ms)
+  ✔ immutable exact revisions, conflicting bases, explicit entities and equivalent edit denial (177.24ms)
+  ✔ post-COMMIT response loss, restarted HTTP client, changed semantics and current authority (264.805292ms)
+  ✔ ordinary artifact editor rules, removed editing rights and safe setup unavailability (346.339417ms)
+  ✔ compatible text/JSON limits, bounded children, hidden scan continuation and no reading effects (680.757875ms)
+  ✔ standalone external-client executable persists intent across process exit and exact retry (same machine) (567.202709ms)
+  ✔ ordinary server restart preserves publication recovery and makes old view cursors explicit (510.271125ms)
+✔ synthetic participation over real HTTPS and PostgreSQL (5224.65625ms)
+▶ review regressions: retained history and disclosure-safe reply traversal
+  ✔ history remains available without disclosing a suppressed current revision (106.364167ms)
+  ✔ child pages traverse unavailable parents but never bypass discussion suppression (183.919667ms)
+✔ review regressions: retained history and disclosure-safe reply traversal (2431.703625ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8128.972916

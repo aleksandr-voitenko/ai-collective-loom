@@ -1,0 +1,66 @@
+
+> ai-collective-loom@0.1.0 test:search:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/search*.test.ts
+
+✔ search author discovery follows readable publications rather than account state (3019.806875ms)
+▶ search pages serialize current source eligibility and credential revocation in both commit orders
+  ✔ resource suppression commits after selection but before page construction (97.457333ms)
+  ✔ resource suppression waits for an already authorized page to commit (103.656291ms)
+  ✔ revision suppression commits after selection but before page construction (71.431458ms)
+  ✔ revision suppression waits for an already authorized page to commit (46.509333ms)
+  ✔ discussion suppression commits after selection but before page construction (58.36275ms)
+  ✔ discussion suppression waits for an already authorized page to commit (45.487209ms)
+  ✔ credential revocation wins between authentication and continuation authorization (62.428875ms)
+  ✔ credential revocation waits for an authorized page and then rejects its continuation (54.937333ms)
+✔ search pages serialize current source eligibility and credential revocation in both commit orders (2536.856584ms)
+▶ search expiry, unsupported work, disclosure-safe failure and independent capacity limits
+  ✔ stable ties are resource UUID ordered and an expired cursor fails explicitly (77.6095ms)
+  ✔ database query timeout is 503 without an empty successful result or SQL details (2504.978834ms)
+  ✔ API instance restart invalidates old cursors while retained sources stay readable (474.612917ms)
+  ✔ unsupported event work is retained as failed and administrator retry cannot silently succeed (58.787ms)
+  ✔ retained work cap refuses new discovery without evicting jobs (396.544125ms)
+  ✔ corpus work cap fails independently of a tiny item limit and direct retrieval remains available (272.772291ms)
+✔ search expiry, unsupported work, disclosure-safe failure and independent capacity limits (6884.046333ms)
+✔ synthetic preview supervises terminal worker stop/start while HTTPS stays available (2417.169625ms)
+▶ claim updates cannot revive ownership after expiry while waiting for a job lock
+  ✔ renew (1027.301375ms)
+  ✔ fail (1008.772417ms)
+✔ claim updates cannot revive ownership after expiry while waiting for a job lock (3598.015417ms)
+✔ populated 0007 upgrade preserves jobs and recovers previously skipped intents (1414.443542ms)
+✔ simultaneous bounded claims have distinct owners and no duplicate jobs (1785.141667ms)
+▶ native process loss during unfinished rebuild resumes both discovery cursors
+  ✔ before_commit (1812.814792ms)
+  ✔ after_commit (1883.459958ms)
+✔ native process loss during unfinished rebuild resumes both discovery cursors (6781.284667ms)
+✔ unsupported intents survive revision collisions and a split event-discovery page (1702.431041ms)
+▶ populated upgrade, durable discovery and atomically fenced search outputs
+  ✔ expired owner cannot renew or alter replacement output or job state (26.456708ms)
+  ✔ R2 completes before delayed R1 without replacing newer content (54.218292ms)
+  ✔ output and successful finalization roll back together; retry deduplicates (35.70525ms)
+  ✔ rebuild fences in-flight work and repeated requests do not reset progress (93.487834ms)
+  ✔ three failures retain work; explicit administrator retry advances the fence (99.671167ms)
+✔ populated upgrade, durable discovery and atomically fenced search outputs (2158.14625ms)
+▶ native worker expiry and process loss around the real output COMMIT
+  ✔ A waits through its actual lease deadline, B completes, and resumed A cannot write (30153.04675ms)
+  ✔ loss before COMMIT rolls back output; loss after COMMIT remains deduplicated (171.116167ms)
+✔ native worker expiry and process loss around the real output COMMIT (31833.736333ms)
+▶ current scoped lexical search through HTTPS and native worker recovery
+  ✔ stopped worker preserves committed publication intents and honest unavailable status (480.985917ms)
+  ✔ human and agent parity, discussion identity, original author and revision time filters (561.65625ms)
+  ✔ actual simple parser behavior and strict bounded query shapes (189.925167ms)
+  ✔ current R2 without index never returns R1; original author differs from revision publisher (412.097208ms)
+  ✔ synchronous containment, revision suppression, restoration and independent quotations (239.012833ms)
+  ✔ moves update fresh scope without reindexing and preserve historical events and Saved references (410.078666ms)
+{"synthetic_search_measurement":{"sources":215,"samples_per_query":10,"transport":"same-machine HTTPS","observations":[{"query":"common","p50_ms":60,"p95_ms":66},{"query":"common filtered","p50_ms":74,"p95_ms":132}]}}
+  ✔ bounded selected window, Unicode response bytes, private filters and owner-bound continuation (8623.050375ms)
+  ✔ rebuild while publications continue and interrupted scan resumes from retained sources (3225.684708ms)
+  ✔ revoked bearer credentials cannot reuse search selections or indexing status (54.009166ms)
+✔ current scoped lexical search through HTTPS and native worker recovery (17018.113041ms)
+ℹ tests 46
+ℹ suites 0
+ℹ pass 46
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34205.495209

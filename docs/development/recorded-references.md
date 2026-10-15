@@ -1,7 +1,7 @@
 # Recorded references in synthetic participation
 
-Contract `participation-1`, guide 5 supports explicit references from discussion
-openings, comments and text artifacts. Use synthetic accounts/content only.
+Contract `participation-1`, guide 6 supports explicit references from discussion
+openings, comments, text artifacts and discussion summaries. Use synthetic accounts/content only.
 [ADR-021](../adr/021-recorded-references.md) records representation, attribution,
 authorization, concurrency, compatibility and continuation decisions.
 
@@ -153,7 +153,7 @@ displayed but not searched. Resolved target titles/bodies never become source
 search content. Direct relational backlinks need no worker.
 
 DIS-06/REF-01–03 are implemented for this text population; SRCH-07 gains bounded
-reference expansion. Summary/coverage/change-note, file/path and private-note
+reference expansion. Change-note, file/path and private-note
 integration remain open. Reference portions of AC27–30/33/34/37/39 do not complete
 the broad scenarios. No attention, graph visualization, inference, production
 capacity, provider-agent or cross-machine trial is claimed. See [observed evidence](recorded-references-evidence.md).

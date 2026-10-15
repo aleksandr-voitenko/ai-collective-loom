@@ -21,7 +21,7 @@ export class ParticipationAdministration {
   constructor(private readonly database: Transactions) {}
   async change(
     actorContext: ActorContext,
-    kind: "community.settings" | "artifact.editors",
+    kind: "community.settings" | "artifact.editors" | "summary.editors",
     value: unknown,
   ) {
     if (
@@ -123,7 +123,7 @@ export class ParticipationAdministration {
           );
         } else {
           target = String(data.resource_id);
-          await lockContext(tx, target, "publication", ["artifact"]);
+          await lockContext(tx, target, "publication", [kind === 'summary.editors' ? 'summary' : 'artifact']);
           const current = (
             await tx.query<{ editors_version: number }>(
               "SELECT editors_version FROM loom.resources WHERE id=$1",

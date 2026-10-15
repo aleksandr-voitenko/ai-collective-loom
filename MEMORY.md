@@ -9,7 +9,7 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`5`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`6`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -19,19 +19,23 @@ Proposal discussions bind their destination/settings; topic-specific suggestions
 also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.
 See ADR-020 and `docs/development/topic-organization.md`; optional moderator
 delegation and attention services remain open.
-Current shared-text search is implemented for typed openings/comments/artifacts,
+Current shared-text search is implemented for typed openings/comments/artifacts/summaries,
 with exact revisions, live containment, original-author/time/topic filters and
 explicit continuation invalidation. Search is the first recoverable derived worker;
 other projections remain disabled. See ADR-012, `docs/development/search.md` and
 `src/server/modules/search/MEMORY.md` for fencing, backfill, bounds and recovery.
 Recorded references (ADR-021) use explicit `loom-markdown-v2` declarations from
-openings/comments/text artifacts; old v1 bytes/digests remain unchanged. Immutable
+openings/comments/text artifacts/summaries; old v1 bytes/digests remain unchanged. Immutable
 memberships/withdrawals commit with the source, keeping exact targets and separate
 assertion/change/withdrawal attribution. Direct bounded backlinks use current
 eligibility, explicit resource/exact and current/history scopes, sorted guards and
 restartable snapshot pages. Search supports both formats' source title/body;
 rationale is displayed but not searched. See `docs/development/recorded-references.md`
-and the participation memory; summary/file/private-note integration remains open.
+and the participation memory; file/private-note integration remains open.
+Discussion summaries (ADR-010) add optional canonical identity, explicit editors,
+immutable exact source declarations, bounded preparation/comparison/maintenance,
+and current authority across API/browser recovery. Coverage is an author claim,
+not reading progress. See `docs/development/discussion-summaries.md`.
 Private Saved items now support discussion/contribution/artifact resource references
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones

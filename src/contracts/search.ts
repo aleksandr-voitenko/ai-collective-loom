@@ -5,7 +5,7 @@ export const searchLimits = Object.freeze({ queryBytes:256, queryNodes:16, corpu
 export const SearchInput = Type.Object({
   q: Type.String({minLength:1,maxLength:256}),
   topic: Type.Optional(UUID), descendants: Type.Optional(Type.Union([Type.Literal('true'),Type.Literal('false')])),
-  kind: Type.Optional(Type.Union(['discussion','comment','artifact'].map(k=>Type.Literal(k)))),
+  kind: Type.Optional(Type.Union(['discussion','comment','artifact','summary'].map(k=>Type.Literal(k)))),
   author: Type.Optional(UUID), from: Type.Optional(Type.String({maxLength:30})), before: Type.Optional(Type.String({maxLength:30})),
   ...PageInput.properties, cursor: Type.Optional(Type.String({maxLength:2048})),
 }, closed);
@@ -27,7 +27,7 @@ export const SearchStatus = Type.Object({
 export type SearchStatusView = Static<typeof SearchStatus>;
 export const SearchResult = Type.Object({
   result_id: UUID, source_resource_id: UUID, revision_id: UUID,
-  kind: Type.Union(['discussion','comment','artifact'].map(k=>Type.Literal(k))),
+  kind: Type.Union(['discussion','comment','artifact','summary'].map(k=>Type.Literal(k))),
   title: Type.Union([Type.String(),Type.Null()]), author: Participant, publisher: Participant,
   published_at: Type.String(), area_id: UUID, area_title: Type.String(),
   location: Type.Array(Type.Object({id:UUID,title:Type.String()},closed),{maxItems:32}),

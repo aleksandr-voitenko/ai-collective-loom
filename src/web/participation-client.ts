@@ -16,7 +16,7 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly currentRevision?: string,
-    readonly operationOutcome?: "unknown",
+    readonly operationOutcome?: "unknown" | "rejected",
   ) {
     super(message);
   }
@@ -71,7 +71,7 @@ export async function request<T>(
           code?: string;
           message?: string;
           current_revision_id?: string;
-          operation_outcome?: "unknown";
+          operation_outcome?: "unknown" | "rejected";
         };
       }
     ).error;
@@ -89,8 +89,10 @@ export async function request<T>(
     );
   return value as T;
 }
-/** Only a first dispatch's explicit rejection can release an intent for correction. */
+/** A first dispatch can be rejected directly. An uncertain summary request can
+ * be corrected only after the server commits its irreversible expiry refusal. */
 export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
+  if (error instanceof ApiError && error.code === 'summary_preparation_expired' && error.operationOutcome === 'rejected') return true;
   return (
     !wasUncertain &&
     error instanceof ApiError &&
@@ -109,6 +111,11 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       "organization_limit",
       "organization_cycle",
       "proposal_route_changed",
+      "summary_already_exists",
+      "summary_preparation_expired",
+      "summary_preparation_limit",
+      "summary_source_limit",
+      "summary_coverage_required",
     ].includes(error.code)
   );
 }

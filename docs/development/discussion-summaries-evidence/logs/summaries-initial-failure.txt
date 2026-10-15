@@ -1,0 +1,46 @@
+
+> ai-collective-loom@0.1.0 test:summaries:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/summaries*.test.ts
+
+✔ AC52: competing creators have one canonical publication/editor; exact retries converge (2073.870667ms)
+✔ AC51/59: exact full/partial declarations preserve concurrent new and changed sources; bookkeeping is excluded (1906.908667ms)
+✖ summary rights use explicit editors and live credentials; an archivist name and discussion authorship grant nothing (1686.254417ms)
+✔ suppression preserves independent prose and hides coverage IDs/counts across every summary surface (1705.912791ms)
+✔ publication rollback stages, concurrent exact retries and lost acknowledgement preserve independent coverage (1608.50775ms)
+✖ summary references and search use summary identity, exact versions and current discussion placement (16781.47575ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 4
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26122.941083
+
+✖ failing tests:
+
+test at tests/integration/summaries.test.ts:5:3603
+✖ summary rights use explicit editors and live credentials; an archivist name and discussion authorship grant nothing (1686.254417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  200 !== 401
+
+      at TestContext.<anonymous> (/Users/tarm/.codex/worktrees/discussion-summaries/ai-collective-loom/tests/integration/summaries.test.ts:71:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 200,
+    expected: 401,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/integration/summaries.test.ts:5:11567
+✖ summary references and search use summary identity, exact versions and current discussion placement (16781.47575ms)
+  Error: Summary indexing deadline
+      at TestContext.<anonymous> (/Users/tarm/.codex/worktrees/discussion-summaries/ai-collective-loom/tests/integration/summaries.test.ts:129:142)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)

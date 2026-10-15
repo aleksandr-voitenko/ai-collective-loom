@@ -42,13 +42,17 @@ export interface Context {
 }
 
 export function intentUrl(record: Intent) {
+  if (record.kind === "summary.prepare") return record.slot.slice("summary.prepare:".length);
+  if (record.kind === "summary.editors" || record.kind === 'artifact.editors') return `/loom/resource/${record.body.resource_id}`;
   if (record.kind === "saved.set") return "/loom/saved";
   if (record.kind === "organization.change") return "/loom/organize?intent=" + encodeURIComponent(record.key);
   const intent = "intent=" + encodeURIComponent(record.key),
     body = record.body;
   if (record.kind === "reply.create")
     return `/loom/discussion/${body.discussion_id}?focus=${body.parent_id}&${intent}`;
-  if (record.kind === "revision.publish")
+  if (record.kind === "summary.create")
+    return `/loom/discussion/${body.discussion_id}?summary=create&${intent}`;
+  if (record.kind === "revision.publish" || record.kind === "summary.revise")
     return `/loom/resource/${body.resource_id}?edit=1&${intent}`;
   if ((record.kind === "discussion.create" || record.kind === "artifact.create") && record.body.proposal_context) {
     const area = (record.body.proposal_context as {affected_area_id?:string}).affected_area_id;

@@ -24,12 +24,13 @@ export async function revisionReferences(tx: SqlTransaction, revision: string): 
 export async function lockReferencePlan(tx: SqlTransaction, anchors: string[], exclusive?: string) {
   await structureGuard(tx);
   const seeds = [...new Set(anchors)];
-  if (seeds.length > 120) throw new PublicationError('invalid_input');
+  if (seeds.length > 2200) throw new PublicationError('invalid_input');
   const openings = (await tx.query<{ opening_id: string }>(
     'SELECT opening_id FROM loom.discussions WHERE id=ANY($1::uuid[])', [seeds])).rows;
   const proposals = (await tx.query<{ area_id: string }>(`SELECT p.area_id FROM loom.discussion_area_references p
     WHERE p.discussion_id=ANY($1::uuid[]) OR p.discussion_id IN
-      (SELECT discussion_id FROM loom.contributions WHERE id=ANY($1::uuid[])) LIMIT 120`, [seeds])).rows;
+      (SELECT discussion_id FROM loom.contributions WHERE id=ANY($1::uuid[])) OR p.discussion_id IN
+      (SELECT owner_resource_id FROM loom.resources WHERE kind='summary' AND id=ANY($1::uuid[])) LIMIT 120`, [seeds])).rows;
   let frontier = [...new Set([...seeds, ...openings.map(row => row.opening_id), ...proposals.map(row => row.area_id)])];
   const found = new Map<string, Resource>();
   for (let depth = 0; frontier.length && depth < 32; depth++) {
@@ -55,7 +56,7 @@ export async function referenceTarget(tx: SqlTransaction, target: ReferenceTarge
     if (!opening) throw new PublicationError('unavailable');
     source = (await lockContext(tx, opening.opening_id, 'resolution', ['contribution']))[0]!;
   } else {
-    const table = target.kind === 'artifact' ? 'artifacts' : 'contributions';
+    const table = target.kind === 'artifact' ? 'artifacts' : target.kind === 'summary' ? 'summaries' : 'contributions';
     if (!(await tx.query(`SELECT id FROM loom.${table} WHERE id=$1`, [source.id])).rowCount) throw new PublicationError('unavailable');
   }
   const selected = target.revision_id ?? source.current_revision_id;
