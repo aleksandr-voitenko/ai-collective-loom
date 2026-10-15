@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync, existsSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { limits, root, validRun, validBundle, validCapture, prepare, approve, routeTemplate } from '../../scripts/lib/browser-diagnostics.mjs';
+import { limits, root, validRun, validBundle, validCapture, prepare, approve, checked, routeTemplate, sourceFile, controlNames, controlLabels } from '../../scripts/lib/browser-diagnostics.mjs';
 
 const canary = 'LOOM_DIAGNOSTIC_SECRET_CANARY_7jQv39';
 const result = spawnSync(process.execPath, ['scripts/browser-tests.mjs', '--config', 'tests/diagnostics/playwright.config.ts'], {
@@ -59,6 +59,15 @@ assert.ok(bundles.some(bundle => !bundle.capture.complete && bundle.capture.even
   && !bundle.capture.events.some((event: any) => event.detail === 'server_closed')));
 assert.equal(routeTemplate('https://user:' + canary + '@example.test/loom?secret=' + canary + '#' + canary, 'https://example.test'), '/loom');
 assert.equal(routeTemplate('https://example.test/' + canary, 'https://example.test'), 'unknown');
+assert.equal(sourceFile('/private/synthetic/organization.spec.ts'), 'organization.spec.ts');
+for (const path of ['/loom/organize','/loom/overview','/api/v1/organization/changes','/api/v1/organization/status','/api/v1/organization/children','/api/v1/organization/destinations','/api/v1/organization/audit']) {
+  assert.equal(routeTemplate('https://example.test'+path+'?secret='+canary, 'https://example.test'), path);
+}
+for (const path of ['/api/v1/organization/resources/:id','/api/v1/areas/:id/proposal-route','/api/v1/areas/:id/metadata-history']) {
+  assert.equal(routeTemplate('https://example.test'+path.replace(':id','00000000-0000-0000-0000-000000000001')+'#'+canary, 'https://example.test'), path);
+}
+assert.deepEqual(controlLabels.slice(-4), ['Confirm move','Save topic','Check organization status','Retry same organization change']);
+assert.equal(new Set(controlNames).size,controlLabels.length);
 
 const large = structuredClone(missing.capture);
 large.events = Array.from({ length: limits.events }, () => ({ ...large.events[0], ms: 86_400_000,
@@ -71,7 +80,10 @@ assert.ok(validCapture(large));
 // Maximum collection dimensions still fit the capture envelope. Independently
 // test oversized file rejection below; do not invent invalid extra event fields
 // just to force a byte overflow that the closed schema already prevents.
-assert.ok(Buffer.byteLength(JSON.stringify(large, null, 2)) <= limits.bytes - 8192);
+assert.ok(Buffer.byteLength(checked(large, validCapture)) <= limits.bytes - 8192);
+const maximalBundle = { ...missing, capture: large, result: { ...missing.result,
+  steps: Array.from({length:limits.steps},()=>({...missing.result.steps[0],ms:86_400_000,duration_ms:86_400_000})) } };
+assert.ok(Buffer.byteLength(checked(maximalBundle, validBundle)) <= limits.bytes);
 
 // Validate complete candidates, not a hand-picked JSON. Refuse unknown files,
 // metadata/attachment injection, oversized data and symlinks without copying any.

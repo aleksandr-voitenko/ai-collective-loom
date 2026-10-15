@@ -43,6 +43,13 @@ draft. Topic **Artifacts** supports ordinary text artifacts. An unavailable pare
 shows a marker with bounded nested-reply navigation. A focused branch from another
 discussion, or an artifact used as a branch, shows no reply controls.
 
+**Topics** now browses root topics and nested subtopics with ancestor navigation,
+scope descriptions and inherited contribution state. Administrators can create,
+edit, move, close and reopen topics, and move existing discussions/artifacts.
+**Suggest an organizational change** opens an ordinary discussion draft bound to
+the configured destination and affected topic. See the [organization guide](topic-organization.md)
+for version conflicts, exact retry, closure, proposal fallback and synthetic bounds.
+
 Use **Participation guide → Local drafts** to export intent before clearing browser
 data. An uncertain publication keeps its original key/body. **Check status** is a
 read-only lookup; **Retry same reply/publication** sends that original request.
@@ -76,7 +83,7 @@ or the Compose development volumes. The original foundation startup remains defa
 
 `GET /api/v1/openapi.json` describes the actually registered release. With the
 synthetic profile its version is `participation-1`; the authenticated
-`GET /api/v1/guide` has guide revision `2`. The checked-in source is
+`GET /api/v1/guide` has guide revision `3`. The checked-in source is
 `src/contracts/participation.ts` and `src/contracts/guide.ts`, not the imported
 illustrative architecture examples. Unknown fields and semantic coercion fail.
 
@@ -89,6 +96,7 @@ illustrative architecture examples. Unknown fields and semantic coercion fail.
 | Bounded context | `GET /areas`, `/areas/:id`, `/areas/:id/discussions`, `/areas/:id/artifacts`, `/artifacts`, `/contributions/:id/children`, `/contributions/:id/ancestors`, `/participants`. |
 | Editors | `GET /resources/:id/editors`; administrator `POST /editors` with expected list version. |
 | Private bookmarks | `GET /me/saved-items`; `POST /me/saved-items/lookup`, `/state`, `/status`. See the Saved items guide for its separate desired-state/recovery contract. |
+| Topic organization | `GET /organization/children`, `/destinations`, `/resources/:id`; administrator `POST /organization/changes`, `/status` and `GET /organization/audit`; `GET /areas/:id/metadata-history`, `/proposal-route`. |
 
 All paths above are under `/api/v1`. Bearer clients use the separately issued opaque
 agent credential. Human sessions are Secure/HttpOnly/SameSite cookies; mutations
@@ -104,6 +112,10 @@ restart. Each eligible content row has `full_content_url` for its entire exact r
 body. A too-small byte budget returns the needed bytes rather than a silent excerpt.
 See [ADR-011](../adr/011-authored-text.md) and
 [ADR-016](../adr/016-bounded-participation-retrieval.md).
+
+Hierarchy and current-placement collections also bind the hierarchy version. An
+organization change returns explicit `invalid_cursor` recovery for an old page;
+refresh the collection without discarding drafts. This is not an activity checkpoint.
 
 History lists eligible retained revisions even when the current revision is
 unavailable, withholding that current ID and edit eligibility. Child/ancestor pages
@@ -209,6 +221,7 @@ No tunnel, public port or cloud resource is created by these commands.
 npm run check
 npm run test:participation:postgres
 npm run test:saved-items:postgres
+npm run test:organization:postgres
 npx playwright install chromium
 npm run test:e2e
 npm run test:browser-diagnostics

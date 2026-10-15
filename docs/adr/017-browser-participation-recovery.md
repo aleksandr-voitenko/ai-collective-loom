@@ -175,3 +175,27 @@ A local or cross-tab journal change invalidates an in-flight Saved collection re
 Its late response cannot clear the refresh notice or claim current completion. The
 last bounded page remains explicitly stale until a deliberate refresh succeeds;
 failed pagination retains the attempted cursor for Retry collection.
+
+## Organization extension
+
+`Organization.tsx` reuses the scoped journal, shared query/intent hooks extracted to
+`participation-state.tsx`, current identity generation and route ownership. Forms
+save semantic input before dispatch, restore it after reload, freeze uncertain
+requests, and require explicit correction after stale-version refusal. A stale tab
+creates a blocked separate draft; it cannot overwrite a dispatched change. Safe
+status distinguishes original outcome from current placement without reapplying it.
+Organization records coexist with publication and Saved recovery and use their
+existing shared storage bound. No organization cleanup clears those other records.
+
+Destination pages show full paths and stable IDs, preserve failed-page context and
+offer explicit refresh after an invalidated hierarchy epoch. Direct subtree pages
+and ancestor links use actual server state. Closing/reopening uses distinct desired
+commands and describes inherited restrictions. The browser never authorizes a later
+command merely because an earlier response advertised `can_organize`.
+
+The proposal composer freezes its destination/settings version, retains its ordinary
+discussion draft and stable affected-area reference, and exposes administrator
+contacts when routing is closed or changed. Opening it publishes nothing. Reload
+and Local drafts reopen the affected-area route with the original frozen binding.
+Community-wide suggestions resume at the overview, preserving their empty initial
+body and avoiding a false affected-topic reference to the destination itself.

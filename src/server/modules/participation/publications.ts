@@ -28,6 +28,7 @@ import {
   type Resource,
   type Reconciliation,
 } from "../publication/publication.js";
+import { structureGuard, advanceHierarchy, OrganizationError } from "./organization-context.js";
 
 const schemas: Record<string, TSchema> = {
   "discussion.create": DiscussionInput,
@@ -51,6 +52,7 @@ type Request = {
   community_name?: string;
   ordinary_area_name?: string;
   proposal_area_name?: string;
+  proposal_context?: { affected_area_id?: string; expected_settings_version: number };
 };
 
 function ordered(value: unknown): unknown {
@@ -82,6 +84,7 @@ function prepare(kind: string, value: unknown) {
     )
       (input as Record<string, unknown>)[key] = field.toLowerCase();
   const content = input.content ?? input.overview!;
+  if (input.proposal_context?.affected_area_id) input.proposal_context.affected_area_id = input.proposal_context.affected_area_id.toLowerCase();
   content.mentions.forEach((entity) => {
     entity.participant_id = entity.participant_id.toLowerCase();
   });
@@ -171,6 +174,14 @@ export class ParticipationPublications {
           );
           if (!found.rowCount) throw new PublicationError("invalid_input");
         }
+        if (input.proposal_context) {
+          // Freeze the designation with the same configuration-before-structure
+          // order used by settings. Exact committed retries resolved above.
+          await tx.query("SELECT pg_advisory_xact_lock($1::integer,$2::integer)", [0x4c4f4f4d, 3]);
+          const configured = (await tx.query<{version:number;proposal_area_id:string|null}>("SELECT version,proposal_area_id FROM loom.community_settings WHERE id=1 FOR SHARE", [])).rows[0]!;
+          if (configured.version !== input.proposal_context.expected_settings_version || configured.proposal_area_id !== input.area_id) throw new OrganizationError("proposal_route_changed");
+          if (input.proposal_context.affected_area_id) await lockContext(tx, input.proposal_context.affected_area_id, "resolution", ["area"]);
+        }
         let chain: Resource[],
           resourceId: string,
           title = input.title ?? null;
@@ -208,6 +219,8 @@ export class ParticipationPublications {
           ).rows[0];
           if (!settings || settings.version !== 0)
             throw new PublicationError("idempotency_conflict");
+          await structureGuard(tx, true);
+          if ((await tx.query("SELECT id FROM loom.areas LIMIT 499", [])).rows.length > 498) throw new OrganizationError("organization_limit");
           const areaId = randomUUID(),
             proposalId = randomUUID();
           for (const [id, name, description] of [
@@ -230,7 +243,9 @@ export class ParticipationPublications {
               "INSERT INTO loom.areas(id,title,description) VALUES ($1,$2,$3)",
               [id, name, description],
             );
+            await tx.query("INSERT INTO loom.area_metadata_revisions(id,area_id,version,title,description,publisher_id) VALUES ($1,$2,1,$3,$4,$5)", [randomUUID(),id,name,description,actor.participantId]);
           }
+          await advanceHierarchy(tx);
           resourceId = await this.createResource(
             tx,
             actor.participantId,
@@ -321,6 +336,8 @@ export class ParticipationPublications {
               actor.participantId,
             ]);
           }
+          if (kind === "discussion.create" && input.proposal_context?.affected_area_id)
+            await tx.query("INSERT INTO loom.discussion_area_references(discussion_id,area_id) VALUES ($1,$2)", [ownerId,input.proposal_context.affected_area_id]);
           // New rows are owned by this transaction. Existing owner locks were taken
           // before insertion; no competing transaction can yet see these identities.
           chain = await lockContext(tx, resourceId, "publication");
@@ -340,6 +357,7 @@ export class ParticipationPublications {
         );
       });
     } catch (error) {
+      if (error instanceof OrganizationError) throw error;
       return safeError(error);
     }
   }

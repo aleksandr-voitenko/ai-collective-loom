@@ -1,8 +1,8 @@
 # Text participation boundary
 
-`publications.ts`, `retrieval.ts`, `administration.ts`, `saved-items.ts` implement the synthetic
+`publications.ts`, `retrieval.ts`, `administration.ts`, `organization.ts` and `saved-items.ts` implement the synthetic
 `participation-1` slice. Controllers are in `server/http/participation.ts` and
-`identity.ts`; shared schemas/guide/parser are in `src/contracts/`.
+`identity.ts` and `organization.ts`; shared schemas/guide/parser are in `src/contracts/`.
 
 Constructors share `commitRevision` with the original internal text/plain operation.
 Validate and parse before SQL. The scoped attempt mutex precedes sorted participant
@@ -43,7 +43,9 @@ ownership and each exact revision independently of current-revision availability
 withhold a suppressed current revision ID and editing hint. No ordinary read changes
 receipts, delivery or source activity. ADR-016 records the structural-disclosure scope.
 
-AES-GCM cursors bind participant/query/scope with a process-local key. Restart makes
+AES-GCM cursors bind participant/query/scope with a process-local key. Hierarchy and
+area/discussion/artifact collections also bind the community hierarchy epoch; any
+organization change makes old continuation requests fail `invalid_cursor`. Restart makes
 old cursors invalid, not old publication intents. This currently assumes one API
 process. Complete activity catch-up, multiple-process cursor custody and destructive
 restore/recovery epochs are separate gates, not extensions of ordinary pagination.
@@ -116,6 +118,31 @@ bookmarks. First-dispatch `saved_limit_reached` is a dismissible rejected record
 later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
-`scripts/saved-items-client.mjs` persists immutable fsynced intent. Guide revision 2
-documents the actual subset and limits; production and cross-machine gates remain.
+`scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
+unchanged Saved contract in guide revisions 2 and 3. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
+
+Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
+NULL for an area is the implicit non-publishable root. Exclusive class-1 structure
+guard precedes cycle/depth checks and writes. Publication uses its shared form;
+proposal-bound publication takes class 3 before class 1. Every accepted command
+advances the hierarchy epoch and existing target's organization version, including
+no-ops; title/description edits append separately attributed metadata history.
+Migration 0006 records legacy metadata as an unattributed baseline. Structural
+events share the last clock tail with explicit before/after scopes and NULL revision;
+old event scopes and content identities/revisions/editors/bookmarks stay unchanged.
+Closure is local plus inherited, blocks all new text publications/revisions even
+for administrators, and preserves reading. Reopen never clears child restrictions.
+Only current administrators mutate/reconcile; audit has a separate admin-only route.
+`organization-v1` retains original outcome references and freshly authorized current
+state. Exact outcomes resolve before stale preconditions; K1→B, K2→C, retry K1 stays C.
+Check original and current scope visibility before recovery. `not_recorded` is
+uncertainty. No auto expiry: 10,000 decisions/community, 500 areas/subtree work,
+12 area levels and 32-resource owner reads. Use bounded frontiers, not an unbounded
+recursive intermediate. Future closure indexes must preserve resource parentage.
+Optional `proposal_context` keeps ordinary discussion creation/digest compatibility
+and binds affected area/settings; community-wide suggestions omit the area and
+resume at the overview instead of inventing a subject. It never reroutes a retained draft. References are
+withheld when affected sources are unavailable. `web/Organization.tsx` reuses the
+extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 3 and
+`test:organization:postgres`/`e2e/organization.spec.ts` define the supported slice.

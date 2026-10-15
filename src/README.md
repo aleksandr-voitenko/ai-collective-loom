@@ -14,7 +14,10 @@ ordered source events and durable intents. `server/modules/identity/` contains a
 synthetic passkey/session/agent-credential and administration protocol.
 `server/application/` shares current actor checks and absent-row attempt mutexes
 between these modules. `server/modules/participation/` owns typed constructors,
-bounded authorized reads and configuration/editor operations. HTTP adapters invoke
+bounded authorized reads, configuration/editor operations, private Saved items and
+administrator topic organization. `organization.ts` owns versioned structural
+commands, metadata history and reference-only retry; `organization-context.ts`
+shares the hierarchy guard/epoch with publication and retrieval. HTTP adapters invoke
 these services, not unrestricted SQL. `contracts/participation.ts`, `authored.ts`
 and `guide.ts` define the release-matched shared representation. `web/` owns the
 lazy-loaded participation views, safe React rendering and identity-scoped intent.
@@ -34,4 +37,4 @@ the versioned participation operations. Complete domain, retention and productio
 identity policy remain gates; a synthetic journey is not production approval.
 See [ADR-004](../docs/adr/004-identity-admission-prototype.md) and the
 [prototype evidence](../docs/development/identity-prototype.md), then the current
-[participation guide](../docs/development/participation.md) and ADR-011/015/016/017.
+[participation guide](../docs/development/participation.md) and ADR-011/015/016/017/020.

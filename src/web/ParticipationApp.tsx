@@ -7,7 +7,6 @@ import {
 } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import {
-  Area,
   Committed,
   ContributionContext,
   Onboarding,
@@ -35,6 +34,9 @@ import {
   type Intent,
   type Self,
 } from "./participation-client.js";
+import { useQuery, useIntent, intentUrl, SeparateDraft, type Context } from "./participation-state.js";
+import { OrganizationPage, TopicDirectory, TopicLocation, OrganizationActions, TopicMetadataHistory, OrganizationRecovery } from "./Organization.js";
+import { OrganizationResource, type OrganizationResourceView, ProposalRoute, type ProposalRouteView } from "../contracts/organization.js";
 import { AuthoredText } from "./AuthoredText.js";
 import { SaveControl, SavedItemsPage } from "./SavedItems.js";
 import "./participation.css";
@@ -84,124 +86,6 @@ function ErrorText({ error }: { error: string }) {
     </p>
   ) : null;
 }
-function useQuery<T>(
-  path: string,
-  schema?: import("@sinclair/typebox").TSchema,
-) {
-  const [data, setData] = useState<T>(),
-    [error, setError] = useState(""),
-    [reload, setReload] = useState(0);
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController(),
-      owner = identityGeneration();
-    setData(undefined);
-    setError("");
-    void request<T>(path, {
-      signal: controller.signal,
-      ...(schema ? { schema } : {}),
-    }).then(
-      (value) => {
-        if (active && owner === identityGeneration()) setData(value);
-      },
-      (failure) => {
-        if (active && failure.name !== "AbortError") setError(failure.message);
-      },
-    );
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [path, reload, schema]);
-  return { data, error, refresh: () => setReload((value) => value + 1) };
-}
-interface Context {
-  self: Self;
-  community: OnboardingView;
-  store: IntentStore;
-  refreshCommunity: () => void;
-}
-
-function intentUrl(record: Intent) {
-  if (record.kind === "saved.set") return "/loom/saved";
-  const intent = "intent=" + encodeURIComponent(record.key),
-    body = record.body;
-  if (record.kind === "reply.create")
-    return `/loom/discussion/${body.discussion_id}?focus=${body.parent_id}&${intent}`;
-  if (record.kind === "revision.publish")
-    return `/loom/resource/${body.resource_id}?edit=1&${intent}`;
-  if (record.kind === "discussion.create" || record.kind === "artifact.create")
-    return `/loom/area/${body.area_id}?compose=${record.kind === "discussion.create" ? "discussions" : "artifacts"}&${intent}`;
-  return "/loom/admin?" + intent;
-}
-
-// Queue saves from rapid input in one view, while IntentStore serializes and
-// compares versions across tabs. Navigation may finish saving the old draft;
-// identity changes and unmounted views cannot receive its UI result.
-function useIntent(initial: () => Intent | undefined) {
-  const location = useLocation(),
-    navigate = useNavigate();
-  const [record, setRecord] = useState(initial);
-  const current = useRef(record),
-    queue = useRef(Promise.resolve()),
-    owner = useRef(identityGeneration()),
-    live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
-  function update(
-    work: (record: Intent | undefined) => Promise<Intent | undefined>,
-  ) {
-    const pending = queue.current.then(async () => {
-      if (owner.current !== identityGeneration())
-        throw new DOMException("Identity changed.", "AbortError");
-      const previous = current.current;
-      const next = await work(previous);
-      current.current = next;
-      if (live.current && owner.current === identityGeneration()) {
-        setRecord(next);
-        if (
-          next &&
-          (next.blocked_by || (previous && next.key !== previous.key)) &&
-          new URLSearchParams(location.search).get("intent") !== next.key
-        ) {
-          void navigate(intentUrl(next), { replace: true });
-        }
-      }
-      return next;
-    });
-    queue.current = pending.then(
-      () => {},
-      () => {},
-    );
-    return pending;
-  }
-  return [record, update] as const;
-}
-
-function SeparateDraft({
-  record,
-  review,
-}: {
-  record: Intent | undefined;
-  review: () => void;
-}) {
-  return record?.blocked_by ? (
-    <div className="notice">
-      <strong>Your changes were saved separately.</strong>
-      <p>
-        Another view changed the original submission. Check it in Local drafts
-        before choosing to publish these changes as a new submission.
-      </p>
-      <Link to="/loom/help">Inspect local drafts</Link>{" "}
-      <button onClick={review}>Continue with separate draft</button>
-    </div>
-  ) : null;
-}
-
 export function ParticipationApp() {
   const location = useLocation(),
     navigate = useNavigate();
@@ -540,6 +424,7 @@ function ActiveView({ context }: { context: Context }) {
     kind = path[0],
     id = path[1];
   if (!kind) return <Topics context={context} />;
+  if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
   if (kind === "area" && id) return <AreaPage id={id} context={context} />;
   if (kind === "discussion" && id)
@@ -583,15 +468,18 @@ function Collection({
 }) {
   const [cursor, setCursor] = useState(""),
     [previous, setPrevious] = useState<string[]>([]);
-  const { data, error, refresh } = useQuery<PageView>(
+  const { data: response, error, refresh } = useQuery<PageView>(
     path + (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
     Page,
   );
+  const retained = useRef<PageView | undefined>(undefined);
+  if (response) retained.current = response;
+  const data = response ?? retained.current;
   return (
     <>
       <ErrorText error={error} />
-      {error && <button onClick={refresh}>Retry this page</button>}
-      {!data && !error && <p role="status">Loading…</p>}
+      {error && <><button onClick={refresh}>Retry this page</button><button onClick={() => { setCursor(""); setPrevious([]); refresh(); }}>Refresh this collection</button></>}
+      {!response && !error && <p role="status">Loading…</p>}
       {data && (
         <>
           <div className="collection">
@@ -617,11 +505,11 @@ function Collection({
           <div className="pagination">
             <span>
               {data.items.length} shown ·{" "}
-              {data.complete ? "End of collection" : "More available"}
+              {!response ? error ? "Previous page · refresh required" : "Previous page · loading" : data.complete ? "End of collection" : "More available"}
             </span>
             <div>
               <button
-                disabled={!previous.length}
+                disabled={!previous.length || !response}
                 onClick={() => {
                   setCursor(previous.at(-1)!);
                   setPrevious((value) => value.slice(0, -1));
@@ -630,7 +518,7 @@ function Collection({
                 ← Previous
               </button>
               <button
-                disabled={!data.next_cursor}
+                disabled={!data.next_cursor || !response}
                 onClick={() => {
                   setPrevious((value) => [...value, cursor]);
                   setCursor(data.next_cursor!);
@@ -702,26 +590,8 @@ function Topics({ context }: { context: Context }) {
           </p>
         </div>
       )}
-      <Collection
-        path="/api/v1/areas"
-        render={(item) => {
-          const area = item as {
-            id: string;
-            title: string;
-            description: string;
-          };
-          return (
-            <Link className="list-row" to={"/loom/area/" + area.id}>
-              <Icon name="topic" />
-              <div>
-                <h3>{area.title}</h3>
-                <p>{area.description}</p>
-              </div>
-              <span>→</span>
-            </Link>
-          );
-        }}
-      />
+      {context.self.role === "administrator" && <><Link className="button" to="/loom/organize?action=area.create">Create root topic</Link><OrganizationRecovery context={context}/></>}
+      <TopicDirectory />
     </>
   );
 }
@@ -736,11 +606,7 @@ function AreaPage({ id, context }: { id: string; context: Context }) {
     data: area,
     error,
     refresh,
-  } = useQuery<{
-    title: string;
-    description: string;
-    publication_open: boolean;
-  }>("/api/v1/areas/" + id, Area);
+  } = useQuery<OrganizationResourceView>("/api/v1/organization/resources/" + id, OrganizationResource);
   if (error)
     return (
       <>
@@ -749,13 +615,10 @@ function AreaPage({ id, context }: { id: string; context: Context }) {
       </>
     );
   if (!area) return <p role="status">Opening topic…</p>;
+  if (area.kind !== "area") return <p role="alert">This topic is unavailable.</p>;
   return (
     <>
-      <div className="breadcrumb">
-        <Link to="/loom">Topics</Link>
-        <span>›</span>
-        <span>{area.title}</span>
-      </div>
+      <TopicLocation area={area}/>
       <div className="header-line">
         <div>
           <h1>{area.title}</h1>
@@ -770,6 +633,9 @@ function AreaPage({ id, context }: { id: string; context: Context }) {
           {tab === "discussions" ? "Start a discussion" : "New text artifact"}
         </button>
       </div>
+      <p className="topic-state">{area.publication_open ? "Open to contributions" : "Closed to contributions"}{!area.publication_open && area.local_open ? " by an ancestor topic" : ""}</p>
+      {context.self.role === "administrator" && <OrganizationActions id={id} kind="area" localOpen={area.local_open}/>}
+      <TopicDirectory key={id} parent={id}/>
       <div className="topic-tabs" role="group" aria-label="Topic content">
         <button
           aria-pressed={tab === "discussions"}
@@ -810,52 +676,40 @@ function AreaPage({ id, context }: { id: string; context: Context }) {
         path={"/api/v1/areas/" + id + "/" + tab}
         render={(item) => <ResourceRow resource={item as ResourceView} />}
       />
-      <details className="about">
+      <details className="about" open={query.has("proposal")}>
         <summary>About this topic</summary>
         <p>{area?.description}</p>
         <Proposal context={context} areaId={id} />
+        <TopicMetadataHistory id={id}/>
       </details>
     </>
   );
 }
 function Proposal({ context, areaId }: { context: Context; areaId?: string }) {
-  const [open, setOpen] = useState(false),
-    target = context.community.proposal_area;
-  if (target.state !== "ready")
-    return (
-      <p role="status">
-        Organizational proposals are{" "}
-        {target.state === "setup_incomplete"
-          ? "not configured"
-          : "currently unavailable"}
-        . Contact{" "}
-        {context.community.contacts.map((p) => p.nickname).join(", ") ||
-          "an administrator"}
-        .
-      </p>
-    );
-  return (
-    <>
-      <button
-        className="text-button"
-        onClick={() => setOpen((value) => !value)}
-      >
-        Suggest an organizational change →
-      </button>
-      {open && (
-        <Composer
-          context={context}
-          kind="discussion.create"
-          path="/api/v1/discussions"
-          slot={"proposal:" + (areaId ?? "community")}
-          fixed={{ area_id: target.resource_id }}
-          titleField
-          initialText={areaId ? `Proposal concerning topic ${areaId}\n\n` : ""}
-          heading="Suggest an organizational change"
-        />
-      )}
-    </>
-  );
+  const chosen = new URLSearchParams(useLocation().search);
+  const existing = context.store.all().find(r => r.kind === "discussion.create" && (chosen.has("intent") ? r.key === chosen.get("intent") && !!r.body.proposal_context : r.slot === "proposal:" + (areaId ?? "community")));
+  const [open, setOpen] = useState(chosen.has("proposal")),
+    [destination, setDestination] = useState(existing?.body.area_id as string | undefined),
+    [version, setVersion] = useState((existing?.body.proposal_context as { expected_settings_version: number } | undefined)?.expected_settings_version);
+  const affected = areaId ?? context.community.proposal_area.resource_id;
+  const route = useQuery<ProposalRouteView>(affected ? `/api/v1/areas/${affected}/proposal-route` : "/api/v1/community", affected ? ProposalRoute : Onboarding);
+  const ready = affected && route.data?.state === "ready";
+  const contacts = route.data?.contacts ?? context.community.contacts;
+  return <>
+    <p>For organization help, contact {contacts.map(p => p.nickname).join(", ") || "an administrator"}. <a href="/api/v1/contacts">Administrator contacts</a></p>
+    {route.error && <p role="alert">{route.error}</p>}
+    {!ready && <p role="status">Organizational proposals are currently unavailable or not configured. Keep your draft and contact an administrator.</p>}
+    <button className="text-button" disabled={!ready && !existing} onClick={() => {
+      if (!open) { setDestination(existing?.body.area_id as string ?? route.data?.destination?.resource_id); setVersion((existing?.body.proposal_context as { expected_settings_version: number } | undefined)?.expected_settings_version ?? route.data?.settings_version); }
+      setOpen(value => !value);
+    }}>Suggest an organizational change →</button>
+    <button className="text-button" onClick={route.refresh}>Refresh proposal route</button>
+    {/* A retained attempt keeps its original target even when fresh routing is unavailable. */}
+    {open && (existing || ready) && (destination ?? existing?.body.area_id) && <Composer
+      context={context} kind="discussion.create" path="/api/v1/discussions" slot={"proposal:" + (areaId ?? "community")}
+      fixed={{ area_id: destination ?? existing?.body.area_id, proposal_context: { ...(areaId ? {affected_area_id:areaId} : {}), expected_settings_version: version ?? (existing?.body.proposal_context as { expected_settings_version: number } | undefined)?.expected_settings_version } }}
+      titleField initialText={areaId ? `Proposal concerning [this topic](${location.origin}/loom/area/${areaId})\n\n` : ''} heading="Suggest an organizational change" />}
+  </>;
 }
 function Composer({
   context,
@@ -1340,6 +1194,8 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
           History & details
         </Link>
       </div>
+      {data.opening.affected_area_id && <p>Organizational suggestion concerning <Link to={'/loom/area/'+data.opening.affected_area_id}>this topic</Link>.</p>}
+      {context.self.role === "administrator" && <OrganizationActions id={id} kind="discussion"/>}
       <div className="reading-grid">
         <div>
           {focus ? (
@@ -1832,6 +1688,7 @@ function ResourcePage({
         />
       )}
       {history && <RevisionHistory id={id} />}
+      {data.kind === "artifact" && context.self.role === "administrator" && <OrganizationActions id={id} kind="artifact"/>}
       {data.kind === "artifact" && <Editors id={id} context={context} />}
     </>
   );

@@ -38,7 +38,10 @@ Applied `0001_schema.sql`, role initialization and the migration runner are unch
 
 This is a shared-publication foundation, not generic resource CRUD or a complete
 discussion/artifact model. Migration 0004 now adds typed text constructors, database-enforced same-discussion
-parents, title/mention revisions and community configuration. Files, full hierarchy,
+parents, title/mention revisions and community configuration. Migration 0006 adds
+versioned topic organization, immutable area metadata history, reference-only
+structural decisions/audit and ordinary discussion area references (ADR-020).
+Resource ownership remains the sole hierarchy parentage. Files,
 reference/summary entities and the complete authored model remain later work. The operation
 publishes into a prepared internal resource envelope; its first revision requires
 explicit null expected revision, while an update requires the exact base UUID.

@@ -1,0 +1,127 @@
+{
+  "schema": "loom-browser-diagnostic-1",
+  "metadata": {
+    "commit": "4279c8abe75a0721a043ddd049502041caed12d0",
+    "dirty": true,
+    "node": "24.19.0",
+    "playwright": "1.64.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "run": "local",
+    "attempt": 0,
+    "job": "local"
+  },
+  "result": {
+    "status": "failed",
+    "duration_ms": 4,
+    "errors": 1,
+    "attachments_omitted": 1,
+    "steps": [
+      {
+        "ms": 10,
+        "duration_ms": 1,
+        "category": "fixture",
+        "action": "other",
+        "file": "browser-fixtures.ts",
+        "line": 5,
+        "failed": false
+      },
+      {
+        "ms": 12,
+        "duration_ms": 473,
+        "category": "pw:api",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": true
+      },
+      {
+        "ms": 11,
+        "duration_ms": 476,
+        "category": "fixture",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": true
+      },
+      {
+        "ms": 7,
+        "duration_ms": 481,
+        "category": "hook",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": true
+      },
+      {
+        "ms": 490,
+        "duration_ms": 2,
+        "category": "fixture",
+        "action": "other",
+        "file": "browser-fixtures.ts",
+        "line": 5,
+        "failed": false
+      },
+      {
+        "ms": 488,
+        "duration_ms": 17,
+        "category": "hook",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": false
+      },
+      {
+        "ms": 505,
+        "duration_ms": 0,
+        "category": "fixture",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": false
+      },
+      {
+        "ms": 505,
+        "duration_ms": 3,
+        "category": "hook",
+        "action": "other",
+        "file": "unknown",
+        "line": 0,
+        "failed": false
+      }
+    ],
+    "steps_dropped": 0
+  },
+  "capture": {
+    "schema": "loom-browser-capture-1",
+    "test": {
+      "id": "3d3c6224aa97494f3ee660f34bc1d08c273010aeba8cb3c05143492766bd1d3d",
+      "file": "diagnostics.probe.ts",
+      "line": 59,
+      "column": 1,
+      "repeat": 0,
+      "retry": 0
+    },
+    "complete": true,
+    "chromium": "unknown",
+    "issues": [],
+    "events": [
+      {
+        "ms": 479,
+        "kind": "fixture",
+        "context": 0,
+        "page": 0,
+        "navigation": 0,
+        "request": 0,
+        "route": "unknown",
+        "method": "none",
+        "status": 0,
+        "detail": "collector_finished"
+      }
+    ],
+    "events_dropped": 0,
+    "pages": [],
+    "pending": [],
+    "connections": 0
+  }
+}

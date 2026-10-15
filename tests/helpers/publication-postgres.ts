@@ -11,7 +11,7 @@ import { localDockerEndpoint } from '../../scripts/lib/local-config.mjs';
 import { migrationSql, readMigrations } from '../../scripts/lib/migrations.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-export async function isolatedPublicationPostgres() {
+export async function isolatedPublicationPostgres(options: { throughMigration?: number } = {}) {
   const name = 'loom-publication-test-' + randomUUID();
   const passwords = {
     POSTGRES_PASSWORD: randomBytes(32).toString('hex'),
@@ -51,7 +51,11 @@ export async function isolatedPublicationPostgres() {
       if (Date.now() > deadline) throw new Error('Isolated publication database startup timed out.');
       await delay(100);
     }
-    docker(['exec', '-i', '-e', 'PGPASSWORD', name, 'psql', '-X', '-q', '-h', '127.0.0.1', '-U', 'loom_migrator', '-d', 'loom_dev', '-v', 'ON_ERROR_STOP=1'], migrationSql(await readMigrations(root + 'db/migrations')));
+    const migrate = async (through?:number) => {
+      const migrations = await readMigrations(root + 'db/migrations');
+      docker(['exec', '-i', '-e', 'PGPASSWORD', name, 'psql', '-X', '-q', '-h', '127.0.0.1', '-U', 'loom_migrator', '-d', 'loom_dev', '-v', 'ON_ERROR_STOP=1'], migrationSql(through === undefined ? migrations : migrations.slice(0,through)));
+    };
+    await migrate(options.throughMigration);
     // Superuser is exclusively a fault-injection/catalog observer. Publication,
     // fixtures and policy checks use actual loom_app connections.
     control = new pg.Client({ ...configuration, user: 'postgres', password: passwords.POSTGRES_PASSWORD });
@@ -76,6 +80,6 @@ export async function isolatedPublicationPostgres() {
       });
       return { resourceId, rootId, areaId, discussionId };
     }
-    return { database: db, observer, configuration, participant, resource, close };
+    return { database: db, observer, configuration, participant, resource, close, migrate };
   } catch (error) { await close(); throw error; }
 }

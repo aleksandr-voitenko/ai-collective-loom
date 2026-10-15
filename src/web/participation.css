@@ -861,3 +861,15 @@
   .loom-app .saved-row > .saved-control { flex-basis: 100%; }
   .loom-app .saved-collection .saved-row { align-items: flex-start; gap: 15px; }
 }
+.organization-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-block: 1rem; }
+.organization-form { max-width: 850px; }
+.organization-form label { display: grid; gap: .4rem; margin-block: 1rem; }
+.organization-form textarea { min-height: 8rem; }
+.organization-form .notice, .topic-directory .list-row, .breadcrumb { overflow-wrap: anywhere; }
+.topic-directory { margin-block: 1.5rem; }
+.topic-directory .list-row > div { min-width: 0; flex: 1; }
+.destination-id { display: block; overflow-wrap: anywhere; }
+.topic-state { color: var(--text-muted, #546158); }
+.loom-app nav.breadcrumb { display: flex; align-items: center; }
+.loom-app nav.breadcrumb a { display: inline; padding: 0; margin: 0; }
+@media (max-width: 600px) { .topic-directory .list-row { flex-wrap: wrap; } .organization-actions .button { white-space: normal; } }

@@ -19,6 +19,7 @@ import {
   safeError,
   type Transactions,
 } from "../publication/publication.js";
+import { hierarchyVersion, structureGuard } from "./organization-context.js";
 
 export class RetrievalError extends Error {
   constructor(
@@ -182,6 +183,13 @@ export class ParticipationRetrieval {
       publication_open: chain.every((item) => item.publication_open),
       full_content_url: `/api/v1/resources/${id}/revisions/${selected}`,
     };
+    if (row.discussion_id) {
+      const reference = (await tx.query<{area_id:string}>("SELECT area_id FROM loom.discussion_area_references WHERE discussion_id=$1", [row.discussion_id])).rows[0];
+      if (reference) {
+        try { await lockContext(tx, reference.area_id, "resolution", ["area"]); view.affected_area_id = reference.area_id; }
+        catch (error) { if (!(error instanceof PublicationError) || error.code !== "unavailable") throw error; }
+      }
+    }
     if (!full) return view;
     const body = (
       await tx.query<{ content_format: string; content_text: string }>(
@@ -317,7 +325,7 @@ export class ParticipationRetrieval {
       ).rows[0]!;
       return {
         id,
-        area: { ...area, publication_open: chain[1]!.publication_open },
+        area: { ...area, publication_open: chain.slice(1).every(r => r.publication_open) },
         opening: await this.resource(tx, authority, discussion.opening_id),
       };
     });
@@ -409,14 +417,14 @@ export class ParticipationRetrieval {
       pageSize > limits.pageItems
     )
       throw new PublicationError("invalid_input");
-    const binding = JSON.stringify([
-      identityOf(actorContext).participantId,
-      kind,
-      scope,
-    ]);
-    const after = this.decode(binding, options.cursor);
     return this.run(async (tx) => {
       const actor = await lockActor(tx, actorContext);
+      await structureGuard(tx);
+      // Current-placement browsing explicitly restarts after organization changes;
+      // a stale continuation cannot silently declare a moved population complete.
+      const binding = JSON.stringify([identityOf(actorContext).participantId, kind, scope,
+        ["areas", "discussions", "artifacts"].includes(kind) ? await hierarchyVersion(tx) : null]);
+      const after = this.decode(binding, options.cursor);
       if (["discussions", "artifacts"].includes(kind) && scope !== "all")
         await lockContext(tx, scope, "resolution", ["area"]);
       if (kind === "children" || kind === "ancestors")

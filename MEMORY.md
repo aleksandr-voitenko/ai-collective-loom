@@ -9,7 +9,16 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`2`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`3`.
+Administrator topic organization adds an implicit root, bounded nested areas,
+attributed metadata history, versioned subtree/content moves and inherited closure.
+Resource ownership remains authoritative; the existing exclusive structure guard
+serializes organization with publication, followed by the common clock/event tail.
+Exact recovery returns original and current state without reapplying earlier moves.
+Proposal discussions bind their destination/settings; topic-specific suggestions
+also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.
+See ADR-020 and `docs/development/topic-organization.md`; optional moderator
+delegation, search and attention services remain open.
 Private Saved items now support discussion/contribution/artifact resource references
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones
@@ -60,6 +69,12 @@ transport. Additive `0004_participation.sql` adds typed text resources, same-dis
 parentage, immutable title/mention revisions, editor versions and configuration.
 Current task migrations were exercised only in disposable databases, never applied
 to existing development data.
+Migration 0006 adds organization versions, immutable metadata/outcome/audit records
+and structural activity with explicit before/after scopes and no content revision.
+Legacy metadata gets an unattributed baseline; prior event ancestry is not invented
+or rewritten. Hierarchy/current-placement continuations bind a community epoch and
+must restart explicitly after organization changes. Populated upgrade and concurrent
+publication/organization checks live in `test:organization:postgres`.
 Migration checksums and application history are
 different concepts. Ordinary stop retains volumes; reset requires explicit consent.
 Migration hygiene checks SQL statement heads outside comments/quoted text, allowing
