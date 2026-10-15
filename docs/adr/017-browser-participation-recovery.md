@@ -1,5 +1,15 @@
 # ADR-017: Browser participation and recovery ownership
 
+Search extension: `Search.tsx` retains query, scope, filters and continuation in the
+URL for reload/back. Each effect setup has its own liveness/identity check, including
+development StrictMode replay. Query/page changes cancel old ownership; a late
+result cannot replace a different view/account. Loading, failure, selected-window
+exhaustion and indexing coverage are distinct. Explicit Refresh drops the cursor;
+failed requests do not become empty success. Exact links pin the matched revision
+and separate context links open current context. Search has no personal/shared write
+side effects. Bounded topic and author selection reuse existing APIs. The browser
+renders excerpts as text, never database HTML. ADR-012 defines selection semantics.
+
 Status: implemented subset for the synthetic participation browser. This does not
 select automatic reading, Following or feed checkpoint behavior. Private Saved items
 are the separate implemented extension below.

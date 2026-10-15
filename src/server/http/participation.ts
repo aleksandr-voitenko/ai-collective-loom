@@ -20,6 +20,8 @@ import { registerSavedItems } from "./saved-items.js";
 import { SavedItemsError } from "../modules/participation/saved-items.js";
 import { registerOrganization } from "./organization.js";
 import { OrganizationError } from "../modules/participation/organization-context.js";
+import { registerSearch } from './search.js';
+import { SearchError } from '../modules/search/search.js';
 
 export interface ParticipationServices {
   database: Transactions;
@@ -55,6 +57,10 @@ export function participantError(
     code = error.code;
     message = error.message;
     status = error.status;
+  } else if (error instanceof SearchError) {
+    code=error.code; message=error.message;
+    status=code==='search_changed'?409:code==='search_work_limit'?429:400;
+    action=code==='search_changed'?'replay_view':code==='search_work_limit'?'review_synthetic_limit':'correct_request';
   } else if (error instanceof OrganizationError) {
     code = error.code;
     message = error.message;
@@ -109,6 +115,7 @@ export async function registerParticipation(
   app.setErrorHandler(participantError);
   registerSavedItems(app, services.database, actor);
   registerOrganization(app, services.database, actor);
+  registerSearch(app, services.database, actor);
   const publications = new ParticipationPublications(services.database),
     reads = new ParticipationRetrieval(services.database),
     admin = new ParticipationAdministration(services.database);

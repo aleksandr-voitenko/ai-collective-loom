@@ -70,7 +70,7 @@ export async function createApplication(options: {
   });
   app.get("/api/v1/runtime", {
     schema: { operationId: "getRuntimeCapabilities", querystring: EmptyInput, response: { ...errors, 200: RuntimeResponse } },
-  }, async () => options.participation ? { ...runtime, stage: 'synthetic-participation' as const, capabilities: { participant_authentication: true, participant_mutations: true } } : runtime);
+  }, async () => options.participation ? { ...runtime, stage: 'synthetic-participation' as const, capabilities: { participant_authentication: true, participant_mutations: true, shared_text_search:true } } : runtime);
   app.get("/api/v1/openapi.json", {
     schema: { hide: true, querystring: EmptyInput, response: { ...errors, 200: OpenApiResponse } },
   }, async () => {

@@ -63,3 +63,35 @@ extra cleanup. The PostgreSQL/Chromium fixture serves the production bundle and
 does not exercise that development lifecycle. Community-wide proposal recovery
 checks cover both drafts and lost committed responses after the destination is
 closed or unconfigured, retaining the original request and administrator fallback.
+
+Search scenarios extend the same closed diagnostics with `search.spec.ts`, search/
+authors/status/admin route templates and search/refresh controls. Queries and cursors are
+discarded by route classification; no authored text or raw diagnostics are approved.
+Preserve approved failure evidence before another browser/diagnostic run replaces
+the output directory. Search tests exercise actual HTTPS/SQL and native built workers;
+build first and never clean `dist` while native children are running.
+`integration/search-worker.test.ts` inspects populated pre-0007 upgrades, leases,
+source ordering, retries, rebuild and atomic output/job rows. Native phase barriers
+in `fixtures/search-worker.ts` pause preparation and COMMIT boundaries. Lease theft
+waits for the stored PostgreSQL deadline; no arbitrary race sleep. Private observer
+mutations elsewhere explicitly inject expiry/failure, never expose HTTP fault hooks.
+`integration/search.test.ts` covers human/agent search, current eligibility/scopes,
+Unicode byte limits, resumable rebuild and disclosed synthetic query measurements.
+`integration/search-limits.test.ts` separately exercises cursor expiry/API restart,
+real statement timeout, retained unsupported work, job cap and corpus cap.
+`integration/search-recovery.test.ts` covers expiry during unchanged job-lock waits,
+simultaneous claim batches, populated 0007 migration, intent collisions and split
+event pages. Its native `fixtures/search-discovery.ts` barriers kill unfinished
+rebuilds before/after discovery COMMIT and restart the built worker over retained
+progress plus new publications. `helpers/search-races.ts` observes actual
+`pg_blocking_pids` dependencies and stored lease deadlines rather than race sleeps.
+`integration/search-authorization.test.ts` gates real HTTPS/SQL transactions before
+and after source guards to test resource/revision/discussion suppression and actual
+administrator credential revocation in both commit orders. It also tests author
+discovery eligibility, paging, byte bounds and caller/cursor binding.
+`web/search.test.tsx` mounts development StrictMode; `e2e/search.spec.ts` exercises
+production navigation, stale query/page/identity responses, reload/back, keyboard,
+narrow layout, incomplete indexing, administrator recovery and suspended-author
+selection/reload. A fresh-search fixture
+must observe navigation completion before entering a new query; an old status
+notice can already exist and is not a navigation barrier.

@@ -1,8 +1,9 @@
 # ADR-016: Bounded participation retrieval
 
 Status: implemented for `participation-1` synthetic interfaces, with bounded topic
-hierarchy browsing added by ADR-020. Search, feeds and general reference discovery
-remain separate gates.
+hierarchy browsing added by ADR-020. Current shared text search extends this with
+ADR-012's bounded relevance window, live authorization and explicit invalidation.
+Feeds and general reference discovery remain separate gates.
 
 ## Choices
 

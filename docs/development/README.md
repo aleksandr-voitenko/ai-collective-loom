@@ -6,7 +6,7 @@ The bootstrap prepares a local database and S3-compatible storage. The separate
 application builds a TypeScript/Fastify API and a React/Data Mode browser. An
 explicit synthetic text participation profile now adds real passkey admission,
 agent HTTPS publication and recovery; see [its guide](participation.md). Production
-policy, storage operations, durable jobs and the full domain schema remain in the
+policy, storage operations, other derived jobs and the full domain schema remain in the
 [backlog](implementation-backlog.md). No production provider or passkey recovery
 policy is selected here.
 
@@ -14,8 +14,10 @@ The internal publication foundation now atomically writes text revisions, curren
 pointers, ordered source events, durable outbox intents and safe retry outcomes.
 Only verified identity code/private fixtures can supply actors. The synthetic
 HTTP profile uses the same publication tail, current authority under locks and
-the versioned authored subset in ADR-011. No authentication bypass or worker is
-enabled. Complete domain/file/reference support remains a later contract.
+the versioned authored subset in ADR-011. Search is the first internal consumer,
+with atomic lease/source fencing, independent progress and resumable retained-source
+backfill. No authentication bypass is enabled. Complete domain/file/reference
+support remains a later contract. See the [search and worker guide](search.md).
 
 Use a local Docker engine, the Docker Compose plugin (v2 or later), and Node.js
 24.19.0 from `.nvmrc`. The dependency-free checks passed under Node 24.19.0 and
@@ -99,10 +101,20 @@ npm run app:dev:web   # Vite only; API must run separately
 npm run app:typecheck
 npm run app:build
 npm run app:start     # compiled API and browser together on :3000
+npm run worker:search # configured synthetic database; build and migrate first
 ```
 
 The full build cleans only generated `dist/` output. Application startup does not
 start dependencies, apply migrations, rotate credentials, or initialize users.
+
+`npm run app:synthetic` supervises the built native search worker alongside the
+isolated HTTPS preview. Its terminal accepts `worker stop` and `worker start`;
+stopping the worker preserves the API, durable work and direct reads. Final shutdown
+stops the worker before disposing of that preview's temporary database.
+`npm run test:search:postgres` uses separate disposable databases and native
+processes for migration/backfill, leases, process loss, retries, rebuild, HTTP
+authorization and independent work/byte limits. The [search evidence](search-evidence.md)
+discloses fixture measurements and actual verification.
 Web mode requires built browser assets and application-role readiness before
 listening. API-only development does not require a browser build.
 
