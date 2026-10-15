@@ -777,6 +777,8 @@ function Composer({
     [busy, setBusy] = useState(false),
     [status, setStatus] = useState(""),
     [compare, setCompare] = useState<RevisionView>(),
+    [comparisonError, setComparisonError] = useState(""),
+    [comparisonAttempt, setComparisonAttempt] = useState(0),
     [picker, setPicker] = useState(false);
   const live = useRef(true),
     textArea = useRef<HTMLTextAreaElement>(null);
@@ -788,28 +790,36 @@ function Composer({
   }, []);
   const locked =
     busy || (!!record && (record.state !== "draft" || !!record.blocked_by));
+  const legacyCorrection = record?.state === "rejected" &&
+    kind === "revision.publish" && original?.format === "loom-markdown-v1";
+  // A format refusal has no conflict ID: its retained expected revision is still
+  // the exact comparison base. Never use a newer fetched current source instead.
+  const comparisonRevision = record?.conflict_revision_id ??
+    (legacyCorrection && typeof record.body.expected_revision_id === "string"
+      ? record.body.expected_revision_id : undefined);
+  const comparisonReady = !!compare && compare.revision_id === comparisonRevision;
   useEffect(() => {
-    if (
-      record?.state !== "rejected" ||
-      !record.conflict_revision_id ||
-      typeof fixed.resource_id !== "string"
-    )
-      return;
+    setCompare(undefined);
+    setComparisonError("");
+    if (record?.state !== "rejected" || !comparisonRevision || typeof fixed.resource_id !== "string") return;
     let active = true;
+    const owner = identityGeneration(), controller = new AbortController();
     void request<RevisionView>(
-      `/api/v1/resources/${fixed.resource_id}/revisions/${record.conflict_revision_id}`,
-      { schema: Revision },
+      `/api/v1/resources/${fixed.resource_id}/revisions/${comparisonRevision}`,
+      { schema: Revision, signal: controller.signal },
     )
       .then((value) => {
-        if (active) setCompare(value);
+        if (active && owner === identityGeneration()) setCompare(value);
       })
-      .catch(() => {
-        /* The rejected text remains retained if comparison is unavailable. */
+      .catch((failure) => {
+        if (active && owner === identityGeneration() && failure.name !== "AbortError")
+          setComparisonError("The comparison revision could not be loaded. Your draft is preserved.");
       });
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [record?.state, record?.conflict_revision_id, fixed.resource_id]);
+  }, [record?.state, record?.key, comparisonRevision, fixed.resource_id, comparisonAttempt]);
   function draftBody(
     nextText = text,
     nextTitle = title,
@@ -951,20 +961,32 @@ function Composer({
     return () => window.removeEventListener("online", online);
   }, [check]);
   async function correct() {
-    if (!record || record.state !== "rejected") return;
+    if (!record || record.state !== "rejected" || busy || (legacyCorrection && !comparisonReady)) return;
+    const owner = identityGeneration();
+    setBusy(true);
     try {
-      const revision = record.conflict_revision_id;
+      const revision = comparisonRevision, body = draftBody();
+      // Only this explicit new-draft transition may adopt the base's v2 contract.
+      // Carry its declarations for review, including an empty list; preserve text.
+      const adopted = legacyCorrection && comparisonReady && compare?.content.format === "loom-markdown-v2"
+        ? compare.content.references : undefined;
       await update((current) =>
         context.store.correct(current!, {
-          ...draftBody(),
+          ...body,
           ...(revision ? { expected_revision_id: revision } : {}),
+          ...(adopted ? { content: { ...body.content, format: "loom-markdown-v2", references: adopted } } : {}),
         }),
       );
-      if (revision) setBase(revision);
-      setCompare(undefined);
-      setError("");
+      if (live.current && owner === identityGeneration()) {
+        if (revision) setBase(revision);
+        if (adopted) { setFormat("loom-markdown-v2"); setReferences(adopted); }
+        setCompare(undefined);
+        setError("");
+      }
     } catch (failure) {
-      setError((failure as Error).message);
+      if (live.current && owner === identityGeneration()) setError((failure as Error).message);
+    } finally {
+      if (live.current && owner === identityGeneration()) setBusy(false);
     }
   }
   function editText(value: string) {
@@ -1137,7 +1159,7 @@ function Composer({
           {record?.state === "rejected" && (
             <div className="notice">
               <strong>Your draft is preserved.</strong>
-              {compare && (
+              {comparisonReady && compare && (
                 <>
                   <p>
                     Current revision {compare.revision_number} by{" "}
@@ -1156,7 +1178,12 @@ function Composer({
                 corrected submission to unlock editing. Your changes will be
                 saved as a new draft.
               </p>
-              <button onClick={correct}>Prepare corrected submission</button>
+              {legacyCorrection && !comparisonReady && !comparisonError && <p role="status">Loading the comparison revision before correction…</p>}
+              {comparisonError && <><p role="alert">{comparisonError}</p>
+                <button disabled={busy} onClick={() => setComparisonAttempt(value => value + 1)}>Retry comparison revision</button></>}
+              {legacyCorrection && comparisonReady && compare?.content.format === "loom-markdown-v2" &&
+                <p>The comparison revision’s references will be copied into your corrected draft. Review or remove them before publishing.</p>}
+              <button disabled={busy || (legacyCorrection && !comparisonReady)} onClick={correct}>Prepare corrected submission</button>
             </div>
           )}
           {(!record || record.state === "draft") && (

@@ -168,3 +168,84 @@ test('an uncertain v1 edit never adopts references from a newer v2 source after 
   expect(recovered.body).toEqual(retained.body);expect(recovered.result.revision_id).toBe(pending.revision_id);
   expect((await f.admin.call('/api/v1/resources/'+source.resource_id)).body.revision_id).toBe(current.body.revision_id);
 });
+
+for (const mode of ['empty references','recorded references','format refusal']) test(`a rejected v1 draft corrects to a v2 base after ${mode}`,async({page,context,server})=>{
+  const f=await setup(page,context,server);
+  const source=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Legacy correction',content:plain('Original v1 text')});
+  const saved=()=>page.evaluate(resource=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.intent.v1:'))
+    .map(([,value])=>JSON.parse(value)).find(r=>r.kind==='revision.publish'&&r.body.resource_id===resource),source.resource_id);
+  await page.goto(server.origin+'/loom/resource/'+source.resource_id+'?edit=1');
+  await page.getByRole('textbox',{name:'Text',exact:true}).fill('Preserved legacy correction');
+  await expect.poll(saved).toMatchObject({state:'draft',body:{content:plain('Preserved legacy correction')}});
+  let original=await saved();
+  const refs=mode==='empty references'?[]:[reference({kind:'artifact',resource_id:f.target.resource_id,revision_id:f.target.revision_id},'builds_on','Keep the current assertion')];
+  const current=await f.admin.call('/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:source.resource_id,expected_revision_id:source.revision_id,title:'Concurrent v2 source',content:authored('Concurrent text',refs)});
+  expect(current.status).toBe(201);
+  if(mode==='format refusal') {
+    // Model an older client's unsent v1 journal against an already-v2 base.
+    // This also represents the refused draft left by the earlier correction bug.
+    await page.evaluate(({key,revision})=>{
+      const entry=Object.entries(localStorage).find(([name])=>name.startsWith('loom.intent.v1:')&&name.endsWith(key))!;
+      const record=JSON.parse(entry[1]);record.body.expected_revision_id=revision;record.sequence++;
+      localStorage.setItem(entry[0],JSON.stringify(record));
+    },{key:original.key,revision:current.body.revision_id});
+    original=await saved();
+  }
+  const comparison=server.origin+`/api/v1/resources/${source.resource_id}/revisions/${current.body.revision_id}`;
+  if(mode==='recorded references')await page.route(comparison,route=>route.abort('failed'));
+  await page.goto(server.origin+`/loom/resource/${source.resource_id}?edit=1&intent=${original.key}`);
+  await expect(page.getByRole('textbox',{name:'Text',exact:true})).toHaveValue('Preserved legacy correction');
+  await expect(page.locator('.reference-draft')).toHaveCount(0);
+  await page.getByRole('button',{name:'Publish',exact:true}).click();
+  await expect(page.getByText('Your draft is preserved.',{exact:true})).toBeVisible();
+  expect((await saved()).body).toEqual(original.body);
+  if(mode==='format refusal') {
+    expect((await saved()).conflict_revision_id).toBeUndefined();
+    await expect(page.getByRole('alert')).toContainText('loom-markdown-v2');
+  }
+  if(mode==='recorded references') {
+    await expect(page.getByRole('button',{name:'Prepare corrected submission',exact:true})).toBeDisabled();
+    await expect(page.getByText('The comparison revision could not be loaded. Your draft is preserved.')).toBeVisible();
+    await page.unroute(comparison);
+    await page.getByRole('button',{name:'Retry comparison revision',exact:true}).click();
+  }
+  await expect(page.getByText(/^Current revision 2 by /)).toBeVisible();
+  await expect(page.getByText('The comparison revision’s references will be copied into your corrected draft. Review or remove them before publishing.')).toBeVisible();
+  if(mode==='recorded references') {
+    await page.evaluate(()=>{
+      const write=Storage.prototype.setItem;
+      Storage.prototype.setItem=function(key,value){if(key.startsWith('loom.intent.v1:'))throw new Error('Synthetic correction save failure');write.call(this,key,value);};
+      (window as any).restoreCorrectionStorage=()=>{Storage.prototype.setItem=write;};
+    });
+    await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();
+    await expect(page.getByRole('alert')).toContainText('Synthetic correction save failure');
+    await expect(page.getByRole('button',{name:'Prepare corrected submission',exact:true})).toBeEnabled();
+    expect(await saved()).toMatchObject({key:original.key,state:'rejected',body:original.body});
+    await expect(page.locator('.reference-draft')).toHaveCount(0);
+    await page.evaluate(()=>(window as any).restoreCorrectionStorage());
+  }
+  await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'Text',exact:true})).toBeEnabled();
+  await page.reload();
+  await expect(page.getByRole('textbox',{name:'Text',exact:true})).toHaveValue('Preserved legacy correction');
+  await expect(page.locator('.reference-draft')).toHaveCount(refs.length);
+  if(refs.length)await expect(page.getByRole('textbox',{name:'Rationale 1 (required)',exact:true})).toHaveValue(refs[0]!.rationale!);
+  const retained=await saved();
+  expect(retained.body.content).toEqual(authored('Preserved legacy correction',refs));
+  if(mode==='format refusal') {
+    await page.getByRole('button',{name:'Remove reference 1',exact:true}).click();
+    await expect.poll(saved).toMatchObject({body:{content:authored('Preserved legacy correction',[])}});
+  }
+  const expectedReferences=mode==='format refusal'?[]:refs,corrected=await saved();
+  const publication=page.waitForResponse(response=>response.url()===server.origin+'/api/v1/revisions'&&response.request().method()==='POST');
+  await page.getByRole('button',{name:'Publish',exact:true}).click();
+  expect((await publication).status()).toBe(201);
+  await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+  expect(corrected.key).not.toBe(original.key);
+  expect(corrected.body).toEqual({...original.body,idempotency_key:corrected.key,expected_revision_id:current.body.revision_id,content:authored('Preserved legacy correction',expectedReferences)});
+  expect(new URL(page.url()).searchParams.get('intent')).toBe(corrected.key);
+  const published=(await f.admin.call('/api/v1/resources/'+source.resource_id)).body;
+  expect(published.content).toEqual(authored('Preserved legacy correction',expectedReferences));
+  expect(published.revision_number).toBe('3');
+  expect(published.publisher.id).toBe(f.person);
+});

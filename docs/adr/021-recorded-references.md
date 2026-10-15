@@ -46,7 +46,11 @@ or reapplying a reference after a later source edit.
 An edit against a v2 base must use v2, including an explicit empty list to withdraw
 everything. Old clients receive `reference_format_required` before writing. Local
 intent keeps the exact original format/body/key; opening an old draft never upgrades
-an uncertain request. All tabs must use the same release, as in ADR-017.
+an uncertain request. After definitive rejection only, explicit correction may create
+a new v2 draft from the selected comparison revision's declarations while keeping
+the author's text/title/mentions. References are carried for deliberate review,
+including empty lists; loading/saving failure preserves the original rejection.
+All tabs must use the same release, as in ADR-017.
 
 ## Storage, authorization and ordering
 

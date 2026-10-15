@@ -126,6 +126,14 @@ refusal, explicit correction, stale-tab separate drafts, account/route ownership
 reload/restart and export rules apply to references. Never downgrade or re-key
 uncertain journals. Reload all tabs onto the same release.
 
+If a saved v1 edit is definitively rejected after the source becomes v2, **Prepare
+corrected submission** creates a new v2 draft. It keeps your text, title and mentions
+and copies the comparison revision's references for review, including an empty list.
+You can change or remove the copied references before publishing. Correction waits
+for that exact revision to load; **Retry comparison revision** recovers a failed load.
+If the replacement cannot be saved, the rejected draft stays intact. Unknown or
+already-committed v1 requests retain their original format/body/key on retry.
+
 The standalone client accepts a JSON declaration array on **prepare**:
 
 ```sh

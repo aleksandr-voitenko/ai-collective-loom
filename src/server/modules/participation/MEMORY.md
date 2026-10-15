@@ -166,7 +166,11 @@ assertion attribution; identical carry-forward does not claim a new assertion.
 Omissions append withdrawal provenance; historical withdrawn entries show the
 latest eligible withdrawing revision. Unchanged immediate-base carry-forward may
 retain unavailable targets; changed/new targets require read eligibility.
-V2 is required when editing a v2 base, even an empty one. Its digest includes every
+V2 is required when editing a v2 base, even an empty one. Explicit correction of a
+definitively rejected v1 edit loads its exact conflict/expected revision and carries
+that v2 base's declarations into a new draft for review, preserving authored text.
+Comparison failure blocks legacy correction; failed saves retain the rejected body.
+Uncertain/replayed requests never upgrade. The v2 digest includes every
 declaration field; v1 journal/digest interpretation never changes. Limits: 16 refs,
 512 UTF-8 rationale bytes each, 16 KiB combined body/rationale. Duplicate IDs or
 target scopes fail. Summary/file/private-note sources are excluded.

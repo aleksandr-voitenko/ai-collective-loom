@@ -107,5 +107,9 @@ restarts the standalone fsynced client and checks UTF-8/JSON/statement limits.
 cover exact navigation, correction, failed autosave, stale tabs, persistent restart,
 page recovery and late route/account results. Observe the failed dispatch leaving
 busy state before restoring faulted storage; click completion alone is not a
-journal-write barrier. Closed diagnostics add `references.spec.ts`, three route
+journal-write barrier. Legacy correction cases distinguish uncommitted v1→v2
+conflicts (empty/populated lists), an existing format refusal, explicit withdrawal,
+comparison-load/save failures and reload. These differ from the already-committed
+v1 replay scenario. The comparison failure and rejection notices need exact text selectors when both show.
+Closed diagnostics add `references.spec.ts`, three route
 templates and Add/Check/Refresh controls, without changing bounds or raw containment.

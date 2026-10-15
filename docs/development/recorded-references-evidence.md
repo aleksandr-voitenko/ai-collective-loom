@@ -147,3 +147,52 @@ operations and real identity proof remain open. Hosted CI/upload and physical
 device/usability/cross-machine/provider-agent trials are not performed by local
 verification. Existing Compose persistence/S3 tests are outside this text change
 and were not run against development services.
+
+## PR review correction — 16 October 2026
+
+[PR #7's P2 comment](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/7#discussion_r4286894293)
+identified a distinct recovery gap: an uncommitted v1 edit corrected against a
+concurrent v2 base retained v1 and repeatedly failed `reference_format_required`,
+including when the base had no references. Existing tests covered v2-to-v2
+correction and already-committed v1 replay, not this transition.
+
+Correction now loads the exact reported conflict revision, or the retained
+expected revision when a format refusal has no conflict ID. Only after definitive
+rejection and the author's explicit correction action does it save a new v2 draft,
+carrying that base's reference list for review while preserving text/title/mentions.
+The notice explains the copy; references can then be changed or removed explicitly.
+Comparison failure blocks legacy correction with a retry action; replacement-save
+failure leaves the rejected body/key and editor intact. Unknown/replayed requests,
+the server guard, schemas and publication storage remain unchanged.
+
+Observed local browser evidence, using the same normal runner and pinned tools:
+
+| Command/run | Observed result |
+|---|---|
+| `npm run test:e2e -- tests/e2e/references.spec.ts --grep 'a rejected v1 draft'`, before fix | Both original cases failed at the corrected POST with HTTP 409 after reload; [approved red evidence](recorded-references-evidence/browser-correction-red/run.json). |
+| Same two cases, after fix | Both passed with the same assertions; [green evidence](recorded-references-evidence/browser-correction-green/run.json). |
+| Complete reference scenarios after adding failure recovery and format-refusal coverage | 8 passed / 1 failed: the new comparison error and rejection notice both matched a substring selector. [Preserved bundle](recorded-references-evidence/browser-correction-fault-01/run.json). Using an exact notice selector fixes the ambiguity without relaxing an assertion. |
+| Three expanded correction cases | All passed. |
+| `npm run test:e2e`, final normal suite | **55/55 passed**, unchanged workers, deadlines and zero retries; [complete result](recorded-references-evidence/browser-correction-full/run.json). |
+
+The three cases cover empty/populated v2 bases, conflict and format refusals,
+complete original and replacement bodies, distinct keys, resumed URLs, reload,
+comparison-fetch failure/retry, replacement-storage failure, explicit withdrawal
+and persisted publication. The format-refusal case models an older client's unsent
+v1 journal against a v2 base, then uses the real browser/HTTPS/SQL path. The existing
+uncertain-v1 and v2-correction scenarios also pass in the normal suite.
+
+`npm run check` passed again, including 42 app/contract/web tests, typechecking and
+build. All nine PostgreSQL suites were rerun and passed: references 26, participation
+12, publication 16, search 46, Saved 10, organization 15, migrations 9, app 9 and
+identity 22 (**165 cases**). Diagnostic verification passed with eight intentional
+controlled failures and four fail-closed cases. Approved failures were preserved
+before replacement, with no new diagnostic categories or guard changes.
+
+Recovery ADRs, the reference guide and scoped participation/test memory were
+reconciled against the new transition and assertions. Root memory and README's
+existing feature promises remain accurate. These are local synthetic results;
+hosted checks for the follow-up commit are separate. No real-data, physical-device,
+provider-agent, cross-machine or production acceptance is inferred, and the
+development-service Compose/S3/persistence suites were not rerun locally for this
+browser-only fix.
