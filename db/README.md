@@ -33,6 +33,18 @@ change state/version but cannot delete retry identity or change owner/target fie
 See [ADR-013](../docs/adr/013-private-saved-items.md). `npm run test:saved-items:postgres`
 uses fresh disposable PostgreSQL and actual HTTPS; it does not migrate existing data.
 
+Additive `0007_search.sql` adds rebuild/discovery state, retained search jobs and
+exact-source document associations with a PostgreSQL lexical index. Resource/revision
+visibility triggers invalidate search continuations without publishing shared activity.
+The worker uses `loom_app`, never the migration role. Its progress is separate from
+immutable outbox intents and other consumers. Populated pre-0007 upgrades, process
+loss and resumable rebuild are exercised by `npm run test:search:postgres`.
+Additive `0008_search_intent_discovery.sql` distinguishes intent work from revision
+backfill and adds an intent UUID to event progress. It preserves existing job
+attempts/outcomes and documents, then replays bounded event discovery to recover
+skipped intents. Populated pre-0008 upgrade and repeatability are tested separately.
+See [ADR-012](../docs/adr/012-scoped-text-search.md) for fencing and synthetic caps.
+
 Use unique four-digit versions and do not edit applied migrations. The runner
 checks filename and SHA-256 against `loom_migrations.history`, rejects unknown
 applied versions, and serializes concurrent local migration runs. Files must not

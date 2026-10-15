@@ -31,7 +31,7 @@ installed separately from the bootstrap in the runtime foundation described by
 | Application skeleton and executable contracts | Runtime foundation implemented: exact TypeScript/Fastify/React/Data Mode/Vite and pg packages, actual lockfile, operational API/browser, strict schemas/OpenAPI 3.0.3, safe errors, role readiness and transaction primitives. Local build/typecheck, transport/router, and isolated PostgreSQL/HTTP checks exercise these boundaries. Participant contracts/authentication and storage-client/version-grant compatibility remain open; no product API-01–07 or AC/AV completion is inferred. | Architecture §§3, 14, 17; ADR-002, ADR-003; API-01–07 |
 | Publication/idempotency primitive | Internal text-revision operation implemented: serialized participant/operation/key, versioned semantic digest, reauthorized exact replay before new-write preconditions, atomic revision/pointer/event/intent/outcome. Real PostgreSQL barriers inspect convergence, changed input, stale writes, all-stage rollback, credential/editor/suppression state and post-commit process loss. Synthetic HTTP constructors, minimal Markdown/entities and client durable intent now reuse it (participation-1); full file/entity support and reviewed retention remain open; no full AC14/AC31/AV01 completion is inferred. | Architecture §§5–7; ADR-003, ADR-006, ADR-015; API-05, AC14, AV01 |
 | Controlled identity/admission | Synthetic protocol implemented with real passkey verification, opaque sessions/agent credentials, shared actor/current policy, controlled initialization, admission, one-time issuance and safe recovery. PostgreSQL barriers/row inspection exercise bootstrap/account/ticket/counter races, response loss, ordinary admin denial, lifecycle changes, rollback and secret disclosure. Six concrete policy candidates remain unapproved. An opt-in synthetic HTTPS/browser workspace is implemented; production admission and operator/human proof ceremonies remain gated. No full AC45/AC54 completion is inferred. | Architecture §§6,14; ADR-004, ADR-015; IDN-01–05/07, API-08, SEC-01/02/05/06 |
-| Fenced job-output publication | Check the current claim generation in the same protected finalization as output associations. Resume an expired worker after a replacement finished; inspect both job state and published outputs. | Architecture §7.5; OPS-03 |
+| Fenced job-output publication | Implemented for synthetic search: resource/revision → job → index-state guards precede lease/owner/generation and current-source checks; output and success share COMMIT. Native process barriers exercise actual lease expiry/reclaim, late A after B, R2 before R1 and process loss before/after COMMIT. Search owns independent discovery, retained failures and resumable rebuild. Other consumers and production job/retention policies remain open. | Architecture §7.5; ADR-006/012; OPS-03 |
 | Committed event ordering | Transactional row-clock tail implemented for shared publications and administrator organization. PostgreSQL tests inspect visible clock/event coverage through reversed preparation order, rollback, killed publication connections and move/close races in both commit orders. Structural events retain before/after scopes without rewriting old event ancestry. Future lifecycle operations must use the same tail. Full traversal/checkpoint/restoration behavior and a representative operating envelope remain open. | Architecture §7.3; ADR-006, ADR-020; ATT-08, AC08 |
 | Version-pinned storage adapter | Implement real owner staging/preparation/final versions. Test replayed upload URLs, exact source-version copy, interruptions, multipart checksums and file-context authorization against local AND selected managed storage. | Architecture §8; ART-02–05, AC04–05 |
 
@@ -79,10 +79,22 @@ See [ADR-020](../adr/020-topic-organization.md), the [guide](topic-organization.
 and [observed evidence](topic-organization-evidence.md).
 This covers administrator portions of ORG-01–06 and ART-08 and the relevant
 organization portions of AC02/12/32/39/40/44/53; it does not complete those broad
-scenarios. Optional moderator assignments/delegation, search, Updates, subscriptions,
+scenarios. Optional moderator assignments/delegation, Updates, subscriptions,
 notifications, attention traversal and real joint human/agent usability remain open.
 The 12-level/500-area/10,000-decision bounds and single-process cursor custody are
 synthetic constraints requiring review before real use.
+
+Scoped current text search and its first recoverable worker are implemented in the
+synthetic database/API/browser slice. The supported SRCH-01–07 portions and remaining
+summary/file/private-note/history/backlink work are stated individually in the
+[search guide](search.md), with [ADR-012](../adr/012-scoped-text-search.md) and
+[observed evidence](search-evidence.md). Current placement and exact source versions
+govern results; a stale index never authorizes old or suppressed text. Explicit
+continuation invalidation, independent work/byte bounds, incomplete coverage and
+administrator retry/rebuild are part of the implemented contract. No broad
+AC06/15/17/20/30/33/37/39 completion is inferred. The 5,000-source/50,000-job caps,
+single-process API cursors, retention/pruning and measured production envelope
+remain review gates; same-machine clients/workers are not a cross-machine trial.
 
 Private Saved items are implemented as a synthetic database/API/browser slice:
 discussion/contribution/artifact references and exact revisions, principal-derived

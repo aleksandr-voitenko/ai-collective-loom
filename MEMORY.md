@@ -9,7 +9,7 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`3`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`4`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -18,7 +18,12 @@ Exact recovery returns original and current state without reapplying earlier mov
 Proposal discussions bind their destination/settings; topic-specific suggestions
 also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.
 See ADR-020 and `docs/development/topic-organization.md`; optional moderator
-delegation, search and attention services remain open.
+delegation and attention services remain open.
+Current shared-text search is implemented for typed openings/comments/artifacts,
+with exact revisions, live containment, original-author/time/topic filters and
+explicit continuation invalidation. Search is the first recoverable derived worker;
+other projections remain disabled. See ADR-012, `docs/development/search.md` and
+`src/server/modules/search/MEMORY.md` for fencing, backfill, bounds and recovery.
 Private Saved items now support discussion/contribution/artifact resource references
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones
@@ -29,7 +34,7 @@ participant; expiry, erasure and destructive restore remain unapproved.
 No real accounts/content are approved: ADR-004 identity/recovery candidates,
 production limits, retained-data operations and cross-machine validation remain
 gates. There is no default administrator or identity-header bypass. Agent memory
-and model execution stay external; uploads/grants and derived workers stay gated.
+and model execution stay external; uploads/grants and other derived workers stay gated.
 See `docs/development/participation.md`, `participation-evidence.md`,
 `retained-data-gate.md`, ADR-011/015/016/017 and
 `src/server/modules/participation/MEMORY.md` for the implemented subset.
@@ -41,7 +46,8 @@ Text participation, authored/retrieval contracts and browser recovery:
 `LC-20261014-9EU9`.
 Application commands require Node 24.19.0. `dev` initializes dependencies;
 `app:synthetic` builds and launches isolated temporary PostgreSQL + HTTPS with a
-private ticket file. It never touches existing development data or credentials.
+private ticket file and supervised native search worker. Terminal `worker stop`/
+`worker start` preserve the API. It never touches existing development data or credentials.
 
 `scripts/local.mjs` manages an explicitly local Compose project. PostgreSQL 18.4
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.
@@ -75,6 +81,13 @@ Legacy metadata gets an unattributed baseline; prior event ancestry is not inven
 or rewritten. Hierarchy/current-placement continuations bind a community epoch and
 must restart explicitly after organization changes. Populated upgrade and concurrent
 publication/organization checks live in `test:organization:postgres`.
+Migration 0007 adds search jobs, exact-source documents and independent progress.
+Visibility triggers advance only derived invalidation state. Populated upgrades and
+native lease/COMMIT-loss tests live in `test:search:postgres`; sources, immutable
+outbox intents, other consumer progress and Saved rows are preserved.
+Migration 0008 preserves jobs/documents while separating intent identity from
+revision backfill and replaying event discovery with an intent-aware cursor.
+Populated 0007 upgrade and unfinished-rebuild process loss are deterministic tests.
 Migration checksums and application history are
 different concepts. Ordinary stop retains volumes; reset requires explicit consent.
 Migration hygiene checks SQL statement heads outside comments/quoted text, allowing
@@ -122,8 +135,9 @@ and COMMIT; no sequences or new domain guards define its committed upper bound.
 atomicity, concurrency, authority, lost acknowledgements and killed connections;
 synthetic tail metrics do not approve production capacity. Checked-out connection
 errors between queries are transaction-owned and discard the failed client.
-Outbox intents are durable but no worker effects run. Generation-fenced output
-publication remains mandatory before the first consumer is enabled.
+Outbox intents remain immutable. Search uses separate discovery/jobs, source-version
+guards and generation-fenced atomic output/job finalization (ADR-006/012).
+No completion of notification, extraction or other projections is implied.
 Publication protocol and recovery decisions: Lore-ID `LC-20261012-6OTQ`.
 Identity account creation, separate one-time issuance and restricted audits commit
 on the same application-role transaction owner. Retry/status contains safe IDs and

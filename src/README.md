@@ -3,7 +3,7 @@
 This directory contains the TypeScript/Fastify API, React/Data Mode browser and
 controlled contracts. An opt-in synthetic profile adds real identity/admission,
 text publication, exact revisions and bounded retrieval. Default startup retains
-the operational foundation and creates no accounts or content. Storage, workers,
+the operational foundation and creates no accounts or content. Storage, other workers,
 agent runtime and memory remain outside this slice.
 
 `server/http/` owns request validation, safe errors, operational routes, and OpenAPI
@@ -21,13 +21,17 @@ shares the hierarchy guard/epoch with publication and retrieval. HTTP adapters i
 these services, not unrestricted SQL. `contracts/participation.ts`, `authored.ts`
 and `guide.ts` define the release-matched shared representation. `web/` owns the
 lazy-loaded participation views, safe React rendering and identity-scoped intent.
+`server/modules/search/` owns current lexical search, bounded derived jobs and
+atomic lease/source fencing. `server/search-worker.ts` is the same-release native
+worker entry; `contracts/search.ts`, `http/search.ts` and `web/Search.tsx` share
+the synthetic search contract. See [ADR-012](../docs/adr/012-scoped-text-search.md).
 Synthetic software authenticators, fault controls and disposable startup remain
 test/development helpers; no fixture or actor bypass is registered in the API.
 
 The server build emits `dist/server/` and `dist/contracts/`; Vite emits `dist/web/`.
 `app:start` serves both from one application release. Development uses separate API
-and Vite processes from the same package. Further domain modules and `jobs/`
-will be created when real operations exist; no empty module tree or npm
+and Vite processes from the same package. Search work stays inside its owning module;
+further domain modules will be created when real operations exist. No empty tree or npm
 workspace split is required.
 
 Read [ADR-002](../docs/adr/002-application-runtime.md) and

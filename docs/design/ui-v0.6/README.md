@@ -14,11 +14,13 @@ The overview stays an ordinary artifact under product v0.9 revision/editor rules
 Artifact locations are omitted in a direct topic and displayed in the global list.
 
 The current subset opens Topics because Updates is not implemented. It exposes
-working Topics, Artifacts, Saved items, Administration and the participation guide.
+working Topics, Artifacts, Search, Saved items, Administration and the participation guide.
 Saved items adopts the reference's restrained collection rows and responsive shell,
 with actual resource/exact-revision distinctions, unavailable entries and recovery
 controls. It uses bounded continuations without invented totals or recency ordering.
-Search, Following, complete hierarchical browsing, summaries/quiet-period
+Search uses real current-text results, exact revision links, bounded filters and
+secondary indexing/selection details. Topic organization supplies bounded hierarchical
+browsing. Following, summaries/quiet-period
 presentation, uploads and personal reading are future features. Their prototype
 controls, generated counts, finite outcome map and local role previews are not
 presented as working server capabilities. Numeric prototype choices are not adopted

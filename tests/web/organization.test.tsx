@@ -35,7 +35,7 @@ function form(t: TestContext) {
       profile: "synthetic", community_name: "Synthetic community", settings_version: 1,
       overview: { state: "setup_incomplete" }, proposal_area: { state: "setup_incomplete" }, contacts: [],
       contacts_url: "/api/v1/contacts", guide_url: "/api/v1/guide", openapi_url: "/api/v1/openapi.json", limits,
-      replay_retention: "retained_without_automatic_expiry; destructive_restore_unsupported", derived_effects: "disabled",
+      replay_retention: "retained_without_automatic_expiry; destructive_restore_unsupported", derived_effects: "search_only; other_projections_disabled",
     },
     store: new IntentStore(instance, participant, localStorage, location.origin, locks),
     refreshCommunity: () => {},

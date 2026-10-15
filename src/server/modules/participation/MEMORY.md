@@ -119,7 +119,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2 and 3. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2, 3 and 4. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -144,5 +144,15 @@ Optional `proposal_context` keeps ordinary discussion creation/digest compatibil
 and binds affected area/settings; community-wide suggestions omit the area and
 resume at the overview instead of inventing a subject. It never reroutes a retained draft. References are
 withheld when affected sources are unavailable. `web/Organization.tsx` reuses the
-extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 3 and
+extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 4 and
 `test:organization:postgres`/`e2e/organization.spec.ts` define the supported slice.
+
+Search (ADR-012) lives in the sibling `search/` module and reuses these exact-body
+and source guards. Current pointer equality is mandatory; reply ancestry is not
+containment. Topic moves affect scope without indexing; closure does not hide text.
+Guide 4 reports `search_only; other_projections_disabled`, not global outbox completion.
+The bounded topic selector is reused with a search-specific label. Search owns its
+query/cursor URL and late-response guards; no search operation enters the intent
+journal or writes personal state. Search's separate author directory uses readable
+publications, including suspended authors; the active-participant directory keeps
+its existing meaning. See `../search/MEMORY.md` and `tests/MEMORY.md`.

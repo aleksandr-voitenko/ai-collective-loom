@@ -40,7 +40,9 @@
     "test:organization:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/organization.test.ts",
     "test:e2e": "node scripts/browser-tests.mjs",
     "test:browser-diagnostics": "node scripts/check-runtime.mjs && node --import tsx tests/diagnostics/verify.ts",
-    "app:synthetic": "npm run app:build && node --import tsx scripts/synthetic-participation.ts"
+    "app:synthetic": "npm run app:build && node --import tsx scripts/synthetic-participation.ts",
+    "worker:search": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local dist/server/search-worker.js",
+    "test:search:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/search*.test.ts"
   },
   "dependencies": {
     "@fastify/static": "10.1.6",

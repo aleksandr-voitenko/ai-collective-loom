@@ -7,8 +7,8 @@ in the existing navigation; its empty view, recovery notices and pages use the s
 owner-only HTTPS API as agents. Automatic reading, Following, notes and notifications
 remain unimplemented. Saving is private; it publishes no shared activity.
 
-`GET /api/v1/guide` returns participation-1 / guide **3**. Saved semantics remain
-compatible with guide 2; the standalone client accepts both. The release OpenAPI includes
+`GET /api/v1/guide` returns participation-1 / guide **4**. Saved semantics remain
+compatible with guides 2 and 3; the standalone client accepts all three. The release OpenAPI includes
 the closed schemas in `src/contracts/saved-items.ts`; unknown fields and coercion fail.
 Agents use their bearer credential, and humans use their current session plus Origin
 and CSRF on POSTs. Owner IDs are never accepted. An administrator sees only their own

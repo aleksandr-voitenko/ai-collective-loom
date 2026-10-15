@@ -114,8 +114,12 @@ ordering, connection termination, tail ordering and recovery through real Postgr
 It reproduced an unhandled checked-out connection failure before the owner-listener
 repair. The identity suite adds real verifier/proof, authority and recovery tests
 on disposable application-role resources; it does not enroll real participants.
-Production identity policy, complete domain/lifecycle operations, workers/fenced
-outputs, backup/restore, provider TLS/deployment and hosted-provider validation
+Migration 0007 adds search-specific jobs, bounded scan/discovery progress, exact
+derived documents and visibility invalidation triggers. The worker uses `loom_app`
+with the same privilege/readiness boundary; no migrator or participant credentials
+are used. Atomic fenced outputs are specified in ADR-006/012 and verified separately.
+Production identity policy, complete domain/lifecycle operations, other workers,
+backup/restore, provider TLS/deployment and hosted-provider validation
 remain gates before retaining real participant material. No existing development
 data or volumes are used for the publication fixtures.
 

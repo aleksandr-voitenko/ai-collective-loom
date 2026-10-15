@@ -66,7 +66,10 @@ for (const path of ['/loom/organize','/loom/overview','/api/v1/organization/chan
 for (const path of ['/api/v1/organization/resources/:id','/api/v1/areas/:id/proposal-route','/api/v1/areas/:id/metadata-history']) {
   assert.equal(routeTemplate('https://example.test'+path.replace(':id','00000000-0000-0000-0000-000000000001')+'#'+canary, 'https://example.test'), path);
 }
-assert.deepEqual(controlLabels.slice(-4), ['Confirm move','Save topic','Check organization status','Retry same organization change']);
+assert.deepEqual(controlLabels.slice(-6), ['Confirm move','Save topic','Check organization status','Retry same organization change','Search shared text','Refresh search']);
+assert.equal(sourceFile('/private/synthetic/search.spec.ts'),'search.spec.ts');
+for(const path of ['/loom/search','/api/v1/search','/api/v1/search/status','/api/v1/search/authors','/api/v1/admin/search/health','/api/v1/admin/search/failures','/api/v1/admin/search/rebuild','/api/v1/admin/search/retry'])
+  assert.equal(routeTemplate('https://example.test'+path+'?q='+canary+'&cursor='+canary,'https://example.test'),path);
 assert.equal(new Set(controlNames).size,controlLabels.length);
 
 const large = structuredClone(missing.capture);
