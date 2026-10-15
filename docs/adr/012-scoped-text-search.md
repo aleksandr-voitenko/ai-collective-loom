@@ -6,7 +6,9 @@ in the unchanged architecture proposal; numerical limits are not production poli
 ## Population and query
 
 Index only typed discussion openings, comments and text artifacts in
-`loom-markdown-v1`. A discussion title belongs to its opening revision: the one
+`loom-markdown-v1` or `loom-markdown-v2` (ADR-021). Only source-authored title/body
+is searched; reference rationale and resolved target metadata are excluded.
+A discussion title belongs to its opening revision: the one
 discussion result identifies the discussion and that exact opening resource/revision.
 Comments and artifacts retain their own resource identity. Summaries, files,
 private notes, Saved state, administrative records and historical search are excluded.

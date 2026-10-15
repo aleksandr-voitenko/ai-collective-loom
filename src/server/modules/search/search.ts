@@ -49,7 +49,7 @@ const eligibleSql=`WITH RECURSIVE population AS MATERIALIZED (
     CASE WHEN p.kind='artifact' THEN p.owner_resource_id ELSE d.owner_resource_id END AS area_id
   FROM population p JOIN owners o ON o.source=p.id AND o.owner_resource_id IS NULL AND o.kind='area' AND o.eligible
   LEFT JOIN loom.resources d ON d.id=p.discussion_id
-  WHERE p.availability='available' AND p.content_format='loom-markdown-v1'
+  WHERE p.availability='available' AND p.content_format IN ('loom-markdown-v1','loom-markdown-v2')
 )`;
 async function boundary(tx:SqlTransaction) {
   return (await tx.query<{boundary:string;generation:number;scan_complete:boolean;alive:boolean;capacity_limited:boolean}>(`

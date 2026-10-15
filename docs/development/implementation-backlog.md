@@ -86,7 +86,7 @@ synthetic constraints requiring review before real use.
 
 Scoped current text search and its first recoverable worker are implemented in the
 synthetic database/API/browser slice. The supported SRCH-01–07 portions and remaining
-summary/file/private-note/history/backlink work are stated individually in the
+summary/file/private-note/history work are stated individually in the
 [search guide](search.md), with [ADR-012](../adr/012-scoped-text-search.md) and
 [observed evidence](search-evidence.md). Current placement and exact source versions
 govern results; a stale index never authorizes old or suppressed text. Explicit
@@ -95,6 +95,15 @@ administrator retry/rebuild are part of the implemented contract. No broad
 AC06/15/17/20/30/33/37/39 completion is inferred. The 5,000-source/50,000-job caps,
 single-process API cursors, retention/pruning and measured production envelope
 remain review gates; same-machine clients/workers are not a cross-machine trial.
+
+Recorded references have a synthetic persistence/API/browser slice for openings,
+comments and text artifacts (DIS-06/REF-01–03). Exact scopes, source-owned changes/
+withdrawal, assertion/editor attribution and direct bounded backlinks extend
+SRCH-07 without another worker. See [ADR-021](../adr/021-recorded-references.md),
+the [guide](recorded-references.md) and [evidence](recorded-references-evidence.md).
+Summary/coverage/change-note, file/path and private-note integration remain open.
+Reference portions of AC27–30/33/34/37/39 do not complete those broad scenarios.
+Production capacity, multi-API custody and cross-machine trials remain gates.
 
 Private Saved items are implemented as a synthetic database/API/browser slice:
 discussion/contribution/artifact references and exact revisions, principal-derived

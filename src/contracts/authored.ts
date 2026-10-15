@@ -33,6 +33,24 @@ export function parseAuthored(content: AuthoredContent): Token[] {
     !validUnicode(content.text)
   )
     throw new Error("Invalid authored text.");
+  if (content.format === "loom-markdown-v2") {
+    const ids = new Set<string>(), targets = new Set<string>();
+    let bytes = new TextEncoder().encode(content.text).length;
+    for (const ref of content.references) {
+      const id = ref.reference_id.toLowerCase();
+      const target = JSON.stringify([ref.target.resource_id.toLowerCase(), ref.target.revision_id?.toLowerCase() ?? null]);
+      const rationale = ref.rationale;
+      if (ids.has(id) || targets.has(target) ||
+        (ref.target.kind === "discussion" && ref.target.revision_id) ||
+        (["builds_on", "contradicts"].includes(ref.relationship ?? "") && !rationale?.trim()) ||
+        (rationale !== null && (!validUnicode(rationale) || rationale.includes("\0") ||
+          new TextEncoder().encode(rationale).length > limits.rationaleBytes)))
+        throw new Error("Invalid or duplicate recorded reference.");
+      ids.add(id); targets.add(target);
+      bytes += new TextEncoder().encode(rationale ?? "").length;
+    }
+    if (bytes > limits.textBytes) throw new Error("Text and reference rationales exceed the authored byte limit.");
+  }
   const tokens = markdown.parse(content.text, {});
   const entities = new Map(
     content.mentions.map((entity) => [entity.token, entity]),

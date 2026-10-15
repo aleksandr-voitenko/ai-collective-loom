@@ -43,6 +43,13 @@ Additive `0008_search_intent_discovery.sql` distinguishes intent work from revis
 backfill and adds an intent UUID to event progress. It preserves existing job
 attempts/outcomes and documents, then replays bounded event discovery to recover
 skipped intents. Populated pre-0008 upgrade and repeatability are tested separately.
+
+Additive `0009_recorded_references.sql` admits v2 authored text and adds immutable
+reference memberships, revision ownership FKs, logical/target uniqueness,
+assertion provenance and indexed incoming queries. No historical content,
+digests, mentions, Saved state or proposal references change; there is no inferred
+backfill. `test:references:postgres` exercises populated upgrade and old uncertain
+retry. See [ADR-021](../docs/adr/021-recorded-references.md).
 See [ADR-012](../docs/adr/012-scoped-text-search.md) for fencing and synthetic caps.
 
 Use unique four-digit versions and do not edit applied migrations. The runner

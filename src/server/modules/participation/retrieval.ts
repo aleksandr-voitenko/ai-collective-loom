@@ -20,6 +20,7 @@ import {
   type Transactions,
 } from "../publication/publication.js";
 import { hierarchyVersion, structureGuard } from "./organization-context.js";
+import { declaration, revisionReferences } from "./reference-context.js";
 
 export class RetrievalError extends Error {
   constructor(
@@ -198,7 +199,7 @@ export class ParticipationRetrieval {
       )
     ).rows[0]!;
     // Legacy internal test envelopes are not participant documents.
-    if (body.content_format !== "loom-markdown-v1")
+    if (body.content_format !== "loom-markdown-v1" && body.content_format !== "loom-markdown-v2")
       throw new PublicationError("unavailable");
     const mentions = (
       await tx.query<{
@@ -215,7 +216,9 @@ export class ParticipationRetrieval {
     return {
       ...view,
       content: {
-        format: "loom-markdown-v1",
+        ...(body.content_format === "loom-markdown-v2"
+          ? { format: "loom-markdown-v2" as const, references: (await revisionReferences(tx, selected)).map(declaration) }
+          : { format: "loom-markdown-v1" as const }),
         text: body.content_text,
         mentions: mentions.map((m) => ({
           token: m.token,

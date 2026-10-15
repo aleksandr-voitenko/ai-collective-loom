@@ -6,6 +6,7 @@ import { readFile, open, rename } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { isDeepStrictEqual } from "node:util";
 
 const options = new Map();
 for (let i = 2; i < process.argv.length; i += 2)
@@ -17,6 +18,7 @@ const allowed = [
   "--journal",
   "--parent",
   "--text-file",
+  "--references-file",
   "--action",
 ];
 if (
@@ -26,7 +28,7 @@ if (
   !options.get("--journal")
 ) {
   console.error(
-    "Usage: node scripts/participation-client.mjs --origin https://host --credential-file /private/token --journal /private/intent.json --action prepare|send|lose-response|status|retry|inspect [--parent UUID --text-file /private/reply.txt] [--ca /private/ca.pem]",
+    "Usage: node scripts/participation-client.mjs --origin https://host --credential-file /private/token --journal /private/intent.json --action prepare|send|lose-response|status|retry|inspect [--parent UUID --text-file /private/reply.txt --references-file /private/references.json] [--ca /private/ca.pem]",
   );
   process.exit(2);
 }
@@ -200,7 +202,9 @@ async function main() {
         idempotency_key: randomUUID(),
         discussion_id: parent.discussion_id,
         parent_id: parent.resource_id,
-        content: { format: "loom-markdown-v1", text, mentions: [] },
+        content: options.has("--references-file")
+          ? { format: "loom-markdown-v2", text, mentions: [], references: JSON.parse(await readFile(options.get("--references-file"), "utf8")) }
+          : { format: "loom-markdown-v1", text, mentions: [] },
       },
       retrieved_parent: parent,
       retrieved_ancestors: ancestors,
@@ -263,7 +267,10 @@ async function main() {
     );
     if (
       exact.parent_id !== journal.body.parent_id ||
-      exact.content.text !== journal.body.content.text
+      exact.content.text !== journal.body.content.text ||
+      exact.content.format !== journal.body.content.format ||
+      (journal.body.content.format === "loom-markdown-v2" &&
+        !isDeepStrictEqual(exact.content.references, canonicalReferences(journal.body.content.references)))
     )
       throw new Error(
         "Retained publication differs from the saved semantic request.",
@@ -281,6 +288,15 @@ async function main() {
       ...(journal.result ? { result: journal.result } : {}),
     }),
   );
+}
+// Compare server canonical UUID spelling/order without changing the retained
+// semantic request. Retries always send the original journal body verbatim.
+function canonicalReferences(references) {
+  return references.map(ref => ({
+    ...ref, reference_id: ref.reference_id.toLowerCase(),
+    target: { ...ref.target, resource_id: ref.target.resource_id.toLowerCase(),
+      ...(ref.target.revision_id ? { revision_id: ref.target.revision_id.toLowerCase() } : {}) },
+  })).sort((a,b) => a.reference_id.localeCompare(b.reference_id));
 }
 try {
   await main();

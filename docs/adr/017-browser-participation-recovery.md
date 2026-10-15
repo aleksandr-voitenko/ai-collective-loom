@@ -209,3 +209,15 @@ contacts when routing is closed or changed. Opening it publishes nothing. Reload
 and Local drafts reopen the affected-area route with the original frozen binding.
 Community-wide suggestions resume at the overview, preserving their empty initial
 body and avoiding a false affected-topic reference to the destination itself.
+
+## Reference-aware drafts
+
+[ADR-021](021-recorded-references.md) extends the existing composer/journal with
+explicit v2 declarations. The complete list and exact target/type/rationale save
+before dispatch; old v1 journals never gain injected defaults. Picker validation
+is independent of indexing and confirms resource/exact scope. Source-owned change
+and removal take effect only on publication. Failed saves, conflict correction,
+stale tabs, reload/restart and lost acknowledgement use the same durable identity
+rules. Bounded reference pages retain failed positions and require explicit refresh
+after invalidation. Picker/results guard route and account generations, restore
+keyboard focus and reestablish liveness under development StrictMode.

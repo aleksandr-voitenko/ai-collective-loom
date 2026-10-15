@@ -22,6 +22,8 @@ import { registerOrganization } from "./organization.js";
 import { OrganizationError } from "../modules/participation/organization-context.js";
 import { registerSearch } from './search.js';
 import { SearchError } from '../modules/search/search.js';
+import { registerReferences } from './references.js';
+import { ReferenceError } from '../modules/participation/references.js';
 
 export interface ParticipationServices {
   database: Transactions;
@@ -45,6 +47,7 @@ export function participantError(
     current = error.current_revision_id;
     status = {
       invalid_input: 400,
+      reference_format_required: 409,
       invalid_actor: 401,
       unavailable: 404,
       forbidden: 403,
@@ -57,6 +60,10 @@ export function participantError(
     code = error.code;
     message = error.message;
     status = error.status;
+  } else if (error instanceof ReferenceError) {
+    code=error.code; message=error.message;
+    status=code==='references_changed'?409:429;
+    action=code==='references_changed'?'replay_view':'review_synthetic_limit';
   } else if (error instanceof SearchError) {
     code=error.code; message=error.message;
     status=code==='search_changed'?409:code==='search_work_limit'?429:400;
@@ -116,6 +123,7 @@ export async function registerParticipation(
   registerSavedItems(app, services.database, actor);
   registerOrganization(app, services.database, actor);
   registerSearch(app, services.database, actor);
+  registerReferences(app, services.database, actor);
   const publications = new ParticipationPublications(services.database),
     reads = new ParticipationRetrieval(services.database),
     admin = new ParticipationAdministration(services.database);

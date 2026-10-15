@@ -103,7 +103,7 @@ export class SearchWorker {
         SELECT v.title,v.content_text AS body,v.revision_number::text,v.content_format AS format,octet_length(v.content_text) AS bytes,
         EXISTS(SELECT 1 FROM (${typedSources}) s WHERE s.id=v.resource_id) AS typed
         FROM loom.revisions v WHERE v.id=$1 AND v.resource_id=$2`, [claim.revision_id,claim.resource_id])).rows[0];
-      if (!row || !row.typed || row.format !== 'loom-markdown-v1') return { kind: 'failure', failure: 'unsupported_source' };
+      if (!row || !row.typed || !['loom-markdown-v1','loom-markdown-v2'].includes(row.format)) return { kind: 'failure', failure: 'unsupported_source' };
       if (row.bytes > 16384) return { kind: 'failure', failure: 'source_limit' };
       return { kind: 'text', title: row.title ?? '', body: row.body, revision_number: row.revision_number };
     });

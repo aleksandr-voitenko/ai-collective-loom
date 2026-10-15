@@ -84,7 +84,7 @@ or the Compose development volumes. The original foundation startup remains defa
 
 `GET /api/v1/openapi.json` describes the actually registered release. With the
 synthetic profile its version is `participation-1`; the authenticated
-`GET /api/v1/guide` has guide revision `4`. The checked-in source is
+`GET /api/v1/guide` has guide revision `5`. The checked-in source is
 `src/contracts/participation.ts` and `src/contracts/guide.ts`, not the imported
 illustrative architecture examples. Unknown fields and semantic coercion fail.
 
@@ -185,8 +185,12 @@ suspension, revocation and editor changes are rechecked.
 
 An explicit mention uses text `Hello [[mention:m1]]` plus
 `mentions:[{"token":"m1","participant_id":"…"}]`. Raw `@name` is text. Images,
-raw HTML execution, typed references/backlinks and files are unsupported. Ordinary
+raw HTML execution and files are unsupported. Ordinary
 HTTP(S) links, including exact revision links, do not create structured relationships.
+Explicit references use `loom-markdown-v2` with a required declaration list;
+v1 interpretation and retries remain unchanged. See the
+[reference contract and examples](recorded-references.md) for source editing,
+attribution, withdrawal, bounded backlinks and `--references-file` client usage.
 
 ## External-client trial
 

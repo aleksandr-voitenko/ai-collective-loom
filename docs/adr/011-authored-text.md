@@ -6,7 +6,9 @@ The imported product v0.9 and architecture v0.3 remain unchanged.
 
 ## Choice and rationale
 
-Use `{format: "loom-markdown-v1", text, mentions}` in every supported publication.
+Retain `{format: "loom-markdown-v1", text, mentions}` for existing publications.
+[ADR-021](021-recorded-references.md) adds `loom-markdown-v2` with a required
+explicit `references` list, preserving exact text/mentions and v1 interpretation.
 The browser and API use the same pinned markdown-it 15.0.2 CommonMark parser, with
 raw HTML, images and linkification disabled, and a maximum nesting depth of 20.
 Links must use HTTP or HTTPS. Raw HTML and uploaded/transcript-like text have no
@@ -42,16 +44,16 @@ The selected dialect is versioned so neither choice is imposed on future release
 
 Ordinary HTTP(S) links, including exact Loom revision URLs, are retained as authored
 links. They are not typed provenance, recorded backlinks, preserved remote bytes,
-change coverage or notification entities. Unsupported reference, audience, file,
-manifest and summary fields are rejected, never silently ignored. Add a versioned
-representation and canonicalization decision before those operations are enabled.
+change coverage or notification entities. Only the v2 declaration list creates a
+recorded relationship; no URL or token inference/backfill occurs. Unsupported
+audience, file, manifest and summary fields are rejected, never silently ignored.
 
 The 128 KiB request/response cap can hold the worst JSON escaping of every accepted
 16 KiB text plus its bounded metadata/entities. Lists explicitly omit bodies and
 provide the exact revision URL; a smaller requested byte budget fails explicitly
 with a measured minimum. See [ADR-016](016-bounded-participation-retrieval.md).
 
-Review these choices when adding rich authoring, recorded references, new entity
+Review these choices when adding rich authoring, new reference/source kinds or entity
 types, files, or larger content. Existing retained representations and digests must
 remain interpretable. Source: `src/contracts/authored.ts`, `AuthoredText.tsx`,
 participation HTTP tests and authored-rendering tests; architecture §10.1.

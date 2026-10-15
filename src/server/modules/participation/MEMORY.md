@@ -25,10 +25,11 @@ Application grants prevent changing contribution identity/parent/creation order.
 Overview is a normal artifact, with normal revisions and administrator editor lists.
 Config absence/ineligibility is explicit and does not block unrelated participation.
 
-Bodies are exact `loom-markdown-v1`, 16 KiB UTF-8 and 4,096 parsed tokens maximum,
+Bodies are exact `loom-markdown-v1` or explicit-reference `loom-markdown-v2`,
+16 KiB UTF-8 text plus rationale and 4,096 parsed tokens maximum,
 with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images and
-non-HTTP(S) links do not render as active content. References/backlinks, files,
-summaries, notifications and model execution are not implemented by accepting text.
+non-HTTP(S) links do not render as active content. Ordinary links infer nothing.
+Files, summaries, notifications and model execution remain unsupported.
 
 Eligible retrieval rows contain metadata + exact full-content paths. Default 12, max 25,
 scan max 100, serialized response budget 4–128 KiB. Maximum escaped accepted text
@@ -119,7 +120,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2, 3 and 4. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–5. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -144,15 +145,41 @@ Optional `proposal_context` keeps ordinary discussion creation/digest compatibil
 and binds affected area/settings; community-wide suggestions omit the area and
 resume at the overview instead of inventing a subject. It never reroutes a retained draft. References are
 withheld when affected sources are unavailable. `web/Organization.tsx` reuses the
-extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 4 and
+extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 5 and
 `test:organization:postgres`/`e2e/organization.spec.ts` define the supported slice.
 
 Search (ADR-012) lives in the sibling `search/` module and reuses these exact-body
 and source guards. Current pointer equality is mandatory; reply ancestry is not
 containment. Topic moves affect scope without indexing; closure does not hide text.
-Guide 4 reports `search_only; other_projections_disabled`, not global outbox completion.
+Guide 5 reports `search_only; other_projections_disabled`, not global outbox completion.
 The bounded topic selector is reused with a search-specific label. Search owns its
 query/cursor URL and late-response guards; no search operation enters the intent
 journal or writes personal state. Search's separate author directory uses readable
 publications, including suspended authors; the active-participant directory keeps
 its existing meaning. See `../search/MEMORY.md` and `tests/MEMORY.md`.
+
+References (ADR-021): `reference-context.ts` owns bounded target validation and
+the full pre-source resource lock plan. `publication/reference-storage.ts` owns
+fixed membership/withdrawal inserts in the common revision transaction before
+clock allocation. Immutable source-scoped logical IDs retain original and latest
+assertion attribution; identical carry-forward does not claim a new assertion.
+Omissions append withdrawal provenance; historical withdrawn entries show the
+latest eligible withdrawing revision. Unchanged immediate-base carry-forward may
+retain unavailable targets; changed/new targets require read eligibility.
+V2 is required when editing a v2 base, even an empty one. Its digest includes every
+declaration field; v1 journal/digest interpretation never changes. Limits: 16 refs,
+512 UTF-8 rationale bytes each, 16 KiB combined body/rationale. Duplicate IDs or
+target scopes fail. Summary/file/private-note sources are excluded.
+
+`references.ts` provides direct outgoing/incoming reads under REPEATABLE READ,
+current actor and sorted full resource guards. Read races either wait or return
+explicit restart; do not mix snapshots. Incoming resource/exact scopes never
+aggregate; default current, explicit history. Candidate scan 100, items max25,
+JSON 4–128 KiB, owner walk32/total guards3840, statement deadline2.5s. Encrypted
+2 KiB/five-minute cursors bind caller, semantics and source/visibility/hierarchy
+boundary; edits/moves/restoration/restart invalidate. No counts or graph scan.
+`web/References.tsx` feeds declarations into the existing durable composer and
+guards picker/page responses by live view, request sequence and identity generation.
+Known IDs/links work without indexing. Rationale is not searched; both formats'
+source title/body remain worker/rebuild eligible. Tests: `test:references:postgres`,
+`web/references.test.tsx`, `e2e/references.spec.ts` and the reference evidence guide.

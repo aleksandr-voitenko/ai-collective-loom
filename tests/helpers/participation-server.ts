@@ -16,10 +16,11 @@ import type { Transactions } from "../../src/server/modules/publication/publicat
 export async function syntheticServer(
   options: {
     port?: number;
+    throughMigration?: number;
     transactionWrapper?: (database: Transactions) => Transactions;
   } = {},
 ) {
-  const fixture = await isolatedPublicationPostgres(),
+  const fixture = await isolatedPublicationPostgres(options.throughMigration === undefined ? {} : { throughMigration: options.throughMigration }),
     directory = await mkdtemp(join(tmpdir(), "loom-participation-"));
   let application: Awaited<ReturnType<typeof createApplication>> | undefined;
   const close = async () => {

@@ -29,6 +29,7 @@ import {
   type Reconciliation,
 } from "../publication/publication.js";
 import { structureGuard, advanceHierarchy, OrganizationError } from "./organization-context.js";
+import { lockReferencePlan, prepareReferences } from "./reference-context.js";
 
 const schemas: Record<string, TSchema> = {
   "discussion.create": DiscussionInput,
@@ -65,10 +66,10 @@ function ordered(value: unknown): unknown {
     );
   return value;
 }
-export function digestRequest(kind: string, value: unknown) {
+export function digestRequest(kind: string, value: unknown, version = participationSemanticVersion) {
   return createHash("sha256")
     .update(
-      JSON.stringify([participationSemanticVersion, kind, ordered(value)]),
+      JSON.stringify([version, kind, ordered(value)]),
     )
     .digest("hex");
 }
@@ -90,6 +91,12 @@ function prepare(kind: string, value: unknown) {
   });
   // Entity order is not semantic. Text, token spelling, line endings and spaces are.
   content.mentions.sort((a, b) => (a.token < b.token ? -1 : a.token > b.token ? 1 : 0));
+  if (content.format === "loom-markdown-v2") {
+    content.references = content.references.map(ref => ({ reference_id: ref.reference_id.toLowerCase(),
+      target: { kind: ref.target.kind, resource_id: ref.target.resource_id.toLowerCase(),
+        ...(ref.target.revision_id ? { revision_id: ref.target.revision_id.toLowerCase() } : {}) },
+      relationship: ref.relationship, rationale: ref.rationale })).sort((a,b) => a.reference_id.localeCompare(b.reference_id));
+  }
   try {
     parseAuthored(content);
   } catch {
@@ -105,7 +112,8 @@ function prepare(kind: string, value: unknown) {
       throw new PublicationError("invalid_input");
   }
   const { idempotency_key: _key, ...semantic } = input;
-  return { input, content, digest: digestRequest(kind, semantic) };
+  const version = content.format === "loom-markdown-v2" ? "participation-text-v2" : participationSemanticVersion;
+  return { input, content, version, digest: digestRequest(kind, semantic, version) };
 }
 async function outcome(
   tx: SqlTransaction,
@@ -129,7 +137,7 @@ export class ParticipationPublications {
   constructor(private readonly database: Transactions) {}
 
   async publish(actorContext: ActorContext, kind: string, value: unknown) {
-    const { input, content, digest } = prepare(kind, value),
+    const { input, content, digest, version } = prepare(kind, value),
       identity = identityOf(actorContext);
     try {
       return await this.database.transaction(async (tx) => {
@@ -161,7 +169,7 @@ export class ParticipationPublications {
             await authorizePublication(tx, actor, chain);
           else open(chain);
           if (
-            saved.semantic_version !== participationSemanticVersion ||
+            saved.semantic_version !== version ||
             saved.request_digest !== digest
           )
             throw new PublicationError("idempotency_conflict");
@@ -180,8 +188,18 @@ export class ParticipationPublications {
           await tx.query("SELECT pg_advisory_xact_lock($1::integer,$2::integer)", [0x4c4f4f4d, 3]);
           const configured = (await tx.query<{version:number;proposal_area_id:string|null}>("SELECT version,proposal_area_id FROM loom.community_settings WHERE id=1 FOR SHARE", [])).rows[0]!;
           if (configured.version !== input.proposal_context.expected_settings_version || configured.proposal_area_id !== input.area_id) throw new OrganizationError("proposal_route_changed");
-          if (input.proposal_context.affected_area_id) await lockContext(tx, input.proposal_context.affected_area_id, "resolution", ["area"]);
         }
+        if (content.format === "loom-markdown-v2") {
+          // Setup must take the exclusive structure guard before any shared plan.
+          if (kind === "community.setup") {
+            await tx.query("SELECT pg_advisory_xact_lock($1::integer,$2::integer)", [0x4c4f4f4d, 3]);
+            await structureGuard(tx, true);
+          }
+          await lockReferencePlan(tx, [input.resource_id, input.area_id, input.parent_id,
+            input.proposal_context?.affected_area_id, ...content.references.map(ref => ref.target.resource_id)]
+            .filter((id): id is string => !!id), kind === "revision.publish" ? input.resource_id : undefined);
+        }
+        if (input.proposal_context?.affected_area_id) await lockContext(tx, input.proposal_context.affected_area_id, "resolution", ["area"]);
         let chain: Resource[],
           resourceId: string,
           title = input.title ?? null;
@@ -198,11 +216,13 @@ export class ParticipationPublications {
               resource.current_revision_id,
             );
           const old = (
-            await tx.query<{ title: string | null }>(
-              "SELECT title FROM loom.revisions WHERE id=$1",
+            await tx.query<{ title: string | null; content_format: string }>(
+              "SELECT title,content_format FROM loom.revisions WHERE id=$1",
               [resource.current_revision_id],
             )
           ).rows[0]!;
+          if (old.content_format === "loom-markdown-v2" && content.format !== "loom-markdown-v2")
+            throw new PublicationError("reference_format_required");
           if ((old.title === null) !== (title === null))
             throw new PublicationError("invalid_input");
           resourceId = resource.id;
@@ -352,8 +372,10 @@ export class ParticipationPublications {
             content,
             title,
             mentions: content.mentions,
+            ...(content.format === "loom-markdown-v2" ? { references: await prepareReferences(tx, resourceId,
+              input.expected_revision_id ?? null, content.references) } : {}),
           },
-          { kind, version: participationSemanticVersion, digest },
+          { kind, version, digest },
         );
       });
     } catch (error) {

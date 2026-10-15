@@ -38,6 +38,8 @@ import { useQuery, useIntent, intentUrl, SeparateDraft, type Context } from "./p
 import { OrganizationPage, TopicDirectory, TopicLocation, OrganizationActions, TopicMetadataHistory, OrganizationRecovery } from "./Organization.js";
 import { OrganizationResource, type OrganizationResourceView, ProposalRoute, type ProposalRouteView } from "../contracts/organization.js";
 import { AuthoredText } from "./AuthoredText.js";
+import { ReferenceEditor, ReferenceViews } from "./References.js";
+import type { ReferenceValue } from "../contracts/participation.js";
 import { SaveControl, SavedItemsPage } from "./SavedItems.js";
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import "./participation.css";
@@ -725,6 +727,8 @@ function Composer({
   initialText = "",
   initialTitle = "",
   initialMentions = [],
+  initialFormat = "loom-markdown-v1",
+  initialReferences = [],
   heading,
   onCommitted,
 }: {
@@ -737,6 +741,8 @@ function Composer({
   initialText?: string;
   initialTitle?: string;
   initialMentions?: AuthoredContent["mentions"];
+  initialFormat?: AuthoredContent["format"];
+  initialReferences?: ReferenceValue[];
   heading: string;
   onCommitted?: (value: CommittedView) => void;
 }) {
@@ -760,6 +766,10 @@ function Composer({
   const [text, setText] = useState(original?.text ?? initialText),
     [title, setTitle] = useState(String(record?.body.title ?? initialTitle)),
     [mentions, setMentions] = useState(original?.mentions ?? initialMentions);
+  const [format, setFormat] = useState(original?.format ?? initialFormat),
+    // A retained v1 request has no declarations, even if the fetched current
+    // source has since become v2. Never borrow newer fields for its frozen view.
+    [references, setReferences] = useState(original ? original.format === "loom-markdown-v2" ? original.references : [] : initialReferences);
   const [base, setBase] = useState(
     record?.body.expected_revision_id ?? fixed.expected_revision_id,
   );
@@ -804,13 +814,16 @@ function Composer({
     nextText = text,
     nextTitle = title,
     nextMentions = mentions,
+    nextReferences = references,
   ) {
     return {
       ...fixed,
       ...(base ? { expected_revision_id: base } : {}),
       ...(titleField ? { title: nextTitle } : {}),
       content: {
-        format: "loom-markdown-v1",
+        ...(format === "loom-markdown-v2" || nextReferences.length
+          ? { format: "loom-markdown-v2", references: nextReferences }
+          : { format: "loom-markdown-v1" }),
         text: nextText,
         mentions: nextMentions,
       },
@@ -820,9 +833,10 @@ function Composer({
     nextText = text,
     nextTitle = title,
     nextMentions = mentions,
+    nextReferences = references,
   ) {
     try {
-      const body = draftBody(nextText, nextTitle, nextMentions);
+      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences);
       const next = await update((current) =>
         context.store.saveDraft(
           current ?? context.store.create(slot, kind, path, body),
@@ -985,7 +999,7 @@ function Composer({
           <button
             onClick={() =>
               void update((current) =>
-                context.store.replace(current!, draftBody("", "", [])),
+                context.store.replace(current!, draftBody("", "", [], [])),
               ).catch((failure) => setError(failure.message))
             }
           >
@@ -1116,6 +1130,10 @@ function Composer({
               )}
             </>
           )}
+          <ReferenceEditor references={references} disabled={locked} onChange={next => {
+            setReferences(next); setFormat("loom-markdown-v2");
+            void persist(text, title, mentions, next);
+          }}/>
           {record?.state === "rejected" && (
             <div className="notice">
               <strong>Your draft is preserved.</strong>
@@ -1129,6 +1147,8 @@ function Composer({
                     content={compare.content}
                     participants={compare.mentioned_participants}
                   />
+                  <ReferenceViews sourceId={compare.resource_id} sourceRevision={compare.revision_id}
+                    target={{ kind: compare.kind === "artifact" ? "artifact" : "contribution", resource_id: compare.resource_id, revision_id: compare.revision_id }}/>
                 </>
               )}
               <p>
@@ -1155,7 +1175,7 @@ function Composer({
           <details>
             <summary>Preview</summary>
             <AuthoredText
-              content={{ format: "loom-markdown-v1", text, mentions }}
+              content={draftBody().content as AuthoredContent}
             />
           </details>
         </>
@@ -1199,6 +1219,7 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
         </Link>
       </div>
       {data.opening.affected_area_id && <p>Organizational suggestion concerning <Link to={'/loom/area/'+data.opening.affected_area_id}>this topic</Link>.</p>}
+      <ReferenceViews key={id} target={{kind:"discussion",resource_id:id}}/>
       {context.self.role === "administrator" && <OrganizationActions id={id} kind="discussion"/>}
       <div className="reading-grid">
         <div>
@@ -1403,6 +1424,7 @@ function ContributionBody({
         content={data.content}
         participants={data.mentioned_participants}
       />
+      <ReferenceViews key={data.revision_id} sourceId={id} sourceRevision={data.revision_id} target={{kind:"contribution",resource_id:id}}/>
       <div className="post-footer">
         <SaveControl context={context} target={{ kind: "contribution", resource_id: id }} label="contribution" />
         <button
@@ -1648,6 +1670,8 @@ function ResourcePage({
           content={data.content}
           participants={data.mentioned_participants}
         />
+        <ReferenceViews key={id+data.revision_id+(revision??'current')} sourceId={id} sourceRevision={data.revision_id}
+          target={{kind:data.kind === "artifact" ? "artifact" : "contribution",resource_id:id,...(revision?{revision_id:revision}:{})}}/>
         {data.parent_id && (
           <p className="parent-context">
             In reply to{" "}
@@ -1688,6 +1712,8 @@ function ResourcePage({
           initialTitle={data.title ?? ""}
           initialText={data.content.text}
           initialMentions={data.content.mentions}
+          initialFormat={data.content.format}
+          initialReferences={data.content.format === "loom-markdown-v2" ? data.content.references : []}
           heading="Edit text"
         />
       )}
