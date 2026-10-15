@@ -9,7 +9,7 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`4`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`5`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -24,6 +24,14 @@ with exact revisions, live containment, original-author/time/topic filters and
 explicit continuation invalidation. Search is the first recoverable derived worker;
 other projections remain disabled. See ADR-012, `docs/development/search.md` and
 `src/server/modules/search/MEMORY.md` for fencing, backfill, bounds and recovery.
+Recorded references (ADR-021) use explicit `loom-markdown-v2` declarations from
+openings/comments/text artifacts; old v1 bytes/digests remain unchanged. Immutable
+memberships/withdrawals commit with the source, keeping exact targets and separate
+assertion/change/withdrawal attribution. Direct bounded backlinks use current
+eligibility, explicit resource/exact and current/history scopes, sorted guards and
+restartable snapshot pages. Search supports both formats' source title/body;
+rationale is displayed but not searched. See `docs/development/recorded-references.md`
+and the participation memory; summary/file/private-note integration remains open.
 Private Saved items now support discussion/contribution/artifact resource references
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones
@@ -88,6 +96,9 @@ outbox intents, other consumer progress and Saved rows are preserved.
 Migration 0008 preserves jobs/documents while separating intent identity from
 revision backfill and replaying event discovery with an intent-aware cursor.
 Populated 0007 upgrade and unfinished-rebuild process loss are deterministic tests.
+Migration 0009 adds v2 reference membership/withdrawal tables and constraints,
+without backfilling old content or rewriting outcomes. Populated pre-0009 upgrade,
+original v1 uncertain retry and reference races use `test:references:postgres`.
 Migration checksums and application history are
 different concepts. Ordinary stop retains volumes; reset requires explicit consent.
 Migration hygiene checks SQL statement heads outside comments/quoted text, allowing
@@ -127,8 +138,9 @@ ownership, state, expiry and current role; enrollment tickets cannot publish.
 It rechecks actor/credential, containment, author/editor/admin rights and base
 revision under the ADR-006 guards. Exact retained attempts resolve before stale
 new-write checks; read-only reconciliation can disclose only eligible references.
-ADR-015 preserves `text-revision-v1` and adds `participation-text-v1`; retained
-outcomes are never silently rehashed. Both still need approved erasure/restore policy.
+ADR-015 preserves `text-revision-v1` and `participation-text-v1`; ADR-021 adds
+`participation-text-v2` only for new v2 content. Retained outcomes are never silently
+rehashed. All still need approved erasure/restore policy.
 The transactional clock is acquired last and held through events/intents/outcome
 and COMMIT; no sequences or new domain guards define its committed upper bound.
 `test:publication:postgres` uses tmpfs PostgreSQL and private process fixtures for

@@ -887,3 +887,11 @@
 .search-result .byline { font-size:.85rem; color:#546356; }
 .search-indexing { margin:1rem 0; }
 @media(max-width:650px) { .search-filters { grid-template-columns:1fr; } }
+.reference-editor { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border, #ccd5ce); border-radius: 8px; min-width: 0; }
+.reference-draft, .reference-picker, .reference-row { padding: .75rem 0; border-bottom: 1px solid var(--border, #ccd5ce); overflow-wrap: anywhere; }
+.reference-editor textarea, .reference-editor input, .reference-editor select, .reference-views select { max-width: 100%; box-sizing: border-box; }
+.reference-views { margin: .75rem 0; min-width: 0; }
+.reference-list { padding-left: 1.25rem; }
+.reference-rationale { white-space: pre-wrap; }
+.reference-results h3:focus { outline: 2px solid #287348; outline-offset: 3px; }
+.reference-views code, .reference-editor code { overflow-wrap: anywhere; }

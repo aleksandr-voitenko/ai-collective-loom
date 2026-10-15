@@ -7,7 +7,10 @@ Implementation and verification record: `LC-20261015-94TS`.
 Node entry, running as constrained `loom_app`, without participant credentials.
 Other outbox consumers remain unimplemented. Sources and intents are immutable inputs.
 
-Typed artifacts and contributions in `loom-markdown-v1` are the population.
+Typed artifacts and contributions in `loom-markdown-v1` and `loom-markdown-v2`
+are the population. ADR-021 preserves source title/body indexing across worker
+restart/rebuild; rationale and dynamically resolved targets are not indexed.
+Recorded references are direct relational reads, independent of this worker.
 A null-parent opening represents one discussion result, with its discussion ID
 and exact opening resource/revision. Original author filters differ from revision
 publisher; dates use the matching revision's publication timestamp. PostgreSQL

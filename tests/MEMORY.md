@@ -95,3 +95,21 @@ narrow layout, incomplete indexing, administrator recovery and suspended-author
 selection/reload. A fresh-search fixture
 must observe navigation completion before entering a new query; an old status
 notice can already exist and is not a navigation barrier.
+
+Reference tests use `helpers/references.ts` with ordinary cookie/bearer accounts
+and real HTTPS/SQL. `integration/references*.test.ts` covers populated 0008 upgrade,
+unchanged old digests, declaration/withdrawal attribution, rollback, exact retries,
+known-target selection without search, native worker restart/rebuild, bounded
+hidden-candidate paging and source/target/credential races. SQL barriers and
+`pg_blocking_pids` establish both commit orders. `references-client.test.ts` also
+restarts the standalone fsynced client and checks UTF-8/JSON/statement limits.
+`web/references.test.tsx` exercises development StrictMode; Chromium scenarios
+cover exact navigation, correction, failed autosave, stale tabs, persistent restart,
+page recovery and late route/account results. Observe the failed dispatch leaving
+busy state before restoring faulted storage; click completion alone is not a
+journal-write barrier. Legacy correction cases distinguish uncommitted v1→v2
+conflicts (empty/populated lists), an existing format refusal, explicit withdrawal,
+comparison-load/save failures and reload. These differ from the already-committed
+v1 replay scenario. The comparison failure and rejection notices need exact text selectors when both show.
+Closed diagnostics add `references.spec.ts`, three route
+templates and Add/Check/Refresh controls, without changing bounds or raw containment.

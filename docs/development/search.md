@@ -1,7 +1,7 @@
 # Scoped text search and the indexing worker
 
 This synthetic-only slice provides current lexical search in the browser and the
-same `participation-1`, guide 4 API. Its implemented choices and limits are in
+same `participation-1`, guide 5 API. Its implemented choices and limits are in
 [ADR-012](../adr/012-scoped-text-search.md). Product and imported architecture
 snapshots remain unchanged. Use synthetic accounts and text only.
 
@@ -181,7 +181,14 @@ and historical search remain open. SRCH-03 supports topic/descendant, kind, orig
 author and current-revision time filters. SRCH-04 supplies exact contextual excerpts
 and attribution. SRCH-05 provides independently bounded selected results and explicit
 continuation. SRCH-06 applies live source/owner/revision eligibility. SRCH-07 supplies
-exact bodies and existing branch/ancestor routes; backlinks remain open.
+exact bodies and existing branch/ancestor routes. [Recorded references](recorded-references.md)
+adds independent bounded outgoing/incoming expansion for supported text sources,
+including exact target revisions; summary/file/private-note expansion remains open.
+
+Both `loom-markdown-v1` and `loom-markdown-v2` source title/body participate in
+selection, worker output, coverage and rebuild. Authored rationale is not lexical
+search content. Resolved target titles/bodies never enter the source index. A
+stopped worker does not prevent known-target validation or backlink retrieval.
 
 No broad AC06/15/17/20/30/33/37/39 completion is claimed. Saved searches, attention,
 notifications, reading state, summaries, files, semantic search and agent execution

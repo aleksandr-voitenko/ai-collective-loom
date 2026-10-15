@@ -149,7 +149,8 @@ the same attempt mutex and returns safe original references under live read
 eligibility. Exact mutation retries additionally recheck current action rights;
 closure/editor removal may deny retry while allowing read-only reconciliation.
 Both channels suppress ineligible result references. `not_recorded` is still
-uncertain. Success means committed source publication only; projection is disabled.
+uncertain. Success means committed source publication, not completed indexing.
+Search is the only enabled derived worker; attention projections remain disabled.
 
 Configuration/editor-list mutations keep expected numeric versions and immutable
 private audit outcomes with all semantic fields hashed. They do not append a
@@ -198,3 +199,14 @@ existing participation-text-v1 digests remain identical. Its stable reference is
 retained on the discussion and exposed only when the area remains readable. There
 is no proposal workflow or special authority. Changing the designated destination
 rejects the frozen request; an exact committed retry still resolves its old outcome.
+
+## Recorded references
+
+[ADR-021](021-recorded-references.md) adds `participation-text-v2` only for
+`loom-markdown-v2`. Logical ID, target kind/resource/exact revision, relationship
+and exact rationale all enter semantic identity. V1/internal digests and retained
+requests remain unchanged. Exact retry resolves before new-target validation and
+does not reapply references after a later withdrawal. A v1 edit of a v2 base is
+explicitly refused before writing; empty v2 lists represent deliberate withdrawal.
+Assertion changes and withdrawals derive attribution from authenticated revision
+publishers, never client-supplied ownership fields.

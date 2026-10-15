@@ -26,6 +26,10 @@ with topic, kind, original-author and publication-time filters. A recoverable No
 worker indexes retained sources; exact reads remain available while indexing is
 incomplete. The author picker includes suspended authors whose publications remain
 readable. See the [search and worker guide](docs/development/search.md).
+Participants can explicitly record untyped, related-to, builds-on or contradicts
+references while publishing openings, comments and text artifacts. Exact revision
+targets, assertion history, source-owned withdrawal and bounded **Referenced by**
+views work independently of indexing. See the [recorded references guide](docs/development/recorded-references.md).
 
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
@@ -77,6 +81,7 @@ npm run test:participation:postgres # actual HTTPS journey and standalone agent 
 npm run test:saved-items:postgres # private bookmarks, concurrency, recovery and bounded retrieval
 npm run test:organization:postgres # populated upgrades, hierarchy, moves, closure and HTTPS recovery
 npm run test:search:postgres # leases, process loss, rebuild, current authorization and search limits
+npm run test:references:postgres # references, populated upgrade, client recovery and read/publication races
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures

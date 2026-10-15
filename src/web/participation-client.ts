@@ -1,6 +1,7 @@
 import { Value } from "@sinclair/typebox/value";
 import type { TSchema } from "@sinclair/typebox";
 import type { CommittedView } from "../contracts/participation.js";
+import { ReferenceDeclaration } from "../contracts/participation.js";
 
 export interface Self {
   participant_id: string;
@@ -96,6 +97,8 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
     error.operationOutcome !== "unknown" &&
     [
       "invalid_input",
+      "reference_format_required",
+      "unavailable",
       "invalid_request",
       "revision_conflict",
       "forbidden",
@@ -187,6 +190,15 @@ export class IntentStore {
       record.sequence ??= 1;
       if (!Number.isSafeInteger(record.sequence) || record.sequence < 1)
         throw new Error("A recovery record has an incompatible version.");
+      for (const field of [record.body.content, record.body.overview]) {
+        if (!field || typeof field !== "object") continue;
+        const authored = field as { format?: string; references?: unknown };
+        if ((authored.format === "loom-markdown-v1" && authored.references !== undefined) ||
+          (authored.format === "loom-markdown-v2" && (!Array.isArray(authored.references) || authored.references.length > 16 ||
+            !authored.references.every(ref => Value.Check(ReferenceDeclaration, ref)))) ||
+          !["loom-markdown-v1", "loom-markdown-v2"].includes(authored.format ?? ""))
+          throw new Error("This authored recovery format is unsupported. Export the exact record before continuing.");
+      }
       records.push(record);
     }
     return records.sort((a, b) => a.created_at.localeCompare(b.created_at));

@@ -90,3 +90,14 @@ These choices implement architecture §§5.3, 12, 14 and the first backlog miles
 Reconsider indexes, limits and ordering with representative workload measurements;
 do not call the synthetic values approved capacity. See the
 [verification evidence](../development/participation-evidence.md).
+
+## Reference expansion
+
+[ADR-021](021-recorded-references.md) adds exact-source outgoing and distinct
+resource/exact-target incoming pages. Default current and explicit historical
+membership use current eligibility, original/change/withdrawal attribution and
+current placement. Direct relational queries do not depend on the index. The
+bounded candidate scan, metadata guards, UTF-8 budget and encrypted five-minute
+continuation are independent limits. Pages use REPEATABLE READ plus complete
+sorted guards; incompatible changes produce `references_changed`, not mixed
+metadata. No aggregate scope, hidden count or whole graph is returned.

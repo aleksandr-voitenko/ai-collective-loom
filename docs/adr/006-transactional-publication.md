@@ -112,3 +112,11 @@ requires full feed, remaining projections, production identity and product valid
 
 See architecture §§7.1–7.6 and ADR-015 for the inherited semantics and retry scope;
 this record selects the executable mechanism rather than restating the architecture.
+
+Recorded references extend the pre-clock preparation (ADR-021): discover the full
+source/target/owner set under the shared structure guard, then take sorted resource
+locks with the edited source UPDATE and others SHARE. Include discussion openings,
+reply parents and proposal affected areas; avoid cross-citation lock upgrades.
+Revision memberships and withdrawal rows are fixed relational inserts before the
+pointer/clock/event/intent/outcome tail, in the same transaction. No target event
+or independent reference mutation is introduced.

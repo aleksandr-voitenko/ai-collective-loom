@@ -1,10 +1,12 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "4";
+export const guideRevision = "5";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
+  references: 16,
+  rationaleBytes: 512,
   parserTokens: 4096,
   pageItems: 25,
   scanItems: 100,
@@ -19,7 +21,21 @@ export const UUID = Type.String({
 });
 export const NullableId = Type.Union([UUID, Type.Null()]);
 export const Title = Type.String({ minLength: 1, maxLength: 160 });
-export const Content = Type.Object(
+export const ReferenceTarget = Type.Object({
+  kind: Type.Union([Type.Literal("discussion"), Type.Literal("contribution"), Type.Literal("artifact")]),
+  resource_id: UUID,
+  revision_id: Type.Optional(UUID),
+}, closed);
+export const Relationship = Type.Union([Type.Null(), Type.Literal("related_to"), Type.Literal("builds_on"), Type.Literal("contradicts")]);
+export const ReferenceDeclaration = Type.Object({
+  reference_id: UUID,
+  target: ReferenceTarget,
+  relationship: Relationship,
+  rationale: Type.Union([Type.Null(), Type.String({ maxLength: limits.rationaleBytes })]),
+}, closed);
+export type ReferenceTargetValue = Static<typeof ReferenceTarget>;
+export type ReferenceValue = Static<typeof ReferenceDeclaration>;
+export const LegacyContent = Type.Object(
   {
     format: Type.Literal("loom-markdown-v1"),
     text: Type.String({ minLength: 1, maxLength: limits.textBytes }),
@@ -36,6 +52,12 @@ export const Content = Type.Object(
   },
   closed,
 );
+export const ReferencedContent = Type.Object({
+  ...LegacyContent.properties,
+  format: Type.Literal("loom-markdown-v2"),
+  references: Type.Array(ReferenceDeclaration, { maxItems: limits.references }),
+}, closed);
+export const Content = Type.Union([LegacyContent, ReferencedContent]);
 export type AuthoredContent = Static<typeof Content>;
 const attempt = { idempotency_key: UUID };
 export const DiscussionInput = Type.Object(
