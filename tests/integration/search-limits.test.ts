@@ -105,6 +105,10 @@ test('synthetic preview supervises terminal worker stop/start while HTTPS stays 
   assert.equal((await client.call('/health/ready')).status,200);
   child.stdin.write('worker start\n');await line('Search worker started.');
   assert.equal((await client.call('/health/ready')).status,200);
+  child.stdin.write('notifications stop\n');await line('Notification worker stopped; search and API remain available.');
+  assert.equal((await client.call('/health/ready')).status,200);
+  child.stdin.write('notifications start\n');await line('Notification worker started.');
+  assert.equal((await client.call('/health/ready')).status,200);
   child.kill('SIGTERM');assert.deepEqual(await closed,[0,null]);
   await assert.rejects(stat(certificate),{code:'ENOENT'});
 });

@@ -23,11 +23,17 @@ Before a retained-data environment is enabled, approve and exercise:
    and retained operation decisions. Their synthetic caps have no automatic expiry.
    Approve physical-source erasure handling without retargeting exact references or
    allowing stale Save/Unsave replay. Logical removal tests do not certify erasure.
+   Personal notifications add immutable claim/signal/delivery identity, per-recipient
+   committed clocks and a retained-history floor. Approve any pruning and preserve
+   explicit incomplete resynchronization; a rebuild must never recreate old alerts.
 4. A coordinated encrypted backup and restore drill, including revisions, outcomes,
    identity verifiers, instance identity and migrations. Restoring older committed
    history requires a recovery epoch that blocks automatic old-intent replay until
    reconciliation. The ordinary server/browser restart tests do not implement this.
    Include private bookmark versions and decisions in the same recovery contract.
+   Include notification key custody, recovery epoch, reply-eligibility facts,
+   source heads/gaps and personal availability. Ordinary restart continuity and
+   rejection of an incompatible notification epoch do not certify destructive restore.
 5. A release/migration maintenance procedure: compatibility checks, admission stop,
    in-flight request drain, retained backup, migrator-only additive application,
    application-role checks and recovery on failure. Old binary rollback is not a

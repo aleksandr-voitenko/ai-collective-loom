@@ -907,3 +907,14 @@
 .change-details, .change-discovery { margin-top: 1.25rem; padding-top: .75rem; border-top: 1px solid var(--line, #d8dfd7); }
 .change-details code, .change-discovery code, .change-account-editor code { overflow-wrap: anywhere; }
 .change-discovery li, .change-account-editor li { margin: .75rem 0; overflow-wrap: anywhere; }
+.notification-toolbar,.notification-links,.notification-reasons { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; }
+.notification-toolbar { margin:1.5rem 0; justify-content:space-between; }
+.notifications button[aria-disabled="true"] { opacity:.6; cursor:progress; }
+.notification-toolbar label { display:flex; gap:.65rem; align-items:center; }
+.notification-list { list-style:none; padding:0; margin:1rem 0; }
+.notification-list>li { padding:.9rem 0; border-bottom:1px solid var(--line,#dde4de); overflow-wrap:anywhere; }
+.notification-list h2 { font-size:1.1rem; margin:.5rem 0; }
+.notification-list p { margin:.5rem 0; }
+.notification-reasons span { font-size:.8rem; background:#edf3ee; color:#294d39; padding:.2rem .55rem; border-radius:4px; }
+.notification-list details,.notification-coverage { margin-top:.65rem; font-size:.88rem; }
+@media(max-width:600px) { .notification-toolbar,.notification-toolbar label { align-items:stretch; flex-direction:column; } }

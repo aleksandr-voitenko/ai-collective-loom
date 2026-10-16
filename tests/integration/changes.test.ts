@@ -46,7 +46,7 @@ test('Alice owns R2 note; Bob describes exact R1/R2 without artifact rights; fie
   const current=(await bob.client.call(discover(r2))).body;assert.deepEqual(current.items.map((m:any)=>m.form),['change_account']);
   await f.move(r1.resource_id,f.other);assert.equal((await bob.client.call(notePath(r2))).body.source.area_id,f.other);
   assert.equal((await f.observer.query('SELECT count(*)::int n FROM loom.shared_activity WHERE resource_id=$1',[account.body.resource_id])).rows[0].n,1);
-  assert.equal((await f.observer.query("SELECT count(*)::int n FROM information_schema.tables WHERE table_schema='loom' AND table_name LIKE '%notification%'",[])).rows[0].n,0);
+  assert.equal((await f.observer.query('SELECT count(*)::int n FROM loom.notification_signals',[])).rows[0].n,0);
 });
 
 test('summary note-only revisions exclude themselves; ordinary accounts are eligible new and revised sources',{timeout:60000},async t=>{

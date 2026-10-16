@@ -9,7 +9,7 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`7`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`8`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -18,12 +18,20 @@ Exact recovery returns original and current state without reapplying earlier mov
 Proposal discussions bind their destination/settings; topic-specific suggestions
 also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.
 See ADR-020 and `docs/development/topic-organization.md`; optional moderator
-delegation and attention services remain open.
+delegation and full shared attention services remain open.
 Current shared-text search is implemented for typed openings/comments/artifacts/summaries,
 with exact revisions, live containment, original-author/time/topic filters and
-explicit continuation invalidation. Search is the first recoverable derived worker;
-other projections remain disabled. See ADR-012, `docs/development/search.md` and
+explicit continuation invalidation. Search and personal direct attention have independent recoverable derived workers;
+remaining projections stay disabled. See ADR-012, `docs/development/search.md` and
 `src/server/modules/search/MEMORY.md` for fencing, backfill, bounds and recovery.
+Personal direct attention (ADR-023, guide 8): migration 0012 backfills typed retained
+revisions in order and consumes intents independently of search. Immutable logical
+claims/signals/deliveries use per-recipient committed clocks. Missing predecessor
+and historical unmentioned-reply eligibility gaps remain explicit. API/browser
+checkpoints survive ordinary restarts; visibility replay reaches all retained
+history before completed lower bounds. No shared Updates/read/dismissal/Follow
+semantics are implied. See `docs/development/notifications.md` and
+`src/server/modules/notifications/MEMORY.md` for bounds, locks and recovery custody.
 Recorded references (ADR-021) use explicit `loom-markdown-v2` declarations from
 openings/comments/text artifacts/summaries; old v1 bytes/digests remain unchanged. Immutable
 memberships/withdrawals commit with the source, keeping exact targets and separate
@@ -48,7 +56,7 @@ and exact contribution/artifact revisions. Owners come from current authenticati
 with no administrator override. Migration 0005 retains versioned target tombstones
 and immutable applied/conflict decisions, without shared publication side effects.
 See ADR-013 and `docs/development/saved-items.md`; notes, read state, Following and
-notifications remain open. Synthetic caps are 500 target states/10,000 decisions per
+shared Updates remain open. Synthetic caps are 500 target states/10,000 decisions per
 participant; expiry, erasure and destructive restore remain unapproved.
 No real accounts/content are approved: ADR-004 identity/recovery candidates,
 production limits, retained-data operations and cross-machine validation remain
@@ -65,8 +73,8 @@ Text participation, authored/retrieval contracts and browser recovery:
 `LC-20261014-9EU9`.
 Application commands require Node 24.19.0. `dev` initializes dependencies;
 `app:synthetic` builds and launches isolated temporary PostgreSQL + HTTPS with a
-private ticket file and supervised native search worker. Terminal `worker stop`/
-`worker start` preserve the API. It never touches existing development data or credentials.
+private ticket file and independent supervised native search/notification workers.
+Terminal `worker stop/start` and `notifications stop/start` preserve the API. It never touches existing development data or credentials.
 
 `scripts/local.mjs` manages an explicitly local Compose project. PostgreSQL 18.4
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.
@@ -160,7 +168,7 @@ synthetic tail metrics do not approve production capacity. Checked-out connectio
 errors between queries are transaction-owned and discard the failed client.
 Outbox intents remain immutable. Search uses separate discovery/jobs, source-version
 guards and generation-fenced atomic output/job finalization (ADR-006/012).
-No completion of notification, extraction or other projections is implied.
+Ordered personal notifications use their own consumer (ADR-023); extraction and other projections remain open.
 Publication protocol and recovery decisions: Lore-ID `LC-20261012-6OTQ`.
 Identity account creation, separate one-time issuance and restricted audits commit
 on the same application-role transaction owner. Retry/status contains safe IDs and

@@ -58,7 +58,7 @@ Bodies are exact v1, explicit-reference v2 or change-aware `loom-markdown-v3`,
 16 KiB UTF-8 text plus rationale and 4,096 parsed tokens maximum,
 with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images and
 non-HTTP(S) links do not render as active content. Ordinary links infer nothing.
-Files, notifications and model execution remain unsupported.
+Files and model execution remain unsupported; persisted entities feed the independent notification consumer (ADR-023).
 
 Eligible retrieval rows contain metadata + exact full-content paths. Default 12, max 25,
 scan max 100, serialized response budget 4–128 KiB. Maximum escaped accepted text
@@ -77,8 +77,9 @@ AES-GCM cursors bind participant/query/scope with a process-local key. Hierarchy
 area/discussion/artifact collections also bind the community hierarchy epoch; any
 organization change makes old continuation requests fail `invalid_cursor`. Restart makes
 old cursors invalid, not old publication intents. This currently assumes one API
-process. Complete activity catch-up, multiple-process cursor custody and destructive
-restore/recovery epochs are separate gates, not extensions of ordinary pagination.
+process. Full shared activity catch-up and destructive restore remain separate gates.
+Personal direct attention uses durable custody and an explicit recovery epoch in
+its sibling notifications module; ordinary browsing cursors keep these rules.
 
 Browser `IntentStore` records origin/instance/participant/kind/key/body before POST,
 caps 32 records/1 MiB, fails closed without evicting uncertain work, and exports JSON.
@@ -149,7 +150,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–7. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–8. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -180,7 +181,7 @@ extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 7 
 Search (ADR-012) lives in the sibling `search/` module and reuses these exact-body
 and source guards. Current pointer equality is mandatory; reply ancestry is not
 containment. Topic moves affect scope without indexing; closure does not hide text.
-Guide 7 reports `search_only; other_projections_disabled`, not global outbox completion.
+Guide 8 advertises independent search and personal direct attention, not global outbox completion.
 The bounded topic selector is reused with a search-specific label. Search owns its
 query/cursor URL and late-response guards; no search operation enters the intent
 journal or writes personal state. Search's separate author directory uses readable
@@ -239,3 +240,11 @@ source metadata without expanding unavailable members.
 Discovery scans100, returns25, binds scope/history/form/owner and live source epochs;
 resource aggregation validates each exact member even if current is unavailable.
 Summary eligibility includes v3 ordinary accounts; summary note revisions stay out.
+
+Notification integration (ADR-023): new reply constructors discover the immutable
+parent author before sorted participant locks and capture active human/agent
+eligibility in `notification_reply_facts` before the common publication tail. Older
+schema fixtures omit that additive fact; old bytes/digests/retries stay unchanged.
+The consumer authenticates no publisher and processes every retained ordinal;
+see `../notifications/MEMORY.md`. Retrieval and Saved state never acknowledge,
+consume or create notification effects.

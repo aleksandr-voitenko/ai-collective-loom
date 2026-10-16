@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "7";
+export const guideRevision = "8";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -302,7 +302,9 @@ export const Onboarding = Type.Object(
     replay_retention: Type.Literal(
       "retained_without_automatic_expiry; destructive_restore_unsupported",
     ),
-    derived_effects: Type.Literal("search_only; other_projections_disabled"),
+    derived_effects: Type.Literal("search_and_personal_direct_attention; other_projections_disabled"),
+    notification_contract: Type.Literal("personal-attention-1"),
+    notifications_url: Type.Literal("/api/v1/me/notifications/query"),
   },
   closed,
 );

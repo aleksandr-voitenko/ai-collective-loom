@@ -401,7 +401,9 @@ export class ParticipationRetrieval {
         limits,
         replay_retention:
           "retained_without_automatic_expiry; destructive_restore_unsupported" as const,
-        derived_effects: "search_only; other_projections_disabled" as const,
+        derived_effects: "search_and_personal_direct_attention; other_projections_disabled" as const,
+        notification_contract: "personal-attention-1" as const,
+        notifications_url: "/api/v1/me/notifications/query" as const,
       };
     });
   }

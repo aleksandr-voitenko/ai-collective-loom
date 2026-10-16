@@ -42,6 +42,8 @@ import { ChangeNoteEditor, ChangeAccountEditor, ChangeDetails, ChangeDiscoveryVi
 import { ReferenceEditor, ReferenceViews } from "./References.js";
 import type { ReferenceValue, NoteContent, ChangeAccountValue, ExactChangeTargetValue } from "../contracts/participation.js";
 import { SaveControl, SavedItemsPage } from "./SavedItems.js";
+import { NotificationsPage } from './Notifications.js';
+import { NotificationRecovery } from './notification-recovery.js';
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import { SummarySection, SummaryMaintenance, CoverageDetails, CoverageEditor } from './Summaries.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
@@ -184,14 +186,22 @@ export function ParticipationApp() {
     if (!self) return;
     try {
       await request("/api/v1/identity/logout", { body: {}, self });
+      const cleanupFailures:string[]=[];
+      // Fence pending views before awaiting local locks: a late read must not
+      // refill a cleared recovery record while another cleanup lock is blocked.
+      try {announceIdentityChange();}
+      catch {invalidateIdentity();cleanupFailures.push('other tabs could not be notified.');}
+      const cleanupOwner=identityGeneration();
       try {
-        await store?.clear();
+        if(store&&community)await new IntentStore(community.instance_id,self.participant_id).clear();
       } catch {
-        setError(
-          "Signed out, but local drafts could not be cleared. They remain scoped to this account on this browser.",
-        );
+        cleanupFailures.push('local drafts could not be cleared.');
       }
-      announceIdentityChange();
+      if(cleanupOwner!==identityGeneration())return;
+      try {if(community)await new NotificationRecovery(community.instance_id,self.participant_id).clear();}
+      catch {cleanupFailures.push('notification recovery could not be cleared.');}
+      if(cleanupOwner!==identityGeneration())return;
+      if(cleanupFailures.length)setError(`Signed out, but ${cleanupFailures.join(' ')} They remain scoped to this account on this browser.`);
       navigate("/loom");
     } catch (failure) {
       setError((failure as Error).message);
@@ -226,6 +236,7 @@ export function ParticipationApp() {
           Artifacts
         </NavLink>
         <NavLink to="/loom/saved"><Icon name="saved" />Saved items</NavLink>
+        <NavLink to="/loom/notifications"><Icon name="discussion" />Mentions/replies</NavLink>
         <NavLink to="/loom/search"><Icon name="search" />Search</NavLink>
         <NavLink to="/loom/summaries"><Icon name="discussion" />Summary maintenance</NavLink>
         {self?.role === "administrator" && (
@@ -298,7 +309,7 @@ export function ParticipationApp() {
                 ? "Community overview"
                 : location.pathname.includes("/artifacts")
                   ? "Artifacts"
-                  : location.pathname.includes("/saved") ? "Saved items" : location.pathname.includes("/search") ? "Search" : "Topics"}
+                  : location.pathname.includes('/notifications') ? 'Mentions/replies' : location.pathname.includes("/saved") ? "Saved items" : location.pathname.includes("/search") ? "Search" : "Topics"}
           </span>
           <span className="release-label">Synthetic preview</span>
         </header>
@@ -434,6 +445,7 @@ function ActiveView({ context }: { context: Context }) {
   if (!kind) return <Topics context={context} />;
   if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
+  if (kind === 'notifications') return <NotificationsPage context={context} />;
   if (kind === "search") return <SearchPageViewComponent context={context} />;
   if (kind === "summaries") return <SummaryMaintenance context={context} />;
   if (kind === "area" && id) return <AreaPage id={id} context={context} />;

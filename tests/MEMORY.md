@@ -1,5 +1,26 @@
 # Browser test diagnostics
 
+Notifications use `integration/notifications*.test.ts`: ordered historical backfill,
+coalesced immutable identity, all-stage rollback, native lease/COMMIT death barriers,
+delayed availability after completed and fixed bounds, independent recipient clocks,
+current guard orders, historical eligibility gaps, durable key/epoch/retention
+recovery and compiled HTTPS/client restarts. Private retained-data mutations inject
+missing ordinals/malformed sources; they are not product repair routes. Assertions
+derive availability order from committed personal positions, not source UUID/time.
+`web/notifications.test.tsx` exercises StrictMode, failed saves and late ownership;
+`e2e/notifications.spec.ts` uses the normal runner, native worker and actual API.
+Chromium blurs a focused paging button when native `disabled` is applied; JSDOM
+does not reproduce that boundary. Notification controls retain focus with
+`aria-disabled` plus busy guards; keep the compiled-browser failed-page assertion.
+Review regressions cover standalone next with changed page sizes/first use/legacy
+journals, historical projection beneath a hidden current revision, cached-row
+withdrawal on policy/authentication failure, contradictory local token modes and
+sign-out with cleanup blocked on a real Web Lock. Compare DOM presence as a Boolean;
+passing an HTMLElement into Node's equality assertion can hang error serialization.
+The closed diagnostic vocabulary adds only its spec and fixed notification routes.
+Optional `LOOM_NOTIFICATION_REVIEW_SCREENS=1` deliberately curates synthetic screenshots
+under `docs/development/evidence/notifications/`, separate from approved diagnostics.
+
 Summary tests use the same runner and closed diagnostics (`summaries.spec.ts` and
 summary route templates; no raw IDs/bodies added). `summaries*.test.ts` covers
 pre-0010 populated upgrade, source snapshot boundaries, both authority/suppression

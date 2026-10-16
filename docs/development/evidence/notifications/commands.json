@@ -1,0 +1,370 @@
+{
+  "node": "24.19.0",
+  "platform": "macOS arm64; disposable Linux arm64 PostgreSQL",
+  "results": [
+    {
+      "command": "npm run check",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          64,
+          5,
+          53
+        ],
+        "pass": [
+          64,
+          5,
+          53
+        ],
+        "fail": [
+          0,
+          0,
+          0
+        ],
+        "cancelled": [
+          0,
+          0,
+          0
+        ],
+        "skipped": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:notifications:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          13
+        ],
+        "pass": [
+          13
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:migrations:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          9
+        ],
+        "pass": [
+          9
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:publication:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          16
+        ],
+        "pass": [
+          16
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:participation:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          12
+        ],
+        "pass": [
+          12
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:search:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          46
+        ],
+        "pass": [
+          46
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:references:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          26
+        ],
+        "pass": [
+          26
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:summaries:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          14
+        ],
+        "pass": [
+          14
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:changes:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          12
+        ],
+        "pass": [
+          12
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "node --import tsx --test tests/integration/notifications-recovery.test.ts tests/integration/search-limits.test.ts",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          10
+        ],
+        "pass": [
+          10
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:notifications:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          14
+        ],
+        "pass": [
+          14
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:app:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          9
+        ],
+        "pass": [
+          9
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:identity:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          22
+        ],
+        "pass": [
+          22
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:saved-items:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          10
+        ],
+        "pass": [
+          10
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:organization:postgres",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          15
+        ],
+        "pass": [
+          15
+        ],
+        "fail": [
+          0
+        ],
+        "cancelled": [
+          0
+        ],
+        "skipped": [
+          0
+        ]
+      }
+    },
+    {
+      "command": "npm run test:browser-diagnostics",
+      "observed_exit_code": 0,
+      "controlled_failures": 8,
+      "fail_closed_validation_cases": 4,
+      "approved_evidence": "diagnostics/approval.json"
+    },
+    {
+      "command": "npm run check",
+      "scope": "final implementation and documentation",
+      "observed_exit_code": 0,
+      "node_test_groups": {
+        "tests": [
+          64,
+          5,
+          53
+        ],
+        "pass": [
+          64,
+          5,
+          53
+        ],
+        "fail": [
+          0,
+          0,
+          0
+        ],
+        "cancelled": [
+          0,
+          0,
+          0
+        ],
+        "skipped": [
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}
