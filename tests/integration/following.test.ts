@@ -43,13 +43,14 @@ test('independent expected event set: overlap, exact notes, direct discussions, 
   const a=await f.artifact(),reply=await f.reply(d),summary=await f.create(d.id);
   const r2=(await f.admin.call('/api/v1/revisions',revisionBody(a,'New artifact',note('Exact R2 note')))).body;
   const r3=(await f.admin.call('/api/v1/revisions',revisionBody(r2,'Current artifact'))).body;
+  const summary2=await f.reviseSummary(summary,{carry_forward_revision_id:summary.revision_id});
   const account=await f.publish(f.admin,'/api/v1/replies',{discussion_id:d.id,parent_id:d.opening.resource_id,content:content('An independent account'),change_note:null,
     change_account:{revisions:[{kind:'artifact',resource_id:a.resource_id,revision_id:r2.revision_id}]}});
   const definitions=[f.settings('area',f.area,true),f.settings('discussion',d.id),f.settings('artifact',a.resource_id)];
   for(const def of definitions)await f.follow(reader.client,def);
   const overview=(await f.observer.query('SELECT r.current_revision_id AS revision_id FROM loom.community_settings c JOIN loom.resources r ON r.id=c.overview_id')).rows[0];
   const expected:string[]=[];
-  for(const source of [overview,d.opening,reply,summary,a,r2,r3,account])expected.push(await f.event(source.revision_id));
+  for(const source of [overview,d.opening,reply,summary,a,r2,r3,summary2,account])expected.push(await f.event(source.revision_id));
   const result=await f.allChanges(reader.client,{limit:2});
   // Setup's real overview is also in General; it is part of retained shared history.
   assert.deepEqual(result.items.map(i=>i.event_id).sort(),expected.sort());
@@ -58,7 +59,19 @@ test('independent expected event set: overlap, exact notes, direct discussions, 
   assert.deepEqual(n.reasons.map(r=>r.preferences),[['artifact_revisions','change_notes'],['artifact_revisions','change_notes']]);
   assert.equal(result.items.find(i=>i.revision_id===r3.revision_id)!.change_note_url,null);
   const discussion=await f.allChanges(reader.client,{scope:{kind:'explicit',definition:f.settings('discussion',d.id)}});
-  assert.deepEqual(discussion.items.map(i=>i.resource_id).sort(),[d.opening.resource_id,reply.resource_id,summary.resource_id,account.resource_id].sort());
+  assert.deepEqual(discussion.items.map(i=>[i.resource_id,i.revision_id,i.context_url,i.exact_url]),[
+    [d.opening.resource_id,d.opening.revision_id,`/loom/discussion/${d.id}?focus=${d.opening.resource_id}`,`/loom/resource/${d.opening.resource_id}/${d.opening.revision_id}`],
+    [reply.resource_id,reply.revision_id,`/loom/discussion/${d.id}?focus=${reply.resource_id}`,`/loom/resource/${reply.resource_id}/${reply.revision_id}`],
+    [summary.resource_id,summary.revision_id,`/loom/discussion/${d.id}`,`/loom/resource/${summary.resource_id}/${summary.revision_id}`],
+    [summary2.resource_id,summary2.revision_id,`/loom/discussion/${d.id}`,`/loom/resource/${summary2.resource_id}/${summary2.revision_id}`],
+    [account.resource_id,account.revision_id,`/loom/discussion/${d.id}?focus=${account.resource_id}`,`/loom/resource/${account.resource_id}/${account.revision_id}`],
+  ]);
+  for(const source of [summary,summary2]){
+    const detail=await reader.client.call('/api/v1/shared-changes/detail',{cursor:discussion.page.page_cursor,event_id:await f.event(source.revision_id)});
+    assert.equal(detail.status,200);assert.equal(detail.body.context_url,`/loom/discussion/${d.id}`);
+    assert.equal(detail.body.exact_url,`/loom/resource/${source.resource_id}/${source.revision_id}`);
+  }
+  assert.equal((await reader.client.call(`/api/v1/contributions/${summary.resource_id}/context`)).status,404);
   const direct=await f.allChanges(reader.client,{scope:{kind:'explicit',definition:f.settings('artifact',a.resource_id)}});
   assert.deepEqual(direct.items.map(i=>i.revision_id),[a.revision_id,r2.revision_id,r3.revision_id]);
   assert.equal((await f.admin.call('/api/v1/me/following')).body.items.length,0);

@@ -21,6 +21,9 @@ Refresh checks keep a mounted editor, adopt a separate client's settings/version
 and reject an older lookup. Policy-placeholder feedback must retain authentication
 errors. Expiry checks preserve the displayed item/byte budgets; the compiled case
 expires only its fixture's encrypted descriptor and renews through real HTTPS.
+Navigation checks cover summary events' containing-discussion context, both summary
+revisions after an update, exact historical text and ordinary reply focusing. The
+contribution context endpoint must continue rejecting a summary resource ID.
 `e2e/following.spec.ts` uses the normal one-worker, zero-retry runner and closed route
 vocabulary. Preserve approved failures before rerunning. Deliberate synthetic visual
 review uses LOOM_FOLLOWING_REVIEW_SCREENS=1, separately from diagnostic uploads.

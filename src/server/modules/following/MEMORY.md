@@ -35,6 +35,9 @@ resource does not republish it. Internal actors are excluded; unclassified eligi
 public work yields unknown coverage rather than a false checkpoint. Untyped
 contributions/summaries retain their canonical owning discussion for this decision;
 a missing companion row must not make a direct discussion traversal complete.
+Current-context links focus opening/comment contributions only. Summary events open
+their containing discussion and its current summary; exact links retain the event's
+summary revision. A summary owner does not make its resource a contribution branch.
 
 Area scopes are immutable nearest-first event-time facts. Structural matching uses
 before/after scopes and new affected_target_ids. `structural-facts.ts` collects at

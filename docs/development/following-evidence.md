@@ -177,6 +177,48 @@ explicit editor refresh versus policy feedback, and preserved renewal budgets.
 The earlier 207-test PostgreSQL set and diagnostic verification remain prior
 implementation evidence; those unrelated suites were not rerun for these fixes.
 
+## PR review correction: summary context navigation
+
+[PR #11's review comment](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/11#discussion_r4293037646)
+identified a valid navigation defect in `b1aca44`: summaries and contributions both
+have a discussion owner, but only contributions are valid focused branches. A
+summary event's Current context URL appended its summary ID as `focus`, causing
+the contribution-context endpoint to return 404. Exact revision links were correct.
+The integration fixture checked summary event identity but not navigation URLs;
+the browser journey opened artifact exact revisions and missed this boundary.
+
+Context generation now appends `focus` only for contributions. Summary events open
+the containing discussion, whose summary card resolves the current revision. Query
+and detail responses retain exact historical links, and the contribution endpoint
+still rejects summary IDs. The fix changes no schema, coverage, authorization,
+subscription, checkpoint or publication contract.
+
+Observed checks on Node 24.19.0/macOS arm64:
+
+| Command | Result |
+|---|---|
+| `node --import tsx --test --test-name-pattern='independent expected event set' tests/integration/following.test.ts` | Failed before the fix on both summary context URLs; passed afterward. Complete expected navigation tuples cover opening/replies, two summary revisions and an authored account; detail URLs and contribution-only rejection are also checked. |
+| `npm run test:e2e -- tests/e2e/following.spec.ts --grep 'summary change context'` | Failed before the fix at the expected discussion URL, with an observed contribution-context 404; [approved failure](evidence/following/browser-summary-context-red/run.json). The rebuilt regression passes, opening current summary R2 from retained R1, reading exact R1 text, opening R2 context and preserving reply focus; [approved pass](evidence/following/browser-summary-context-green/run.json). |
+| `npm run check` | Pass: 64 bootstrap, 5 hook and 65 application tests, TypeScript projects and production build. |
+| `npm run test:following:postgres` | Pass, 18/18, no skips/cancellations, 19.59 seconds. |
+| `npm run test:e2e` | Pass, 83/83, normal one worker, zero retries and no omissions; includes all ten Following cases and existing summary, reply and recovery journeys. [Approved full-run manifest](evidence/following/browser-summary-context-full/run.json). |
+
+The first repaired browser probe passed the URL assertion but failed its broad
+heading locator. Selecting the discussion's level-one heading made that assertion
+unambiguous; the remaining navigation checks then passed. Its
+[approved diagnostic](evidence/following/browser-summary-context-probe/run.json)
+is retained. Normal worker count, retries and deadlines were unchanged.
+
+Following and test memories now distinguish summary context from contribution
+focus, and the feature guide describes current versus exact navigation. Root summaries
+remain accurate; participation memory already describes the contribution-only context
+contract. No new screenshot or human-usability claim accompanies this fix.
+The previous head's hosted checks and local-integration jobs were confirmed successful
+through GitHub status; [PR run 38877964023](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38877964023)
+belongs to `b1aca44`, not the subsequent repair. Existing PostgreSQL and diagnostic
+results above remain prior evidence; those unrelated suites were not rerun locally
+for this navigation-only correction.
+
 ## Synthetic observations and visual review
 
 The completed 17-case run observed a 103-event fixture with 101 suppressed artifacts:

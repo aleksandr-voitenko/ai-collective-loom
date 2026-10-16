@@ -20,6 +20,9 @@ not grouped Updates. Each row identifies the actual publisher/time, exact source
 revision, eligible current location and event-time match reasons. Notes open their
 owning revision. Full text is fetched deliberately; current text never substitutes
 for a hidden historical revision. More than eight reasons uses bounded detail pages.
+**Current context** opens a summary event's containing discussion, including its
+current summary link. Opening/comment events focus their contribution branch.
+**Exact revision** keeps the event's historical revision even after a newer update.
 
 The displayed page stays fixed while inspecting content. Continue the named interval,
 use Previous shared page, or check newer changes after its checkpoint. Reload and

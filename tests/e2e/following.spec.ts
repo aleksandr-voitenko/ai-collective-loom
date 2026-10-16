@@ -6,6 +6,7 @@ import { setup,api,journal } from '../helpers/change-browser.js';
 import type { Page,BrowserContext } from '@playwright/test';
 import type { syntheticServer } from '../helpers/participation-server.js';
 import { eventPreferences } from '../../src/contracts/following.js';
+import { authored } from '../helpers/references.js';
 function barrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};}
 const control=(page:Page,kind:string,id:string)=>page.locator(`[data-follow-target="${kind}:${id}"]`);
 const recovery=(page:Page)=>page.evaluate(()=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.shared-pages:')).map(([key,value])=>({key,records:JSON.parse(value)})));
@@ -96,6 +97,47 @@ test('chronological Changes freezes displayed pages, replays reload/back, resize
     if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=fileURLToPath(new URL('../../docs/development/evidence/following/',import.meta.url));await mkdir(destination,{recursive:true});const path=info.outputPath('changes-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,destination+'changes-'+name+'.png');}}
   await page.getByRole('button',{name:'Continue shared interval'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(2);await page.getByRole('button',{name:'Check newer shared changes'}).click();await expect(page.getByRole('alert')).toContainText('Following settings changed');await page.getByRole('button',{name:'Adopt current settings from retained history'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(0);
   expect((await server.observer.query('SELECT count(*)::int n FROM loom.personal_deliveries')).rows[0].n).toBe(0);
+});
+
+test('summary change context opens the discussion while historical summary revisions and focused replies remain distinct',async({page,context,server})=>{
+  const f=await setup(page,context,server);
+  const opening=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Shared summary context',content:authored('Navigation opening')});
+  const discussion=(await api(page,'/api/v1/resources/'+opening.resource_id)).discussion_id;
+  const reply=await api(page,'/api/v1/replies',{idempotency_key:randomUUID(),discussion_id:discussion,parent_id:opening.resource_id,content:authored('Focused reply material')});
+  const preparation=await api(page,'/api/v1/summary-preparations',{idempotency_key:randomUUID(),discussion_id:discussion,scope:'full'});
+  const summary=await api(page,'/api/v1/summaries',{idempotency_key:randomUUID(),discussion_id:discussion,title:'Summary R1',content:authored('Original summary text'),coverage:{preparation_id:preparation.preparation_id}});
+  await api(page,'/api/v1/me/following/state',{target:{kind:'discussion',resource_id:discussion},include_descendants:false,preferences:['replies','summaries'],following:true,expected_version:0,idempotency_key:randomUUID()});
+  await page.goto(server.origin+'/loom/changes');await expect(page.locator('.notification-list > li')).toHaveCount(2);
+  const summary2=await api(page,'/api/v1/summary-revisions',{idempotency_key:randomUUID(),resource_id:summary.resource_id,expected_revision_id:summary.revision_id,title:'Summary R2',content:authored('Current summary text'),coverage:{carry_forward_revision_id:summary.revision_id}});
+  // The displayed event remains R1; its current context must still resolve R2.
+  await expect(page.locator('.notification-list > li')).toHaveCount(2);
+  const row=(source:{resource_id:string;revision_id:string})=>page.locator('.notification-list > li').filter({has:page.locator(`a[href="/loom/resource/${source.resource_id}/${source.revision_id}"]`)});
+  await row(summary).getByRole('link',{name:'Current context',exact:true}).click();
+  await expect(page).toHaveURL(server.origin+'/loom/discussion/'+discussion);
+  await expect(page.getByRole('heading',{name:'Shared summary context',level:1,exact:true})).toBeVisible();
+  await expect(page.getByText('Navigation opening',{exact:true})).toBeVisible();
+  await expect(page.getByText('This branch is unavailable in this discussion.')).toHaveCount(0);
+  await page.getByRole('region',{name:'Discussion summary'}).getByRole('link',{name:'Summary R2',exact:true}).click();
+  await expect(page.getByText('Current summary text',{exact:true})).toBeVisible();
+  await page.goto(server.origin+'/loom/changes');await expect(page.locator('.notification-list > li')).toHaveCount(2);
+  await row(summary).getByRole('link',{name:'Exact revision 1',exact:true}).click();
+  await expect(page).toHaveURL(server.origin+`/loom/resource/${summary.resource_id}/${summary.revision_id}`);
+  await expect(page.getByText('Original summary text',{exact:true})).toBeVisible();
+  await expect(page.getByText('Current summary text',{exact:true})).toHaveCount(0);
+  await page.goto(server.origin+'/loom/changes');await expect(page.locator('.notification-list > li')).toHaveCount(2);
+  await page.getByRole('button',{name:'Check newer shared changes'}).click();
+  await expect(page.locator('.notification-list > li')).toHaveCount(1);
+  await row(summary2).getByRole('link',{name:'Current context',exact:true}).click();
+  await expect(page).toHaveURL(server.origin+'/loom/discussion/'+discussion);
+  await expect(page.getByRole('region',{name:'Discussion summary'}).getByRole('link',{name:'Summary R2',exact:true})).toBeVisible();
+  await expect(page.getByText('This branch is unavailable in this discussion.')).toHaveCount(0);
+  await page.goto(server.origin+'/loom/changes');await expect(page.locator('.notification-list > li')).toHaveCount(1);
+  await page.getByRole('button',{name:'Refresh scope from retained history'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(3);
+  await row(reply).getByRole('link',{name:'Current context',exact:true}).click();
+  await expect(page).toHaveURL(server.origin+`/loom/discussion/${discussion}?focus=${reply.resource_id}`);
+  await expect(page.getByText('Focused branch',{exact:true})).toBeVisible();
+  await expect(page.getByText('Focused reply material',{exact:true})).toBeVisible();
+  await expect(page.getByText('This branch is unavailable in this discussion.')).toHaveCount(0);
 });
 
 test('expired shared page renewal preserves the displayed five-item page after reload',async({page,context,server})=>{

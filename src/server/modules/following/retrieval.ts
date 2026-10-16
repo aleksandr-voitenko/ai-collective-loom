@@ -196,7 +196,8 @@ export class SharedChanges {
       row.resource_kind==='contribution'?(row.parent_id?'reply':'opening')+(row.revision_number==='1'?'.published':'.revised'):row.resource_kind+'.published',
       resource_id:row.resource_id,discussion_id:row.discussion_id,revision_id:row.revision_id,revision_number:row.revision_number,
       actor:{id:row.publisher_id,nickname:row.nickname,kind:row.actor_kind},occurred_at:row.created_at.toISOString(),current,
-      exact_url:exact,context_url:row.discussion_id?contextUrl+`?focus=${row.resource_id}`:contextUrl,full_content_url:full,
+      // Summaries share a discussion owner, but focused branches accept contributions only.
+      exact_url:exact,context_url:row.resource_kind==='contribution'&&row.discussion_id?contextUrl+`?focus=${row.resource_id}`:contextUrl,full_content_url:full,
       change_note_url:row.note?full+'/change-note':null,reasons:reasons.slice(offset,offset+8),reasons_complete:!more,
       detail_url:'/api/v1/shared-changes/detail',next_reason:more?offset+8:null};
   }
