@@ -1,0 +1,89 @@
+# Combined Updates
+
+Lore `LC-20261017-FUWG`; ADR-025, guide10, `combined-updates-1`.
+Contracts in `src/contracts/updates.ts`,
+additive migrations0014/0015, HTTP `http/updates.ts`. Only the opt-in synthetic profile.
+No new authored resource, format, worker, read state or notification generation.
+
+`CombinedUpdates` composes Following's candidate SQL/classification/matching/item
+projection and personal reason/item/projection policy in one REPEATABLE READ
+transaction. Authenticate first; capture Following under its owner guard; capture
+both distinct committed clocks, visibility generations and epochs coherently.
+Never derive personal progress from a shared position/time. Default scope is the
+union, not all activity in personally mentioned discussions. Explicit shared target
+substitutes for Following; personal-only removes shared input. Reason filter is bound.
+
+Preparation scans100 candidates per stream and persists only identities/order.
+Plan all candidate owners, discussion openings, actual parents, status sources and
+explanations before per-source guards. Preparation returns a continuation even after
+its final scan; the next group request plans the finished view separately rather
+than acquiring a new contested resource plan after a partial preparation plan.
+Source clocks are read, never locked/advanced by these reads. Errors rollback both
+component progress and any newly created custody. Counts appear only ready; unknown shared history qualifies them as known_sources_only.
+
+Shared event ID coalesces stream overlap while retaining delivery/signal identity,
+revision and reasons. An old personally delivered source is not a new shared change.
+Ownership groups openings/replies/summaries under discussion, artifacts under self,
+discussion/artifact moves under the affected stable identity. Area organization
+events each have their own event group; ancestor relevance is not descendant copies.
+Frozen group order is direct first, latest immutable display timestamp descending,
+kind/key tie; members direct first, display timestamp descending then event UUID.
+Visibility changes invalidate before ordinary selection; no live authorized MAX/MIN
+can move a group across a page. Exact/current-source authorization still happens on
+every read. Protected count/title/source references are withheld on failure.
+
+Highlights = all direct groups plus three routine groups, with bounded pages.
+Switching selection restarts group pagination but retains scope, definitions,
+reason and both lower/upper bounds. Only exhausted complete grouping with known
+coverage issues a checkpoint; member details/bodies remain explicitly omitted.
+Full-record metadata has a separate cursor. Member/detail pages never imply reading.
+Personal reasons all fit their three-reason bound; shared match reasons page eight
+via `/me/updates/reasons` using combined custody, not standalone tokens.
+
+Select one eligible included revision note before an independent ordinary account,
+ordered by immutable publication position/ID and capped at16 candidates/group.
+Candidate publication cannot exceed the captured shared upper bound. Link only to
+authorized owning source with publisher and eligible included exact targets.
+Coverage is an author claim; neither current-summary currency nor whole-interval
+explanation follows. Independent account prose keeps its own owner/authority.
+
+Independent AES-GCM key/purpose/epoch in updates_state binds underlying epochs too.
+Descriptor expiry24h; custody7 days from creation; renewal preserves displayed
+position without extending custody. Missing custody, descriptor expiry, per-stream
+history gaps, epoch mismatch and unknown historical facts remain distinct.
+Replay explicitly restarts both streams before completed lower bounds; a nonzero
+history floor prevents complete replay. Resynchronization makes an incomplete
+current baseline plus existing authorized inventories, not invented retained facts.
+Self-contained checkpoints do not require old grouping rows. Following changes at
+a new checkpoint interval require explicit new scope; old switches remain frozen.
+
+Caps:2000 sources/view,500/group,256 groups,1000 steps,16 views/owner,128 global.
+Creation writes the migration0015 custody serialization row before cap/cleanup and
+source guards. A concurrent committed creation makes an older RR snapshot retry;
+an advisory mutex alone leaves stale quota counts. It deletes one expired view
+only. No live-view eviction. Source/group cap needs narrower scope; full custody
+needs a retained view or expiry. Default12/max25 items,2 direct previews/group,
+4–128 KiB JSON,16 KiB tokens, existing3840-resource plan cap and SQL2.5s/lock1.5s/
+transaction15s. These are finite synthetic bounds, not production capacity.
+
+Browser `Updates.tsx` keeps filters outside keyed owner/scope result state. One
+overview/expansion, eight back requests; `updates-recovery.ts` stores only requests
+and successors with separate expansion budgets. Origin/instance/owner Web Locks,
+sequence and identity fencing reject late/stale saves. Save before exposing a page;
+transport errors retain permitted context, policy failures withdraw it. Sign-out
+invalidates before cleanup. Explicit clearing owns only Updates records. Storage
+16 records/128 KiB each/512 KiB total, with no silent eviction of other journals.
+`scripts/updates-client.mjs` provides mode0600 atomic/fsynced HTTPS recovery,
+separate overview/member positions, resizing successors and credential continuity.
+Member retry reauthorizes a withdrawn overview before the attempted expansion;
+interim saves retain the previous displayed detail until its successor succeeds.
+Native journal ownership uses built-in Node24 SQLite BEGIN EXCLUSIVE on a private
+`.lock.sqlite` sidecar. OS locks release on process death; never unlink the sidecar
+and split its inode ownership. Share journals only between clients using that
+protocol. Legacy `.lock` files have unknown ownership and are explicitly refused.
+
+Tests: `integration/updates*.test.ts`, `web/updates.test.tsx`, `e2e/updates.spec.ts`.
+Build before compiled API/browser checks. Use the normal browser runner; retain
+approved failed diagnostics before reruns. Evidence/limits live in
+`docs/development/updates-evidence.md`; synthetic trials do not close composite
+product scenarios or human/provider/cross-machine and retained-data gates.

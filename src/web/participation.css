@@ -934,3 +934,10 @@
   .following-row .follow-control { width: 100%; }
   .shared-changes .notification-toolbar { align-items: stretch; flex-direction: column; }
 }
+.updates-list .update-direct { border-left: 3px solid #3e6d52; padding: .25rem .75rem; margin: .65rem 0; }
+.updates-list .update-counts { font-weight: 600; }
+.update-explanation { padding: .6rem .8rem; background: #f2f6f0; border-radius: .35rem; }
+.update-expansion { margin-block: 1rem; scroll-margin-block: 1rem; }
+.update-expansion li { padding-block: .6rem; border-bottom: 1px solid #d7ded4; }
+.updates .notification-toolbar { flex-wrap: wrap; }
+.updates .notification-links { flex-wrap: wrap; }

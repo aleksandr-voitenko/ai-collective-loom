@@ -107,6 +107,7 @@ illustrative architecture examples. Unknown fields and semantic coercion fail.
 | Private bookmarks | `GET /me/saved-items`; `POST /me/saved-items/lookup`, `/state`, `/status`. See the Saved items guide for its separate desired-state/recovery contract. |
 | Current text search | `GET /search`, `GET /search/status`; administrator health/failures and retry/rebuild under `/admin/search`. See the [search guide](search.md) for filters, exact links, explicit refresh and worker commands. |
 | Following / shared Changes | Owner-private `/me/following` lookup/state/status/list and `/shared-changes/query`/detail; independent shared checkpoints. See the [Following guide](following.md). |
+| Combined Updates | `/me/updates/query`, `/members` and `/reasons` bind shared and personal intervals, ownership groups, highlights/complete selection and exact metadata. The existing source-body routes remain separate. See the [Updates guide](updates.md). |
 | Personal direct attention | `POST /me/notifications/query`, `GET /me/notifications/:id`; administrator health/failures/retry/reconcile under `/admin/notifications`. Personal-only durable checkpoints; see the [notification guide](notifications.md). |
 | Topic organization | `GET /organization/children`, `/destinations`, `/resources/:id`; administrator `POST /organization/changes`, `/status` and `GET /organization/audit`; `GET /areas/:id/metadata-history`, `/proposal-route`. |
 

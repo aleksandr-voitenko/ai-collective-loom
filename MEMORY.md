@@ -9,7 +9,7 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`9`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`10`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -18,7 +18,7 @@ Exact recovery returns original and current state without reapplying earlier mov
 Proposal discussions bind their destination/settings; topic-specific suggestions
 also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.
 See ADR-020 and `docs/development/topic-organization.md`; optional moderator
-delegation and grouped/combined attention services remain open.
+delegation remains open. Combined Updates uses ADR-025 below.
 Current shared-text search is implemented for typed openings/comments/artifacts/summaries,
 with exact revisions, live containment, original-author/time/topic filters and
 explicit continuation invalidation. Search and personal direct attention have independent recoverable derived workers;
@@ -37,9 +37,19 @@ owner-private versioned definitions/decisions and direct committed-event queries
 Area relevance uses immutable event-time scopes; new ancestor impacts are retained,
 while missing old structural facts keep coverage unknown. Fixed shared checkpoints
 have independent custody, visibility replay and explicit incomplete resynchronization.
-No worker is required, and no personal checkpoint/delivery is consumed. W02 grouping,
-combined attention, mutes/dismissal and read state remain open. See
+No worker is required, and no personal checkpoint/delivery is consumed. Mutes/dismissal
+and read state remain open. See
 `src/server/modules/following/MEMORY.md` and `docs/development/following.md`.
+Combined Updates (ADR-025, guide10) uses additive migrations0014/0015 and independent
+`combined-updates-1` custody. Bounded preparation freezes ownership membership/order
+for the union of followed shared and personal availability intervals. Highlights
+switches to complete without adopting later definitions/arrivals; both visibility
+generations invalidate before filters and explicit replay reaches before completed
+lower bounds. Source/explanation authorization stays current. Member metadata,
+group coverage, projection, full bodies and reading remain distinct. No new authored
+format or worker; existing claims/events/tokens/Saved remain independent. See
+`src/server/modules/updates/MEMORY.md` and `docs/development/updates.md` for finite
+custody, recovery, native/browser clients and synthetic acceptance limits.
 Recorded references (ADR-021) use explicit `loom-markdown-v2` declarations from
 openings/comments/text artifacts/summaries; old v1 bytes/digests remain unchanged. Immutable
 memberships/withdrawals commit with the source, keeping exact targets and separate
@@ -63,8 +73,8 @@ Private Saved items now support discussion/contribution/artifact resource refere
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones
 and immutable applied/conflict decisions, without shared publication side effects.
-See ADR-013 and `docs/development/saved-items.md`; private notes, read state and
-grouped Updates remain open. Synthetic caps are 500 target states/10,000 decisions per
+See ADR-013 and `docs/development/saved-items.md`; private notes and read state
+remain open. Synthetic caps are 500 target states/10,000 decisions per
 participant; expiry, erasure and destructive restore remain unapproved.
 No real accounts/content are approved: ADR-004 identity/recovery candidates,
 production limits, retained-data operations and cross-machine validation remain

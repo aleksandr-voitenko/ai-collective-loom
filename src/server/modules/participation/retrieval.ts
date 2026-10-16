@@ -402,6 +402,8 @@ export class ParticipationRetrieval {
         replay_retention:
           "retained_without_automatic_expiry; destructive_restore_unsupported" as const,
         derived_effects: "search_and_personal_direct_attention; other_projections_disabled" as const,
+        updates_contract: "combined-updates-1" as const,
+        updates_url: "/api/v1/me/updates/query" as const,
         notification_contract: "personal-attention-1" as const,
         notifications_url: "/api/v1/me/notifications/query" as const,
         following_contract: "following-1" as const,

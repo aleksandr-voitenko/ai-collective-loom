@@ -48,7 +48,8 @@
     "test:changes:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/changes*.test.ts",
     "worker:notifications": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local dist/server/notifications-worker.js",
     "test:notifications:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/notifications*.test.ts",
-    "test:following:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/following*.test.ts"
+    "test:following:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/following*.test.ts",
+    "test:updates:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/updates*.test.ts"
   },
   "dependencies": {
     "@fastify/static": "10.1.6",

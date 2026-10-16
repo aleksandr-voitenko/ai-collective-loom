@@ -79,6 +79,7 @@ organization change makes old continuation requests fail `invalid_cursor`. Resta
 old cursors invalid, not old publication intents. This currently assumes one API
 process. Personal direct attention and ungrouped shared Changes use durable custody
 and independent recovery epochs in their sibling notifications/following modules;
+combined Updates adds independent paired custody in `../updates/` (ADR-025), while
 ordinary browsing cursors keep these rules. Destructive restore remains a separate gate.
 
 Browser `IntentStore` records origin/instance/participant/kind/key/body before POST,
@@ -256,3 +257,9 @@ clock tail; a pre-0013 fixture uses the original insert shape. New reads use all
 resource kinds for structural events, complete reference guard plans and exact revision
 eligibility. Their private definitions and separate shared tokens do not change Saved,
 publication, summary coverage or personal recovery. See `../following/MEMORY.md`.
+
+Guide10/community discovery advertises `combined-updates-1` and its query URL.
+`http/updates.ts` registers strict overview/member/reason reads, using shared source
+projection and personal exact-source policy in one guarded transaction. It preserves
+PR11's contribution-only focused-context rule; summaries open their discussion.
+Updates errors carry retrieval recovery actions, never publication outcome claims.
