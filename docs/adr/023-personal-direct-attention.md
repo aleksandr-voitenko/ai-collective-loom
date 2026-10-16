@@ -133,3 +133,11 @@ Production/retained-data operations, full Updates/Following, files/private notes
 read state, dismissal, moderation UI and human/provider/cross-machine trials remain
 open requirements. Reconsider mechanisms for larger measured workloads, new source
 types, key rotation/erasure or a separately approved recovery procedure.
+
+## Following increment
+
+[ADR-024](024-following-shared-changes.md) adds independent owner-private Following
+and ungrouped complete shared retrieval. It retains this decision’s source identities
+and personal-delivery boundaries. New structural events capture bounded descendant
+impacts; older missing facts remain explicit unknown coverage. Grouped Updates,
+combined checkpoints, mutes/dismissal and reading progress remain separate work.

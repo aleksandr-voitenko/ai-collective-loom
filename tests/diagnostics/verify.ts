@@ -74,6 +74,9 @@ for(const path of ['/api/v1/references/target','/api/v1/references/incoming','/a
 assert.equal(sourceFile('/private/synthetic/search.spec.ts'),'search.spec.ts');
 for(const path of ['/loom/search','/api/v1/search','/api/v1/search/status','/api/v1/search/authors','/api/v1/admin/search/health','/api/v1/admin/search/failures','/api/v1/admin/search/rebuild','/api/v1/admin/search/retry'])
   assert.equal(routeTemplate('https://example.test'+path+'?q='+canary+'&cursor='+canary,'https://example.test'),path);
+assert.equal(sourceFile('/private/synthetic/following.spec.ts'),'following.spec.ts');
+for(const path of ['/loom/following','/loom/changes','/api/v1/me/following','/api/v1/me/following/lookup','/api/v1/me/following/state','/api/v1/me/following/status','/api/v1/shared-changes/query','/api/v1/shared-changes/detail'])
+  assert.equal(routeTemplate('https://example.test'+path+'?scope='+canary+'&cursor='+canary,'https://example.test'),path);
 assert.equal(new Set(controlNames).size,controlLabels.length);
 
 const large = structuredClone(missing.capture);

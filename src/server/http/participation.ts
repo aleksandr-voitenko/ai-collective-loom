@@ -23,6 +23,8 @@ import { OrganizationError } from "../modules/participation/organization-context
 import { registerSearch } from './search.js';
 import { registerNotifications } from './notifications.js';
 import { NotificationError } from '../modules/notifications/retrieval.js';
+import { FollowingError } from '../modules/following/context.js';
+import { registerFollowing } from './following.js';
 import { SearchError } from '../modules/search/search.js';
 import { registerReferences } from './references.js';
 import { registerChanges } from './changes.js';
@@ -71,6 +73,12 @@ export function participantError(
     status=code==='summary_source_limit'||code==='summary_preparation_limit'?429:409;
     action=code==='summary_changed'?'replay_view':code==='summary_already_exists'?'inspect_discussion_summary':
       code==='summary_preparation_expired'?'retain_draft_and_reconcile':'review_declaration';
+  } else if (error instanceof FollowingError) {
+    code=error.code;message=error.message;
+    status=code==='shared_descriptor_expired'||code==='shared_history_gap'?410:code==='shared_work_limit'||code==='following_limit_reached'?429:409;
+    action=code==='shared_descriptor_expired'?'renew_traversal':code==='shared_visibility_replay_required'?'replay_retained_history':
+      code==='shared_history_gap'?'resynchronize_retained_content':code==='shared_epoch_changed'?'deployment_recovery_required':
+      code==='shared_definition_changed'?'start_retained_history':code==='following_collection_changed'?'replay_view':'retry_same_request';
   } else if (error instanceof NotificationError) {
     code=error.code;message=error.message;
     status=code==='notification_descriptor_expired'||code==='notification_history_gap'?410:code==='notification_work_limit'?429:409;
@@ -116,7 +124,7 @@ export function participantError(
   if (code === "idempotency_conflict" || status >= 500)
     action = "reconcile_operation";
   const personalRead = request.routeOptions.url === '/api/v1/me/notifications/query' ||
-    request.routeOptions.url === '/api/v1/me/notifications/:id';
+    request.routeOptions.url === '/api/v1/me/notifications/:id' || request.routeOptions.url?.startsWith('/api/v1/shared-changes/');
   if (personalRead && status >= 500) action = 'retry_same_request';
   return reply
     .code(status)
@@ -145,6 +153,7 @@ export async function registerParticipation(
   registerOrganization(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerNotifications(app, services.database, actor);
+  registerFollowing(app, services.database, actor);
   registerReferences(app, services.database, actor);
   registerChanges(app, services.database, actor);
   registerSummaries(app, services.database, actor);

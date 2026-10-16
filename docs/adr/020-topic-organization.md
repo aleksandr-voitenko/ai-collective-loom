@@ -119,3 +119,11 @@ the containing runner for reload, stale tabs, late account/route results, keyboa
 and narrow layouts. Record actual results separately. Same-machine synthetic
 clients do not establish cross-machine operation or human usability; production
 identity, retention/restore, multi-process cursor custody and capacity remain gates.
+
+## Following increment
+
+[ADR-024](024-following-shared-changes.md) adds independent owner-private Following
+and ungrouped complete shared retrieval. It retains this decision’s source identities
+and personal-delivery boundaries. New structural events capture bounded descendant
+impacts; older missing facts remain explicit unknown coverage. Grouped Updates,
+combined checkpoints, mutes/dismissal and reading progress remain separate work.

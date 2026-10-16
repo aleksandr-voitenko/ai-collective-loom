@@ -1,7 +1,7 @@
 # Scoped text search and the indexing worker
 
 This synthetic-only slice provides current lexical search in the browser and the
-same `participation-1`, guide 7 API. Its implemented choices and limits are in
+same `participation-1`, guide 9 API. Its implemented choices and limits are in
 [ADR-012](../adr/012-scoped-text-search.md). Product and imported architecture
 snapshots remain unchanged. Use synthetic accounts and text only.
 
@@ -15,8 +15,8 @@ Revision publisher is displayed separately from original author.
 The author picker lists authors with readable current publications, including
 suspended accounts. It excludes authors whose only publications are unavailable.
 
-The current population is discussion titles/openings, comments and authored text
-artifacts. One discussion result represents its title and opening together. Results
+The current population is discussion titles/openings, comments, authored text
+artifacts and discussion summaries. One discussion result represents its title and opening together. Results
 show current location, attribution, a labelled excerpt and the exact matching
 revision. The title opens that exact revision; **Open context** opens the current
 discussion branch or artifact. Browser back retains query/filter/cursor URL state;
@@ -59,11 +59,11 @@ Optional `author=<UUID>` resolves the selected filter after reload. Discovery us
 readable publications even when indexing is stopped; it does not depend on the
 active-participant directory. Its five-minute cursors bind caller, exact filter and
 current selection boundary; changes require restart. An unavailable selection stays
-selected until explicitly removed. Supplying `descendants` requires a topic. Kinds are `discussion`, `comment`
-and `artifact`. Unsupported filters fail explicitly. The controlled schema is
+selected until explicitly removed. Supplying `descendants` requires a topic. Kinds are `discussion`, `comment`,
+`artifact` and `summary`. Unsupported filters fail explicitly. The controlled schema is
 available from `/api/v1/openapi.json`; `/api/v1/guide` gives the same release meaning.
 
-The result supplies `result_id` (discussion, comment or artifact identity),
+The result supplies `result_id` (discussion, comment, artifact or summary identity),
 `source_resource_id`, `revision_id`, `author`, `publisher`, `published_at`, current
 `location`, an `excerpt` and `full_content_url`. `context_url` is an API route;
 `browser_url` and `browser_context_url` are browser routes. Existing contribution

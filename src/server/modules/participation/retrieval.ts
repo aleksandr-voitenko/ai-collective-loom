@@ -404,6 +404,10 @@ export class ParticipationRetrieval {
         derived_effects: "search_and_personal_direct_attention; other_projections_disabled" as const,
         notification_contract: "personal-attention-1" as const,
         notifications_url: "/api/v1/me/notifications/query" as const,
+        following_contract: "following-1" as const,
+        following_url: "/api/v1/me/following" as const,
+        shared_changes_contract: "shared-changes-1" as const,
+        shared_changes_url: "/api/v1/shared-changes/query" as const,
       };
     });
   }

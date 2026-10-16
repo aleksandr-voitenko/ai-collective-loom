@@ -47,7 +47,12 @@ published mention surfaces and true replies. An independent worker preserves
 original triggers, deduplicates continuing mentions and coalesces new reasons.
 Personal checkpoints survive ordinary API/client restarts; restoration explicitly
 replays older retained history. See the [notification and recovery guide](docs/development/notifications.md).
-Shared Updates, Following, read state and dismissal remain unfinished.
+Participants can Follow topics (with explicit subtopics), discussions and artifacts.
+The Following page manages independent choices; chronological Changes retrieves
+retained shared events with exact links, fixed intervals and durable recovery.
+Moves preserve historical relevance, and direct Mentions/replies remains independent.
+See the [Following guide](docs/development/following.md). Grouped Updates, combined
+attention, read state, mutes and dismissal remain unfinished.
 
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
@@ -103,6 +108,7 @@ npm run test:references:postgres # references, populated upgrade, client recover
 npm run test:summaries:postgres # canonical summaries, coverage, bounded maintenance and exact recovery
 npm run test:changes:postgres # revision notes, exact change accounts, upgrade, bounds and recovery
 npm run test:notifications:postgres # ordered personal delivery, native fencing, durable recovery and authorization
+npm run test:following:postgres # private definitions, shared intervals, moves, current authority and restart recovery
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures

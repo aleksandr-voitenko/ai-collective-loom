@@ -20,6 +20,9 @@ test('pre-summary populated upgrade preserves text, declarations, Saved, placeme
   const tables=['resources','revisions','revision_mentions','revision_references','idempotency_records','resource_editors','shared_activity','outbox_intents','saved_items','saved_operations','saved_collections','organization_state','organization_operations','organization_audit','search_documents','search_jobs'];
   const snapshot=async()=>{const rows:Record<string,unknown>={};for(const table of tables)rows[table]=(await f.observer.query(`SELECT * FROM loom.${table} ORDER BY 1,2`)).rows;return rows;};
   const before=await snapshot();
+  // Migration 0013 adds only an unknown impact marker to old events.
+  for(const row of before.shared_activity as Record<string,unknown>[])Object.assign(row,{affected_target_ids:null});
+
   // Migration 0011 adds explicit empty note projections and main-field provenance; every old column remains compared.
   for(const row of before.search_documents as Record<string,unknown>[])Object.assign(row,{note_text:'',note_document:''});
   for(const row of before.revision_mentions as Record<string,unknown>[])Object.assign(row,{source_field:'main'});

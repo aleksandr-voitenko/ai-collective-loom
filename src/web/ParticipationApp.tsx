@@ -44,6 +44,9 @@ import type { ReferenceValue, NoteContent, ChangeAccountValue, ExactChangeTarget
 import { SaveControl, SavedItemsPage } from "./SavedItems.js";
 import { NotificationsPage } from './Notifications.js';
 import { NotificationRecovery } from './notification-recovery.js';
+import { FollowControl, FollowingPage } from './Following.js';
+import { SharedChangesPage } from './SharedChanges.js';
+import { SharedRecovery } from './shared-recovery.js';
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import { SummarySection, SummaryMaintenance, CoverageDetails, CoverageEditor } from './Summaries.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
@@ -201,6 +204,9 @@ export function ParticipationApp() {
       try {if(community)await new NotificationRecovery(community.instance_id,self.participant_id).clear();}
       catch {cleanupFailures.push('notification recovery could not be cleared.');}
       if(cleanupOwner!==identityGeneration())return;
+      try {if(community)await new SharedRecovery(community.instance_id,self.participant_id).clear();}
+      catch {cleanupFailures.push('shared change recovery could not be cleared.');}
+      if(cleanupOwner!==identityGeneration())return;
       if(cleanupFailures.length)setError(`Signed out, but ${cleanupFailures.join(' ')} They remain scoped to this account on this browser.`);
       navigate("/loom");
     } catch (failure) {
@@ -235,6 +241,7 @@ export function ParticipationApp() {
           <Icon name="artifact" />
           Artifacts
         </NavLink>
+        <NavLink to="/loom/following"><Icon name="topic" />Following</NavLink>
         <NavLink to="/loom/saved"><Icon name="saved" />Saved items</NavLink>
         <NavLink to="/loom/notifications"><Icon name="discussion" />Mentions/replies</NavLink>
         <NavLink to="/loom/search"><Icon name="search" />Search</NavLink>
@@ -309,6 +316,8 @@ export function ParticipationApp() {
                 ? "Community overview"
                 : location.pathname.includes("/artifacts")
                   ? "Artifacts"
+                  : location.pathname.includes('/following') ? 'Following'
+                  : location.pathname.includes('/changes') ? 'Changes'
                   : location.pathname.includes('/notifications') ? 'Mentions/replies' : location.pathname.includes("/saved") ? "Saved items" : location.pathname.includes("/search") ? "Search" : "Topics"}
           </span>
           <span className="release-label">Synthetic preview</span>
@@ -335,7 +344,9 @@ export function ParticipationApp() {
             />
           ) : community && store ? (
             <ActiveView
-              key={`${self.participant_id}:${location.pathname}:${location.search}`}
+              // Changes owns a separate key for scoped results. Its persistent
+              // controls must survive query edits; other views retain their key.
+              key={`${self.participant_id}:${community.instance_id}:${location.pathname}:${location.pathname === '/loom/changes' ? '' : location.search}`}
               context={{
                 self,
                 community,
@@ -446,6 +457,8 @@ function ActiveView({ context }: { context: Context }) {
   if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
   if (kind === 'notifications') return <NotificationsPage context={context} />;
+  if (kind === 'following') return <FollowingPage context={context} />;
+  if (kind === 'changes') return <SharedChangesPage context={context} />;
   if (kind === "search") return <SearchPageViewComponent context={context} />;
   if (kind === "summaries") return <SummaryMaintenance context={context} />;
   if (kind === "area" && id) return <AreaPage id={id} context={context} />;
@@ -658,6 +671,7 @@ function AreaPage({ id, context }: { id: string; context: Context }) {
       <p className="topic-state">{area.publication_open ? "Open to contributions" : "Closed to contributions"}{!area.publication_open && area.local_open ? " by an ancestor topic" : ""}</p>
       <Link className="button" to={'/loom/search?topic='+id}>Search this topic</Link>
       {context.self.role === "administrator" && <OrganizationActions id={id} kind="area" localOpen={area.local_open}/>}
+      <FollowControl key={'area:'+id} context={context} target={{kind:'area',resource_id:id}}/>
       <TopicDirectory key={id} parent={id}/>
       <div className="topic-tabs" role="group" aria-label="Topic content">
         <button
@@ -1342,6 +1356,7 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
       <div className="header-line">
         <h1>{data.opening.title}</h1>
         <SaveControl context={context} target={{ kind: "discussion", resource_id: id }} label="discussion" />
+        <FollowControl key={'discussion:'+id} context={context} target={{kind:'discussion',resource_id:id}}/>
         <Link
           className="button"
           to={"/loom/resource/" + data.opening.resource_id}
@@ -1863,6 +1878,7 @@ function ResourcePage({
       )}
       {history && <RevisionHistory id={id} />}
       {data.kind === "artifact" && context.self.role === "administrator" && <OrganizationActions id={id} kind="artifact"/>}
+      {data.kind === 'artifact' && <FollowControl key={'artifact:'+id} context={context} target={{kind:'artifact',resource_id:id}}/>}
       {(data.kind === "artifact" || data.kind === 'summary') && <Editors id={id} context={context} kind={data.kind} />}
     </>
   );
@@ -2646,7 +2662,7 @@ function Help({ context }: { context: Context }) {
           Export drafts
         </button>
         <p>Saved-item recovery shares this local storage bound and export, but is managed separately in <Link to="/loom/saved">Saved items</Link>.</p>
-        {context.store.all().filter((record) => record.kind !== "saved.set").map((record) => (
+        {context.store.all().filter((record) => !["saved.set", "following.set"].includes(record.kind)).map((record) => (
           <div className="list-row" key={record.key}>
             <Link to={intentUrl(record)}>
               {record.kind} · {record.state} ·{" "}
@@ -2667,8 +2683,9 @@ function Help({ context }: { context: Context }) {
           </div>
         ))}
         <p>
-          Saved items are private server bookmarks, independent of these local drafts. Updates, Following, uploads, notifications and agent
-          execution are outside this slice.
+          Saved items and Following have separate private server state and recovery controls.
+          Shared Changes and personal Mentions/replies have independent checkpoints.
+          Grouped Updates, uploads, read state and agent execution remain future work.
         </p>
       </section>
     </>

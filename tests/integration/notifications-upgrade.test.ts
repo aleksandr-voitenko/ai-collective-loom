@@ -25,7 +25,10 @@ test('populated v1/v2/v3 upgrade preserves bytes, digests, old uncertain retries
   await new SearchWorker(f.database).tick();
   const tables=['resources','revisions','revision_mentions','revision_change_notes','revision_references','shared_activity','outbox_intents','idempotency_records','search_jobs','search_documents','search_state'];
   const snapshot=async()=>{const out:Record<string,unknown>={};for(const name of tables)out[name]=(await f.observer.query(`SELECT * FROM loom.${name} ORDER BY 1`)).rows;return out;};
-  const before=await snapshot();await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);
+  const before=await snapshot();
+  // Migration 0013 adds only an unknown impact marker to old events.
+  for(const row of before.shared_activity as Record<string,unknown>[])Object.assign(row,{affected_target_ids:null});
+await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);
   await f.worker.discover();
   const current=await f.publish(b.client,'/api/v1/artifacts',{area_id:f.area,title:'During backfill',content:mentioned(a.id),change_note:null,change_account:null});expected.push(current.revision_id);
   await f.drain();const page=await f.page(a.client);assert.deepEqual(page.items.map(i=>i.source.revision_id).sort(),expected.sort());
