@@ -10,6 +10,7 @@ import { PublicationError } from '../publication/errors.js';
 import { lockActor, lockContext, requireRevision, safeError, type Transactions } from '../publication/publication.js';
 import { fit, responseBudget, RetrievalError, type PageOptions } from './retrieval.js';
 import { OrganizationError, structureGuard, hierarchyVersion, advanceHierarchy } from './organization-context.js';
+import { structuralImpacts } from '../following/structural-facts.js';
 
 type Actor = Awaited<ReturnType<typeof lockActor>>;
 type Decision = { id:string; operation_kind:C.OrganizationCommand['kind']; request_digest:string; resource_id:string; original_parent_id:string|null; result_version:number; hierarchy_version:number; local_open:boolean; source_event_id:string };
@@ -169,12 +170,14 @@ export class TopicOrganization {
       const hierarchy=await advanceHierarchy(tx),current=await this.projection(tx,actor,id);
       const after=scopes(await lockContext(tx,id,'resolution',[current.kind]));
       const operationId=randomUUID(),eventId=randomUUID();
+      const impacts=await structuralImpacts(tx,id,current.kind);
       const result:C.OrganizationResult={operation_state:'committed',operation_id:operationId,kind:input.kind,idempotency:'created',
         outcome:{resource_id:id,parent_id:current.parent_id,version:current.version,hierarchy_version:hierarchy,local_open:current.local_open},current};
       fit(result,limits.responseBytes);
       // All domain/actor/referenced-row guards are held before the common tail.
       const position=(await tx.query<{position:string}>('UPDATE loom.community_clocks SET shared_position=shared_position+1 WHERE id=1 RETURNING shared_position::text AS position',[])).rows[0]!.position;
-      await tx.query("INSERT INTO loom.shared_activity(id,position,kind,resource_id,revision_id,publisher_id,area_scope_ids,before_area_scope_ids,after_area_scope_ids) VALUES ($1,$2,'organization.changed',$3,NULL,$4,$5,$6,$7)",[eventId,position,id,actor.participantId,[...new Set([...before,...after])],before,after]);
+      if(impacts)await tx.query("INSERT INTO loom.shared_activity(id,position,kind,resource_id,revision_id,publisher_id,area_scope_ids,before_area_scope_ids,after_area_scope_ids,affected_target_ids) VALUES ($1,$2,'organization.changed',$3,NULL,$4,$5,$6,$7,$8)",[eventId,position,id,actor.participantId,[...new Set([...before,...after])],before,after,impacts]);
+      else await tx.query("INSERT INTO loom.shared_activity(id,position,kind,resource_id,revision_id,publisher_id,area_scope_ids,before_area_scope_ids,after_area_scope_ids) VALUES ($1,$2,'organization.changed',$3,NULL,$4,$5,$6,$7)",[eventId,position,id,actor.participantId,[...new Set([...before,...after])],before,after]);
       await tx.query("INSERT INTO loom.outbox_intents(id,source_event_id,kind) VALUES ($1,$2,'organization.project')",[randomUUID(),eventId]);
       await tx.query(`INSERT INTO loom.organization_operations(id,actor_id,operation_kind,idempotency_key,semantic_version,request_digest,resource_id,original_parent_id,result_version,hierarchy_version,local_open,source_event_id)
         VALUES ($1,$2,$3,$4,'organization-v1',$5,$6,$7,$8,$9,$10,$11)`,[operationId,actor.participantId,input.kind,key,digest,id,current.parent_id,current.version,hierarchy,current.local_open,eventId]);

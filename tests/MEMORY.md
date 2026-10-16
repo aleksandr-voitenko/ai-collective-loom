@@ -1,5 +1,30 @@
 # Browser test diagnostics
 
+Following/shared retrieval uses `integration/following*.test.ts`: owner-private
+versions and rollback/replay, independent expected event sets, old typed upgrades,
+ancestor impacts, fixed clock/definition capture, both authority guard orders,
+completed-checkpoint restoration, bounded scans/bytes/quotas, unknown public work,
+history floor/epoch and native client/API restart. Shared reads run without consumers;
+a later repaired personal delivery stays independently retrievable. Build first.
+Unknown-work fixtures include contributions/summaries without companion rows but
+with known discussion owners: both explicit and followed scopes stay incomplete,
+while suppressed work and unrelated scopes preserve ordinary eligibility.
+Populated older upgrade snapshots expect only affected_target_ids=NULL on old events;
+every prior column remains compared. Reverse publisher preparation with independent
+discussion creates: artifact creates also serialize existing editor-set invalidation.
+`web/following.test.tsx` uses development StrictMode. Keep explicit-scope controls
+outside keyed result remounts; changing a checkbox must preserve open controls/focus.
+URL-backed controlled checkboxes commit with router flushSync; the deferred transition
+otherwise restores the old checked value during native interaction. Rebuild before
+compiled-browser verification; this harness does not build automatically.
+Refresh checks keep a mounted editor, adopt a separate client's settings/version,
+and reject an older lookup. Policy-placeholder feedback must retain authentication
+errors. Expiry checks preserve the displayed item/byte budgets; the compiled case
+expires only its fixture's encrypted descriptor and renews through real HTTPS.
+`e2e/following.spec.ts` uses the normal one-worker, zero-retry runner and closed route
+vocabulary. Preserve approved failures before rerunning. Deliberate synthetic visual
+review uses LOOM_FOLLOWING_REVIEW_SCREENS=1, separately from diagnostic uploads.
+
 Notifications use `integration/notifications*.test.ts`: ordered historical backfill,
 coalesced immutable identity, all-stage rollback, native lease/COMMIT death barriers,
 delayed availability after completed and fixed bounds, independent recipient clocks,

@@ -19,7 +19,10 @@ test('populated upgrade, durable discovery and atomically fenced search outputs'
   const area=(await f.observer.query("SELECT id FROM loom.areas WHERE title='General'")).rows[0].id;
   const first=await publications.publish(admin.actor,'artifact.create',{idempotency_key:randomUUID(),area_id:area,title:'Worker artifact',content:content('First searchable revision')});
   const snapshot=async()=>{const result:Record<string,unknown>={};for(const name of ['resources','revisions','shared_activity','outbox_intents','idempotency_records','resource_editors','saved_items','organization_operations'])result[name]=(await f.observer.query(`SELECT * FROM loom.${name} ORDER BY 1`)).rows;return result;};
-  const initial=await snapshot();await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),initial);
+  const initial=await snapshot();
+  // New structural impacts remain explicitly unknown for every old event.
+  for(const row of initial.shared_activity as Record<string,unknown>[])Object.assign(row,{affected_target_ids:null});
+  await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),initial);
   const a=new SearchWorker(f.database),b=new SearchWorker(f.database),search=new TextSearch(f.database);
   await a.discover();await a.discover();
   assert.equal((await f.observer.query('SELECT count(*)::int AS n FROM loom.search_jobs')).rows[0].n,2);

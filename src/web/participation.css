@@ -918,3 +918,19 @@
 .notification-reasons span { font-size:.8rem; background:#edf3ee; color:#294d39; padding:.2rem .55rem; border-radius:4px; }
 .notification-list details,.notification-coverage { margin-top:.65rem; font-size:.88rem; }
 @media(max-width:600px) { .notification-toolbar,.notification-toolbar label { align-items:stretch; flex-direction:column; } }
+/* Following keeps full paths readable and controls distinct from bookmarks. */
+.following-row { align-items: start; gap: 1.25rem; }
+.following-row > div:first-child { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.follow-control { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; max-width: 100%; }
+.follow-control > details, .follow-control > .notice, .follow-control > [role="alert"], .follow-control > [role="status"] { flex-basis: 100%; }
+.follow-control fieldset, .shared-changes > details { display: grid; gap: .5rem; padding: .8rem; }
+.follow-control label, .shared-changes > details label { display: flex; align-items: center; gap: .5rem; }
+.follow-control input[type="checkbox"], .shared-changes input[type="checkbox"] { width: auto; }
+.change-reasons { padding-left: 1.1rem; color: var(--muted, #52635b); font-size: .85rem; }
+.change-kind { text-transform: capitalize; font-size: .8rem; color: var(--muted, #52635b); }
+.shared-changes .notification-coverage { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .following-row { display: flex; flex-direction: column; }
+  .following-row .follow-control { width: 100%; }
+  .shared-changes .notification-toolbar { align-items: stretch; flex-direction: column; }
+}

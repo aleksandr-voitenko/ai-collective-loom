@@ -7,6 +7,8 @@ Implementation and verification record: `LC-20261015-94TS`.
 Node entry, running as constrained `loom_app`, without participant credentials.
 Personal notifications are an independent ordered sibling consumer (ADR-023).
 Search keeps latest-revision-wins semantics and never changes notification identity.
+Shared Changes (ADR-024) queries committed events independently; relevance-ranked
+search is neither shared-history completion nor its resynchronization inventory.
 Sources and intents are immutable inputs.
 
 Typed artifacts, contributions and canonical summaries in `loom-markdown-v1`, `loom-markdown-v2` and `loom-markdown-v3`

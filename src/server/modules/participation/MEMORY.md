@@ -77,9 +77,9 @@ AES-GCM cursors bind participant/query/scope with a process-local key. Hierarchy
 area/discussion/artifact collections also bind the community hierarchy epoch; any
 organization change makes old continuation requests fail `invalid_cursor`. Restart makes
 old cursors invalid, not old publication intents. This currently assumes one API
-process. Full shared activity catch-up and destructive restore remain separate gates.
-Personal direct attention uses durable custody and an explicit recovery epoch in
-its sibling notifications module; ordinary browsing cursors keep these rules.
+process. Personal direct attention and ungrouped shared Changes use durable custody
+and independent recovery epochs in their sibling notifications/following modules;
+ordinary browsing cursors keep these rules. Destructive restore remains a separate gate.
 
 Browser `IntentStore` records origin/instance/participant/kind/key/body before POST,
 caps 32 records/1 MiB, fails closed without evicting uncertain work, and exports JSON.
@@ -150,7 +150,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–8. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–9. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -181,7 +181,8 @@ extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 7 
 Search (ADR-012) lives in the sibling `search/` module and reuses these exact-body
 and source guards. Current pointer equality is mandatory; reply ancestry is not
 containment. Topic moves affect scope without indexing; closure does not hide text.
-Guide 8 advertises independent search and personal direct attention, not global outbox completion.
+Guide 9 advertises independent search/personal consumers and direct shared Changes;
+none certifies global outbox completion.
 The bounded topic selector is reused with a search-specific label. Search owns its
 query/cursor URL and late-response guards; no search operation enters the intent
 journal or writes personal state. Search's separate author directory uses readable
@@ -248,3 +249,10 @@ schema fixtures omit that additive fact; old bytes/digests/retries stay unchange
 The consumer authenticates no publisher and processes every retained ordinal;
 see `../notifications/MEMORY.md`. Retrieval and Saved state never acknowledge,
 consume or create notification effects.
+
+Following/shared Changes live in sibling `following/` (ADR-024). Organization captures
+bounded affected target IDs under its existing exclusive structure guard before the
+clock tail; a pre-0013 fixture uses the original insert shape. New reads use all five
+resource kinds for structural events, complete reference guard plans and exact revision
+eligibility. Their private definitions and separate shared tokens do not change Saved,
+publication, summary coverage or personal recovery. See `../following/MEMORY.md`.

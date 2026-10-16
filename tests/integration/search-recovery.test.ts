@@ -74,6 +74,9 @@ test('populated 0007 upgrade preserves jobs and recovers previously skipped inte
     return rows;
   };
   const before = await snapshot();
+  // Migration 0013 adds only an unknown impact marker to old events.
+  for(const row of before.shared_activity as Record<string,unknown>[])Object.assign(row,{affected_target_ids:null});
+
   // Migration 0011 adds explicit empty note projections and main-field provenance; every old column remains compared.
   for(const row of before.search_documents as Record<string,unknown>[])Object.assign(row,{note_text:'',note_document:''});
  await f.migrate(); await f.migrate(); assert.deepEqual(await snapshot(), before);
