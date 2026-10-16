@@ -26,7 +26,11 @@ test('populated pre-reference upgrade preserves old requests, mention bytes, Sav
   const worker=new SearchWorker(f.database);await worker.tick();
   const tables=['resources','revisions','revision_mentions','idempotency_records','shared_activity','outbox_intents','saved_items','saved_operations','saved_collections','organization_state','organization_operations','organization_audit','area_metadata_revisions','discussion_area_references','search_documents','search_jobs'];
   const snapshot=async()=>{const result:Record<string,unknown>={};for(const table of tables)result[table]=(await f.observer.query(`SELECT * FROM loom.${table} ORDER BY 1,2`)).rows;return result;};
-  const before=await snapshot();await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);
+  const before=await snapshot();
+  // Migration 0011 adds explicit empty note projections and main-field provenance; every old column remains compared.
+  for(const row of before.search_documents as Record<string,unknown>[])Object.assign(row,{note_text:'',note_document:''});
+  for(const row of before.revision_mentions as Record<string,unknown>[])Object.assign(row,{source_field:'main'});
+await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);
   assert.equal((await f.observer.query('SELECT count(*)::int n FROM loom.revision_references')).rows[0].n,0);
   const replay=await f.admin.call('/api/v1/artifacts',input);assert.equal(replay.status,201);assert.equal(replay.body.revision_id,original.revision_id);assert.equal(replay.body.operation_id,original.id);
   assert.deepEqual((await f.observer.query('SELECT * FROM loom.idempotency_records WHERE idempotency_key=$1',[input.idempotency_key])).rows[0],original);

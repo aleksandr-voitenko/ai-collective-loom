@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { UUID, closed, Content, Title, Resource, Participant, PageInput } from './participation.js';
+import { UUID, closed, Content, Title, Resource, Participant, PageInput, changeFields } from './participation.js';
 
 export const summaryLimits = Object.freeze({ sources:100, activePreparations:8, ownerPreparations:128, preparations:8192,
   preparationHours:24, maintenanceScan:10, maintenanceItems:5, cursorBytes:2048, cursorSeconds:300 });
@@ -15,7 +15,7 @@ export const CoverageDeclaration=Type.Union([
   Type.Object({carry_forward_revision_id:UUID},closed),
 ]);
 export type CoverageDeclarationValue=Static<typeof CoverageDeclaration>;
-const authored={idempotency_key:UUID,title:Title,content:Content,coverage:CoverageDeclaration};
+const authored={idempotency_key:UUID,title:Title,content:Content,coverage:CoverageDeclaration,...changeFields};
 export const SummaryCreateInput=Type.Object({...authored,discussion_id:UUID},closed);
 export const SummaryRevisionInput=Type.Object({...authored,resource_id:UUID,expected_revision_id:UUID},closed);
 export const SummaryStatusInput=Type.Object({operation_kind:Type.Union([Type.Literal('summary.create'),Type.Literal('summary.revise')]),idempotency_key:UUID},closed);

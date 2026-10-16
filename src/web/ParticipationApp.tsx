@@ -20,7 +20,7 @@ import {
   type ResourceView,
   type RevisionView,
 } from "../contracts/participation.js";
-import { parseAuthored } from "../contracts/authored.js";
+import { parseAuthored, validateChangeFields } from "../contracts/authored.js";
 import {
   ApiError,
   IntentStore,
@@ -38,8 +38,9 @@ import { useQuery, useIntent, intentUrl, SeparateDraft, type Context } from "./p
 import { OrganizationPage, TopicDirectory, TopicLocation, OrganizationActions, TopicMetadataHistory, OrganizationRecovery } from "./Organization.js";
 import { OrganizationResource, type OrganizationResourceView, ProposalRoute, type ProposalRouteView } from "../contracts/organization.js";
 import { AuthoredText } from "./AuthoredText.js";
+import { ChangeNoteEditor, ChangeAccountEditor, ChangeDetails, ChangeDiscoveryViewComponent } from "./Changes.js";
 import { ReferenceEditor, ReferenceViews } from "./References.js";
-import type { ReferenceValue } from "../contracts/participation.js";
+import type { ReferenceValue, NoteContent, ChangeAccountValue, ExactChangeTargetValue } from "../contracts/participation.js";
 import { SaveControl, SavedItemsPage } from "./SavedItems.js";
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import { SummarySection, SummaryMaintenance, CoverageDetails, CoverageEditor } from './Summaries.js';
@@ -733,6 +734,8 @@ function Composer({
   initialMentions = [],
   initialFormat = "loom-markdown-v1",
   initialReferences = [],
+  initialChangeAccount = null,
+  resourceKind,
   summaryDiscussion,
   initialCoverage,
   heading,
@@ -749,6 +752,8 @@ function Composer({
   initialMentions?: AuthoredContent["mentions"];
   initialFormat?: AuthoredContent["format"];
   initialReferences?: ReferenceValue[];
+  initialChangeAccount?: ChangeAccountValue | null;
+  resourceKind?: string;
   summaryDiscussion?: string | undefined;
   initialCoverage?: CoverageDeclarationValue | undefined;
   heading: string;
@@ -777,7 +782,10 @@ function Composer({
   const [format, setFormat] = useState(original?.format ?? initialFormat),
     // A retained v1 request has no declarations, even if the fetched current
     // source has since become v2. Never borrow newer fields for its frozen view.
-    [references, setReferences] = useState(original ? original.format === "loom-markdown-v2" ? original.references : [] : initialReferences);
+    [references, setReferences] = useState(original ? original.format !== "loom-markdown-v1" ? original.references : [] : initialReferences);
+  const [note,setNote] = useState<NoteContent|null>(record ? (record.body.change_note as NoteContent|null|undefined) ?? null : null);
+  const [account,setAccount] = useState<ChangeAccountValue|null>(record ? (record.body.change_account as ChangeAccountValue|null|undefined) ?? null : initialChangeAccount);
+  const canNote = kind === 'artifact.create' || !!summaryDiscussion || resourceKind === 'artifact';
   const [base, setBase] = useState(
     record?.body.expected_revision_id ?? fixed.expected_revision_id,
   );
@@ -800,13 +808,17 @@ function Composer({
   const locked =
     busy || (!!record && (record.state !== "draft" || !!record.blocked_by));
   const legacyCorrection = record?.state === "rejected" &&
-    (kind === "revision.publish" || kind === 'summary.revise') && original?.format === "loom-markdown-v1";
+    (kind === "revision.publish" || kind === 'summary.revise') && original?.format !== "loom-markdown-v3";
   // A format refusal has no conflict ID: its retained expected revision is still
   // the exact comparison base. Never use a newer fetched current source instead.
   const comparisonRevision = record?.conflict_revision_id ??
     (legacyCorrection && typeof record.body.expected_revision_id === "string"
       ? record.body.expected_revision_id : undefined);
   const comparisonReady = !!compare && compare.revision_id === comparisonRevision;
+  // Same-format correction preserves the attempted reference edits. Adopting
+  // the comparison base is only needed when the old client could not carry it.
+  const adoptsBaseFormat = legacyCorrection && comparisonReady && compare?.content.format !== 'loom-markdown-v1' &&
+    (original?.format === 'loom-markdown-v1' || compare?.content.format === 'loom-markdown-v3');
   const requiresComparison = legacyCorrection || (!!summaryDiscussion && !!comparisonRevision);
   useEffect(() => {
     setCompare(undefined);
@@ -836,14 +848,18 @@ function Composer({
     nextMentions = mentions,
     nextReferences = references,
     nextCoverage = coverage,
+    nextNote = note,
+    nextAccount = account,
   ) {
     return {
       ...fixed,
       ...(base ? { expected_revision_id: base } : {}),
       ...(titleField ? { title: nextTitle } : {}),
       ...(nextCoverage ? { coverage: nextCoverage } : {}),
+      ...((format === 'loom-markdown-v3' || nextNote || nextAccount) ? {change_note:nextNote,change_account:nextAccount} : {}),
       content: {
-        ...(format === "loom-markdown-v2" || nextReferences.length
+        ...(format === 'loom-markdown-v3' || nextNote || nextAccount ? {format:'loom-markdown-v3',references:nextReferences}
+          : format === "loom-markdown-v2" || nextReferences.length
           ? { format: "loom-markdown-v2", references: nextReferences }
           : { format: "loom-markdown-v1" }),
         text: nextText,
@@ -857,9 +873,11 @@ function Composer({
     nextMentions = mentions,
     nextReferences = references,
     nextCoverage = coverage,
+    nextNote = note,
+    nextAccount = account,
   ) {
     try {
-      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences, nextCoverage);
+      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences, nextCoverage, nextNote, nextAccount);
       const next = await update((current) =>
         context.store.saveDraft(
           current ?? context.store.create(slot, kind, path, body),
@@ -906,6 +924,8 @@ function Composer({
         parseAuthored(
           (wasUncertain ? draft.body.content : body.content) as AuthoredContent,
         );
+        validateChangeFields((wasUncertain ? draft.body.content : body.content) as AuthoredContent,
+          (wasUncertain ? draft.body : body) as {change_note?:NoteContent|null;change_account?:ChangeAccountValue|null});
         // Version comparison and the state transition occur under the journal
         // lock. A stale Publish click cannot send a changed or newly keyed body.
         return context.store.prepareDispatch(draft, body);
@@ -982,21 +1002,26 @@ function Composer({
       // A correction never enlarges the source claim. A carry-forward from an
       // older base must be chosen again after inspecting the conflict revision.
       if (summaryDiscussion) delete body.coverage;
-      // Only this explicit new-draft transition may adopt the base's v2 contract.
+      // Only this explicit new-draft transition may adopt the base's newer contract.
       // Carry its declarations for review, including an empty list; preserve text.
-      const adopted = legacyCorrection && comparisonReady && compare?.content.format === "loom-markdown-v2"
-        ? compare.content.references : undefined;
+      const adopted = adoptsBaseFormat && compare?.content.format !== "loom-markdown-v1"
+        ? compare?.content.references : undefined;
+      const adoptedAccount = legacyCorrection && compare?.content.format === 'loom-markdown-v3'
+        ? (compare.change_account?.state === 'declared' ? {carry_forward_revision_id:compare.revision_id} : null) : account;
+      const nextFormat = compare?.content.format === 'loom-markdown-v3' || format === 'loom-markdown-v3' ? 'loom-markdown-v3' : adopted ? 'loom-markdown-v2' : format;
       await update((current) =>
         context.store.correct(current!, {
           ...body,
           ...(revision ? { expected_revision_id: revision } : {}),
-          ...(adopted ? { content: { ...body.content, format: "loom-markdown-v2", references: adopted } } : {}),
+          ...(adopted || nextFormat === 'loom-markdown-v3' ? { content: { ...body.content, format: nextFormat, references: adopted ?? references } } : {}),
+          ...(nextFormat === 'loom-markdown-v3' ? {change_note:note,change_account:adoptedAccount} : {}),
         }),
       );
       if (live.current && owner === identityGeneration()) {
         if (revision) setBase(revision);
         if (summaryDiscussion) setCoverage(undefined);
-        if (adopted) { setFormat("loom-markdown-v2"); setReferences(adopted); }
+        setFormat(nextFormat); setAccount(adoptedAccount);
+        if (adopted) setReferences(adopted);
         setCompare(undefined);
         setError("");
       }
@@ -1006,15 +1031,15 @@ function Composer({
       if (live.current && owner === identityGeneration()) setBusy(false);
     }
   }
-  async function startSummaryRevision() {
-    if (kind !== 'summary.revise' || record?.state !== 'committed' || busy || typeof fixed.resource_id !== 'string') return;
+  async function startNextRevision() {
+    if (!['summary.revise','revision.publish'].includes(kind) || record?.state !== 'committed' || busy || typeof fixed.resource_id !== 'string') return;
     const owner = identityGeneration();
     setBusy(true);
     setError('');
     try {
       const latest = await request<RevisionView>(`/api/v1/resources/${fixed.resource_id}`, { schema: Revision });
       if (!live.current || owner !== identityGeneration()) return;
-      if (latest.kind !== 'summary' || !latest.can_edit) throw new Error('This summary is no longer available for editing.');
+      if (!latest.can_edit) throw new Error('This resource is no longer available for editing.');
       // The explicit new draft uses current authored content and carries only its
       // existing declaration. Saving must succeed before retiring the old request.
       await update(current => context.store.replace(current!, {
@@ -1022,7 +1047,8 @@ function Composer({
         expected_revision_id: latest.revision_id,
         title: latest.title,
         content: latest.content,
-        coverage: { carry_forward_revision_id: latest.revision_id },
+        ...(latest.kind === 'summary' ? {coverage: { carry_forward_revision_id: latest.revision_id }} : {}),
+        ...(latest.content.format === 'loom-markdown-v3' ? {change_note:null,change_account:latest.change_account?.state === 'declared' ? {carry_forward_revision_id:latest.revision_id}:null} : {}),
       }));
     } catch (failure) {
       if (live.current && owner === identityGeneration()) setError((failure as Error).message);
@@ -1038,6 +1064,14 @@ function Composer({
   const declareCoverage=useRef<(next:CoverageDeclarationValue)=>Promise<boolean>>(async()=>false);
   // Attach a delayed preparation only to the latest draft, not the click's text.
   declareCoverage.current=async next=>{const saved=await persist(text,title,mentions,references,next);if(saved&&live.current)setCoverage(next);return !!saved;};
+  const changeActions=useRef<(nextNote:NoteContent|null,nextAccount:ChangeAccountValue|null,target?:ExactChangeTargetValue)=>void>(()=>{});
+  changeActions.current=(nextNote,nextAccount,target)=>{
+    if(locked||!live.current)return;
+    const nextReferences=target&&!references.some(r=>r.target.resource_id===target.resource_id&&r.target.revision_id===target.revision_id)
+      ? [...references,{reference_id:crypto.randomUUID(),target,relationship:null,rationale:null}] : references;
+    setFormat('loom-markdown-v3');setNote(nextNote);setAccount(nextAccount);setReferences(nextReferences);
+    void persist(text,title,mentions,nextReferences,coverage,nextNote,nextAccount);
+  };
   return (
     <section className="composer card" aria-label={heading}>
       <h2>{heading}</h2>
@@ -1062,14 +1096,14 @@ function Composer({
               Inspect exact revision
             </Link>
           </p>
-          {kind === 'summary.revise' && <>
-            <button disabled={busy} onClick={() => void startSummaryRevision()}>Start another revision</button>
-            <p className="fineprint">Start from the current summary and keep its source declaration until you explicitly replace it.</p>
+          {['summary.revise','revision.publish'].includes(kind) && <>
+            <button disabled={busy} onClick={() => void startNextRevision()}>Start another revision</button>
+            <p className="fineprint">Start from current content, keep existing declarations, and author a new optional note. The previous note is not copied.</p>
           </>}
-          {!summaryDiscussion && <button
+          {!summaryDiscussion && kind !== "revision.publish" && <button
             onClick={() =>
               void update((current) =>
-                context.store.replace(current!, draftBody("", "", [], [])),
+                context.store.replace(current!, draftBody("", "", [], [], undefined, null, null)),
               ).catch((failure) => setError(failure.message))
             }
           >
@@ -1201,9 +1235,11 @@ function Composer({
             </>
           )}
           <ReferenceEditor references={references} disabled={locked} onChange={next => {
-            setReferences(next); setFormat("loom-markdown-v2");
+            setReferences(next); if(format !== "loom-markdown-v3") setFormat("loom-markdown-v2");
             void persist(text, title, mentions, next);
           }}/>
+          {canNote ? <ChangeNoteEditor value={note} disabled={locked} onChange={next=>changeActions.current(next,account)}/>
+            : <ChangeAccountEditor value={account} source={typeof fixed.resource_id === "string" ? fixed.resource_id : undefined} base={typeof base === "string" ? base : undefined} disabled={locked} onChange={(next,target)=>changeActions.current(note,next,target)}/>}
           {summaryDiscussion && <CoverageEditor context={context} discussion={summaryDiscussion}
             resource={typeof fixed.resource_id === 'string' ? fixed.resource_id : undefined}
             base={typeof base === 'string' ? base : undefined} value={coverage} disabled={locked}
@@ -1233,7 +1269,7 @@ function Composer({
               {requiresComparison && !comparisonReady && !comparisonError && <p role="status">Loading the comparison revision before correction…</p>}
               {comparisonError && <><p role="alert">{comparisonError}</p>
                 <button disabled={busy} onClick={() => setComparisonAttempt(value => value + 1)}>Retry comparison revision</button></>}
-              {legacyCorrection && comparisonReady && compare?.content.format === "loom-markdown-v2" &&
+              {adoptsBaseFormat && compare?.content.format !== "loom-markdown-v1" &&
                 <p>The comparison revision’s references will be copied into your corrected draft. Review or remove them before publishing.</p>}
               {summaryDiscussion && <p>A corrected summary draft needs an explicit source declaration. Later material is never added automatically.</p>}
               <button disabled={busy || (requiresComparison && !comparisonReady)} onClick={correct}>Prepare corrected submission</button>
@@ -1242,7 +1278,7 @@ function Composer({
           {(!record || record.state === "draft") && (
             <button
               className="primary"
-              disabled={locked || !text.trim() || (titleField && !title.trim()) || (!!summaryDiscussion && !coverage)}
+              disabled={locked || !text.trim() || (titleField && !title.trim()) || (!!summaryDiscussion && !coverage) || (!!account && ("revisions" in account ? account.revisions.length === 0 : account.carry_forward_revision_id !== base)) || (!!note && !note.text.trim())}
               onClick={() => void send()}
             >
               {busy
@@ -1512,6 +1548,7 @@ function ContributionBody({
         content={data.content}
         participants={data.mentioned_participants}
       />
+      <ChangeDetails revision={data}/>
       <ReferenceViews key={data.revision_id} sourceId={id} sourceRevision={data.revision_id} target={{kind:"contribution",resource_id:id}}/>
       <div className="post-footer">
         <SaveControl context={context} target={{ kind: "contribution", resource_id: id }} label="contribution" />
@@ -1758,6 +1795,8 @@ function ResourcePage({
           content={data.content}
           participants={data.mentioned_participants}
         />
+        <ChangeDetails revision={data}/>
+        <ChangeDiscoveryViewComponent key={id+data.revision_id} resource={id} revision={data.revision_id} kind={data.kind === "summary" ? "summary" : data.kind === "artifact" ? "artifact" : "contribution"}/>
         <ReferenceViews key={id+data.revision_id+(revision??'current')} sourceId={id} sourceRevision={data.revision_id}
           target={{kind:data.kind === "summary" ? "summary" : data.kind === "artifact" ? "artifact" : "contribution",resource_id:id,...(revision?{revision_id:revision}:{})}}/>
         {data.parent_id && (
@@ -1802,7 +1841,9 @@ function ResourcePage({
           initialText={data.content.text}
           initialMentions={data.content.mentions}
           initialFormat={data.content.format}
-          initialReferences={data.content.format === "loom-markdown-v2" ? data.content.references : []}
+          initialReferences={data.content.format !== "loom-markdown-v1" ? data.content.references : []}
+          initialChangeAccount={data.change_account?.state === "declared" ? {carry_forward_revision_id:data.revision_id} : null}
+          resourceKind={data.kind}
           summaryDiscussion={data.kind === 'summary' ? data.discussion_id! : undefined}
           initialCoverage={data.kind === 'summary' ? {carry_forward_revision_id:data.revision_id} : undefined}
           heading="Edit text"

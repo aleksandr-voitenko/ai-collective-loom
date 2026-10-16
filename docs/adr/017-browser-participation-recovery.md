@@ -232,3 +232,7 @@ comparison keeps legacy correction locked with a retry action; a failed save
 retains the rejected body/key and form. The new body is saved before retiring the
 rejection or adopting it in the editor. Uncertain/replayed v1 requests never take
 this transition, and the server's v2 anti-stripping guard remains mandatory.
+
+## Guide 7 extension — ADR-022
+
+Note/account fields share the existing journal, ownership and uncertain-request rules. A genuinely new revision starts without a copied note; reloading a saved attempt retains its note. Starting another artifact/summary revision fetches current content and saves a new key/base before replacing the old record. Correction retains attempted notes and requires deliberate handling of an account carry from an obsolete base. Late selection uses current draft callbacks; field labels remain stable after text entry. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.

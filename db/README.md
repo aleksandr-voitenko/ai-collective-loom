@@ -107,3 +107,11 @@ private software authenticator signs actual WebAuthn assertions; no fixture is
 registered by normal startup. It checks committed identity rows, retries, races,
 recovery, current authority and sampled secret disclosure. Development credentials,
 containers and volumes are not used or reset.
+
+Migration `0011_change_notes.sql` adds immutable revision notes and exact account
+sets/members, main/note entity/reference namespaces, typed-owner/carry/cardinality
+constraints and empty note search projections. It does not rewrite source bytes,
+old retry identities, existing reference provenance or summary coverage. Existing
+entities are explicitly main-field; old search documents have empty note fields.
+Only isolated synthetic upgrades have been exercised; retained-data/production
+rollout remains gated. See [ADR-022](../docs/adr/022-authored-change-notes.md).

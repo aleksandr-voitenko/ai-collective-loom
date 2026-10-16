@@ -1,0 +1,101 @@
+
+> ai-collective-loom@0.1.0 test:search:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/search*.test.ts
+
+✔ search author discovery follows readable publications rather than account state (2543.5765ms)
+▶ search pages serialize current source eligibility and credential revocation in both commit orders
+  ✔ resource suppression commits after selection but before page construction (53.694875ms)
+  ✔ resource suppression waits for an already authorized page to commit (54.381875ms)
+  ✔ revision suppression commits after selection but before page construction (68.649708ms)
+  ✔ revision suppression waits for an already authorized page to commit (53.080709ms)
+  ✔ discussion suppression commits after selection but before page construction (43.70175ms)
+  ✔ discussion suppression waits for an already authorized page to commit (42.199875ms)
+  ✔ credential revocation wins between authentication and continuation authorization (44.193875ms)
+  ✔ credential revocation waits for an authorized page and then rejects its continuation (49.607292ms)
+✔ search pages serialize current source eligibility and credential revocation in both commit orders (2265.586417ms)
+▶ search expiry, unsupported work, disclosure-safe failure and independent capacity limits
+  ✔ stable ties are resource UUID ordered and an expired cursor fails explicitly (123.184292ms)
+  ✔ database query timeout is 503 without an empty successful result or SQL details (2506.43ms)
+  ✔ API instance restart invalidates old cursors while retained sources stay readable (475.277917ms)
+  ✔ unsupported event work is retained as failed and administrator retry cannot silently succeed (56.838875ms)
+  ✔ retained work cap refuses new discovery without evicting jobs (450.77325ms)
+  ✔ corpus work cap fails independently of a tiny item limit and direct retrieval remains available (182.08975ms)
+✔ search expiry, unsupported work, disclosure-safe failure and independent capacity limits (6344.410834ms)
+✔ synthetic preview supervises terminal worker stop/start while HTTPS stays available (3570.361167ms)
+▶ claim updates cannot revive ownership after expiry while waiting for a job lock
+  ✔ renew (1008.968625ms)
+  ✔ fail (1004.640042ms)
+✔ claim updates cannot revive ownership after expiry while waiting for a job lock (3674.787666ms)
+✖ populated 0007 upgrade preserves jobs and recovers previously skipped intents (1323.386542ms)
+✔ simultaneous bounded claims have distinct owners and no duplicate jobs (1724.244042ms)
+▶ native process loss during unfinished rebuild resumes both discovery cursors
+  ✔ before_commit (1836.483959ms)
+  ✔ after_commit (1881.473875ms)
+✔ native process loss during unfinished rebuild resumes both discovery cursors (7611.360792ms)
+✔ unsupported intents survive revision collisions and a split event-discovery page (2278.647583ms)
+▶ populated upgrade, durable discovery and atomically fenced search outputs
+  ✔ expired owner cannot renew or alter replacement output or job state (51.984959ms)
+  ✔ R2 completes before delayed R1 without replacing newer content (81.884625ms)
+  ✔ output and successful finalization roll back together; retry deduplicates (46.256959ms)
+  ✔ rebuild fences in-flight work and repeated requests do not reset progress (125.721417ms)
+  ✔ three failures retain work; explicit administrator retry advances the fence (81.445542ms)
+✔ populated upgrade, durable discovery and atomically fenced search outputs (2270.978167ms)
+▶ native worker expiry and process loss around the real output COMMIT
+  ✔ A waits through its actual lease deadline, B completes, and resumed A cannot write (30227.75925ms)
+  ✔ loss before COMMIT rolls back output; loss after COMMIT remains deduplicated (339.901209ms)
+✔ native worker expiry and process loss around the real output COMMIT (31861.969708ms)
+▶ current scoped lexical search through HTTPS and native worker recovery
+  ✔ stopped worker preserves committed publication intents and honest unavailable status (571.092625ms)
+  ✔ human and agent parity, discussion identity, original author and revision time filters (290.013625ms)
+  ✔ actual simple parser behavior and strict bounded query shapes (141.406542ms)
+  ✔ current R2 without index never returns R1; original author differs from revision publisher (473.207917ms)
+  ✔ synchronous containment, revision suppression, restoration and independent quotations (164.673792ms)
+  ✔ moves update fresh scope without reindexing and preserve historical events and Saved references (212.895125ms)
+{"synthetic_search_measurement":{"sources":215,"samples_per_query":10,"transport":"same-machine HTTPS","observations":[{"query":"common","p50_ms":53,"p95_ms":73},{"query":"common filtered","p50_ms":51,"p95_ms":75}]}}
+  ✔ bounded selected window, Unicode response bytes, private filters and owner-bound continuation (9040.556334ms)
+  ✔ rebuild while publications continue and interrupted scan resumes from retained sources (3624.023083ms)
+  ✔ revoked bearer credentials cannot reuse search selections or indexing status (80.000875ms)
+✔ current scoped lexical search through HTTPS and native worker recovery (17058.229667ms)
+ℹ tests 46
+ℹ suites 0
+ℹ pass 45
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34434.305
+
+✖ failing tests:
+
+test at tests/integration/search-recovery.test.ts:1:2913
+✖ populated 0007 upgrade preserves jobs and recovers previously skipped intents (1323.386542ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+
+    {
+      jobs: [
+        {
+          attempts: 3,
+          claim_generation: 3,
+  ...
+          job_id: 'b68c2d7b-2f4f-446b-b898-f7572f739ffd',
+  +       note_document: '',
+  +       note_text: '',
+          resource_id: 'a4b98faa-aee8-4b39-9427-d3c28f9a5c9e',
+          revision_id: 'c1d85677-da05-4969-8921-e05fe4d5ae1b',
+          revision_number: '1',
+          title: 'Community overview'
+        }
+
+      at TestContext.<anonymous> (/Users/tarm/source/ai-collective-loom/tests/integration/search-recovery.test.ts:76:81)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { revisions: [ [Object] ], shared_activity: [ [Object], [Object] ], outbox_intents: [ [Object], [Object], [Object] ], saved_items: [], search_documents: [ [Object] ], jobs: [ [Object], [Object] ] },
+    expected: { revisions: [ [Object] ], shared_activity: [ [Object], [Object] ], outbox_intents: [ [Object], [Object], [Object] ], saved_items: [], search_documents: [ [Object] ], jobs: [ [Object], [Object] ] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

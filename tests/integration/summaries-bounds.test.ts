@@ -19,7 +19,12 @@ test('pre-summary populated upgrade preserves text, declarations, Saved, placeme
   const worker=new SearchWorker(f.database);await worker.tick();
   const tables=['resources','revisions','revision_mentions','revision_references','idempotency_records','resource_editors','shared_activity','outbox_intents','saved_items','saved_operations','saved_collections','organization_state','organization_operations','organization_audit','search_documents','search_jobs'];
   const snapshot=async()=>{const rows:Record<string,unknown>={};for(const table of tables)rows[table]=(await f.observer.query(`SELECT * FROM loom.${table} ORDER BY 1,2`)).rows;return rows;};
-  const before=await snapshot();await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);
+  const before=await snapshot();
+  // Migration 0011 adds explicit empty note projections and main-field provenance; every old column remains compared.
+  for(const row of before.search_documents as Record<string,unknown>[])Object.assign(row,{note_text:'',note_document:''});
+  for(const row of before.revision_mentions as Record<string,unknown>[])Object.assign(row,{source_field:'main'});
+  for(const row of before.revision_references as Record<string,unknown>[])Object.assign(row,{source_field:'main'});
+await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);
   for(const table of ['summaries','summary_preparations','summary_coverage_sets','summary_coverage_members'])assert.equal((await f.observer.query(`SELECT count(*)::int n FROM loom.${table}`)).rows[0].n,0);
   assert.equal((await f.admin.call('/api/v1/artifacts',body)).body.revision_id,source.body.revision_id);
   assert.equal((await f.admin.call('/api/v1/artifacts',old)).body.revision_id,v1.body.revision_id);

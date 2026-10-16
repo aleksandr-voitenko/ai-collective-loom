@@ -117,8 +117,9 @@ Outgoing References and incoming Referenced by preserve exact links and bounded
 pages, history/scope labels, unavailable/failed/restart states and response ownership.
 No picker/read/navigation action saves, follows, marks read or publishes anything.
 
-Search supports both document formats in selection, status, worker and rebuild.
-Only source-authored title/body is indexed; rationale is retained/displayed but
+Search supports all three document formats in selection, status, worker and rebuild
+(v3 extends this ADR through ADR-022). Source-authored title/body and current v3 note
+text are indexed; rationale is retained/displayed but
 excluded from lexical search. Dynamically resolved target titles/bodies are never
 indexed as source-authored text. This avoids changing the existing body/excerpt
 budget or making suppressed target metadata searchable through a citation.
@@ -144,3 +145,7 @@ Coverage membership itself creates no assertion. Change-note, file/path and
 private-note integration remain open.
 Same-machine tests do not establish provider-agent or cross-machine trials, real
 identity/retention/restore policy, production capacity or broad AC completion.
+
+## Guide 7 extension — ADR-022
+
+Migration 0011 adds source_field (main/change_note) to entity/assertion identity. Main reference IDs retain continuing provenance and withdrawals. Note IDs are local to their owning revision field, newly asserted even if a later note reuses the same UUID. Outgoing/incoming rows identify the field; history distinguishes historical_note. Ordering includes field between source revision and reference UUID. Account coverage alone is not a reference assertion. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.

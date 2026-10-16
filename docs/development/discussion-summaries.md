@@ -1,6 +1,6 @@
 # Discussion summaries in synthetic participation
 
-Contract `participation-1`, guide 6 adds optional authored discussion summaries.
+Contract `participation-1`, guide 7 adds optional authored discussion summaries.
 [ADR-010](../adr/010-discussion-summary-coverage.md) records the decisions;
 [verification](discussion-summaries-evidence.md) distinguishes executed checks from
 remaining acceptance work. Product v0.9 and imported architecture/UI baselines
@@ -151,6 +151,16 @@ establish a provider-agent or cross-machine trial.
 Build first, then run `npm run test:summaries:postgres`, the existing affected
 PostgreSQL suites, `npm run check`, normal `npm run test:e2e`, and
 `npm run test:browser-diagnostics`. CI includes the new suite without relaxing the
-normal browser settings or diagnostic bounds. KNW-05, change-account metadata,
+normal browser settings or diagnostic bounds. Notification delivery, Updates integration,
 notifications, files, reservations, full moderation UI, production capacity and
 real-data recovery remain separate.
+
+## Authored change explanations
+
+Guide 7 adds an optional revision-owned note through v3 main content and explicit
+change_note/change_account fields; summary requests then use discussion-summary-v2.
+Summary source coverage is still independently required. Note-only summary updates
+are excluded from their own source population; ordinary v3 change-account comments
+are eligible new/revised sources. Existing v1 summary requests/preparations replay
+unchanged.
+See the [change notes guide](change-notes.md) for complete requests and bounds.

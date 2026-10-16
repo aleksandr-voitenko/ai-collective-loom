@@ -25,7 +25,7 @@ export function normalizeSearch(options:SearchOptions) {
     || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().replace('.000Z','Z')!==date.replace('.000Z','Z'))) throw new SearchError('invalid_search');
   if(options.from && options.before && Date.parse(options.from)>=Date.parse(options.before)) throw new SearchError('invalid_search');
   return {q,scope:{topic:options.topic?.toLowerCase()??null,descendants:options.descendants==='true',kind:options.kind??null,
-    author:options.author?.toLowerCase()??null,from:options.from??null,before:options.before??null}};
+    author:options.author?.toLowerCase()??null,from:options.from??null,before:options.before??null,...(options.explanation?{explanation:options.explanation}:{})}};
 }
 
 // Bounded containment walk mirrors lockContext: contribution -> discussion ->
@@ -50,7 +50,7 @@ const eligibleSql=`WITH RECURSIVE population AS MATERIALIZED (
     CASE WHEN p.kind='artifact' THEN p.owner_resource_id ELSE d.owner_resource_id END AS area_id
   FROM population p JOIN owners o ON o.source=p.id AND o.owner_resource_id IS NULL AND o.kind='area' AND o.eligible
   LEFT JOIN loom.resources d ON d.id=p.discussion_id
-  WHERE p.availability='available' AND p.content_format IN ('loom-markdown-v1','loom-markdown-v2')
+  WHERE p.availability='available' AND p.content_format IN ('loom-markdown-v1','loom-markdown-v2','loom-markdown-v3')
 )`;
 async function boundary(tx:SqlTransaction) {
   return (await tx.query<{boundary:string;generation:number;scan_complete:boolean;alive:boolean;capacity_limited:boolean}>(`
@@ -128,24 +128,28 @@ export class TextSearch {
     return this.run(async tx=>{
       const authority=await lockActor(tx,actor);await structureGuard(tx);await checkPopulation(tx);
       if(normalized.scope.topic)await lockContext(tx,normalized.scope.topic,'resolution',['area']);
-      const state=await boundary(tx),binding=JSON.stringify([authority.participantId,normalized,'simple-title-body-v1']);
+      const state=await boundary(tx),binding=JSON.stringify([authority.participantId,normalized,'simple-title-body-note-v2']);
       const saved=options.cursor?this.decode(options.cursor):undefined;
       if(saved&&(saved.binding!==binding||saved.boundary!==state.boundary))throw new SearchError('search_changed');
       const nodes=(await tx.query<{n:number}>('SELECT numnode(plainto_tsquery(\'pg_catalog.simple\',$1)) AS n',[normalized.q])).rows[0]!.n;
       if(nodes===0||nodes>searchLimits.queryNodes)throw new SearchError('invalid_search');
       const scope=normalized.scope;
-      const matches=(await tx.query<{id:string;search_kind:'discussion'|'comment'|'artifact'|'summary';revision_id:string;body:string}>(`${eligibleSql}
-        SELECT e.id,e.search_kind,d.revision_id,d.body FROM eligible e
+      const matches=(await tx.query<{id:string;search_kind:'discussion'|'comment'|'artifact'|'summary';revision_id:string;body:string;note_text:string;main_match:boolean;note_match:boolean;change_account:boolean}>(`${eligibleSql}
+        SELECT e.id,e.search_kind,d.revision_id,d.body,d.note_text,
+          tsvector_to_array(to_tsvector('pg_catalog.simple',normalize(d.title || ' ' || d.body,NFC))) && tsvector_to_array(to_tsvector('pg_catalog.simple',$2)) AS main_match,
+          tsvector_to_array(d.note_document) && tsvector_to_array(to_tsvector('pg_catalog.simple',$2)) AS note_match,
+          EXISTS(SELECT 1 FROM loom.change_account_sets a WHERE a.revision_id=d.revision_id) AS change_account FROM eligible e
         JOIN loom.search_documents d ON d.resource_id=e.id AND d.revision_id=e.current_revision_id AND d.generation=$1
         WHERE d.document @@ plainto_tsquery('pg_catalog.simple',$2)
           AND ($3::uuid IS NULL OR CASE WHEN $4::boolean THEN $3=ANY(e.path) ELSE e.area_id=$3 END)
           AND ($5::text IS NULL OR e.search_kind=$5) AND ($6::uuid IS NULL OR e.original_author_id=$6)
           AND ($7::timestamptz IS NULL OR e.created_at>=$7) AND ($8::timestamptz IS NULL OR e.created_at<$8)
+          AND ($9::text IS NULL OR $9='revision_note' AND d.note_text<>'' OR $9='change_account' AND EXISTS(SELECT 1 FROM loom.change_account_sets a WHERE a.revision_id=d.revision_id))
         ORDER BY ts_rank(d.document,plainto_tsquery('pg_catalog.simple',$2)) DESC,e.id LIMIT 201`,
-        [state.generation,normalized.q,scope.topic,scope.descendants,scope.kind,scope.author,scope.from,scope.before])).rows;
+        [state.generation,normalized.q,scope.topic,scope.descendants,scope.kind,scope.author,scope.from,scope.before,scope.explanation??null])).rows;
       const window=matches.slice(0,searchLimits.window),expires=saved?.expires??Date.now()+searchLimits.cursorSeconds*1000;
       let offset=saved?.offset??0;
-      const view:SearchPageView={items:[],query:normalized.q,scope,indexing:await status(tx,state),selection:'bounded_current_relevance',ranking:'simple-title-body-v1',
+      const view:SearchPageView={items:[],query:normalized.q,scope,indexing:await status(tx,state),selection:'bounded_current_relevance',ranking:'simple-title-body-note-v2',
         next_cursor:null,window_exhausted:false,selection_limited:matches.length>searchLimits.window,corpus_exhaustive:false,limit,max_response_bytes:budget,expires_at:new Date(expires).toISOString()};
       const cursor=(next:number)=>next<window.length?this.encode({binding,boundary:state.boundary,offset:next,expires}):null;
       for(const row of window.slice(offset,offset+limit)) {
@@ -155,10 +159,10 @@ export class TextSearch {
         const ids=chain.filter(r=>r.kind==='area').map(r=>r.id).reverse();
         const areas=(await tx.query<{id:string;title:string}>('SELECT id,title FROM loom.areas WHERE id=ANY($1::uuid[])',[ids])).rows;
         const item:SearchResultView={result_id:row.search_kind==='discussion'?source.discussion_id!:row.id,source_resource_id:row.id,
-          revision_id:row.revision_id,kind:row.search_kind,title:source.title,author:source.author,publisher:source.publisher,published_at:source.created_at,
+          revision_id:row.revision_id,kind:row.search_kind,matching_fields:[...(row.main_match?['main' as const]:[]),...(row.note_match?['change_note' as const]:[])],change_account:row.change_account,title:source.title,author:source.author,publisher:source.publisher,published_at:source.created_at,
           area_id:source.area_id,area_title:source.area_title,location:ids.map(id=>areas.find(a=>a.id===id)!).filter(Boolean),
-          discussion_id:source.discussion_id,parent_id:source.parent_id,excerpt:{text:excerpt(row.body,normalized.q),representation:'excerpt',omitted_detail:'full_body'},
-          full_content_url:source.full_content_url,browser_url:`/loom/resource/${row.id}/${row.revision_id}`,
+          discussion_id:source.discussion_id,parent_id:source.parent_id,excerpt:{text:excerpt(row.note_match&&!row.main_match?row.note_text:row.body,normalized.q),field:row.note_match&&!row.main_match?'change_note':'main',representation:'excerpt',omitted_detail:'full_body'},
+          full_content_url:source.full_content_url+(row.note_match&&!row.main_match?'/change-note':''),browser_url:`/loom/resource/${row.id}/${row.revision_id}${row.note_match&&!row.main_match?'#change-note':''}`,
           context_url:row.search_kind==='summary'?`/api/v1/discussions/${source.discussion_id}/summary`:source.discussion_id?`/api/v1/contributions/${row.id}/context`:`/api/v1/resources/${row.id}`,
           browser_context_url:row.search_kind==='summary'?`/loom/resource/${row.id}`:source.discussion_id?`/loom/discussion/${source.discussion_id}?focus=${row.id}`:`/loom/resource/${row.id}`};
         view.items.push(item);view.next_cursor=cursor(offset+1);view.window_exhausted=view.next_cursor===null;

@@ -44,7 +44,7 @@ The selected dialect is versioned so neither choice is imposed on future release
 
 Ordinary HTTP(S) links, including exact Loom revision URLs, are retained as authored
 links. They are not typed provenance, recorded backlinks, preserved remote bytes,
-change coverage or notification entities. Only the v2 declaration list creates a
+change coverage or notification entities. Only an explicit v2/v3 declaration list creates a
 recorded relationship; no URL or token inference/backfill occurs. Unsupported
 audience, file, manifest and summary fields are rejected, never silently ignored.
 
@@ -60,3 +60,7 @@ participation HTTP tests and authored-rendering tests; architecture §10.1.
 
 The parser's primary reference is the
 [markdown-it project](https://github.com/markdown-it/markdown-it).
+
+## Guide 7 extension — ADR-022
+
+Loom-markdown-v3 retains main text/entities/references and requires explicit nullable top-level change fields at publication. Revision notes use independently parsed v2 documents and field-local entities/assertions. Combined main/note/rationale bytes, entity counts and parser work retain the original ceilings; note bytes cap at 4096. Exact note retrieval is separate so complete JSON stays within 128 KiB. No HTML execution or inferred mentions are added. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.

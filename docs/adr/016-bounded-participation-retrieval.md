@@ -101,3 +101,7 @@ bounded candidate scan, metadata guards, UTF-8 budget and encrypted five-minute
 continuation are independent limits. Pages use REPEATABLE READ plus complete
 sorted guards; incompatible changes produce `references_changed`, not mixed
 metadata. No aggregate scope, hidden count or whole graph is returned.
+
+## Guide 7 extension — ADR-022
+
+Generic v3 bodies expose note/account presence and exact-field paths without expanding notes or raw described IDs. Authorized note and coverage paths retain the hard UTF-8 JSON envelope. Change discovery explicitly distinguishes exact revisions from labelled resource aggregation; current/all history, field provenance, bounded scans and unknown unavailable members are explicit. Note reads obey owning revision/resource policy; independent account prose keeps its own policy. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.

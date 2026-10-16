@@ -1,0 +1,97 @@
+
+> ai-collective-loom@0.1.0 test:summaries:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/summaries*.test.ts
+
+✖ pre-summary populated upgrade preserves text, declarations, Saved, placement, indexing and old retry bytes (2376.110792ms)
+✔ preparations enforce ownership, exact retry, irreversible expiry, quotas and independent published membership (2283.444166ms)
+✔ large source populations and maintenance use bounded work, safe pages, opaque custody and explicit invalidation (4192.995041ms)
+ℹ {"source_limit":100,"maintenance_candidates":10,"observed_queries":251,"max_rows":120,"source_response_bytes":1593,"maintenance_bytes":3000}
+✔ standalone HTTPS client and server restart preserve preparation, publication, references and lost acknowledgement (4266.094167ms)
+✔ summary preparation has a real statement boundary; sources arriving and changing during preparation stay outside it (2257.443584ms)
+✔ coverage reads serialize source suppression/restoration and moves at observed guards (2308.682708ms)
+✔ summary writes do not reserve editor or credential authority; both guard orders have coherent outcomes (2208.351958ms)
+✔ AC52: competing creators have one canonical publication/editor; exact retries converge (2333.75325ms)
+✔ AC51/59: exact full/partial declarations preserve concurrent new and changed sources; bookkeeping is excluded (2758.899292ms)
+✔ summary rights use explicit editors and live credentials; an archivist name and discussion authorship grant nothing (1914.011167ms)
+✔ suppression preserves independent prose and hides coverage IDs/counts across every summary surface (1909.855541ms)
+✔ publication rollback stages, concurrent exact retries and lost acknowledgement preserve independent coverage (1718.21475ms)
+✔ summary references and search use summary identity, exact versions and current discussion placement (2287.860375ms)
+✔ summary reference changes retain attribution and withdrawal; linked target edits do not create source gaps (1704.339584ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 13
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15031.815083
+
+✖ failing tests:
+
+test at tests/integration/summaries-bounds.test.ts:1:394
+✖ pre-summary populated upgrade preserves text, declarations, Saved, placement, indexing and old retry bytes (2376.110792ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+
+    {
+      idempotency_records: [
+        {
+          id: '2377ac73-bda5-4191-ab70-9b2ad215e08a',
+          idempotency_key: 'fc5852fe-b243-43fd-9700-0d6c03a53d2e',
+  ...
+          revision_id: 'f9969e1c-e544-4677-926a-e24f02ce42a4',
+  +       source_field: 'main',
+          source_id: '18b3f9f5-a899-44d7-b1d0-5676ebd4310e',
+          target_id: '17b644f7-ebb8-4d1e-9447-75adf71cb852',
+          target_kind: 'artifact',
+          target_revision_id: '9cf31594-8aaf-4a68-9281-5012c80ba246'
+        }
+  ...
+          job_id: 'af878d00-ad30-41b4-8450-e5e7bb19663e',
+  +       note_document: '',
+  +       note_text: '',
+          resource_id: '174b3de2-d2c9-487a-958a-28e1a1e85ad7',
+          revision_id: 'dc32d856-52b2-40e4-9014-5ca7500a055c',
+          revision_number: '1',
+          title: 'Community overview'
+        },
+  ...
+          job_id: 'e690fe95-4cec-4dc6-9388-fa9220914f72',
+  +       note_document: '',
+  +       note_text: '',
+          resource_id: '17b644f7-ebb8-4d1e-9447-75adf71cb852',
+          revision_id: '9cf31594-8aaf-4a68-9281-5012c80ba246',
+          revision_number: '1',
+          title: 'Reference source'
+        },
+  ...
+          job_id: '3b555e9d-6a7d-4a11-96e7-cd0d099ce36d',
+  +       note_document: '',
+  +       note_text: '',
+          resource_id: '18b3f9f5-a899-44d7-b1d0-5676ebd4310e',
+          revision_id: 'f9969e1c-e544-4677-926a-e24f02ce42a4',
+          revision_number: '1',
+          title: 'Retained version two'
+        },
+  ...
+          job_id: '916d3f53-1d0b-4f07-ae7a-e182e9a938dc',
+  +       note_document: '',
+  +       note_text: '',
+          resource_id: '8f86be43-eac3-4801-8c0c-36112336e090',
+          revision_id: '87411594-3e32-4794-afb5-b87d8d09c3c5',
+          revision_number: '1',
+          title: 'Version one'
+        }
+
+      at TestContext.<anonymous> (/Users/tarm/source/ai-collective-loom/tests/integration/summaries-bounds.test.ts:22:76)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { resources: [ [Object], [Object], [Object], [Object], [Object], [Object] ], revisions: [ [Object], [Object], [Object], [Object] ], revision_mentions: [], revision_references: [ [Object] ], idempotency_records: [ [Object], [Object], [Object], [Object] ], resource_editors: [ [Object], [Object], [Object], [Object] ], shared_activity: [ [Object], [Object], [Object], [Object], [Object] ], outbox_intents: [ [Object], [Object], [Object], [Object], [Object] ], saved_items: [ [Object] ], saved_operations: [ [Object] ], saved_collections: [ [Object] ], organization_state: [ [Object] ], organization_operations: [ [Object] ], organization_audit: [ [Object] ], search_documents: [ [Object], [Object], [Object], [Object] ], search_jobs: [ [Object], [Object], [Object], [Object], [Object] ] },
+    expected: { resources: [ [Object], [Object], [Object], [Object], [Object], [Object] ], revisions: [ [Object], [Object], [Object], [Object] ], revision_mentions: [], revision_references: [ [Object] ], idempotency_records: [ [Object], [Object], [Object], [Object] ], resource_editors: [ [Object], [Object], [Object], [Object] ], shared_activity: [ [Object], [Object], [Object], [Object], [Object] ], outbox_intents: [ [Object], [Object], [Object], [Object], [Object] ], saved_items: [ [Object] ], saved_operations: [ [Object] ], saved_collections: [ [Object] ], organization_state: [ [Object] ], organization_operations: [ [Object] ], organization_audit: [ [Object] ], search_documents: [ [Object], [Object], [Object], [Object] ], search_jobs: [ [Object], [Object], [Object], [Object], [Object] ] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

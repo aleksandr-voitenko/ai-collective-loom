@@ -23,6 +23,7 @@ import { OrganizationError } from "../modules/participation/organization-context
 import { registerSearch } from './search.js';
 import { SearchError } from '../modules/search/search.js';
 import { registerReferences } from './references.js';
+import { registerChanges } from './changes.js';
 import { ReferenceError } from '../modules/participation/references.js';
 import { registerSummaries } from './summaries.js';
 import { SummaryError } from '../modules/participation/summary-context.js';
@@ -50,6 +51,7 @@ export function participantError(
     status = {
       invalid_input: 400,
       reference_format_required: 409,
+      change_format_required: 409,
       invalid_actor: 401,
       unavailable: 404,
       forbidden: 403,
@@ -132,6 +134,7 @@ export async function registerParticipation(
   registerOrganization(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerReferences(app, services.database, actor);
+  registerChanges(app, services.database, actor);
   registerSummaries(app, services.database, actor);
   const publications = new ParticipationPublications(services.database),
     reads = new ParticipationRetrieval(services.database),

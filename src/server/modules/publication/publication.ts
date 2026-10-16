@@ -7,6 +7,9 @@ import { lockAttempt } from '../../application/attempt.js';
 import { currentAuthority } from '../../application/authority.js';
 import { insertReferences, type PreparedReference } from './reference-storage.js';
 import { insertCoverage, type PreparedCoverage } from './summary-storage.js';
+import { insertChangeFields } from './change-storage.js';
+import type { NoteContent } from '../../../contracts/participation.js';
+import type { PreparedChangeAccount } from '../participation/change-context.js';
 
 export interface Transactions { transaction<T>(operation: (transaction: SqlTransaction) => Promise<T>): Promise<T> }
 export interface Resource {
@@ -146,13 +149,15 @@ export class PublicationOperation {
  * entity and authority guards; no callback or external work can enter this tail. */
 export async function commitRevision(tx: SqlTransaction, actor: Awaited<ReturnType<typeof lockActor>>, chain: Resource[],
   input: { idempotency_key: string; expected_revision_id: string | null; content: { format: string; text: string }; title?: string | null;
-    mentions?: readonly { token: string; participant_id: string }[]; references?: readonly PreparedReference[]; coverage?: PreparedCoverage },
+    mentions?: readonly { token: string; participant_id: string }[]; references?: readonly PreparedReference[]; coverage?: PreparedCoverage;
+    changeNote?: NoteContent; noteReferences?: readonly PreparedReference[]; changeAccount?: PreparedChangeAccount },
   attempt: { kind: string; version: string; digest: string }): Promise<CommittedPublication> {
   const resource = chain[0]!;
   const ids = { operation: randomUUID(), revision: randomUUID(), event: randomUUID(), intent: randomUUID() };
   const ordinal = (await tx.query<{ number: string }>('SELECT COALESCE(MAX(revision_number), 0)::text AS number FROM loom.revisions WHERE resource_id = $1', [resource.id])).rows[0]!.number;
   await tx.query('INSERT INTO loom.revisions(id, resource_id, revision_number, publisher_id, content_format, content_text, title) VALUES ($1, $2, $3, $4, $5, $6, $7)', [ids.revision, resource.id, String(BigInt(ordinal) + 1n), actor.participantId, input.content.format, input.content.text, input.title ?? null]);
   for (const mention of input.mentions ?? []) await tx.query('INSERT INTO loom.revision_mentions(revision_id, token, participant_id) VALUES ($1,$2,$3)', [ids.revision, mention.token, mention.participant_id]);
+  if (input.changeNote || input.changeAccount) await insertChangeFields(tx, resource.id, ids.revision, input.changeNote, input.noteReferences, input.changeAccount);
   if (input.references) await insertReferences(tx, resource.id, ids.revision, input.references, input.expected_revision_id);
   if (input.coverage) await insertCoverage(tx, resource.id, ids.revision, input.coverage);
   const updated = await tx.query('UPDATE loom.resources SET current_revision_id = $2 WHERE id = $1 AND current_revision_id IS NOT DISTINCT FROM $3::uuid RETURNING id', [resource.id, ids.revision, input.expected_revision_id]);

@@ -9,7 +9,7 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`6`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`7`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -29,13 +29,20 @@ openings/comments/text artifacts/summaries; old v1 bytes/digests remain unchange
 memberships/withdrawals commit with the source, keeping exact targets and separate
 assertion/change/withdrawal attribution. Direct bounded backlinks use current
 eligibility, explicit resource/exact and current/history scopes, sorted guards and
-restartable snapshot pages. Search supports both formats' source title/body;
+restartable snapshot pages. Search supports all three formats' source title/body and current revision notes;
 rationale is displayed but not searched. See `docs/development/recorded-references.md`
 and the participation memory; file/private-note integration remains open.
 Discussion summaries (ADR-010) add optional canonical identity, explicit editors,
 immutable exact source declarations, bounded preparation/comparison/maintenance,
 and current authority across API/browser recovery. Coverage is an author claim,
 not reading progress. See `docs/development/discussion-summaries.md`.
+Authored explanations (ADR-022, guide 7; LC-20261016-T9G8): immutable artifact/summary revision notes
+and ordinary opening/comment accounts with bounded exact described revision sets.
+Migration 0011 adds field-local entities/assertions, note/account rows and current
+note indexing, preserving old digests and source bytes. Generic bodies link separate
+authorized note/coverage fields; discovery labels exact/resource and current/history
+scopes. New drafts start without copied notes; existing attempts retain theirs.
+See `docs/development/change-notes.md` and the participation/search scoped memories.
 Private Saved items now support discussion/contribution/artifact resource references
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones

@@ -1,0 +1,62 @@
+
+> ai-collective-loom@0.1.0 test:changes:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/changes*.test.ts
+
+✔ discovery bounds candidates and complete JSON, keeps empty continuation and binds scope, owner and lifecycle (8444.639166ms)
+ℹ {"candidate_bound":100,"first_page_bytes":914,"second_page_bytes":3874,"visible_members":3}
+✔ combined authored budgets, field-local references, exact note response and coverage pages preserve complete bytes (2431.437ms)
+ℹ {"main_json_bytes":74919,"note_json_bytes":25484,"coverage_members":16}
+✔ populated pre-note upgrade preserves old columns, retry digests, preparations and uncertain outcomes (4298.407083ms)
+✖ standalone reply and summary clients keep every change field across process/server restart and response loss (2450.254083ms)
+✔ notes and new account targets serialize suppression, owner/exact restrictions and current editor/credential rights (6029.079417ms)
+✖ note and coverage pages reauthorize at deterministic resource guards without replacing hidden content (1490.180541ms)
+✔ Alice owns R2 note; Bob describes exact R1/R2 without artifact rights; fields and history remain independent (3454.789333ms)
+✔ summary note-only revisions exclude themselves; ordinary accounts are eligible new and revised sources (3752.902625ms)
+✔ hidden described revisions keep prose and safe carry-forward; owner/exact restrictions govern notes and recovery (2031.807459ms)
+✔ stale/semantic conflicts, concurrent retries, rollback stages and COMMIT response loss keep one complete publication (1796.663ms)
+✔ coverage rejects malformed, duplicate, unsupported and wrong-owner revisions; legacy clients cannot strip v3 meaning (1582.593417ms)
+✔ current note text and explicit accounts are searchable with field provenance; stopped indexing and rebuild keep exact reads (2265.113625ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 10
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15254.710917
+
+✖ failing tests:
+
+test at tests/integration/changes-compatibility.test.ts:1:3989
+✖ standalone reply and summary clients keep every change field across process/server restart and response loss (2450.254083ms)
+  Error: ENOENT: no such file or directory, access '/Users/tarm/source/ai-collective-loom/dist/web/index.html'
+      at async access (node:internal/fs/promises:664:10)
+      at async createApplication (/Users/tarm/source/ai-collective-loom/src/server/http/app.ts:85:5)
+      at async syntheticServer (/Users/tarm/source/ai-collective-loom/tests/helpers/participation-server.ts:108:19)
+      at async fixture (/Users/tarm/source/ai-collective-loom/tests/helpers/references.ts:17:16)
+      at async fixture (/Users/tarm/source/ai-collective-loom/tests/helpers/summaries.ts:8:11)
+      at async TestContext.<anonymous> (/Users/tarm/source/ai-collective-loom/tests/integration/changes-compatibility.test.ts:40:11)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'access',
+    path: '/Users/tarm/source/ai-collective-loom/dist/web/index.html'
+  }
+
+test at tests/integration/changes-races.test.ts:1:3945
+✖ note and coverage pages reauthorize at deterministic resource guards without replacing hidden content (1490.180541ms)
+  Error: ENOENT: no such file or directory, access '/Users/tarm/source/ai-collective-loom/dist/web/index.html'
+      at async access (node:internal/fs/promises:664:10)
+      at async createApplication (/Users/tarm/source/ai-collective-loom/src/server/http/app.ts:85:5)
+      at async syntheticServer (/Users/tarm/source/ai-collective-loom/tests/helpers/participation-server.ts:108:19)
+      at async fixture (/Users/tarm/source/ai-collective-loom/tests/helpers/references.ts:17:16)
+      at async fixture (/Users/tarm/source/ai-collective-loom/tests/helpers/summaries.ts:8:11)
+      at async TestContext.<anonymous> (/Users/tarm/source/ai-collective-loom/tests/integration/changes-races.test.ts:40:11)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'access',
+    path: '/Users/tarm/source/ai-collective-loom/dist/web/index.html'
+  }

@@ -15,7 +15,7 @@ Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configur
 const {render,screen,fireEvent,cleanup,act,waitFor}=await import('@testing-library/react');
 afterEach(()=>cleanup());
 const status={indexing:'ready',coverage:'current_supported_text',direct_retrieval:'independent'} as const;
-function page(query:string):SearchPageView{return {items:[],query,scope:{topic:null,descendants:false,kind:null,author:null,from:null,before:null},indexing:status,selection:'bounded_current_relevance',ranking:'simple-title-body-v1',
+function page(query:string):SearchPageView{return {items:[],query,scope:{topic:null,descendants:false,kind:null,author:null,from:null,before:null},indexing:status,selection:'bounded_current_relevance',ranking:'simple-title-body-note-v2',
   next_cursor:null,window_exhausted:true,selection_limited:false,corpus_exhaustive:false,limit:12,max_response_bytes:131072,expires_at:'2026-10-15T00:00:00.000Z'};}
 function mount(t:TestContext){
   const calls:{path:string;finish:(r:Response)=>void}[]=[];

@@ -68,6 +68,19 @@ actual browser/device or human identity-proof trials.
 Do not reintroduce private branches, universal reviewed-state tracking, delegated
 editor-list management, or a model-execution service.
 
+## Authored change explanations
+
+KNW-05 has both synthetic text forms: immutable artifact/summary revision notes and
+ordinary opening/comment accounts with 1–16 exact described revisions. Migration
+0011 preserves old rows/digests and adds field-specific mention/reference provenance.
+Bounded authorized history/discovery and current-note search reuse source identity;
+summary coverage distinguishes summary notes from ordinary account sources.
+See [ADR-022](../adr/022-authored-change-notes.md), the [guide](change-notes.md)
+and [evidence](change-notes-evidence.md). This implements related KNW-02–06,
+MEN-01/02 provenance, REF-01–03, SRCH-02/04–07 and API/recovery portions; it does not
+complete notification delivery, Updates, file/private-note integration, broad human/
+provider-agent acceptance, production capacity or retained-data policy.
+
 ## Subsequent correctness gates
 
 Discussion summaries have a synthetic database/API/browser slice for KNW-01–04
@@ -77,8 +90,8 @@ history, safe unknown comparison and bounded maintenance. Summary references and
 current authored-text indexing reuse existing mechanisms. See [ADR-010](../adr/010-discussion-summary-coverage.md),
 the [guide](discussion-summaries.md) and [observed evidence](discussion-summaries-evidence.md).
 AC51/52 and applicable summary/source portions of AC10/31/37/38/54/55/57/59 are
-bounded scripted journeys, not broad scenario closure. KNW-05 change notes,
-notifications, files, reservations, full moderation UI, representative human and
+bounded scripted journeys, not broad scenario closure. Notifications, files,
+reservations, full moderation UI, representative human and
 provider-agent trials, retained-data recovery and production capacity remain open.
 The 100-source/10-summary scan and preparation retention/custody limits are
 synthetic choices requiring review before larger workloads.
@@ -114,7 +127,7 @@ comments, text artifacts and summaries (DIS-06/REF-01–03). Exact scopes, sourc
 withdrawal, assertion/editor attribution and direct bounded backlinks extend
 SRCH-07 without another worker. See [ADR-021](../adr/021-recorded-references.md),
 the [guide](recorded-references.md) and [evidence](recorded-references-evidence.md).
-Change-note, file/path and private-note integration remain open. Summaries and
+File/path and private-note integration remain open. Summaries and
 coverage use ADR-010; coverage membership itself is not a reference assertion.
 Reference portions of AC27–30/33/34/37/39 do not complete those broad scenarios.
 Production capacity, multi-API custody and cross-machine trials remain gates.

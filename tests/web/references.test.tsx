@@ -32,7 +32,7 @@ function mount(t:TestContext, editor = false) {
   return {calls,router};
 }
 function result():ReferencePageView {
-  return {items:[],direction:'incoming',scope:'resource',history:'current',relationship:null,order:'source_revision_uuid_then_reference_uuid',
+  return {items:[],direction:'incoming',scope:'resource',history:'current',relationship:null,order:'source_revision_uuid_then_field_then_reference_uuid',
     omitted_detail:'bodies; unrelated_target_scopes',next_cursor:null,complete:true,work_budget_reached:false,limit:12,max_response_bytes:131072,expires_at:'2026-10-16T12:00:00Z'};
 }
 function resolved():ResolvedTargetView {

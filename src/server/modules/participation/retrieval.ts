@@ -20,7 +20,7 @@ import {
   type Transactions,
 } from "../publication/publication.js";
 import { hierarchyVersion, structureGuard } from "./organization-context.js";
-import { declaration, revisionReferences } from "./reference-context.js";
+import { declaration, revisionReferences, hasChangeSchema } from "./reference-context.js";
 
 export class RetrievalError extends Error {
   constructor(
@@ -199,8 +199,9 @@ export class ParticipationRetrieval {
       )
     ).rows[0]!;
     // Legacy internal test envelopes are not participant documents.
-    if (body.content_format !== "loom-markdown-v1" && body.content_format !== "loom-markdown-v2")
+    if (!["loom-markdown-v1", "loom-markdown-v2", "loom-markdown-v3"].includes(body.content_format))
       throw new PublicationError("unavailable");
+    const fields = await hasChangeSchema(tx);
     const mentions = (
       await tx.query<{
         token: string;
@@ -209,15 +210,15 @@ export class ParticipationRetrieval {
         kind: string;
       }>(
         `SELECT m.token,m.participant_id,p.nickname,p.kind FROM loom.revision_mentions m
-      JOIN loom.participants p ON p.id=m.participant_id WHERE m.revision_id=$1 ORDER BY m.token`,
+      JOIN loom.participants p ON p.id=m.participant_id WHERE m.revision_id=$1 ${fields ? "AND m.source_field='main'" : ""} ORDER BY m.token`,
         [selected],
       )
     ).rows;
     return {
       ...view,
       content: {
-        ...(body.content_format === "loom-markdown-v2"
-          ? { format: "loom-markdown-v2" as const, references: (await revisionReferences(tx, selected)).map(declaration) }
+        ...(body.content_format !== "loom-markdown-v1"
+          ? { format: body.content_format as "loom-markdown-v2" | "loom-markdown-v3", references: (await revisionReferences(tx, selected)).map(declaration) }
           : { format: "loom-markdown-v1" as const }),
         text: body.content_text,
         mentions: mentions.map((m) => ({
@@ -230,6 +231,12 @@ export class ParticipationRetrieval {
         nickname: m.nickname,
         kind: m.kind,
       })),
+      ...(body.content_format === "loom-markdown-v3" ? {
+        change_note: {state: (await tx.query("SELECT revision_id FROM loom.revision_change_notes WHERE revision_id=$1", [selected])).rowCount ? "available" as const : "absent" as const,
+          full_content_url: `/api/v1/resources/${id}/revisions/${selected}/change-note`},
+        change_account: {state: (await tx.query("SELECT revision_id FROM loom.change_account_sets WHERE revision_id=$1", [selected])).rowCount ? "declared" as const : "absent" as const,
+          coverage_url: `/api/v1/resources/${id}/revisions/${selected}/change-coverage`},
+      } : {}),
       current_revision_id: currentAvailable
         ? resource.current_revision_id
         : null,

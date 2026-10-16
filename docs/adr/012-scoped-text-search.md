@@ -6,7 +6,7 @@ in the unchanged architecture proposal; numerical limits are not production poli
 ## Population and query
 
 Index only typed discussion openings, comments, text artifacts and summaries in
-`loom-markdown-v1` or `loom-markdown-v2` (ADR-021). Only source-authored title/body
+`loom-markdown-v1`, `loom-markdown-v2` or `loom-markdown-v3` (ADR-021/022). Source-authored title/body and optional current note
 is searched; reference rationale and resolved target metadata are excluded.
 A discussion title belongs to its opening revision: the one
 discussion result identifies the discussion and that exact opening resource/revision.
@@ -123,3 +123,7 @@ and closed diagnostics. Record measurements and actual outcomes in the search gu
 do not infer production approval or broad AC completion from synthetic checks.
 Executed results and failure evidence are retained in
 [search verification](../development/search-evidence.md).
+
+## Guide 7 extension — ADR-022
+
+Loom-markdown-v3 and optional current revision notes join the same owning search document, with matching_fields, excerpt.field and explicit account classification/filtering. Ranking is simple-title-body-note-v2 (title A, main/note D). Resolved target titles/bodies and rationales stay excluded. Discovery, processing, status and rebuild include v3 together; historical notes are exact reads, not indexed history. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.
