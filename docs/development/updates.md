@@ -121,6 +121,15 @@ checkpoint. Resynchronization never reconstructs absent facts using current ance
 It returns current topic/artifact and retained personal inventory routes, whose own
 continuations/authorization still apply. This is not a destructive restore tool.
 
+The browser offers **Establish an incomplete new baseline** after a component
+history-gap error and on a ready interval with unknown historical coverage, including
+an exhausted complete selection. Before a descriptor exists, recovery keeps the
+selected scope and personal reason. With a descriptor, it retains that interval's
+frozen scope, definitions and reason. The action starts at the current paired
+boundaries; it does not claim that older activity was retrieved. **Check newer
+activity** then works after reload. An incomplete-history notice stays visible in
+subsequent intervals, with links to retained topics, artifacts and personal attention.
+
 Synthetic bounds: 100 candidates from each stream per preparation step; 2,000
 sources, 500/group, 256 groups and 1,000 steps/view; 16 views/participant, 128 total;
 24-hour descriptor, seven-day nonextendable custody; cleanup of one expired view per

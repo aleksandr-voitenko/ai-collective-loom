@@ -130,7 +130,7 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
     </div>
     {busy&&<p role="status">Loading Updates…</p>}
     {failure&&<div role="alert" className="notice error" tabIndex={-1} ref={notice}><p>{failure.text}</p>
-      {action?<button aria-disabled={busy} onClick={()=>void load({recovery:{action,...(token?{token}:{})},limit:attempted.current.limit??12,max_response_bytes:attempted.current.max_response_bytes??131072},past,action==='renew'&&memberAttempt.current?{cursor:memberAttempt.current.cursor,limit:memberAttempt.current.limit??12,max_response_bytes:memberAttempt.current.max_response_bytes??131072}:undefined,true)}>
+      {action?<button aria-disabled={busy} onClick={()=>void load({recovery:{action,...(token?{token}:{})},...(!token?{scope,reason}:{}),limit:attempted.current.limit??12,max_response_bytes:attempted.current.max_response_bytes??131072},past,action==='renew'&&memberAttempt.current?{cursor:memberAttempt.current.cursor,limit:memberAttempt.current.limit??12,max_response_bytes:memberAttempt.current.max_response_bytes??131072}:undefined,true)}>
         {action==='renew'?'Renew fixed Updates view':action==='replay'?'Replay both retained streams':'Establish an incomplete new baseline'}</button>:
         failure.code!=='updates_epoch_changed'&&<button aria-disabled={busy} onClick={()=>page&&memberFailure.current&&memberAttempt.current?void members(memberAttempt.current):
           void load(attempted.current,past,memberAttempt.current?{cursor:memberAttempt.current.cursor,limit:memberAttempt.current.limit??12,max_response_bytes:memberAttempt.current.max_response_bytes??131072}:undefined)}>Retry Updates</button>}
@@ -139,9 +139,16 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
     {page&&<>
       {!page.traversal.settings_current&&<p className="notice">This interval retains earlier Following settings. Refresh scope to adopt current choices.</p>}
       {page.projection.state!=='complete'&&<p className="notice">Notification generation is {page.projection.state}. More direct signals may become available in a later interval.</p>}
-      {page.traversal.shared.coverage==='unknown'&&<p className="notice">Historical shared coverage is unknown. No complete combined checkpoint is issued.</p>}
+      {page.traversal.shared.coverage==='unknown'&&<div className="notice">
+        <p>Historical shared coverage is unknown. No complete combined checkpoint is issued.</p>
+        {page.stage==='ready'&&<><p>Start checking newer activity from now with an explicitly incomplete baseline. Missing history will not be reconstructed.</p>
+          <button aria-disabled={busy} onClick={()=>void load({recovery:{action:'resynchronize',token:page.page_cursor},limit:page.limit,max_response_bytes:page.max_response_bytes},[],undefined,true)}>Establish an incomplete new baseline</button></>}
+      </div>}
       {page.recovery==='visibility_replay'&&<p role="status">Replaying retained history from both streams with original identities.</p>}
-      {page.baseline_established&&<p className="notice">This is an incomplete new baseline. Missing history was not reconstructed. Inspect retained topics, artifacts and personal attention.</p>}
+      {(page.baseline_established||page.traversal.shared.history==='incomplete'||page.traversal.personal.history==='incomplete')&&<div className="notice">
+        <p>{page.baseline_established?'This is an incomplete new baseline.':'History remains incomplete from an earlier baseline.'} Missing history was not reconstructed.</p>
+        <p><Link to="/loom">Browse retained topics</Link> · <Link to="/loom/artifacts">Browse retained artifacts</Link> · <Link to="/loom/notifications">Open retained personal attention</Link></p>
+      </div>}
       {page.stage==='preparing'?<p>Preparing this fixed interval in bounded steps. Counts and groups will appear when both scans finish.</p>:<>
         <div className="notification-toolbar"><strong>{page.traversal.selection==='highlights'?'Highlights':page.traversal.selection==='direct'?'Direct attention groups':'All matching groups'}</strong>
           {page.traversal.selection!=='complete'&&<button aria-disabled={busy} onClick={()=>void load({switch:{token:page.page_cursor,selection:'complete'},limit:size},[],undefined,true)}>Show all matching groups in this interval</button>}

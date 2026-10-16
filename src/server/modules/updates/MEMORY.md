@@ -34,8 +34,9 @@ every read. Protected count/title/source references are withheld on failure.
 
 Highlights = all direct groups plus three routine groups, with bounded pages.
 Switching selection restarts group pagination but retains scope, definitions,
-reason and both lower/upper bounds. Only exhausted complete grouping with known
-coverage issues a checkpoint; member details/bodies remain explicitly omitted.
+reason and both lower/upper bounds. Outside explicit incomplete resynchronization,
+only exhausted complete grouping with known coverage issues a checkpoint;
+member details/bodies remain explicitly omitted.
 Full-record metadata has a separate cursor. Member/detail pages never imply reading.
 Personal reasons all fit their three-reason bound; shared match reasons page eight
 via `/me/updates/reasons` using combined custody, not standalone tokens.
@@ -73,6 +74,11 @@ sequence and identity fencing reject late/stale saves. Save before exposing a pa
 transport errors retain permitted context, policy failures withdraw it. Sign-out
 invalidates before cleanup. Explicit clearing owns only Updates records. Storage
 16 records/128 KiB each/512 KiB total, with no silent eviction of other journals.
+Tokenless gap recovery sends the selected scope/reason; descriptor-bound recovery
+uses the frozen token. Ready unknown-history pages offer explicit resynchronization.
+Browser history warnings follow component history flags across reload/newer intervals,
+with retained-content links, rather than disappearing after the baseline page.
+Recovery boundary rationale and regressions: `LC-20261017-5QRE`.
 `scripts/updates-client.mjs` provides mode0600 atomic/fsynced HTTPS recovery,
 separate overview/member positions, resizing successors and credential continuity.
 Member retry reauthorizes a withdrawn overview before the attempted expansion;

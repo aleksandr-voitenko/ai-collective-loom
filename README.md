@@ -55,7 +55,9 @@ See the [Following guide](docs/development/following.md). **Updates** combines t
 followed changes with personal attention into compact discussion/artifact cards,
 bounded source lists and attributed revision notes. Highlights can switch to all
 matching groups within the same fixed interval. Independent paired checkpoints
-preserve delayed personal deliveries. See the [Updates guide](docs/development/updates.md).
+preserve delayed personal deliveries. Missing or unknown history has an explicit
+incomplete-baseline recovery path that preserves scope and personal reasons.
+See the [Updates guide](docs/development/updates.md).
 Read state, mutes and dismissal remain unfinished.
 
 For the isolated browser preview, run `npm run app:synthetic` after installing

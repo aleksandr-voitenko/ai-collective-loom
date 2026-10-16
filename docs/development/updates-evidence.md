@@ -1,5 +1,8 @@
 # Combined Updates: implementation and verification
 
+For the later PR12 recovery findings and browser CI investigation, see the
+[review follow-up](updates-pr12-review.md). Results below retain their original scope.
+
 Task baseline: main `0dbb7d5637a4f3e7dfa34f519b0092135628e623`, including PR11's
 summary-context repair (`LC-20261016-A66W`). The attached 17 October 2026 brief is
 the acceptance source. Implementation and review stopped without staging. The

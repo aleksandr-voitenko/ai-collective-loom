@@ -26,14 +26,50 @@ function result(cursor='shown'):UpdatesPageView{return {
   page_cursor:cursor,next_cursor:'next',checkpoint:null,complete_cursor:'complete',direct_cursor:'direct',records_cursor:'records',page_exhausted:false,selection_exhausted:false,grouped_interval_complete:false,member_metadata_complete:false,full_contents_fetched:false,
   projection:{state:'complete',coverage:'currently_eligible_supported_sources'},work_budget_reached:false,recovery:'none',baseline_established:false,inventory:[],limit:12,max_response_bytes:131072};}
 const expansion=(cursor='members-shown'):UpdatesMembersPageView=>({contract_version:'combined-updates-1',traversal_id:traversal,group_id:group,direct_only:false,items:[],page_cursor:cursor,next_cursor:'members-next',complete:false,full_contents_fetched:false,limit:5,max_response_bytes:8192});
-function mount(t:TestContext){
+function mount(t:TestContext,entry='/loom/updates'){
   const calls:{path:string;body:any;finish:(r:Response)=>void}[]=[];t.mock.method(globalThis,'fetch',(path:string,options:any)=>new Promise<Response>(finish=>calls.push({path,body:options.body?JSON.parse(options.body):undefined,finish})));
   const instance=randomUUID(),participant=randomUUID(),store=new IntentStore(instance,participant),context={community:{instance_id:instance},self:{participant_id:participant,csrf:'fixture'},store} as Context;
-  const router=createMemoryRouter([{path:'/loom/updates',element:<UpdatesPage context={context}/>},{path:'/other',element:<h1>Other view</h1>}],{initialEntries:['/loom/updates']});
+  const router=createMemoryRouter([{path:'/loom/updates',element:<UpdatesPage context={context}/>},{path:'/other',element:<h1>Other view</h1>}],{initialEntries:[entry]});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);return {calls,router,context};
 }
 const records=()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('loom.updates-pages:'))!)!);
 const record=()=>Object.values(records())[0] as any;
+for(const kind of ['personal','artifact'] as const)test(`tokenless ${kind} history-gap recovery preserves the selected scope and reason`,async t=>{
+  const reason=kind==='personal'?'mention':'reply',scope=kind==='personal'?{kind}:{kind:'explicit',definition:{target:{kind,resource_id:group},include_descendants:false,preferences:['artifact_revisions']}};
+  const entry=`/loom/updates?kind=${kind}&id=${group}&events=artifact_revisions&reason=${reason}`;
+  const {calls,router}=mount(t,entry);await waitFor(()=>assert.equal(calls.length,2));
+  assert.deepEqual(calls[1]!.body,{scope,reason});
+  await act(async()=>calls[1]!.finish(Response.json({error:{code:`updates_${kind==='personal'?'personal':'shared'}_history_gap`,message:'Retained history is unavailable'}},{status:410})));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Establish an incomplete new baseline'})));
+  assert.deepEqual(calls[2]!.body,{scope,reason,recovery:{action:'resynchronize'},limit:12,max_response_bytes:131072});
+  const baseline=result('baseline');baseline.traversal.scope=kind==='personal'?'personal':'explicit';baseline.traversal.reason=reason;
+  baseline.baseline_established=true;baseline.traversal.shared.history='incomplete';baseline.traversal.personal.history='incomplete';baseline.checkpoint='newer';
+  await act(async()=>calls[2]!.finish(Response.json(baseline)));
+  assert.deepEqual(Object.keys(records()),[JSON.stringify([scope,reason])]);
+  await act(async()=>router.navigate('/other'));await act(async()=>router.navigate(entry));await waitFor(()=>assert.equal(calls.length,5));
+  assert.deepEqual(calls[4]!.body,{cursor:'baseline',limit:12,max_response_bytes:131072});
+  await act(async()=>calls[4]!.finish(Response.json(baseline)));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check newer activity'})));
+  assert.deepEqual(calls[5]!.body,{checkpoint:'newer',limit:12});
+});
+test('ready unknown history offers token-bound resynchronization and keeps incomplete history visible after newer activity',async t=>{
+  const {calls,router}=mount(t);await waitFor(()=>assert.equal(calls.length,2));
+  const unknown=result('unknown-history');unknown.traversal.shared.coverage='unknown';unknown.traversal.selection='complete';unknown.next_cursor=null;unknown.selection_exhausted=true;unknown.page_exhausted=true;
+  await act(async()=>calls[1]!.finish(Response.json(unknown)));
+  assert.equal(screen.queryByRole('button',{name:'Check newer activity'}),null);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Establish an incomplete new baseline'})));
+  assert.deepEqual(calls[2]!.body,{recovery:{action:'resynchronize',token:'unknown-history'},limit:12,max_response_bytes:131072});
+  const baseline=result('baseline');baseline.baseline_established=true;baseline.traversal.shared.history='incomplete';baseline.traversal.personal.history='incomplete';baseline.checkpoint='newer';
+  await act(async()=>calls[2]!.finish(Response.json(baseline)));
+  await act(async()=>router.navigate('/other'));await act(async()=>router.navigate('/loom/updates'));await waitFor(()=>assert.equal(calls.length,5));
+  await act(async()=>calls[4]!.finish(Response.json(baseline)));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check newer activity'})));
+  const newer={...baseline,page_cursor:'new-interval',baseline_established:false,recovery:'none' as const};
+  await act(async()=>calls[5]!.finish(Response.json(newer)));
+  assert.match(screen.getByText(/Missing history was not reconstructed/).textContent!,/History remains incomplete/);
+  for(const [name,href] of [['Browse retained topics','/loom'],['Browse retained artifacts','/loom/artifacts'],['Open retained personal attention','/loom/notifications']] as const)
+    assert.equal(screen.getByRole('link',{name}).getAttribute('href'),href);
+});
 test('StrictMode persists displayed Updates budgets before resized successors; failed saves retain recoverable context and focus',async t=>{
   const {calls}=mount(t);await waitFor(()=>assert.equal(calls.length,2));await act(async()=>calls[1]!.finish(Response.json(result())));
   await waitFor(()=>assert.ok(screen.getByRole('button',{name:'Continue this interval'})));await act(async()=>calls[0]!.finish(Response.json(result('discarded'))));assert.equal(record().request.cursor,'shown');

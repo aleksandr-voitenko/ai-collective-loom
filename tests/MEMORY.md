@@ -21,6 +21,11 @@ Native tests SIGKILL a reader while it holds the journal, prove a live competito
 is refused, then recover both displayed pages. SQLite lock sidecars stay in place.
 StrictMode and Chromium member-race retries must reauthorize a withdrawn overview
 and preserve the prior expansion until an unseen successor has been saved.
+Recovery regressions start without a saved descriptor for personal/mention and
+explicit-artifact/reply gaps. A populated pre-0013 structural upgrade exercises the
+successful unknown-history response, explicit baseline, reload and newer activity.
+Assert the request and resulting scope/reason, qualified history and independent
+source/delivery clocks; a successful HTTP response alone missed these browser gaps.
 
 Following/shared retrieval uses `integration/following*.test.ts`: owner-private
 versions and rollback/replay, independent expected event sets, old typed upgrades,
