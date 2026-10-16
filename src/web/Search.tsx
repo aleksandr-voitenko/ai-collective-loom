@@ -34,7 +34,7 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
   const location=useLocation(),navigate=useNavigate(),params=new URLSearchParams(location.search);
   const [query,setQuery]=useState(params.get('q')??''),[topic,setTopic]=useState(params.get('topic')??''),
     [descendants,setDescendants]=useState(params.get('descendants')==='true'),[kind,setKind]=useState(params.get('kind')??''),
-    [author,setAuthor]=useState(params.get('author')??''),
+    [author,setAuthor]=useState(params.get('author')??''),[explanation,setExplanation]=useState(params.get('explanation')??''),
     [from,setFrom]=useState(params.get('from')?.slice(0,10)??''),[before,setBefore]=useState(params.get('before')?.slice(0,10)??''),
     [topics,setTopics]=useState(false),[authors,setAuthors]=useState(false),[refresh,setRefresh]=useState(0),
     [data,setData]=useState<SearchPageView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -44,7 +44,7 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
   useEffect(()=>{
     const selected=new URLSearchParams(location.search);
     setQuery(selected.get('q')??'');setTopic(selected.get('topic')??'');setDescendants(selected.get('descendants')==='true');
-    setKind(selected.get('kind')??'');setAuthor(selected.get('author')??'');setFrom(selected.get('from')?.slice(0,10)??'');setBefore(selected.get('before')?.slice(0,10)??'');
+    setExplanation(selected.get('explanation')??'');setKind(selected.get('kind')??'');setAuthor(selected.get('author')??'');setFrom(selected.get('from')?.slice(0,10)??'');setBefore(selected.get('before')?.slice(0,10)??'');
     let active=true;const owner=identityGeneration(),controller=new AbortController();setData(undefined);setError('');
     if(!selected.has('q')){setBusy(false);return;}
     setBusy(true);
@@ -55,7 +55,7 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
   },[location.search,refresh]);
   const status=useQuery<SearchStatusView>('/api/v1/search/status',SearchStatus);
   function submit(){const selected=new URLSearchParams({q:query});if(topic){selected.set('topic',topic);selected.set('descendants',String(descendants));}
-    if(kind)selected.set('kind',kind);if(author)selected.set('author',author);if(from)selected.set('from',from+'T00:00:00Z');if(before)selected.set('before',before+'T00:00:00Z');
+    if(explanation)selected.set('explanation',explanation);if(kind)selected.set('kind',kind);if(author)selected.set('author',author);if(from)selected.set('from',from+'T00:00:00Z');if(before)selected.set('before',before+'T00:00:00Z');
     const target='/loom/search?'+selected;if(target===location.pathname+location.search)setRefresh(n=>n+1);else void navigate(target);}
   function restart(){const selected=new URLSearchParams(location.search);selected.delete('cursor');const target='/loom/search?'+selected;
     if(target===location.pathname+location.search)setRefresh(n=>n+1);else void navigate(target);status.refresh();}
@@ -63,6 +63,7 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
     <form onSubmit={event=>{event.preventDefault();submit();}}><label>Search terms<input name="q" value={query} onChange={e=>setQuery(e.target.value)} required maxLength={256}/></label>
       <p className="hint">Plain words, all required. No phrases, operators, stemming or substring matching.</p>
       <div className="search-filters"><label>Content kind<select value={kind} onChange={e=>setKind(e.target.value)}><option value="">All text</option><option value="discussion">Discussions</option><option value="comment">Comments</option><option value="artifact">Text artifacts</option><option value="summary">Discussion summaries</option></select></label>
+        <label>Change explanations<select value={explanation} onChange={e=>setExplanation(e.target.value)}><option value="">All publications</option><option value="revision_note">With a current revision note</option><option value="change_account">Explicit change accounts</option></select></label>
         <label>Published from (UTC)<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Published before (UTC)<input type="date" value={before} onChange={e=>setBefore(e.target.value)}/></label></div>
       <p>Topic: {topic?<TopicName key={topic} id={topic}/>:<span>All topics</span>}</p>
       <button type="button" onClick={()=>setTopics(v=>!v)}>Choose topic</button>{topic&&<button type="button" onClick={()=>{setTopic('');setDescendants(false);}}>All topics</button>}
@@ -80,7 +81,8 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
       <div className="collection">{data.items.map(item=><article className="search-result" key={item.result_id}><small>{item.kind==='comment'?'Comment':item.kind==='discussion'?'Discussion':item.kind==='summary'?'Discussion summary':'Text artifact'}</small>
         <h3><Link to={item.browser_url}>{item.title??'Comment by '+item.author.nickname}</Link></h3>
         <p>{item.location.map(a=>a.title).join(' › ')}</p><p className="byline">By {item.author.nickname} · Revision published by {item.publisher.nickname} · <time dateTime={item.published_at}>{new Date(item.published_at).toLocaleString()}</time></p>
-        <p><small>Excerpt</small><br/>{item.excerpt.text}</p><Link to={item.browser_context_url}>Open context</Link>
+        <p className="fineprint">Matching {item.matching_fields.map(field=>field==='change_note'?'revision note':'main content').join(' and ')}{item.change_account?' · Explicit change account':''}</p>
+        <p><small>{item.excerpt.field==='change_note'?'Revision note excerpt':'Excerpt'}</small><br/>{item.excerpt.text}</p><Link to={item.browser_context_url}>Open context</Link>
       </article>)}</div>
       {!data.items.length&&<p>{data.indexing.coverage==='current_supported_text'?'No matching results in this selection.':'No indexed matches in this selection yet. Indexing is incomplete.'}</p>}
       {data.next_cursor&&<button onClick={()=>{const next=new URLSearchParams(location.search);next.set('cursor',data.next_cursor!);void navigate('/loom/search?'+next);}}>Next search results</button>}

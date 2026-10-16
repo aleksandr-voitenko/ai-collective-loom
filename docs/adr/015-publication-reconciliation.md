@@ -210,3 +210,7 @@ does not reapply references after a later withdrawal. A v1 edit of a v2 base is
 explicitly refused before writing; empty v2 lists represent deliberate withdrawal.
 Assertion changes and withdrawals derive attribution from authenticated revision
 publishers, never client-supplied ownership fields.
+
+## Guide 7 extension — ADR-022
+
+V3 publications use participation-text-v3, or discussion-summary-v2 for summaries, incorporating both explicit nullable change fields and every entity/reference/member. Old v1/v2/summary payloads receive no new defaults or rehashing. A committed exact retry still returns the original revision before new-write validation; legacy edits of v3 bases fail change_format_required. Note and account rows share the common transaction/outcome. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.

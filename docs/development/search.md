@@ -1,7 +1,7 @@
 # Scoped text search and the indexing worker
 
 This synthetic-only slice provides current lexical search in the browser and the
-same `participation-1`, guide 6 API. Its implemented choices and limits are in
+same `participation-1`, guide 7 API. Its implemented choices and limits are in
 [ADR-012](../adr/012-scoped-text-search.md). Product and imported architecture
 snapshots remain unchanged. Use synthetic accounts and text only.
 
@@ -185,8 +185,8 @@ exact bodies and existing branch/ancestor routes. [Recorded references](recorded
 adds independent bounded outgoing/incoming expansion for supported text sources,
 including exact target revisions; file/private-note expansion remains open.
 
-Both `loom-markdown-v1` and `loom-markdown-v2` source title/body participate in
-selection, worker output, coverage and rebuild. Authored rationale is not lexical
+All three authored formats' source title/body, plus current v3 note text, participate
+in selection, worker output, coverage and rebuild. Authored rationale is not lexical
 search content. Resolved target titles/bodies never enter the source index. A
 stopped worker does not prevent known-target validation or backlink retrieval.
 
@@ -195,3 +195,12 @@ notifications, reading state, files, semantic search and agent execution
 remain outside this release. See [verification evidence](search-evidence.md) for
 executed checks, failure history and remaining limits. Same-machine workers and
 clients do not establish cross-machine agent trials or hosted CI results.
+
+## Authored change explanations
+
+Guide 7 adds current revision note text to each owning resource’s existing search
+document and explicit change-account filtering. Results identify matching fields;
+note-only excerpts link to the exact note. Ranking is simple-title-body-note-v2.
+Historical notes remain exact reads, outside current-only indexing. Target metadata
+and rationales remain excluded. V3 is eligible throughout worker/status/rebuild.
+See the [change notes guide](change-notes.md) for complete requests and bounds.

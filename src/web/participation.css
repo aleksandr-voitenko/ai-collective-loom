@@ -901,3 +901,9 @@
 .coverage-editor { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .coverage-editor code { overflow-wrap: anywhere; }
 @media (max-width: 760px) { .loom-app .summary-card { padding: 20px 18px; } }
+
+.change-note-editor, .change-account-editor { margin: 1rem 0; border: 1px solid var(--line, #d8dfd7); border-radius: 8px; padding: 1rem; min-width: 0; }
+.change-note-editor label, .change-account-editor label, .change-discovery label { display: block; margin: .6rem 0; }
+.change-details, .change-discovery { margin-top: 1.25rem; padding-top: .75rem; border-top: 1px solid var(--line, #d8dfd7); }
+.change-details code, .change-discovery code, .change-account-editor code { overflow-wrap: anywhere; }
+.change-discovery li, .change-account-editor li { margin: .75rem 0; overflow-wrap: anywhere; }

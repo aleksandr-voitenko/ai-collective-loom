@@ -132,3 +132,22 @@ comparison-load/save failures and reload. These differ from the already-committe
 v1 replay scenario. The comparison failure and rejection notices need exact text selectors when both show.
 Closed diagnostics add `references.spec.ts`, three route
 templates and Add/Check/Refresh controls, without changing bounds or raw containment.
+
+Change notes/accounts use `changes*.test.ts`: populated pre-0011 old-column/digest
+preservation, exact client/server restart, both authority/suppression guard orders,
+rollback stages, field namespaces, summary source eligibility, hidden empty scans,
+JSON budgets and native worker recovery. Older populated-upgrade snapshots explicitly
+expect only the added main-field/empty-note defaults while comparing every old value.
+`web/changes.test.tsx` exercises StrictMode page/picker ownership; `changes.spec.ts`
+checks note/account drafts, failed save, correction, restart, competing tabs, current
+revision starts, keyboard discovery and mobile layout. Its v2→v3 correction case
+checks added/edited/withdrawn references through conflict, replacement-key reload
+and actual publication; a format upgrade alone must not replace supported fields.
+Observe durable journal save before deliberately reloading or installing a
+one-write storage fault; fill/click completion alone is not a Web Lock/save barrier.
+Reply controls use Post reply.
+Closed diagnostics add only the changes spec and three route templates. Explicit
+synthetic screen evidence is curated separately from the private runner output.
+Direct-client recovery fixtures include reordered entities and uppercase UUIDs:
+inspect canonical meaning without rewriting the saved request. Build before HTTPS
+suites; a concurrent rebuild temporarily removes the browser output they require.

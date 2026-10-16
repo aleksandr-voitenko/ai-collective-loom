@@ -248,3 +248,12 @@ Guide 6 adds optional canonical summaries with exact source declarations, editor
 rights, bounded coverage/maintenance, references and current authored-text search.
 See the [summary guide](discussion-summaries.md) and [verification](discussion-summaries-evidence.md).
 The existing publication, Saved and organization contracts remain compatible.
+
+## Guide 7 change explanations
+
+Artifact/summary revisions support optional immutable notes. Ordinary openings/comments
+can explicitly describe exact revision sets with their own authorship. The durable
+composer and direct clients retain these fields across retry/correction/restart.
+V3 uses explicit nullable change_note and change_account fields; old requests keep
+their original semantic identity. See the [change notes guide](change-notes.md)
+and [ADR-022](../adr/022-authored-change-notes.md).

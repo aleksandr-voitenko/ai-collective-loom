@@ -17,12 +17,12 @@ export const ResolvedTarget = Type.Object({
 }, closed);
 const Attribution = Type.Object({ participant: Participant, published_at: Type.String(), revision_id: NullableId }, closed);
 export const ReferenceEntry = Type.Object({
-  declaration: ReferenceDeclaration,
+  declaration: ReferenceDeclaration, source_field: Type.Union([Type.Literal('main'), Type.Literal('change_note')]),
   direction: Type.Literal('source_to_target'),
   source: Resource, source_browser_url: Type.String(), source_context_url: Type.String(),
   original_assertion: Attribution, last_assertion_change: Attribution,
   withdrawal: Type.Union([Attribution, Type.Null()]),
-  membership: Type.Union(['current','carried_forward','changed','withdrawn','current_unavailable'].map(v => Type.Literal(v))),
+  membership: Type.Union(['current','carried_forward','changed','withdrawn','current_unavailable','historical_note'].map(v => Type.Literal(v))),
   target: Type.Union([ResolvedTarget, Type.Object({ state: Type.Literal('unavailable') }, closed)]),
 }, closed);
 export const ReferencePage = Type.Object({
@@ -32,7 +32,7 @@ export const ReferencePage = Type.Object({
   source_id: Type.Optional(UUID), source_revision_id: Type.Optional(UUID), target: Type.Optional(ReferenceTarget),
   history: Type.Union([Type.Literal('current'), Type.Literal('all'), Type.Literal('selected_revision')]),
   relationship: Type.Union([Type.Null(), Type.String()]),
-  order: Type.Literal('source_revision_uuid_then_reference_uuid'),
+  order: Type.Literal('source_revision_uuid_then_field_then_reference_uuid'),
   omitted_detail: Type.Literal('bodies; unrelated_target_scopes'),
   next_cursor: Type.Union([Type.String({ maxLength: referenceLimits.cursorBytes }), Type.Null()]),
   complete: Type.Boolean(), work_budget_reached: Type.Boolean(),

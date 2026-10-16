@@ -19,6 +19,8 @@ const allowed = [
   "--parent",
   "--text-file",
   "--references-file",
+  "--change-account-file",
+  "--mentions-file",
   "--action",
 ];
 if (
@@ -28,7 +30,7 @@ if (
   !options.get("--journal")
 ) {
   console.error(
-    "Usage: node scripts/participation-client.mjs --origin https://host --credential-file /private/token --journal /private/intent.json --action prepare|send|lose-response|status|retry|inspect [--parent UUID --text-file /private/reply.txt --references-file /private/references.json] [--ca /private/ca.pem]",
+    "Usage: node scripts/participation-client.mjs --origin https://host --credential-file /private/token --journal /private/intent.json --action prepare|send|lose-response|status|retry|inspect [--parent UUID --text-file /private/reply.txt --references-file /private/references.json --change-account-file /private/exact-set.json --mentions-file /private/entities.json] [--ca /private/ca.pem]",
   );
   process.exit(2);
 }
@@ -209,6 +211,12 @@ async function main() {
       retrieved_parent: parent,
       retrieved_ancestors: ancestors,
     };
+    if(options.has("--mentions-file")) journal.body.content.mentions=JSON.parse(await readFile(options.get("--mentions-file"),"utf8"));
+    if(options.has("--change-account-file")){
+      journal.body.content={...journal.body.content,format:"loom-markdown-v3",references:journal.body.content.references??[]};
+      journal.body.change_note=null;
+      journal.body.change_account=JSON.parse(await readFile(options.get("--change-account-file"),"utf8"));
+    }
     await save(journal, true);
   }
   if (
@@ -268,13 +276,24 @@ async function main() {
     if (
       exact.parent_id !== journal.body.parent_id ||
       exact.content.text !== journal.body.content.text ||
+      !isDeepStrictEqual(exact.content.mentions,[...journal.body.content.mentions].map(m=>({...m,participant_id:m.participant_id.toLowerCase()})).sort((a,b)=>a.token<b.token?-1:a.token>b.token?1:0)) ||
       exact.content.format !== journal.body.content.format ||
-      (journal.body.content.format === "loom-markdown-v2" &&
+      (journal.body.content.format !== "loom-markdown-v1" &&
         !isDeepStrictEqual(exact.content.references, canonicalReferences(journal.body.content.references)))
     )
       throw new Error(
         "Retained publication differs from the saved semantic request.",
       );
+  }
+  if(journal.result&&journal.body.content.format==="loom-markdown-v3"){
+    let cursor=null;const observed=[];
+    do{const view=await call(`/api/v1/resources/${journal.result.resource_id}/revisions/${journal.result.revision_id}/change-coverage?limit=16`+(cursor?"&cursor="+encodeURIComponent(cursor):""));
+      if(view.unknown)throw new Error("Described material is now unavailable; retain the journal without replacing its exact set.");
+      for(const member of view.items){await call(member.representation.full_content_url);observed.push(member.target);}
+      cursor=view.next_cursor;
+    }while(cursor);
+    const normalize=members=>members.map(m=>({...m,resource_id:m.resource_id.toLowerCase(),revision_id:m.revision_id.toLowerCase()})).sort((a,b)=>(a.resource_id+a.revision_id).localeCompare(b.resource_id+b.revision_id));
+    if(!isDeepStrictEqual(normalize(observed),normalize(journal.body.change_account?.revisions??[])))throw new Error("Retained change declaration differs from journal.");
   }
   console.log(
     JSON.stringify({

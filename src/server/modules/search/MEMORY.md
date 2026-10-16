@@ -7,7 +7,7 @@ Implementation and verification record: `LC-20261015-94TS`.
 Node entry, running as constrained `loom_app`, without participant credentials.
 Other outbox consumers remain unimplemented. Sources and intents are immutable inputs.
 
-Typed artifacts, contributions and canonical summaries in `loom-markdown-v1` and `loom-markdown-v2`
+Typed artifacts, contributions and canonical summaries in `loom-markdown-v1`, `loom-markdown-v2` and `loom-markdown-v3`
 are the population (ADR-010). Before migration 0010 the worker detects the absent
 summary companion table and retains the previous typed population for additive
 synthetic upgrade. ADR-021 preserves source title/body indexing across worker
@@ -16,7 +16,7 @@ Recorded references are direct relational reads, independent of this worker.
 A null-parent opening represents one discussion result, with its discussion ID
 and exact opening resource/revision. Original author filters differ from revision
 publisher; dates use the matching revision's publication timestamp. PostgreSQL
-`simple` lexical AND, title A/body D and rank-descending/resource-UUID ordering
+`simple` lexical AND, title A/body and note D and rank-descending/resource-UUID ordering
 are explicit choices, not universal language, substring or code-symbol guarantees.
 NFC/whitespace/case normalize the query. Excerpts are bounded Unicode plain text.
 
@@ -75,3 +75,11 @@ leases. The preview supervisor supports worker stop/start independently of HTTPS
 See `tests/MEMORY.md` for durable-row, native process, HTTP and browser fixtures.
 Retained-data upgrade, pruning/erasure, multi-API key custody, production operating
 envelope and cross-machine agent trials remain separate gates.
+
+ADR-022 adds note_text/note_document to the existing one-resource document. V3
+notes join the same atomic fenced output; pre-0011 worker fixtures detect the absent
+schema and preserve previous inserts. Current pointer and all owner/exact checks
+still apply. Search exposes matching_fields, excerpt.field and explicit current
+change_account status; explanation filters do not infer classification from prose.
+Historical notes are direct exact reads, outside current-only indexing. Target
+metadata/rationales are not indexed. Ranking/cursor policy is simple-title-body-note-v2.

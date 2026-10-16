@@ -7,6 +7,25 @@ import {
   request,
 } from "../../src/web/participation-client.js";
 
+test('v3 journal round-trips explicit change fields and refuses malformed or silently stripped semantics',async()=>{
+  const storage=new JSDOM('',{url:'https://loom.example'}).window.localStorage;
+  const store=new IntentStore('instance','alice',storage,'https://loom.example');
+  const body={content:{format:'loom-markdown-v3',text:'Main',mentions:[],references:[]},
+    change_note:{format:'loom-markdown-v2',text:'',mentions:[],references:[]},change_account:null};
+  const saved=await store.saveDraft(store.create('edit:source','revision.publish','/api/v1/revisions',body),body);
+  assert.deepEqual(new IntentStore('instance','alice',storage,'https://loom.example').all(),[saved]);
+  for(const bad of [{...body,change_note:false},{...body,change_note:{...body.change_note,mentions:[{token:'m',participant_id:'bad'}]}},
+    {...body,change_account:{revisions:[],carry_forward_revision_id:'bad'}},{...body,change_account:{carry_forward_revision_id:'bad'}},
+    {content:body.content,change_account:null},{...body,content:{...body.content,format:'loom-markdown-v2'}}]){
+    storage.setItem(store.prefix+saved.key,JSON.stringify({...saved,body:{...bad,idempotency_key:saved.key}}));
+    assert.throws(()=>store.all(),/incompatible|requires|Legacy/);
+  }
+  storage.setItem(store.prefix+saved.key,JSON.stringify(saved));
+  const dispatched=await store.prepareDispatch(saved,{...body,change_note:{...body.change_note,text:'Frozen note'}});
+  const retried=await store.prepareDispatch(dispatched,{...body,change_note:null});
+  assert.deepEqual(retried.body,dispatched.body);
+});
+
 test("recovery storage survives a new client object and separates participant, instance and origin", async () => {
   const storage = new JSDOM("", { url: "https://loom.example" }).window
     .localStorage;

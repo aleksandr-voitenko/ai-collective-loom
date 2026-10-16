@@ -1,0 +1,186 @@
+
+> ai-collective-loom@0.1.0 check
+> npm run check:docs && npm test && npm run test:hooks && npm run app:typecheck && npm run test:app && npm run app:build
+
+
+> ai-collective-loom@0.1.0 check:docs
+> node scripts/check-docs.mjs
+
+Document checks passed: {"requirements":101,"acceptanceScenarios":61,"illustrativeJsonBlocks":42} (not product acceptance).
+
+> ai-collective-loom@0.1.0 test
+> node --test tests/bootstrap/*.test.mjs
+
+✔ generated credentials round-trip through the restricted parser (1.238666ms)
+✔ init creates private local state without replacing existing credentials (5.510542ms)
+✔ init refuses a credential symlink without changing its target (1.419417ms)
+✔ configuration rejects a port below the nonprivileged range (0.136334ms)
+✔ configuration rejects a port above the TCP range (0.066667ms)
+✔ configuration rejects equal ports (0.052917ms)
+✔ configuration rejects numerically equal ports with leading zeros (0.063167ms)
+✔ configuration rejects equal buckets (0.054792ms)
+✔ configuration rejects a production-looking bucket (0.066875ms)
+✔ configuration rejects a nonlocal project namespace (0.102792ms)
+✔ configuration rejects an example password (0.056583ms)
+✔ configuration rejects a missing secret (0.044208ms)
+✔ parser rejects duplicates, unknown fields, quotes, and shell expressions (0.089584ms)
+✔ Compose invocation binds the checkout/config and does not contain secrets (0.109959ms)
+✔ only local Docker endpoints are accepted (0.11675ms)
+✔ reset requires an exact explicit destructive confirmation (0.085709ms)
+✔ known local secrets are removed from child diagnostics (0.046042ms)
+✔ exact copy-source encoding preserves path and version boundaries (0.031833ms)
+✔ imported sources retain hashes, requirements, acceptance mappings, JSON and companion links (5.416333ms)
+✔ duplicate identifier declarations are rejected (0.960042ms)
+✔ invalid illustrative JSON is not counted as validated (0.188041ms)
+✔ migration digest changes when source changes (1.316959ms)
+✔ restricted filenames prevent interpolating external identifiers (0.136917ms)
+✔ migration source cannot contain psql commands or top-level transaction control (0.097959ms)
+✔ migration validation accepts a multiline PL/pgSQL function (0.19525ms)
+✔ migration validation accepts a single-line PL/pgSQL function (0.064792ms)
+✔ migration validation accepts a multiline DO body (0.04725ms)
+✔ migration validation accepts a single-line DO body (0.058083ms)
+✔ migration validation accepts a tagged body with inner quoting (0.041666ms)
+✔ migration validation accepts a Unicode dollar tag (0.082459ms)
+✔ migration validation accepts a single-quoted procedural body (0.092667ms)
+✔ migration validation ignores command text in comments and quoted values (0.1395ms)
+✔ migration validation accepts ordinary SQL formatting and non-transaction commands (0.07925ms)
+✔ escape strings retain their quoting rules when continued across lines (0.2465ms)
+✔ migration validation rejects top-level BEGIN (0.165625ms)
+✔ migration validation rejects top-level BEGIN WORK (0.137167ms)
+✔ migration validation rejects top-level START TRANSACTION (0.261ms)
+✔ migration validation rejects top-level COMMIT (0.303292ms)
+✔ migration validation rejects top-level COMMIT AND CHAIN (0.178167ms)
+✔ migration validation rejects top-level END (0.308083ms)
+✔ migration validation rejects top-level ROLLBACK (0.417167ms)
+✔ migration validation rejects top-level ABORT (0.275417ms)
+✔ migration validation rejects top-level SAVEPOINT probe (0.142917ms)
+✔ migration validation rejects top-level RELEASE SAVEPOINT probe (0.114125ms)
+✔ migration validation rejects top-level ROLLBACK TO SAVEPOINT probe (0.122333ms)
+✔ migration validation rejects top-level PREPARE TRANSACTION 'probe' (0.137458ms)
+✔ migration validation rejects top-level COMMIT PREPARED 'probe' (0.139208ms)
+✔ migration validation rejects top-level ROLLBACK PREPARED 'probe' (0.124958ms)
+✔ migration validation rejects top-level SET TRANSACTION READ ONLY (0.398958ms)
+✔ migration validation rejects top-level SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY (0.170625ms)
+✔ psql meta-commands are rejected after SQL and comments as well as at line starts (0.095458ms)
+✔ a transaction command after quoted semicolons is still rejected (0.081833ms)
+✔ unterminated quoted text and block comments cannot swallow runner SQL (0.072167ms)
+✔ runner uses one transaction, serializes migrations, and retains real psql controls (0.111292ms)
+✔ runner ignores a forged precomputed digest and orders by filename version (4.6955ms)
+✔ directory loader rejects duplicate migration numbers and symlink inputs (5.931625ms)
+✔ expiry probe uses five seconds, a clear margin, and safe actual timestamps (1.557541ms)
+✔ expiry probe retries only a still-successful GET until expiry denial (0.547458ms)
+✔ expiry probe fails after three still-successful GETs (0.469333ms)
+✔ expiry probe does not retry HTTP 401 (0.290625ms)
+✔ expiry probe does not retry HTTP 404 (0.129208ms)
+✔ expiry probe does not retry HTTP 500 (0.282375ms)
+✔ expiry probe fails transport errors without retries or bearer disclosure (0.174708ms)
+✔ expiry probe rejects missing or unexpected signing metadata before waiting (0.492459ms)
+ℹ tests 64
+ℹ suites 0
+ℹ pass 64
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57.948459
+
+> ai-collective-loom@0.1.0 test:hooks
+> node --test .githooks/install-lore-coding-hooks.test.mjs
+
+▶ Git hooks installer
+  ✔ sets core.hooksPath inside a Git worktree when no hook path is configured (0.467541ms)
+  ✔ skips cleanly outside a Git worktree (0.057959ms)
+  ✔ skips in CI and when explicitly disabled (0.352458ms)
+  ✔ does not overwrite an existing custom hooks path (0.090416ms)
+  ✔ treats existing .githooks path variants as already configured (0.039666ms)
+✔ Git hooks installer (1.440125ms)
+ℹ tests 5
+ℹ suites 1
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 35.430083
+
+> ai-collective-loom@0.1.0 app:typecheck
+> node scripts/check-runtime.mjs && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.tests.json
+
+
+> ai-collective-loom@0.1.0 test:app
+> node scripts/check-runtime.mjs && node --import tsx --test tests/unit/*.test.ts tests/contract/*.test.ts tests/web/*.test.tsx
+
+✔ production routes report liveness, readiness, and actual unimplemented capabilities (178.092916ms)
+✔ unsupported production query fields and identity headers do not create authority or routes (53.636667ms)
+✔ controlled body schemas reject unknown properties and semantic coercion (65.643542ms)
+✔ failure responses and diagnostics exclude exception details and response extras (64.429041ms)
+✔ generated OpenAPI 3.0.3 validates and describes only implemented production contracts (155.623459ms)
+✔ runtime configuration defaults to loopback and the application database role (1.487292ms)
+✔ invalid configuration and command arguments fail without echoing supplied secrets (0.649708ms)
+✔ identity contracts reject unsupported fields and meaningful coercion (15.784541ms)
+✔ opaque credentials use 256-bit secrets, verifier-only comparison and separated channels (1.005708ms)
+✔ CSRF proof is session-bound and rejects malformed Unicode without throwing (0.542375ms)
+✔ identity policy must be explicit, bounded and use the exact HTTPS RP origin (1.447041ms)
+✔ v3 journal round-trips explicit change fields and refuses malformed or silently stripped semantics (72.028792ms)
+✔ recovery storage survives a new client object and separates participant, instance and origin (6.906375ms)
+✔ full or unreadable recovery storage refuses writes without evicting unresolved intent (18.8835ms)
+✔ even an uncancellable successful HTTP response is discarded after identity changes (6.269083ms)
+✔ only definitive first-dispatch rejection permits a corrected identity (3.836875ms)
+✔ failed correction storage keeps the original rejected attempt (4.992458ms)
+✔ journal versions fence stale dispatch, removal and late outcomes across clients (6.967083ms)
+✔ serialized journal quota preserves existing recovery records under concurrent creation (11.4875ms)
+✔ legacy unresolved records retain exact request identity when adopting journal versions (5.28275ms)
+✔ semantic canonicalization includes all accepted substantive fields and preserves authored text (1.188208ms)
+✔ unsupported fields, missing preconditions and non-round-trippable text are rejected before SQL (0.2925ms)
+✔ trusted actor contexts are opaque and cannot be supplied as identity-shaped JSON (0.15575ms)
+✔ release Saved items examples match the strict executable request schemas (6.527917ms)
+✔ authored markup is rendered safely without HTML, remote images or executable URLs (34.835458ms)
+✔ only explicit ordinary-prose entities resolve stable participant IDs (2.0425ms)
+✔ authored byte and complexity bounds reject malformed or unretrievable input (36.51675ms)
+✔ StrictMode exact account selection rejects late edits and route/account completions (173.582708ms)
+✔ StrictMode account retry confirms an exact set and note preview keeps HTML inert (43.173917ms)
+✔ StrictMode discovery retains failed-page position and focuses explicit local retry (25.10975ms)
+✔ StrictMode organization success leaves the busy state and shows the confirmed result (157.82ms)
+✔ StrictMode organization rejection leaves the busy state and permits explicit correction (29.249ms)
+✔ StrictMode organization completion after unmount settles only the retained intent (26.576417ms)
+✔ StrictMode organization completion cannot update a different identity (15.360792ms)
+✔ StrictMode reference pages settle, retain the failed position, and focus explicit recovery (149.667708ms)
+✔ StrictMode reference page completions cannot cross route or account ownership (12.509084ms)
+✔ StrictMode target validation recovers from failure, rejects late selections, and confirms exact scope (77.985917ms)
+✔ known target selection never fetches arbitrary links and keeps resource and exact scopes explicit (0.439792ms)
+✔ initial data loading exposes a real pending state (114.77425ms)
+✔ navigation keeps the page visible while the status loader is pending (31.6245ms)
+✔ a failed data loader displays safe failure and can recover on retry (26.61525ms)
+✔ unexpected loader exceptions are not displayed as private diagnostics (11.703167ms)
+✔ browser API loading validates responses and preserves cancellation and safe errors (4.815459ms)
+✔ StrictMode search resolves loading and errors and permits explicit retry (181.9485ms)
+✔ late query and unmounted responses cannot replace the current search view (38.52975ms)
+✔ late account results are ignored even when a transport completes after invalidation (13.818625ms)
+✔ StrictMode source pages settle once, recover the failed cursor and focus deliberate retry (146.202667ms)
+✔ source responses and errors cannot cross account or route ownership (13.352042ms)
+✔ partial, unknown and measured gaps coexist without an all-current claim (1.548792ms)
+✔ optional summary distinguishes absence, unavailability and failure with local retry in StrictMode (38.848375ms)
+ℹ tests 50
+ℹ suites 0
+ℹ pass 50
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1602.420833
+
+> ai-collective-loom@0.1.0 app:build
+> node scripts/build-application.mjs
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 310 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/web/index.html                              0.45 kB │ gzip:   0.29 kB
+dist/web/assets/index-DJhLkAqw.css               2.22 kB │ gzip:   0.94 kB
+dist/web/assets/ParticipationApp-CnyNM5iH.css   16.53 kB │ gzip:   4.02 kB
+dist/web/assets/ParticipationApp-CJCRO1ol.js   264.84 kB │ gzip:  83.58 kB
+dist/web/assets/index-5gtznWrE.js              371.64 kB │ gzip: 114.63 kB
+
+✓ built in 101ms

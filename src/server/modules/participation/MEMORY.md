@@ -4,7 +4,7 @@ Summaries (ADR-010): migration 0010 adds one typed canonical resource per discus
 revision-owned coverage and participant-owned preparation headers/members. The
 `summaries.ts` read model is separate from `summary-preparation.ts`; fixed coverage
 inserts live in `publication/summary-storage.ts`, before the common clock tail.
-`summary.create`/`summary.revise` use `discussion-summary-v1`; generic revision
+`summary.create`/`summary.revise` use `discussion-summary-v1` for v1/v2 content and `discussion-summary-v2` for v3; generic revision
 publication cannot bypass coverage. Creation serializes on the discussion UPDATE
 guard and grants its creator editing atomically. Later writes require explicit
 editor/admin authority; only admins change lists, using `summary.editors`.
@@ -54,7 +54,7 @@ Application grants prevent changing contribution identity/parent/creation order.
 Overview is a normal artifact, with normal revisions and administrator editor lists.
 Config absence/ineligibility is explicit and does not block unrelated participation.
 
-Bodies are exact `loom-markdown-v1` or explicit-reference `loom-markdown-v2`,
+Bodies are exact v1, explicit-reference v2 or change-aware `loom-markdown-v3`,
 16 KiB UTF-8 text plus rationale and 4,096 parsed tokens maximum,
 with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images and
 non-HTTP(S) links do not render as active content. Ordinary links infer nothing.
@@ -149,7 +149,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–6. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–7. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -174,13 +174,13 @@ Optional `proposal_context` keeps ordinary discussion creation/digest compatibil
 and binds affected area/settings; community-wide suggestions omit the area and
 resume at the overview instead of inventing a subject. It never reroutes a retained draft. References are
 withheld when affected sources are unavailable. `web/Organization.tsx` reuses the
-extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 6 and
+extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 7 and
 `test:organization:postgres`/`e2e/organization.spec.ts` define the supported slice.
 
 Search (ADR-012) lives in the sibling `search/` module and reuses these exact-body
 and source guards. Current pointer equality is mandatory; reply ancestry is not
 containment. Topic moves affect scope without indexing; closure does not hide text.
-Guide 6 reports `search_only; other_projections_disabled`, not global outbox completion.
+Guide 7 reports `search_only; other_projections_disabled`, not global outbox completion.
 The bounded topic selector is reused with a search-specific label. Search owns its
 query/cursor URL and late-response guards; no search operation enters the intent
 journal or writes personal state. Search's separate author directory uses readable
@@ -197,7 +197,8 @@ latest eligible withdrawing revision. Unchanged immediate-base carry-forward may
 retain unavailable targets; changed/new targets require read eligibility.
 V2 is required when editing a v2 base, even an empty one. Explicit correction of a
 definitively rejected v1 edit loads its exact conflict/expected revision and carries
-that v2 base's declarations into a new draft for review, preserving authored text.
+that reference-aware base's declarations into a new draft for review, preserving
+authored text.
 Comparison failure blocks legacy correction; failed saves retain the rejected body.
 Uncertain/replayed requests never upgrade. The v2 digest includes every
 declaration field; v1 journal/digest interpretation never changes. Limits: 16 refs,
@@ -215,6 +216,26 @@ JSON 4–128 KiB, owner walk32/total guards3840, statement deadline2.5s. Encrypt
 boundary; edits/moves/restoration/restart invalidate. No counts or graph scan.
 `web/References.tsx` feeds declarations into the existing durable composer and
 guards picker/page responses by live view, request sequence and identity generation.
-Known IDs/links work without indexing. Rationale is not searched; both formats'
+Known IDs/links work without indexing. Rationale is not searched; all three formats'
 source title/body remain worker/rebuild eligible. Tests: `test:references:postgres`,
 `web/references.test.tsx`, `e2e/references.spec.ts` and the reference evidence guide.
+
+Authored changes (ADR-022): `change-context.ts` prepares exact account members;
+`publication/change-storage.ts` inserts note/account rows before the common tail;
+`changes.ts` owns authorized bounded reads/discovery. V3 explicitly requires nullable
+change_note/change_account; only artifact/summary owners accept notes and only
+ordinary contributions accept accounts. New members require eligibility; immediate-
+base identical/carry members can survive suppression. Generated coverage withholds
+hidden IDs/counts and reports unknown. Notes have no independent identity/event.
+Main/note tokens and reference IDs are field-local; note assertions never carry as
+continuing main assertions. Combined text/rationales 16384 bytes, note4096, combined
+mentions/references16 each and parser tokens4096. Exact note bodies stay separate.
+`web/Changes.tsx` uses current-draft callbacks and stable accessible names. New
+revision drafts omit notes; saved/uncertain attempts preserve their exact fields.
+Correction retains attempted references, including v2→v3 upgrades; only v1 drafts
+adopt comparison-base references. An obsolete account carry requires an explicit
+comparison-declaration carry, replacement or removal; the comparison read checks
+source metadata without expanding unavailable members.
+Discovery scans100, returns25, binds scope/history/form/owner and live source epochs;
+resource aggregation validates each exact member even if current is unavailable.
+Summary eligibility includes v3 ordinary accounts; summary note revisions stay out.

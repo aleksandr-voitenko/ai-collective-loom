@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { SqlTransaction } from '../../db/postgres.js';
 import type { Transactions } from '../publication/publication.js';
+import { hasChangeSchema } from '../participation/reference-context.js';
 
 export const workerLimits = Object.freeze({ batch: 25, discovery: 50, jobs: 50000, sources: 5000, leaseSeconds: 30, attempts: 3 });
 export interface Claim {
   id: string; generation: number; claim_generation: number; owner: string;
   resource_id: string | null; revision_id: string | null; kind: string;
 }
-type Prepared = { kind: 'text'; title: string; body: string; revision_number: string }
+type Prepared = { kind: 'text'; title: string; body: string; revision_number: string; note?: string }
   | { kind: 'organization' } | { kind: 'failure'; failure: 'unsupported_event' | 'unsupported_source' | 'source_limit' };
 export async function discoveryGuard(tx: SqlTransaction) {
   await tx.query('SELECT pg_advisory_xact_lock($1::integer,$2::integer)', [0x4c4f4f4d, 4]);
@@ -113,9 +114,12 @@ export class SearchWorker {
         SELECT v.title,v.content_text AS body,v.revision_number::text,v.content_format AS format,octet_length(v.content_text) AS bytes,
         EXISTS(SELECT 1 FROM (${sources}) s WHERE s.id=v.resource_id) AS typed
         FROM loom.revisions v WHERE v.id=$1 AND v.resource_id=$2`, [claim.revision_id,claim.resource_id])).rows[0];
-      if (!row || !row.typed || !['loom-markdown-v1','loom-markdown-v2'].includes(row.format)) return { kind: 'failure', failure: 'unsupported_source' };
+      if (!row || !row.typed || !['loom-markdown-v1','loom-markdown-v2','loom-markdown-v3'].includes(row.format)) return { kind: 'failure', failure: 'unsupported_source' };
       if (row.bytes > 16384) return { kind: 'failure', failure: 'source_limit' };
-      return { kind: 'text', title: row.title ?? '', body: row.body, revision_number: row.revision_number };
+      const fields = await hasChangeSchema(tx);
+      const note = fields ? (await tx.query<{content_text:string}>('SELECT content_text FROM loom.revision_change_notes WHERE revision_id=$1', [claim.revision_id])).rows[0]?.content_text ?? '' : undefined;
+      if (note !== undefined && (Buffer.byteLength(note)>4096 || row.bytes+Buffer.byteLength(note)>16384)) return {kind:'failure',failure:'source_limit'};
+      return { kind: 'text', title: row.title ?? '', body: row.body, revision_number: row.revision_number, ...(note !== undefined ? {note} : {}) };
     });
   }
 
@@ -139,14 +143,14 @@ export class SearchWorker {
       if (prepared.kind === 'text') {
         outcome = 'superseded';
         if (current === claim.revision_id) {
-          const written = await tx.query(`INSERT INTO loom.search_documents(resource_id,revision_id,revision_number,generation,job_id,title,body,document)
+          const written = await tx.query(`INSERT INTO loom.search_documents(resource_id,revision_id,revision_number,generation,job_id,title,body,document${prepared.note !== undefined ? ",note_text,note_document" : ""})
             VALUES ($1,$2,$3,$4,$5,$6,$7,
-              setweight(to_tsvector('pg_catalog.simple',normalize($6,NFC)),'A') || setweight(to_tsvector('pg_catalog.simple',normalize($7,NFC)),'D'))
+              setweight(to_tsvector('pg_catalog.simple',normalize($6,NFC)),'A') || setweight(to_tsvector('pg_catalog.simple',normalize($7,NFC)),'D')${prepared.note !== undefined ? " || setweight(to_tsvector('pg_catalog.simple',normalize($8,NFC)),'D'),$8,to_tsvector('pg_catalog.simple',normalize($8,NFC))" : ''})
             ON CONFLICT (resource_id) DO UPDATE SET revision_id=EXCLUDED.revision_id,revision_number=EXCLUDED.revision_number,
-              generation=EXCLUDED.generation,job_id=EXCLUDED.job_id,title=EXCLUDED.title,body=EXCLUDED.body,document=EXCLUDED.document,indexed_at=clock_timestamp()
+              generation=EXCLUDED.generation,job_id=EXCLUDED.job_id,title=EXCLUDED.title,body=EXCLUDED.body,document=EXCLUDED.document${prepared.note !== undefined ? ",note_text=EXCLUDED.note_text,note_document=EXCLUDED.note_document" : ""},indexed_at=clock_timestamp()
             WHERE loom.search_documents.generation<EXCLUDED.generation OR
               (loom.search_documents.generation=EXCLUDED.generation AND loom.search_documents.revision_number<=EXCLUDED.revision_number)
-            RETURNING resource_id`, [claim.resource_id,claim.revision_id,prepared.revision_number,claim.generation,claim.id,prepared.title,prepared.body]);
+            RETURNING resource_id`, [claim.resource_id,claim.revision_id,prepared.revision_number,claim.generation,claim.id,prepared.title,prepared.body,...(prepared.note !== undefined ? [prepared.note] : [])]);
           if (written.rowCount) {
             outcome = 'indexed';
             await tx.query('UPDATE loom.search_state SET index_version=index_version+1 WHERE id=1', []);

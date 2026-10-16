@@ -6,6 +6,7 @@ import { structureGuard } from './organization-context.js';
 import type { PreparedReference } from '../publication/reference-storage.js';
 
 export interface ReferenceRow {
+  source_field: 'main' | 'change_note';
   source_id: string; revision_id: string; reference_id: string;
   target_kind: ReferenceTargetValue['kind']; target_id: string; target_revision_id: string | null;
   relationship: ReferenceValue['relationship']; rationale: string | null;
@@ -15,8 +16,15 @@ export function declaration(row: ReferenceRow): ReferenceValue {
   return { reference_id: row.reference_id, target: { kind: row.target_kind, resource_id: row.target_id,
     ...(row.target_revision_id ? { revision_id: row.target_revision_id } : {}) }, relationship: row.relationship, rationale: row.rationale };
 }
-export async function revisionReferences(tx: SqlTransaction, revision: string): Promise<ReferenceRow[]> {
-  return (await tx.query<ReferenceRow>('SELECT * FROM loom.revision_references WHERE revision_id=$1 ORDER BY reference_id LIMIT 17', [revision])).rows;
+export async function hasChangeSchema(tx: SqlTransaction) {
+  return !!(await tx.query<{present:boolean}>("SELECT to_regclass('loom.revision_change_notes') IS NOT NULL AS present", [])).rows[0]?.present;
+}
+export async function revisionReferences(tx: SqlTransaction, revision: string, field: ReferenceRow['source_field'] = 'main'): Promise<ReferenceRow[]> {
+  const fields = await hasChangeSchema(tx);
+  if (!fields && field !== 'main') return [];
+  return (await tx.query<ReferenceRow>('SELECT * FROM loom.revision_references WHERE revision_id=$1' +
+    (fields ? " AND source_field=$2" : '') + ' ORDER BY reference_id LIMIT 17', fields ? [revision,field] : [revision])).rows
+    .map(row => ({...row, source_field: row.source_field ?? 'main'}));
 }
 
 /** Discover all dependencies before taking any resource guard. SHARE-to-UPDATE
@@ -63,21 +71,22 @@ export async function referenceTarget(tx: SqlTransaction, target: ReferenceTarge
   if (!selected) throw new PublicationError('unavailable');
   await requireRevision(tx, source.id, selected);
   const format = (await tx.query<{ content_format: string }>('SELECT content_format FROM loom.revisions WHERE id=$1', [selected])).rows[0]?.content_format;
-  if (!['loom-markdown-v1', 'loom-markdown-v2'].includes(format ?? '')) throw new PublicationError('unavailable');
+  if (!['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(format ?? '')) throw new PublicationError('unavailable');
   return { source, revision: selected };
 }
 
-export async function prepareReferences(tx: SqlTransaction, source: string, base: string | null, references: ReferenceValue[]): Promise<PreparedReference[]> {
-  const prior = base ? await revisionReferences(tx, base) : [];
+export async function prepareReferences(tx: SqlTransaction, source: string, base: string | null, references: ReferenceValue[], field: ReferenceRow['source_field'] = 'main'): Promise<PreparedReference[]> {
+  const prior = field === 'main' && base ? await revisionReferences(tx, base) : [];
   const prepared: PreparedReference[] = [];
   for (const ref of references) {
     const previous = prior.find(row => row.reference_id === ref.reference_id);
     const same = previous && JSON.stringify(declaration(previous)) === JSON.stringify(ref);
     // Only identical immediate-base carry-forward may retain an unavailable target.
     if (!same) await referenceTarget(tx, ref.target);
-    const origin = previous ?? (await tx.query<ReferenceRow>(`SELECT rr.* FROM loom.revision_references rr
+    const fields = await hasChangeSchema(tx);
+    const origin = field === 'change_note' ? undefined : previous ?? (await tx.query<ReferenceRow>(`SELECT rr.* FROM loom.revision_references rr
       JOIN loom.revisions v ON v.id=rr.revision_id WHERE rr.source_id=$1 AND rr.reference_id=$2
-      ORDER BY v.revision_number LIMIT 1`, [source, ref.reference_id])).rows[0];
+      ${fields ? "AND rr.source_field='main'" : ''} ORDER BY v.revision_number LIMIT 1`, [source, ref.reference_id])).rows[0];
     prepared.push({ ...ref, origin_revision_id: origin?.origin_revision_id ?? null,
       assertion_revision_id: same ? previous.assertion_revision_id : null });
   }

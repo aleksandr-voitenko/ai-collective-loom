@@ -56,14 +56,14 @@ export async function currentSources(tx:SqlTransaction,discussion:string):Promis
     WHERE c.discussion_id=$1 ORDER BY c.id LIMIT 101`,[discussion])).rows;
 }
 export function eligibleSource(row:SourceRow) {
-  return row.state==='active'&&row.availability==='available'&&['loom-markdown-v1','loom-markdown-v2'].includes(row.content_format??'');
+  return row.state==='active'&&row.availability==='available'&&['loom-markdown-v1','loom-markdown-v2','loom-markdown-v3'].includes(row.content_format??'');
 }
 export async function authorizeMember(tx:SqlTransaction,discussion:string,member:Member) {
   await lockContext(tx,member.contribution_id,'resolution',['contribution']);
   if(!(await tx.query('SELECT id FROM loom.contributions WHERE id=$1 AND discussion_id=$2',[member.contribution_id,discussion])).rowCount)throw new PublicationError('unavailable');
   await requireRevision(tx,member.contribution_id,member.source_revision_id);
   const row=(await tx.query<{content_format:string}>('SELECT content_format FROM loom.revisions WHERE id=$1',[member.source_revision_id])).rows[0];
-  if(!['loom-markdown-v1','loom-markdown-v2'].includes(row?.content_format??''))throw new PublicationError('unavailable');
+  if(!['loom-markdown-v1','loom-markdown-v2','loom-markdown-v3'].includes(row?.content_format??''))throw new PublicationError('unavailable');
 }
 export async function availableMember(tx:SqlTransaction,discussion:string,member:Member) {
   try {await authorizeMember(tx,discussion,member);return true;}

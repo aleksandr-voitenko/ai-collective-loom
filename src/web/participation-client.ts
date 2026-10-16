@@ -1,7 +1,14 @@
 import { Value } from "@sinclair/typebox/value";
-import type { TSchema } from "@sinclair/typebox";
+import { Type, type TSchema } from "@sinclair/typebox";
 import type { CommittedView } from "../contracts/participation.js";
-import { ReferenceDeclaration } from "../contracts/participation.js";
+import { ReferenceDeclaration, ExactChangeTarget, ReferencedContent, UUID, closed } from "../contracts/participation.js";
+
+// Draft text may be blank or temporarily invalid while being edited. Declaration
+// shapes still fail closed on reload; no unknown semantics are silently discarded.
+const DraftNote = Type.Union([Type.Null(), Type.Object({...ReferencedContent.properties,text:Type.String()},closed)]);
+const DraftAccount = Type.Union([Type.Null(),
+  Type.Object({revisions:Type.Array(ExactChangeTarget,{maxItems:16})},closed),
+  Type.Object({carry_forward_revision_id:UUID},closed)]);
 
 export interface Self {
   participant_id: string;
@@ -100,6 +107,7 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
     [
       "invalid_input",
       "reference_format_required",
+      "change_format_required",
       "unavailable",
       "invalid_request",
       "revision_conflict",
@@ -201,11 +209,20 @@ export class IntentStore {
         if (!field || typeof field !== "object") continue;
         const authored = field as { format?: string; references?: unknown };
         if ((authored.format === "loom-markdown-v1" && authored.references !== undefined) ||
-          (authored.format === "loom-markdown-v2" && (!Array.isArray(authored.references) || authored.references.length > 16 ||
+          (["loom-markdown-v2", "loom-markdown-v3"].includes(authored.format ?? "") && (!Array.isArray(authored.references) || authored.references.length > 16 ||
             !authored.references.every(ref => Value.Check(ReferenceDeclaration, ref)))) ||
-          !["loom-markdown-v1", "loom-markdown-v2"].includes(authored.format ?? ""))
+          !["loom-markdown-v1", "loom-markdown-v2", "loom-markdown-v3"].includes(authored.format ?? ""))
           throw new Error("This authored recovery format is unsupported. Export the exact record before continuing.");
       }
+      if ('change_note' in record.body && !Value.Check(DraftNote,record.body.change_note))
+        throw new Error('The saved note is incompatible. Export the exact record before continuing.');
+      if ('change_account' in record.body && !Value.Check(DraftAccount,record.body.change_account))
+        throw new Error('The saved change declaration is incompatible. Export the exact record before continuing.');
+      const contentFormat=((record.body.content??record.body.overview) as {format?:string}|undefined)?.format;
+      if(contentFormat==='loom-markdown-v3' && (!('change_note' in record.body)||!('change_account' in record.body)))
+        throw new Error('V3 recovery requires both explicit change fields. Preserve the original journal.');
+      if(contentFormat && contentFormat!=='loom-markdown-v3' && ('change_note' in record.body || 'change_account' in record.body))
+        throw new Error('Legacy intent cannot contain new change fields. Preserve the original journal.');
       records.push(record);
     }
     return records.sort((a, b) => a.created_at.localeCompare(b.created_at));

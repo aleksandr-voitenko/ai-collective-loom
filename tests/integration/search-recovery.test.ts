@@ -73,7 +73,10 @@ test('populated 0007 upgrade preserves jobs and recovers previously skipped inte
     rows.jobs = (await f.observer.query('SELECT id,generation,resource_id,revision_id,source_event_id,kind,state,outcome,attempts,claim_generation,failure FROM loom.search_jobs ORDER BY id')).rows;
     return rows;
   };
-  const before = await snapshot(); await f.migrate(); await f.migrate(); assert.deepEqual(await snapshot(), before);
+  const before = await snapshot();
+  // Migration 0011 adds explicit empty note projections and main-field provenance; every old column remains compared.
+  for(const row of before.search_documents as Record<string,unknown>[])Object.assign(row,{note_text:'',note_document:''});
+ await f.migrate(); await f.migrate(); assert.deepEqual(await snapshot(), before);
   assert.deepEqual((await f.observer.query('SELECT event_after::text,event_after_intent FROM loom.search_state')).rows, [{ event_after: '0', event_after_intent: null }]);
   assert.equal((await f.observer.query('SELECT source_intent_id FROM loom.search_jobs WHERE id=$1', [failed])).rows[0].source_intent_id, failedIntent);
   const worker = new SearchWorker(f.database); await worker.discover(); await worker.discover();

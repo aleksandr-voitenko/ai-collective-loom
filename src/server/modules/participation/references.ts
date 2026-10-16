@@ -16,7 +16,7 @@ export class ReferenceError extends Error {
       : 'This reference request exceeds the synthetic work limit. Retry a bounded view.');
   }
 }
-type Cursor = { binding: string; boundary: string; after: [string,string] | null; expires: number };
+type Cursor = { binding: string; boundary: string; after: [string,string,string] | null; expires: number };
 const contextUrl = (source: ResourceView) => source.kind === 'summary' ? `/loom/resource/${source.resource_id}` : source.discussion_id
   ? `/loom/discussion/${source.discussion_id}?focus=${source.resource_id}` : `/loom/resource/${source.resource_id}`;
 function canonicalTarget(target: ReferenceTargetValue): ReferenceTargetValue {
@@ -44,8 +44,8 @@ export class RecordedReferences {
       const bytes=Buffer.from(value,'base64url'),decipher=createDecipheriv('aes-256-gcm',this.key,bytes.subarray(0,12));
       decipher.setAuthTag(bytes.subarray(12,28));
       const saved=JSON.parse(Buffer.concat([decipher.update(bytes.subarray(28)),decipher.final()]).toString('utf8')) as Cursor;
-      if (!Number.isFinite(saved.expires)||saved.expires<=Date.now()||!saved.after || saved.after.length!==2 ||
-        saved.after.some(id=>!/^[0-9a-f-]{36}$/.test(id))) throw new Error();
+      if (!Number.isFinite(saved.expires)||saved.expires<=Date.now()||!saved.after || saved.after.length!==3 ||
+        [saved.after[0],saved.after[2]].some(id=>!/^[0-9a-f-]{36}$/.test(id)) || !["main","change_note"].includes(saved.after[1]!)) throw new Error();
       return saved;
     } catch { throw new ReferenceError('references_changed'); }
   }
@@ -93,7 +93,7 @@ export class RecordedReferences {
     const budget=responseBudget(options.max_response_bytes),limit=Number(options.limit??12);
     return this.run(async tx => {
       const actor=await lockActor(tx,actorContext), state=await boundary(tx),
-        binding=JSON.stringify([actor.participantId,selection,'source_revision_uuid_then_reference_uuid']);
+        binding=JSON.stringify([actor.participantId,selection,'source_revision_uuid_then_field_then_reference_uuid']);
       const saved=options.cursor?this.decode(options.cursor):undefined;
       if (saved&&(saved.binding!==binding||saved.boundary!==state)) throw new ReferenceError('references_changed');
       const after=saved?.after??null, expires=saved?.expires??Date.now()+referenceLimits.cursorSeconds*1000;
@@ -101,13 +101,13 @@ export class RecordedReferences {
       const candidates=(await tx.query<ReferenceRow>(incoming ? `SELECT rr.* FROM loom.revision_references rr
         JOIN loom.resources s ON s.id=rr.source_id
         WHERE rr.target_id=$1 AND rr.target_revision_id IS NOT DISTINCT FROM $2::uuid
-        AND ($3::uuid IS NULL OR (rr.revision_id,rr.reference_id)>($3::uuid,$4::uuid))
-        ORDER BY rr.revision_id,rr.reference_id LIMIT 101`
+        AND ($3::uuid IS NULL OR (rr.revision_id,rr.source_field,rr.reference_id)>($3::uuid,$4::text,$5::uuid))
+        ORDER BY rr.revision_id,rr.source_field,rr.reference_id LIMIT 101`
         : `SELECT rr.* FROM loom.revision_references rr WHERE rr.source_id=$1 AND rr.revision_id=$2
-        AND ($3::uuid IS NULL OR (rr.revision_id,rr.reference_id)>($3::uuid,$4::uuid))
-        ORDER BY rr.revision_id,rr.reference_id LIMIT 101`, incoming
-        ? [selection.target.resource_id,selection.target.revision_id??null,after?.[0]??null,after?.[1]??null]
-        : [selection.source,selection.revision,after?.[0]??null,after?.[1]??null])).rows;
+        AND ($3::uuid IS NULL OR (rr.revision_id,rr.source_field,rr.reference_id)>($3::uuid,$4::text,$5::uuid))
+        ORDER BY rr.revision_id,rr.source_field,rr.reference_id LIMIT 101`, incoming
+        ? [selection.target.resource_id,selection.target.revision_id??null,after?.[0]??null,after?.[1]??null,after?.[2]??null]
+        : [selection.source,selection.revision,after?.[0]??null,after?.[1]??null,after?.[2]??null])).rows;
       await lockReferencePlan(tx, [...new Set([
         incoming ? selection.target.resource_id : selection.source,
         ...candidates.slice(0,100).flatMap(row=>[row.source_id,row.target_id]),
@@ -118,7 +118,7 @@ export class RecordedReferences {
       const page:ReferencePageView={items:[],direction:incoming?'incoming':'outgoing',scope:incoming?(selection.target.revision_id?'revision':'resource'):'source_revision',
         ...(incoming?{target:selection.target}:{source_id:selection.source,source_revision_id:selection.revision}),
         history:incoming?selection.history:'selected_revision',relationship:incoming?selection.relationship:null,
-        order:'source_revision_uuid_then_reference_uuid',omitted_detail:'bodies; unrelated_target_scopes',
+        order:'source_revision_uuid_then_field_then_reference_uuid',omitted_detail:'bodies; unrelated_target_scopes',
         next_cursor:null,complete:false,work_budget_reached:false,limit,max_response_bytes:budget,expires_at:new Date(expires).toISOString()};
       let consumed=0,last=after;
       for(const row of candidates.slice(0,100)) {
@@ -132,7 +132,7 @@ export class RecordedReferences {
         }
         catch(error){if(!(error instanceof PublicationError)||error.code!=='unavailable')throw error;}
         if(entry) {
-          const next=[row.revision_id,row.reference_id] as [string,string];
+          const next=[row.revision_id,row.source_field,row.reference_id] as [string,string,string];
           const preview={...page,items:[...page.items,entry],next_cursor:this.encode({binding,boundary:state,after:next,expires})};
           if(page.items.length===limit || Buffer.byteLength(JSON.stringify(preview))>budget) {
             if(!page.items.length) fit(preview,budget);
@@ -140,7 +140,7 @@ export class RecordedReferences {
           }
           page.items.push(entry);
         }
-        last=[row.revision_id,row.reference_id];consumed++;
+        last=[row.revision_id,row.source_field,row.reference_id];consumed++;
       }
       page.complete=consumed===candidates.length;
       page.work_budget_reached=!page.complete&&consumed===referenceLimits.scan;
@@ -155,8 +155,9 @@ export class RecordedReferences {
     let membership:ReferenceEntryView['membership']='current_unavailable';
     if(available){
       if(current===row.revision_id)membership='current';
+      else if(row.source_field === 'change_note') membership='historical_note';
       else {
-        const now=(await tx.query<ReferenceRow>('SELECT * FROM loom.revision_references WHERE revision_id=$1 AND reference_id=$2',[current,row.reference_id])).rows[0];
+        const now=(await tx.query<ReferenceRow>("SELECT * FROM loom.revision_references WHERE revision_id=$1 AND source_field='main' AND reference_id=$2",[current,row.reference_id])).rows[0];
         membership=!now?'withdrawn':now.assertion_revision_id===row.assertion_revision_id?'carried_forward':'changed';
       }
     }
@@ -173,7 +174,7 @@ export class RecordedReferences {
       WHERE w.source_id=$1 AND w.reference_id=$2
       ORDER BY w.revision_number DESC LIMIT 1`,[row.source_id,row.reference_id])).rows[0]:undefined;
     const withdrawal=withdrawn?await attribution(withdrawn.revision_id):null;
-    return {declaration:declaration(row),direction:'source_to_target',source,
+    return {declaration:declaration(row),source_field:row.source_field,direction:'source_to_target',source,
       source_browser_url:`/loom/resource/${row.source_id}/${row.revision_id}`,source_context_url:contextUrl(source),
       original_assertion:await attribution(row.origin_revision_id),last_assertion_change:await attribution(row.assertion_revision_id),
       withdrawal:withdrawal?.revision_id?withdrawal:null,membership,target};

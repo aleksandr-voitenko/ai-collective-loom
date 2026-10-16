@@ -1,0 +1,74 @@
+
+> ai-collective-loom@0.1.0 test:app
+> node scripts/check-runtime.mjs && node --import tsx --test tests/unit/*.test.ts tests/contract/*.test.ts tests/web/*.test.tsx
+
+✔ production routes report liveness, readiness, and actual unimplemented capabilities (188.954875ms)
+✔ unsupported production query fields and identity headers do not create authority or routes (139.311792ms)
+✔ controlled body schemas reject unknown properties and semantic coercion (133.864875ms)
+✔ failure responses and diagnostics exclude exception details and response extras (79.226584ms)
+✔ generated OpenAPI 3.0.3 validates and describes only implemented production contracts (121.504417ms)
+✔ runtime configuration defaults to loopback and the application database role (0.676333ms)
+✔ invalid configuration and command arguments fail without echoing supplied secrets (0.253125ms)
+✔ identity contracts reject unsupported fields and meaningful coercion (4.246834ms)
+✔ opaque credentials use 256-bit secrets, verifier-only comparison and separated channels (0.469416ms)
+✔ CSRF proof is session-bound and rejects malformed Unicode without throwing (0.238542ms)
+✔ identity policy must be explicit, bounded and use the exact HTTPS RP origin (0.224583ms)
+✔ recovery storage survives a new client object and separates participant, instance and origin (107.748625ms)
+✔ full or unreadable recovery storage refuses writes without evicting unresolved intent (16.543375ms)
+✔ even an uncancellable successful HTTP response is discarded after identity changes (12.879209ms)
+✔ only definitive first-dispatch rejection permits a corrected identity (3.84825ms)
+✔ failed correction storage keeps the original rejected attempt (11.054208ms)
+✔ journal versions fence stale dispatch, removal and late outcomes across clients (3.679708ms)
+✔ serialized journal quota preserves existing recovery records under concurrent creation (9.898125ms)
+✔ legacy unresolved records retain exact request identity when adopting journal versions (3.737625ms)
+✔ semantic canonicalization includes all accepted substantive fields and preserves authored text (1.172584ms)
+✔ unsupported fields, missing preconditions and non-round-trippable text are rejected before SQL (0.305291ms)
+✔ trusted actor contexts are opaque and cannot be supplied as identity-shaped JSON (0.16125ms)
+✔ release Saved items examples match the strict executable request schemas (16.722959ms)
+✔ authored markup is rendered safely without HTML, remote images or executable URLs (13.962208ms)
+✔ only explicit ordinary-prose entities resolve stable participant IDs (2.540292ms)
+✔ authored byte and complexity bounds reject malformed or unretrievable input (7.973917ms)
+✖ StrictMode exact account selection rejects late edits and route/account completions (184.522375ms)
+✔ StrictMode account retry confirms an exact set and note preview keeps HTML inert (48.962708ms)
+✔ StrictMode discovery retains failed-page position and focuses explicit local retry (27.028958ms)
+✔ StrictMode organization success leaves the busy state and shows the confirmed result (156.64375ms)
+✔ StrictMode organization rejection leaves the busy state and permits explicit correction (34.49225ms)
+✔ StrictMode organization completion after unmount settles only the retained intent (43.461ms)
+✔ StrictMode organization completion cannot update a different identity (17.235959ms)
+✔ StrictMode reference pages settle, retain the failed position, and focus explicit recovery (151.040708ms)
+✔ StrictMode reference page completions cannot cross route or account ownership (12.578292ms)
+✔ StrictMode target validation recovers from failure, rejects late selections, and confirms exact scope (93.266ms)
+✔ known target selection never fetches arbitrary links and keeps resource and exact scopes explicit (0.396375ms)
+✔ initial data loading exposes a real pending state (128.348959ms)
+✔ navigation keeps the page visible while the status loader is pending (32.443375ms)
+✔ a failed data loader displays safe failure and can recover on retry (19.345583ms)
+✔ unexpected loader exceptions are not displayed as private diagnostics (6.992625ms)
+✔ browser API loading validates responses and preserves cancellation and safe errors (2.520042ms)
+✔ StrictMode search resolves loading and errors and permits explicit retry (175.925959ms)
+✔ late query and unmounted responses cannot replace the current search view (34.971ms)
+✔ late account results are ignored even when a transport completes after invalidation (12.508916ms)
+✔ StrictMode source pages settle once, recover the failed cursor and focus deliberate retry (123.319167ms)
+✔ source responses and errors cannot cross account or route ownership (16.56975ms)
+✔ partial, unknown and measured gaps coexist without an all-current claim (2.475084ms)
+✔ optional summary distinguishes absence, unavailability and failure with local retry in StrictMode (43.080875ms)
+ℹ tests 49
+ℹ suites 0
+ℹ pass 48
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1788.034708
+
+✖ failing tests:
+
+test at tests/web/changes.test.tsx:1:3183
+✖ StrictMode exact account selection rejects late edits and route/account completions (184.522375ms)
+  TypeError: Cannot read properties of undefined (reading 'finish')
+      at <anonymous> (/Users/tarm/source/ai-collective-loom/tests/web/changes.test.tsx:46:78)
+      at /Users/tarm/source/ai-collective-loom/node_modules/@testing-library/react/dist/act-compat.js:47:24
+      at process.env.NODE_ENV.exports.act (/Users/tarm/source/ai-collective-loom/node_modules/react/cjs/react.development.js:890:22)
+      at /Users/tarm/source/ai-collective-loom/node_modules/@testing-library/react/dist/act-compat.js:46:25
+      at TestContext.<anonymous> (/Users/tarm/source/ai-collective-loom/tests/web/changes.test.tsx:46:55)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

@@ -1,6 +1,6 @@
 import MarkdownIt, { type Token } from "markdown-it";
 import { Value } from "@sinclair/typebox/value";
-import { Content, limits, type AuthoredContent } from "./participation.js";
+import { Content, limits, type AuthoredContent, type NoteContent, type ChangeAccountValue } from "./participation.js";
 
 // Parse once using the same bounded dialect in browser and server. No raw HTML,
 // image fetches, autolinking, embedded applications, or inferred @name entities.
@@ -33,7 +33,7 @@ export function parseAuthored(content: AuthoredContent): Token[] {
     !validUnicode(content.text)
   )
     throw new Error("Invalid authored text.");
-  if (content.format === "loom-markdown-v2") {
+  if (content.format !== "loom-markdown-v1") {
     const ids = new Set<string>(), targets = new Set<string>();
     let bytes = new TextEncoder().encode(content.text).length;
     for (const ref of content.references) {
@@ -90,4 +90,31 @@ export function parseAuthored(content: AuthoredContent): Token[] {
 
 export function validUnicode(text: string) {
   return new TextDecoder().decode(new TextEncoder().encode(text)) === text;
+}
+
+/** Fields are versioned as a publication, not silently defaulted into old intent. */
+export function validateChangeFields(content: AuthoredContent, fields: {
+  change_note?: NoteContent | null; change_account?: ChangeAccountValue | null;
+}) {
+  if (content.format !== 'loom-markdown-v3') {
+    if ('change_note' in fields || 'change_account' in fields) throw new Error('Change fields require loom-markdown-v3.');
+    return;
+  }
+  if (!('change_note' in fields) || !('change_account' in fields))
+    throw new Error('V3 requires explicit change_note and change_account, using null when absent.');
+  const note = fields.change_note;
+  const fieldsToParse = note ? [content, note] : [content];
+  let tokens = 0;
+  const count = (token: Token) => { tokens++; token.children?.forEach(count); };
+  for (const field of fieldsToParse) parseAuthored(field).forEach(count);
+  const bytes = (field: AuthoredContent) => new TextEncoder().encode(field.text).length +
+    (field.format === 'loom-markdown-v1' ? 0 : field.references.reduce((sum, ref) => sum + new TextEncoder().encode(ref.rationale ?? '').length, 0));
+  if ((note && bytes(note) > limits.noteBytes) || fieldsToParse.reduce((sum, field) => sum + bytes(field), 0) > limits.textBytes ||
+    fieldsToParse.reduce((sum, field) => sum + field.mentions.length, 0) > limits.mentions ||
+    fieldsToParse.reduce((sum, field) => sum + field.references.length, 0) > limits.references ||
+    tokens > limits.parserTokens) throw new Error('Combined authored fields exceed the synthetic limit.');
+  if (fields.change_account && 'revisions' in fields.change_account) {
+    const members = fields.change_account.revisions.map(target => `${target.resource_id.toLowerCase()}/${target.revision_id.toLowerCase()}`);
+    if (new Set(members).size !== members.length) throw new Error('Duplicate described revision.');
+  }
 }

@@ -1,0 +1,22 @@
+
+> ai-collective-loom@0.1.0 test:migrations:postgres
+> node --test tests/integration/migrations.test.mjs
+
+▶ migration runner against isolated PostgreSQL
+  ✔ continued escape strings follow PostgreSQL lexical rules (218.710958ms)
+  ✔ comments and quoted commands remain SQL data through the psql stream (267.907ms)
+  ✔ procedural migrations execute in version order on one connection and transaction (278.175167ms)
+  ✔ unchanged migrations retain their exact history and rows (138.0125ms)
+  ✔ applied filenames and checksums remain immutable (142.685208ms)
+  ✔ ahead-of-checkout and inserted-behind-history migrations are refused (162.473916ms)
+  ✔ a failing procedural migration rolls back all pending changes and history (205.302083ms)
+  ✔ runtime and migration roles retain separate capabilities (222.535625ms)
+✔ migration runner against isolated PostgreSQL (2550.725042ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2588.148959

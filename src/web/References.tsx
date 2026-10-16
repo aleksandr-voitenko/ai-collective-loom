@@ -88,7 +88,7 @@ export function ReferenceEditor({references,onChange,disabled}:{references:Refer
 }
 
 function ReferenceItem({item}:{item:ReferenceEntryView}){
-  const membership:Record<string,string>={current:'Current source membership',carried_forward:'Historical membership · carried forward',changed:'Historical membership · later changed',withdrawn:'Historical membership · withdrawn',current_unavailable:'Historical membership · current state unavailable'};
+  const membership:Record<string,string>={current:'Current source membership',carried_forward:'Historical membership · carried forward',changed:'Historical membership · later changed',withdrawn:'Historical membership · withdrawn',current_unavailable:'Historical membership · current state unavailable',historical_note:'Historical revision-owned note assertion'};
   return <li className="reference-row">
     <Link to={item.source_browser_url}>{item.source.title??'Contribution by '+item.source.author.nickname} · source revision {item.source.revision_number}</Link>
     <p>{item.declaration.relationship?labels[item.declaration.relationship]:'References'} → {item.target.state==='available'
@@ -97,7 +97,7 @@ function ReferenceItem({item}:{item:ReferenceEntryView}){
     {item.declaration.rationale!==null&&<p className="reference-rationale">{item.declaration.rationale}</p>}
     <p className="fineprint">{membership[item.membership]}. Asserted by {item.original_assertion.participant.nickname} on {new Date(item.original_assertion.published_at).toLocaleString()}.
       {' '}Last assertion change by {item.last_assertion_change.participant.nickname} on {new Date(item.last_assertion_change.published_at).toLocaleString()}.</p>
-    <p className="fineprint">Source revision published by {item.source.publisher.nickname} on {new Date(item.source.created_at).toLocaleString()} · {item.source.area_title} · <Link to={item.source_context_url}>Source context</Link></p>
+    <p className="fineprint">{item.source_field==='change_note'?'Revision note':'Main content'} · Source revision published by {item.source.publisher.nickname} on {new Date(item.source.created_at).toLocaleString()} · {item.source.area_title} · <Link to={item.source_context_url}>Source context</Link></p>
     {item.withdrawal&&<p className="fineprint">Withdrawn by {item.withdrawal.participant.nickname} on {new Date(item.withdrawal.published_at).toLocaleString()} · <Link to={`/loom/resource/${item.source.resource_id}/${item.withdrawal.revision_id}`}>Withdrawal revision</Link></p>}
     <details><summary>Reference details</summary><code>{item.declaration.reference_id}</code><p>Direction: source to target. <a href={item.source.full_content_url}>Full source API representation</a></p></details>
   </li>;
@@ -120,7 +120,7 @@ export function ReferenceResults({path}:{path:string}){
     {error&&<><p role="alert">{error}</p>{data&&<p>The previous page remains visible; it does not establish the current selection.</p>}
       {!restart&&<button onClick={()=>void load(attempt.current,true)}>Retry reference page</button>}</>}
     <button disabled={busy} onClick={()=>void load(null,true)}>Refresh references</button>
-    {data&&<><ul className="reference-list">{data.items.map(item=><ReferenceItem key={item.source.revision_id+item.declaration.reference_id} item={item}/>)}</ul>
+    {data&&<><ul className="reference-list">{data.items.map(item=><ReferenceItem key={item.source.revision_id+item.source_field+item.declaration.reference_id} item={item}/>)}</ul>
       {!busy&&!error&&data.items.length===0&&<p>{data.complete?'No recorded references in this scope.':'No eligible entries in this bounded page. More candidates remain.'}</p>}
       <p className="fineprint">Bodies are available through exact links. Other target scopes are excluded. {data.work_budget_reached?'This page reached its scan limit.':''}</p>
       {!error&&data.next_cursor&&<button disabled={busy} onClick={()=>void load(data.next_cursor,true)}>Next references</button>}

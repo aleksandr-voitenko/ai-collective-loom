@@ -8,8 +8,10 @@ import {
   RevisionInput,
   SetupInput,
   type AuthoredContent,
+  type NoteContent,
+  type ChangeAccountValue,
 } from "../../../contracts/participation.js";
-import { parseAuthored, validUnicode } from "../../../contracts/authored.js";
+import { parseAuthored, validUnicode, validateChangeFields } from "../../../contracts/authored.js";
 import { lockAttempt } from "../../application/attempt.js";
 import type { SqlTransaction } from "../../db/postgres.js";
 import { identityOf, type ActorContext } from "../publication/actor.js";
@@ -33,6 +35,7 @@ import { lockReferencePlan, prepareReferences } from "./reference-context.js";
 import { SummaryCreateInput, SummaryRevisionInput, type CoverageDeclarationValue } from "../../../contracts/summaries.js";
 import { SummaryError, preparationGuard, preparation, expirePreparation, preparedMembers, coverageSet, authorizeMember } from "./summary-context.js";
 import type { PreparedCoverage } from "../publication/summary-storage.js";
+import { changeMembers, prepareChangeAccount } from './change-context.js';
 
 const schemas: Record<string, TSchema> = {
   "discussion.create": DiscussionInput,
@@ -60,6 +63,8 @@ type Request = {
   proposal_area_name?: string;
   proposal_context?: { affected_area_id?: string; expected_settings_version: number };
   coverage?: CoverageDeclarationValue;
+  change_note?: NoteContent | null;
+  change_account?: ChangeAccountValue | null;
 };
 
 function ordered(value: unknown): unknown {
@@ -96,19 +101,28 @@ function prepare(kind: string, value: unknown) {
     coverage[key] = coverage[key]!.toLowerCase();
   }
   if (input.proposal_context?.affected_area_id) input.proposal_context.affected_area_id = input.proposal_context.affected_area_id.toLowerCase();
-  content.mentions.forEach((entity) => {
+  for (const field of [content, ...(input.change_note ? [input.change_note] : [])]) {
+  field.mentions.forEach((entity) => {
     entity.participant_id = entity.participant_id.toLowerCase();
   });
   // Entity order is not semantic. Text, token spelling, line endings and spaces are.
-  content.mentions.sort((a, b) => (a.token < b.token ? -1 : a.token > b.token ? 1 : 0));
-  if (content.format === "loom-markdown-v2") {
-    content.references = content.references.map(ref => ({ reference_id: ref.reference_id.toLowerCase(),
+  field.mentions.sort((a, b) => (a.token < b.token ? -1 : a.token > b.token ? 1 : 0));
+  if (field.format !== "loom-markdown-v1") {
+    field.references = field.references.map(ref => ({ reference_id: ref.reference_id.toLowerCase(),
       target: { kind: ref.target.kind, resource_id: ref.target.resource_id.toLowerCase(),
         ...(ref.target.revision_id ? { revision_id: ref.target.revision_id.toLowerCase() } : {}) },
       relationship: ref.relationship, rationale: ref.rationale })).sort((a,b) => a.reference_id.localeCompare(b.reference_id));
   }
+  }
+  if (input.change_account) {
+    if ('carry_forward_revision_id' in input.change_account) input.change_account.carry_forward_revision_id = input.change_account.carry_forward_revision_id.toLowerCase();
+    else input.change_account.revisions = input.change_account.revisions.map(target => ({...target,
+      resource_id: target.resource_id.toLowerCase(), revision_id: target.revision_id.toLowerCase()}))
+      .sort((a,b) => a.resource_id.localeCompare(b.resource_id) || a.revision_id.localeCompare(b.revision_id));
+  }
   try {
     parseAuthored(content);
+    validateChangeFields(content, input);
   } catch {
     throw new PublicationError("invalid_input");
   }
@@ -122,7 +136,8 @@ function prepare(kind: string, value: unknown) {
       throw new PublicationError("invalid_input");
   }
   const { idempotency_key: _key, ...semantic } = input;
-  const version = kind.startsWith("summary.") ? "discussion-summary-v1"
+  const version = content.format === 'loom-markdown-v3' ? (kind.startsWith('summary.') ? 'discussion-summary-v2' : 'participation-text-v3')
+    : kind.startsWith("summary.") ? "discussion-summary-v1"
     : content.format === "loom-markdown-v2" ? "participation-text-v2" : participationSemanticVersion;
   return { input, content, version, digest: digestRequest(kind, semantic, version) };
 }
@@ -163,6 +178,7 @@ export class ParticipationPublications {
           ...new Set([
             identity.participantId,
             ...content.mentions.map((m) => m.participant_id),
+            ...(input.change_note?.mentions.map(m => m.participant_id) ?? []),
           ]),
         ].sort()) {
           await tx.query(
@@ -186,7 +202,7 @@ export class ParticipationPublications {
             throw new PublicationError("idempotency_conflict");
           return result(saved, "replayed");
         }
-        for (const mention of content.mentions) {
+        for (const mention of [...content.mentions, ...(input.change_note?.mentions ?? [])]) {
           const found = await tx.query(
             "SELECT id FROM loom.participants WHERE id=$1 AND state='active' AND kind IN ('human','agent')",
             [mention.participant_id],
@@ -216,14 +232,17 @@ export class ParticipationPublications {
           const configured = (await tx.query<{version:number;proposal_area_id:string|null}>("SELECT version,proposal_area_id FROM loom.community_settings WHERE id=1 FOR SHARE", [])).rows[0]!;
           if (configured.version !== input.proposal_context.expected_settings_version || configured.proposal_area_id !== input.area_id) throw new OrganizationError("proposal_route_changed");
         }
-        if (content.format === "loom-markdown-v2" || coverage) {
+        const described = input.change_account && 'revisions' in input.change_account ? input.change_account.revisions
+          : input.change_account && 'carry_forward_revision_id' in input.change_account ? await changeMembers(tx, input.change_account.carry_forward_revision_id) : [];
+        if (content.format !== "loom-markdown-v1" || coverage) {
           // Setup must take the exclusive structure guard before any shared plan.
           if (kind === "community.setup") {
             await tx.query("SELECT pg_advisory_xact_lock($1::integer,$2::integer)", [0x4c4f4f4d, 3]);
             await structureGuard(tx, true);
           }
           await lockReferencePlan(tx, [input.resource_id, input.area_id, input.parent_id, coverage?.discussion_id,
-            input.proposal_context?.affected_area_id, ...(content.format === 'loom-markdown-v2' ? content.references.map(ref => ref.target.resource_id) : []),
+            input.proposal_context?.affected_area_id, ...(content.format !== 'loom-markdown-v1' ? content.references.map(ref => ref.target.resource_id) : []),
+            ...(input.change_note?.references.map(ref => ref.target.resource_id) ?? []), ...described.map(target => target.resource_id),
             ...(coverage?.members.map(m=>m.contribution_id) ?? [])]
             .filter((id): id is string => !!id), kind === 'summary.create' ? input.discussion_id
               : kind === "revision.publish" || kind === 'summary.revise' ? input.resource_id : undefined);
@@ -253,7 +272,9 @@ export class ParticipationPublications {
               [resource.current_revision_id],
             )
           ).rows[0]!;
-          if (old.content_format === "loom-markdown-v2" && content.format !== "loom-markdown-v2")
+          if (old.content_format === 'loom-markdown-v3' && content.format !== 'loom-markdown-v3')
+            throw new PublicationError('change_format_required');
+          if (old.content_format === "loom-markdown-v2" && content.format === "loom-markdown-v1")
             throw new PublicationError("reference_format_required");
           if ((old.title === null) !== (title === null))
             throw new PublicationError("invalid_input");
@@ -414,6 +435,10 @@ export class ParticipationPublications {
             return expirePreparation(tx,coverage.preparation_id);
           for (const member of coverage.members) await authorizeMember(tx, coverage.discussion_id, member);
         }
+        if (input.change_note && !['artifact','summary'].includes(chain[0]!.kind)) throw new PublicationError('invalid_input');
+        if (input.change_account && chain[0]!.kind !== 'contribution') throw new PublicationError('invalid_input');
+        const account = input.change_account ? await prepareChangeAccount(tx, resourceId, input.expected_revision_id ?? null, input.change_account) : undefined;
+        const noteReferences = input.change_note ? await prepareReferences(tx, resourceId, null, input.change_note.references, 'change_note') : undefined;
         return commitRevision(
           tx,
           actor,
@@ -425,7 +450,9 @@ export class ParticipationPublications {
             title,
             mentions: content.mentions,
             ...(coverage ? { coverage } : {}),
-            ...(content.format === "loom-markdown-v2" ? { references: await prepareReferences(tx, resourceId,
+            ...(input.change_note ? { changeNote: input.change_note, noteReferences: noteReferences! } : {}),
+            ...(account ? { changeAccount: account } : {}),
+            ...(content.format !== "loom-markdown-v1" ? { references: await prepareReferences(tx, resourceId,
               input.expected_revision_id ?? null, content.references) } : {}),
           },
           { kind, version, digest },

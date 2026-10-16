@@ -136,5 +136,9 @@ Verify AC51/52 and the applicable summary/source portions of AC10/31/37/38/54/55
 with isolated PostgreSQL, HTTPS, native indexing workers, controlled race barriers,
 durable row assertions and normal browser/diagnostic suites. Record actual results
 separately. Reconsider bounds, retention and custody after measured workload or
-multi-API requirements. KNW-05, attention delivery, files, reservations, moderation
+multi-API requirements. Attention delivery, files, reservations, moderation
 administration, real-data recovery and human/provider-agent trials remain separate.
+
+## Guide 7 extension — ADR-022
+
+V3 summary content accepts a revision-owned change_note with explicit change_account:null and uses discussion-summary-v2. Existing summary requests retain discussion-summary-v1. Source coverage remains separate and mandatory. Notes and summary-only revisions are excluded from the source population; ordinary v3 opening/comment accounts remain eligible sources. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.

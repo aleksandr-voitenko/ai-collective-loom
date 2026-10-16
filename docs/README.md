@@ -26,7 +26,7 @@
 | [Topic organization guide](development/topic-organization.md) | Administrator browser/API operations, bounded navigation, proposal routing and recovery. |
 | [Organization verification](development/topic-organization-evidence.md) | Populated upgrade, SQL/HTTPS/browser evidence and remaining acceptance limits. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; notes/read state remain open. |
-| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 6. |
+| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 7. |
 | [Scoped text search decision](adr/012-scoped-text-search.md) | Current lexical population, ranking, explicit continuation invalidation, fenced jobs and bounded backfill/rebuild. |
 | [Search and worker guide](development/search.md) | Browser/API search, native worker commands, administrator recovery and supported SRCH subsets. |
 | [Search verification](development/search-evidence.md) | Isolated SQL/HTTPS/native worker/browser evidence and remaining validation limits. |
@@ -35,6 +35,9 @@
 | [References verification](development/recorded-references-evidence.md) | Upgrade, SQL/HTTPS/browser recovery and race evidence, failed runs and remaining limits. |
 | [Discussion summaries decision](adr/010-discussion-summary-coverage.md) | Canonical identity, immutable exact declarations, expiry recovery and bounded maintenance. |
 | [Discussion summaries guide](development/discussion-summaries.md) | Browser/API source preparation, coverage, editing, maintenance and direct-client journey. |
+| [Authored change notes decision](adr/022-authored-change-notes.md) | Revision-owned notes, exact ordinary account declarations, immutable field provenance and recovery. |
+| [Change notes guide](development/change-notes.md) | Browser/direct-client workflows, bounded discovery and current-note search. |
+| [Change notes verification](development/change-notes-evidence.md) | Observed isolated tests, failures, review evidence and acceptance limits. |
 | [Summary verification](development/discussion-summaries-evidence.md) | Isolated upgrade, races, recovery, browser observations and precise acceptance limits. |
 | [Saved items verification](development/saved-items-evidence.md) | Actual PostgreSQL, HTTPS and browser evidence, topology and limits. |
 | [Retained-data gate](development/retained-data-gate.md) | Unapproved operating/recovery work before real data. |

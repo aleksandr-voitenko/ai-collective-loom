@@ -1,0 +1,35 @@
+
+> ai-collective-loom@0.1.0 test:identity:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity.test.ts
+
+▶ controlled identity protocol with real PostgreSQL and signed software authenticators
+  ✔ bootstrap capability is required; initially absent repeats converge and new attempts close permanently (27.59025ms)
+  ✔ verified cookie and bearer identities share policy; ordinary participants cannot administer or read audit (35.386916ms)
+  ✔ verified browser and bearer actors publish through the existing shared operation, with persisted provenance (29.437125ms)
+  ✔ cookie mutations require exact origin and session-bound CSRF; mixed channels are rejected (4.959084ms)
+  ✔ two account requests observe absence and converge on one participant, reservation, outcome and audit (15.44125ms)
+  ✔ nickname races admit one participant; reserved old spellings never transfer identity (27.500792ms)
+  ✔ lost account acknowledgement reconciles by administrator identity without another participant (17.34825ms)
+  ✔ lost credential acknowledgement never replays a secret; explicit replacement retains participant identity (36.079125ms)
+  ✔ labelled concurrent credentials enforce the prototype cap and atomic replacement revokes the selected predecessor (39.624541ms)
+  ✔ an uncertain enrollment ticket can be replaced on the same account and never replays its secret (37.799792ms)
+  ✔ two verified registration ceremonies race on one ticket and bind only one passkey (27.022083ms)
+  ✔ WebAuthn enforces origin, RP, challenge, signature, user verification, user handle and single-use proofs (69.745625ms)
+  ✔ passkey and session caps, logout, expiry and counter races respect current database state (115.608958ms)
+  ✔ administrator-assisted human recovery retains the account and fences old passkeys and sessions (59.42725ms)
+  ✔ current suspension, expiry and revocation govern browser, bearer and already-authenticated publication actors (51.606667ms)
+  ✔ current role changes apply equally to agent administrators and human sessions; last-administrator guard holds (104.071792ms)
+  ✔ failed admission and issuance roll back account, reservation, credential, outcome and audit together (26.514458ms)
+  ✔ operator recovery binds a new passkey to the same first identity and invalidates old sessions (34.14375ms)
+  ✔ recovery credentials for the same administrator resolve earlier account outcomes in the original scope (4.747041ms)
+  ✔ secrets are confined to fresh issuance or Set-Cookie; DB, outcomes, audit, lists, errors, caches and logs do not disclose them (35.770542ms)
+  ✔ authentication starts are bounded by the explicit prototype throttle (1.85875ms)
+✔ controlled identity protocol with real PostgreSQL and signed software authenticators (2147.545834ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2417.515458

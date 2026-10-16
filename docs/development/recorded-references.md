@@ -1,6 +1,6 @@
 # Recorded references in synthetic participation
 
-Contract `participation-1`, guide 6 supports explicit references from discussion
+Contract `participation-1`, guide 7 supports explicit references from discussion
 openings, comments, text artifacts and discussion summaries. Use synthetic accounts/content only.
 [ADR-021](../adr/021-recorded-references.md) records representation, attribution,
 authorization, concurrency, compatibility and continuation decisions.
@@ -148,12 +148,22 @@ Preparation fsyncs the complete body without credentials; later processes send
 that retained request. Inspect checks exact text, format and reference fields.
 Omitting `--references-file` retains the previous v1 payload/digest.
 
-Search/rebuild support both formats' source-authored title/body. Rationale is
+Search/rebuild support all three formats' source-authored title/body and current v3
+note text. Rationale is
 displayed but not searched. Resolved target titles/bodies never become source
 search content. Direct relational backlinks need no worker.
 
 DIS-06/REF-01–03 are implemented for this text population; SRCH-07 gains bounded
-reference expansion. Change-note, file/path and private-note
-integration remain open. Reference portions of AC27–30/33/34/37/39 do not complete
+reference expansion. Guide 7 adds change-note field provenance; file/path and
+private-note integration remain open. Reference portions of AC27–30/33/34/37/39 do not complete
 the broad scenarios. No attention, graph visualization, inference, production
 capacity, provider-agent or cross-machine trial is claimed. See [observed evidence](recorded-references-evidence.md).
+
+## Authored change explanations
+
+Guide 7 adds main/change_note field provenance (ADR-022). Note assertions belong to
+their exact owning revision and are newly asserted each time; continuing main
+references keep their carry/withdrawal semantics. Read ordering now includes field
+between source revision UUID and reference UUID. A change-account described set
+does not create references by itself. V3 bases require v3 edits.
+See the [change notes guide](change-notes.md) for complete requests and bounds.

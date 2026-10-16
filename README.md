@@ -37,6 +37,11 @@ through bounded summary maintenance. See the [summary guide](docs/development/di
 After publishing an update, editors can start another revision from the current
 summary while keeping its source declaration unchanged.
 
+Editors can attach immutable notes to artifact and summary revisions. Ordinary posts
+and comments can explain explicitly selected revisions without editing them. Notes,
+change accounts and their exact history are discoverable independently of indexing.
+See the [change notes guide](docs/development/change-notes.md).
+
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
 [participation guide](docs/development/participation.md) for enrollment, the actual
@@ -89,6 +94,7 @@ npm run test:organization:postgres # populated upgrades, hierarchy, moves, closu
 npm run test:search:postgres # leases, process loss, rebuild, current authorization and search limits
 npm run test:references:postgres # references, populated upgrade, client recovery and read/publication races
 npm run test:summaries:postgres # canonical summaries, coverage, bounded maintenance and exact recovery
+npm run test:changes:postgres # revision notes, exact change accounts, upgrade, bounds and recovery
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures

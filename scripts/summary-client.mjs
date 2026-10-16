@@ -39,7 +39,7 @@ async function main(){
     const {discussion_id,sources,resource_id,expected_revision_id,title,content}=input;
     journal={version:1,...scope,state:'preparing',preparation:{idempotency_key:randomUUID(),discussion_id,...sources},
       operation_kind:resource_id?'summary.revise':'summary.create',path:resource_id?'/api/v1/summary-revisions':'/api/v1/summaries',
-      body:{idempotency_key:randomUUID(),title,content,...(resource_id?{resource_id,expected_revision_id}:{discussion_id})}};
+      body:{idempotency_key:randomUUID(),title,content,...(Object.hasOwn(input,'change_note')?{change_note:input.change_note}:{}),...(Object.hasOwn(input,'change_account')?{change_account:input.change_account}:{}),...(resource_id?{resource_id,expected_revision_id}:{discussion_id})}};
     await save(journal,true);
   }
   if(journal.version!==1||Object.entries(scope).some(([key,value])=>journal[key]!==value))throw new Error('Journal belongs to a different participant, origin or instance');
@@ -67,8 +67,19 @@ async function main(){
     }while(cursor);
   }
   if(journal.result){const exact=await call(`/api/v1/resources/${journal.result.resource_id}/revisions/${journal.result.revision_id}`);
-    const normalize=content=>({...content,...(content.references?{references:[...content.references].sort((a,b)=>a.reference_id.localeCompare(b.reference_id))}:{})});
-    if(exact.title!==journal.body.title||!isDeepStrictEqual(normalize(exact.content),normalize(journal.body.content)))throw new Error('Retained publication differs from journal');}
+    if(exact.title!==journal.body.title||!isDeepStrictEqual(canonicalContent(exact.content),canonicalContent(journal.body.content)))throw new Error('Retained publication differs from journal');
+    if(journal.body.content.format==='loom-markdown-v3'){
+      const ownNote=await call(exact.change_note.full_content_url);
+      if(!isDeepStrictEqual(ownNote.content?canonicalContent(ownNote.content):null,journal.body.change_note?canonicalContent(journal.body.change_note):null))throw new Error('Retained note differs from journal');
+    }}
   console.log(JSON.stringify({state:journal.state,operation_kind:journal.operation_kind,inspected_members:members,...(journal.result?{result:journal.result}:{})}));
+}
+// Compare canonical entity order/UUID spelling without rewriting frozen intent.
+function canonicalContent(content){
+  return {...content,mentions:content.mentions.map(m=>({...m,participant_id:m.participant_id.toLowerCase()}))
+    .sort((a,b)=>a.token<b.token?-1:a.token>b.token?1:0),
+    ...(content.references?{references:content.references.map(ref=>({...ref,reference_id:ref.reference_id.toLowerCase(),
+      target:{...ref.target,resource_id:ref.target.resource_id.toLowerCase(),...(ref.target.revision_id?{revision_id:ref.target.revision_id.toLowerCase()}:{})}}))
+      .sort((a,b)=>a.reference_id.localeCompare(b.reference_id))}:{})};
 }
 try{await main();}catch(error){console.error(error.message);process.exitCode=1;}

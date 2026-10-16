@@ -1,0 +1,110 @@
+
+> ai-collective-loom@0.1.0 check
+> npm run check:docs && npm test && npm run test:hooks && npm run app:typecheck && npm run test:app && npm run app:build
+
+
+> ai-collective-loom@0.1.0 check:docs
+> node scripts/check-docs.mjs
+
+Document checks passed: {"requirements":101,"acceptanceScenarios":61,"illustrativeJsonBlocks":42} (not product acceptance).
+
+> ai-collective-loom@0.1.0 test
+> node --test tests/bootstrap/*.test.mjs
+
+✔ generated credentials round-trip through the restricted parser (1.025875ms)
+✔ init creates private local state without replacing existing credentials (5.006333ms)
+✔ init refuses a credential symlink without changing its target (1.058125ms)
+✔ configuration rejects a port below the nonprivileged range (0.123458ms)
+✔ configuration rejects a port above the TCP range (0.058542ms)
+✔ configuration rejects equal ports (0.054917ms)
+✔ configuration rejects numerically equal ports with leading zeros (0.055875ms)
+✔ configuration rejects equal buckets (0.051792ms)
+✔ configuration rejects a production-looking bucket (0.058916ms)
+✔ configuration rejects a nonlocal project namespace (0.087375ms)
+✔ configuration rejects an example password (0.054125ms)
+✔ configuration rejects a missing secret (0.042458ms)
+✔ parser rejects duplicates, unknown fields, quotes, and shell expressions (0.085542ms)
+✔ Compose invocation binds the checkout/config and does not contain secrets (0.1065ms)
+✔ only local Docker endpoints are accepted (0.333375ms)
+✔ reset requires an exact explicit destructive confirmation (0.093458ms)
+✔ known local secrets are removed from child diagnostics (0.053959ms)
+✔ exact copy-source encoding preserves path and version boundaries (0.032792ms)
+✔ imported sources retain hashes, requirements, acceptance mappings, JSON and companion links (5.650541ms)
+✔ duplicate identifier declarations are rejected (0.609875ms)
+✔ invalid illustrative JSON is not counted as validated (0.09375ms)
+✔ migration digest changes when source changes (1.314416ms)
+✔ restricted filenames prevent interpolating external identifiers (0.118166ms)
+✔ migration source cannot contain psql commands or top-level transaction control (0.086791ms)
+✔ migration validation accepts a multiline PL/pgSQL function (0.169458ms)
+✔ migration validation accepts a single-line PL/pgSQL function (0.060042ms)
+✔ migration validation accepts a multiline DO body (0.044375ms)
+✔ migration validation accepts a single-line DO body (0.052167ms)
+✔ migration validation accepts a tagged body with inner quoting (0.039916ms)
+✔ migration validation accepts a Unicode dollar tag (0.076458ms)
+✔ migration validation accepts a single-quoted procedural body (0.08725ms)
+✔ migration validation ignores command text in comments and quoted values (0.127042ms)
+✔ migration validation accepts ordinary SQL formatting and non-transaction commands (0.07275ms)
+✔ escape strings retain their quoting rules when continued across lines (0.213625ms)
+✔ migration validation rejects top-level BEGIN (0.177375ms)
+✔ migration validation rejects top-level BEGIN WORK (0.130583ms)
+✔ migration validation rejects top-level START TRANSACTION (0.129875ms)
+✔ migration validation rejects top-level COMMIT (0.123917ms)
+✔ migration validation rejects top-level COMMIT AND CHAIN (0.129333ms)
+✔ migration validation rejects top-level END (0.111042ms)
+✔ migration validation rejects top-level ROLLBACK (0.110916ms)
+✔ migration validation rejects top-level ABORT (0.112667ms)
+✔ migration validation rejects top-level SAVEPOINT probe (0.122625ms)
+✔ migration validation rejects top-level RELEASE SAVEPOINT probe (0.143958ms)
+✔ migration validation rejects top-level ROLLBACK TO SAVEPOINT probe (0.114ms)
+✔ migration validation rejects top-level PREPARE TRANSACTION 'probe' (0.127334ms)
+✔ migration validation rejects top-level COMMIT PREPARED 'probe' (0.118416ms)
+✔ migration validation rejects top-level ROLLBACK PREPARED 'probe' (0.118125ms)
+✔ migration validation rejects top-level SET TRANSACTION READ ONLY (0.371625ms)
+✔ migration validation rejects top-level SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY (0.134ms)
+✔ psql meta-commands are rejected after SQL and comments as well as at line starts (0.067ms)
+✔ a transaction command after quoted semicolons is still rejected (0.063708ms)
+✔ unterminated quoted text and block comments cannot swallow runner SQL (0.061417ms)
+✔ runner uses one transaction, serializes migrations, and retains real psql controls (0.080792ms)
+✔ runner ignores a forged precomputed digest and orders by filename version (4.528334ms)
+✔ directory loader rejects duplicate migration numbers and symlink inputs (6.146042ms)
+✔ expiry probe uses five seconds, a clear margin, and safe actual timestamps (1.45425ms)
+✔ expiry probe retries only a still-successful GET until expiry denial (0.592625ms)
+✔ expiry probe fails after three still-successful GETs (0.41675ms)
+✔ expiry probe does not retry HTTP 401 (0.233709ms)
+✔ expiry probe does not retry HTTP 404 (0.119375ms)
+✔ expiry probe does not retry HTTP 500 (0.0965ms)
+✔ expiry probe fails transport errors without retries or bearer disclosure (0.115875ms)
+✔ expiry probe rejects missing or unexpected signing metadata before waiting (0.190375ms)
+ℹ tests 64
+ℹ suites 0
+ℹ pass 64
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 53.925959
+
+> ai-collective-loom@0.1.0 test:hooks
+> node --test .githooks/install-lore-coding-hooks.test.mjs
+
+▶ Git hooks installer
+  ✔ sets core.hooksPath inside a Git worktree when no hook path is configured (0.460583ms)
+  ✔ skips cleanly outside a Git worktree (0.046917ms)
+  ✔ skips in CI and when explicitly disabled (0.327708ms)
+  ✔ does not overwrite an existing custom hooks path (0.093792ms)
+  ✔ treats existing .githooks path variants as already configured (0.044583ms)
+✔ Git hooks installer (1.383959ms)
+ℹ tests 5
+ℹ suites 1
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 35.28075
+
+> ai-collective-loom@0.1.0 app:typecheck
+> node scripts/check-runtime.mjs && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.tests.json
+
+tests/integration/changes-bounds.test.ts(16,50): error TS2532: Object is possibly 'undefined'.
+tests/integration/changes-bounds.test.ts(26,101): error TS2532: Object is possibly 'undefined'.
