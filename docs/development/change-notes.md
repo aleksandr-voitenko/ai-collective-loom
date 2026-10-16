@@ -32,8 +32,10 @@ and uncertain attempts retain their authored note, entities, references and chan
 declaration. **Start another revision** fetches current authorized main content,
 saves a new key/base, and carries existing account/summary declarations before
 retiring the completed draft. Fetch/save failures retain the old record. Correction
-preserves the attempted note. An account carry from an obsolete base remains
-saved until the author explicitly keeps the comparison revision's declaration,
+preserves the attempted note and reference additions, edits and withdrawals, even
+when upgrading a v2 draft to v3. Only v1 drafts copy comparison-base references
+for review, since v1 cannot represent them. An account carry from an obsolete base
+remains saved until the author explicitly keeps the comparison revision's declaration,
 replaces the set or removes the classification. Keeping that declaration does not
 require exposing unavailable members; no newer target versions are selected automatically.
 All tabs must run the same release. Export Local drafts before clearing storage.

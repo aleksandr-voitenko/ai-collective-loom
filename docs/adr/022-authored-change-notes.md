@@ -93,8 +93,9 @@ New resource-revision drafts start with no note. Reload and retry restore the ex
 attempt's authored note. Starting another revision fetches current authorized main
 content, carries only existing account/summary declarations, saves a new key/base,
 and then retires the completed record. Failed fetch/save retains the old record.
-Corrections preserve attempted notes and same-format reference edits; format
-upgrades adopt comparison-base metadata only at explicit new-draft creation.
+Corrections preserve attempted notes and reference edits, including v2→v3 upgrades.
+Only v1 drafts adopt comparison-base references, because v1 cannot represent them.
+Newly supported metadata is adopted only at explicit new-draft creation.
 An obsolete account carry remains saved until the author explicitly chooses the
 comparison revision's declaration, replacement or removal. Its exact source read
 checks declaration presence without exposing hidden members. Uncertain requests never upgrade.

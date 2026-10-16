@@ -1,0 +1,3 @@
+
+> ai-collective-loom@0.1.0 app:typecheck
+> node scripts/check-runtime.mjs && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.tests.json

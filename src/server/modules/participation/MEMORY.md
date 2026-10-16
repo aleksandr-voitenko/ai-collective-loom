@@ -197,7 +197,8 @@ latest eligible withdrawing revision. Unchanged immediate-base carry-forward may
 retain unavailable targets; changed/new targets require read eligibility.
 V2 is required when editing a v2 base, even an empty one. Explicit correction of a
 definitively rejected v1 edit loads its exact conflict/expected revision and carries
-that v2 base's declarations into a new draft for review, preserving authored text.
+that reference-aware base's declarations into a new draft for review, preserving
+authored text.
 Comparison failure blocks legacy correction; failed saves retain the rejected body.
 Uncertain/replayed requests never upgrade. The v2 digest includes every
 declaration field; v1 journal/digest interpretation never changes. Limits: 16 refs,
@@ -231,9 +232,10 @@ continuing main assertions. Combined text/rationales 16384 bytes, note4096, comb
 mentions/references16 each and parser tokens4096. Exact note bodies stay separate.
 `web/Changes.tsx` uses current-draft callbacks and stable accessible names. New
 revision drafts omit notes; saved/uncertain attempts preserve their exact fields.
-Same-format correction retains attempted references. An obsolete account carry
-requires an explicit comparison-declaration carry, replacement or removal; the
-comparison read checks source metadata without expanding unavailable members.
+Correction retains attempted references, including v2→v3 upgrades; only v1 drafts
+adopt comparison-base references. An obsolete account carry requires an explicit
+comparison-declaration carry, replacement or removal; the comparison read checks
+source metadata without expanding unavailable members.
 Discovery scans100, returns25, binds scope/history/form/owner and live source epochs;
 resource aggregation validates each exact member even if current is unavailable.
 Summary eligibility includes v3 ordinary accounts; summary note revisions stay out.

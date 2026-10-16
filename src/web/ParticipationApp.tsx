@@ -815,10 +815,10 @@ function Composer({
     (legacyCorrection && typeof record.body.expected_revision_id === "string"
       ? record.body.expected_revision_id : undefined);
   const comparisonReady = !!compare && compare.revision_id === comparisonRevision;
-  // Same-format correction preserves the attempted reference edits. Adopting
-  // the comparison base is only needed when the old client could not carry it.
-  const adoptsBaseFormat = legacyCorrection && comparisonReady && compare?.content.format !== 'loom-markdown-v1' &&
-    (original?.format === 'loom-markdown-v1' || compare?.content.format === 'loom-markdown-v3');
+  // Only v1 cannot represent references. A v2→v3 correction already carries
+  // attempted reference edits, including additions and deliberate withdrawals.
+  const adoptsBaseReferences = legacyCorrection && comparisonReady && original?.format === 'loom-markdown-v1' &&
+    compare?.content.format !== 'loom-markdown-v1';
   const requiresComparison = legacyCorrection || (!!summaryDiscussion && !!comparisonRevision);
   useEffect(() => {
     setCompare(undefined);
@@ -1003,8 +1003,8 @@ function Composer({
       // older base must be chosen again after inspecting the conflict revision.
       if (summaryDiscussion) delete body.coverage;
       // Only this explicit new-draft transition may adopt the base's newer contract.
-      // Carry its declarations for review, including an empty list; preserve text.
-      const adopted = adoptsBaseFormat && compare?.content.format !== "loom-markdown-v1"
+      // Adopt reference declarations only when absent from the old format, even empty.
+      const adopted = adoptsBaseReferences && compare?.content.format !== "loom-markdown-v1"
         ? compare?.content.references : undefined;
       const adoptedAccount = legacyCorrection && compare?.content.format === 'loom-markdown-v3'
         ? (compare.change_account?.state === 'declared' ? {carry_forward_revision_id:compare.revision_id} : null) : account;
@@ -1269,7 +1269,7 @@ function Composer({
               {requiresComparison && !comparisonReady && !comparisonError && <p role="status">Loading the comparison revision before correction…</p>}
               {comparisonError && <><p role="alert">{comparisonError}</p>
                 <button disabled={busy} onClick={() => setComparisonAttempt(value => value + 1)}>Retry comparison revision</button></>}
-              {adoptsBaseFormat && compare?.content.format !== "loom-markdown-v1" &&
+              {adoptsBaseReferences && compare?.content.format !== "loom-markdown-v1" &&
                 <p>The comparison revision’s references will be copied into your corrected draft. Review or remove them before publishing.</p>}
               {summaryDiscussion && <p>A corrected summary draft needs an explicit source declaration. Later material is never added automatically.</p>}
               <button disabled={busy || (requiresComparison && !comparisonReady)} onClick={correct}>Prepare corrected submission</button>

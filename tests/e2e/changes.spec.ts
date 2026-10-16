@@ -6,7 +6,7 @@ import type {Page} from '@playwright/test';
 import {test,expect} from '../helpers/browser-fixtures.js';
 import {setup,api,journal} from '../helpers/change-browser.js';
 import {content,note,exactPair,revisionBody,notePath,coveragePath} from '../helpers/changes.js';
-import {authored} from '../helpers/references.js';
+import {authored,reference,incoming} from '../helpers/references.js';
 function barrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};}
 async function addNote(page:Page,text:string){await page.getByLabel('Add a revision change note',{exact:true}).check();await page.getByLabel('Change note',{exact:true}).fill(text);}
 async function accountTarget(page:Page,target:{resource_id:string;revision_id:string}){
@@ -56,6 +56,47 @@ test('note autosave failure, stale rejection, correction and reload preserve all
   const corrected=await journal(page,'revision.publish');expect(corrected.key).not.toBe(old.key);expect(corrected.body.change_note).toEqual(old.body.change_note);expect(corrected.body.expected_revision_id).toBe(newer.body.revision_id);await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Attempted main');
   await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
   expect((await f.admin.call(notePath((await journal(page,'revision.publish')).result))).body.content).toEqual(corrected.body.change_note);
+});
+
+test('v2 to v3 correction preserves added, edited and withdrawn references after reload and publication',async({page,context,server})=>{
+  const f=await setup(page,context,server),refs=[reference(exactPair(f.target),'builds_on','Initial rationale'),reference({kind:'artifact',resource_id:f.target.resource_id})];
+  const added=await f.admin.call('/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Added target',content:authored('Added target')});expect(added.status).toBe(201);
+  const source=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'V2 correction',content:authored('Original',refs)});
+  await page.goto(server.origin+'/loom/resource/'+source.resource_id+'?edit=1');
+  // Canonical order is by reference ID, so select the existing relationship explicitly.
+  const edited=page.locator('.reference-draft').filter({has:page.locator('select option:checked[value="builds_on"]')});
+  await edited.locator('textarea').fill('Attempted rationale');
+  await page.locator('.reference-draft').filter({has:page.locator('select option:checked[value=""]')}).getByRole('button',{name:/Remove reference/}).click();
+  await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(added.body.resource_id);
+  await page.getByRole('button',{name:'Check target',exact:true}).click();await page.getByRole('button',{name:'Use this resource',exact:true}).click();
+  await page.getByRole('combobox',{name:'Relationship 2',exact:true}).selectOption('related_to');await page.getByLabel('Rationale 2 (optional)',{exact:true}).fill('Added rationale');
+  await page.getByLabel('Text',{exact:true}).fill('Attempted main');
+  await expect.poll(async()=>(await journal(page,'revision.publish'))?.body.content.text).toBe('Attempted main');
+  const attempted=await journal(page,'revision.publish');
+  expect(attempted.body.content).toEqual({...authored('Attempted main'),references:[
+    {...refs[0]!,rationale:'Attempted rationale'},
+    {reference_id:expect.any(String),target:{kind:'artifact',resource_id:added.body.resource_id},relationship:'related_to',rationale:'Added rationale'},
+  ]});
+  const newer=await f.admin.call('/api/v1/revisions',{...revisionBody(source,'Concurrent main',note('Concurrent explanation')),content:content('Concurrent main',refs)});expect(newer.status).toBe(201);
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your draft is preserved.',{exact:true})).toBeVisible();await page.reload();
+  await expect(page.getByRole('button',{name:'Prepare corrected submission'})).toBeEnabled();
+  const rejected=await journal(page,'revision.publish');expect(rejected.body).toEqual(attempted.body);expect(rejected.state).toBe('rejected');
+  await page.getByRole('button',{name:'Prepare corrected submission'}).click();await expect(page.getByLabel('Text',{exact:true})).toBeEnabled();await page.reload();
+  await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Attempted main');
+  const corrected=await journal(page,'revision.publish');
+  expect(corrected.body.content).toEqual({...attempted.body.content,format:'loom-markdown-v3'});
+  expect(corrected.key).not.toBe(rejected.key);expect(await journal(page,'revision.publish',rejected.key)).toBeUndefined();
+  expect(corrected.body).toEqual({...attempted.body,idempotency_key:corrected.key,expected_revision_id:newer.body.revision_id,
+    content:{...attempted.body.content,format:'loom-markdown-v3'},change_note:null,change_account:null});
+  await expect(page.locator('.reference-draft')).toHaveCount(2);await expect(edited.locator('textarea')).toHaveValue('Attempted rationale');
+  await expect(page.locator('.reference-draft').filter({has:page.locator('select option:checked[value="related_to"]')}).locator('textarea')).toHaveValue('Added rationale');
+  await expect(page.getByLabel('Add a revision change note')).not.toBeChecked();
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+  const current=(await f.admin.call('/api/v1/resources/'+source.resource_id)).body;
+  expect(current.content).toEqual({...corrected.body.content,references:[...corrected.body.content.references].sort((a,b)=>a.reference_id.localeCompare(b.reference_id))});
+  expect((await f.admin.call(incoming({kind:'artifact',resource_id:f.target.resource_id}))).body.items).toEqual([]);
+  const withdrawn=(await f.admin.call(incoming({kind:'artifact',resource_id:f.target.resource_id},{history:'all'}))).body.items;
+  expect(withdrawn.length).toBeGreaterThan(0);expect(withdrawn.every((item:any)=>item.membership==='withdrawn')).toBe(true);
 });
 
 test('uncertain notes survive competing tabs and browser restart without copying or changing the original request',async({server,diagnostics})=>{

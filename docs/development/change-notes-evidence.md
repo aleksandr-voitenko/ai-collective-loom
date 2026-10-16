@@ -94,8 +94,9 @@ No retry, deadline, guard or assertion was relaxed.
 
 The first complete normal browser run completed 66 tests with one failure in the
 existing reference correction case. V3 compatibility had broadened reference
-adoption to same-format v2 corrections, replacing attempted edits. The fix restricts
-base adoption to actual format upgrades. Approved failure evidence is retained in
+adoption to same-format v2 corrections, replacing attempted edits. That repair
+restricted base adoption to format upgrades; the remaining v2→v3 gap is addressed
+in the PR #9 follow-up below. Approved failure evidence is retained in
 `change-notes-evidence/browser-full-initial`; this is an application repair,
 distinct from the fixture repairs above.
 
@@ -149,3 +150,61 @@ increment and was not rerun against existing development services.
 
 The local implementation and verification are complete for review. The scoped
 synthetic limits and unperformed broader gates above remain explicit.
+
+## PR #9 follow-up: preserve references during v2→v3 correction
+
+The [review finding](https://github.com/aleksandr-voitenko/ai-collective-loom/pull/9#discussion_r4290345747)
+identified a missing browser transition at `f67b7e2`. Existing cases covered v1→v2,
+v2→v2 and v3→v3 corrections, but did not check a v2 draft against a concurrent v3
+revision. The format-wide adoption condition replaced fields that v2 already
+represented. A newly saved correction could lose reference additions and rationale
+edits, and restore deliberately withdrawn references after retiring the old draft.
+
+The correction now adopts comparison references only for v1 drafts. V2→v3 retains
+the attempted reference list while adding the v3 envelope; the existing explicit
+comparison gate, account handling and save-before-retire journal transition remain.
+This follows the original requirement to preserve attempted edits, rather than
+treating every format upgrade as permission to replace supported fields. The fix
+does not change server formats, digests, schema, guards, retries or test deadlines.
+
+The new `changes.spec.ts` case uses actual Chromium, virtual WebAuthn, HTTPS and
+disposable PostgreSQL. It edits an existing rationale, removes a resource reference,
+adds a different target, and saves the v2 attempt before another editor publishes
+v3 with a note. After rejection, correction and reload, it compares the complete
+saved content/body, new key/base and retired old key. It then verifies the actual
+published content and withdrawal history. The comparison editor's note is not copied.
+
+The [red run](change-notes-evidence/v3-correction/browser-red/run.json) failed at
+the complete corrected-content assertion (`changes.spec.ts:87`) before the fix.
+The [green run](change-notes-evidence/v3-correction/browser-green/run.json) passed
+the entire journey afterward. An initial exact-label combobox selector failed
+before reaching correction; a later exact-label lookup of the reloaded textarea
+failed after the content checks passed. Both use stable role/relationship selectors
+now. Typechecking also caught an asymmetric matcher passed to a typed fixture
+builder; the expected value is now built directly. The original failures are
+retained in `v3-correction/browser-fixture-initial`, `browser-fixture-reload` and
+`commands/check-initial.txt`. These fixture repairs did not relax assertions.
+Staged whitespace validation found one trailing blank line in the retained final
+typecheck log; removing it preserves the command output.
+
+Local checks on pinned Node 24.19.0/macOS arm64:
+
+| Check | Observed result |
+|---|---|
+| Focused browser regression | [1/1 passed](change-notes-evidence/v3-correction/commands/browser-green.txt), after the expected red run. |
+| `npm run test:e2e` | [68/68 passed](change-notes-evidence/v3-correction/browser-full/run.json), with normal one-worker/zero-retry deadlines and no omissions; includes existing v1 adoption, v2/v3 correction, frozen retry and summary recovery cases. |
+| `npm run test:changes:postgres` | [12/12 passed](change-notes-evidence/v3-correction/commands/changes-postgres.txt), including legacy format refusal and exact replay. |
+| `npm run test:references:postgres` | [26/26 passed](change-notes-evidence/v3-correction/commands/references-postgres.txt), including carry, edit and withdrawal provenance. |
+| `npm run test:summaries:postgres` | [14/14 passed](change-notes-evidence/v3-correction/commands/summaries-postgres.txt), including summary references and durable recovery. |
+| `npm run check` | [Passed](change-notes-evidence/v3-correction/commands/check.txt): 50 application/contract/web cases, typechecking and build, plus baseline/hook checks. |
+| Final test typecheck | [Passed](change-notes-evidence/v3-correction/commands/typecheck-final.txt), after the reload selector repair. |
+| `npm run test:browser-diagnostics` | [Passed](change-notes-evidence/v3-correction/commands/diagnostics.txt): eight expected controlled child failures, canary/bounds/lifecycle validation and four fail-closed cases. |
+
+Participation memory and ADR-022 now distinguish v1 reference adoption from
+v2→v3 preservation; test memory records the missing transition and its assertions.
+The change-notes guide describes the same behavior. Root memory's ownership,
+format and recovery summaries remain accurate. The relevant implementation anchors
+are `Composer`'s `adoptsBaseReferences` and `correct`, and unchanged `IntentStore.replace`.
+Hosted checks are evaluated separately for the pushed follow-up head. Other backend
+suites and development-service storage/persistence checks were not rerun locally
+for this browser-only correction; their earlier results above remain historical.

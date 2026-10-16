@@ -140,9 +140,12 @@ JSON budgets and native worker recovery. Older populated-upgrade snapshots expli
 expect only the added main-field/empty-note defaults while comparing every old value.
 `web/changes.test.tsx` exercises StrictMode page/picker ownership; `changes.spec.ts`
 checks note/account drafts, failed save, correction, restart, competing tabs, current
-revision starts, keyboard discovery and mobile layout. Observe durable journal save
-before deliberately reloading or installing a one-write storage fault; fill/click
-completion alone is not a Web Lock/save barrier. Reply controls use Post reply.
+revision starts, keyboard discovery and mobile layout. Its v2→v3 correction case
+checks added/edited/withdrawn references through conflict, replacement-key reload
+and actual publication; a format upgrade alone must not replace supported fields.
+Observe durable journal save before deliberately reloading or installing a
+one-write storage fault; fill/click completion alone is not a Web Lock/save barrier.
+Reply controls use Post reply.
 Closed diagnostics add only the changes spec and three route templates. Explicit
 synthetic screen evidence is curated separately from the private runner output.
 Direct-client recovery fixtures include reordered entities and uppercase UUIDs:
