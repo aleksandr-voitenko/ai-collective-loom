@@ -32,7 +32,19 @@ test('summary create, inspect, maintain, partial update, editor reassignment, ke
   expect((await journal(page,'summary.create')).body.coverage.preparation_id).toBeTruthy();expect((await server.observer.query('SELECT count(*)::int n FROM loom.summaries')).rows[0].n).toBe(0);
   await page.getByRole('button',{name:'Publish',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();await page.getByRole('link',{name:'Inspect exact revision',exact:true}).click();
   await expect(page.getByText('No known gaps in the declared discussion scope.')).toBeVisible();await expect(page.getByText('Saving summaries is not supported in this release.')).toBeVisible();
-  await page.getByRole('button',{name:'Inspect declared sources',exact:true}).click();await expect(page.getByRole('heading',{name:'Source revisions',exact:true})).toBeVisible();await page.getByRole('button',{name:'Refresh source view',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('heading',{name:'Source revisions',exact:true})).toBeFocused();
+  const membersStarted=barrier(),releaseMembers=barrier(),membersRoute='**/api/v1/summaries/*/revisions/*/members*';
+  await page.route(membersRoute,async route=>{const response=await route.fetch();membersStarted.release();await releaseMembers.promise;await route.fulfill({response});});
+  const refreshSources=page.getByRole('button',{name:'Refresh source view',exact:true});
+  try{
+    await page.getByRole('button',{name:'Inspect declared sources',exact:true}).click();await membersStarted.promise;
+    await expect(page.getByRole('heading',{name:'Source revisions',exact:true})).toBeVisible();
+    await expect(refreshSources).toBeDisabled();
+  }finally{releaseMembers.release();}
+  // The heading renders before source loading enables the refresh control.
+  await expect(refreshSources).toBeEnabled();
+  await page.unroute(membersRoute);
+  await refreshSources.focus();await expect(refreshSources).toBeFocused();await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading',{name:'Source revisions',exact:true})).toBeFocused();
   await page.screenshot({path:info.outputPath('summary-desktop.png'),fullPage:true});
   const created=(await journal(page,'summary.create')).result;await f.reply();await page.goto(server.origin+'/loom/summaries?filter=uncovered&editable=true');await expect(page.getByText(/1 eligible contributions outside/)).toBeVisible();await page.getByRole('link',{name:'Update summary',exact:true}).click();
   await page.getByLabel('Source scope').selectOption('selected');await page.locator('.coverage-editor input[type=checkbox]').first().check();await page.getByRole('button',{name:'Prepare declared sources',exact:true}).click();await expect(page.getByText(/Explicit partial selection · 1 currently eligible/)).toBeVisible();

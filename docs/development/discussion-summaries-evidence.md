@@ -41,8 +41,36 @@ with one worker, zero retries and no omitted tests. `npm run check` also
 development application tests, typecheck and build. These local runs used the
 same synthetic environment described above. No runtime or database code changed.
 The original CI failure and controlled reproduction remain recorded separately
-from passing verification. Hosted verification of the fix is pending at commit
-preparation and will be recorded on the PR.
+from passing verification. Both hosted browser runs on `884e074` passed the repaired
+comparison scenario. The [push workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38826898314)
+passed completely; the [PR workflow](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38826904680)
+exposed the separate keyboard fixture race below.
+
+### Keyboard source-refresh fixture
+
+The second PR run completed all 62 browser tests with one failure in the initial
+summary journey's keyboard-focus assertion. Its [approved failure evidence](discussion-summaries-evidence/ci-followup/keyboard/hosted-failure/run.json)
+shows focus/Enter at 4,232–4,240 ms, before the initial source-member response at
+4,259 ms, and no second member request. The heading was already rendered while
+the refresh button was disabled by the pending initial load. Checking heading
+visibility did not establish keyboard readiness.
+
+Holding that member response behind a barrier
+[reproduced the focus failure](discussion-summaries-evidence/ci-followup/keyboard/reproduction/run.json)
+with the original interaction ordering. The corrected fixture asserts refresh is
+disabled while loading, releases the response in `finally`, waits for the enabled
+button, and confirms its focus before pressing Enter. It still requires focus to
+move to the source heading after the actual refresh. No runtime, deadline, retry,
+worker or diagnostic policy change is involved.
+
+`npm run test:e2e -- tests/e2e/summaries.spec.ts`
+[passed all seven summary scenarios](discussion-summaries-evidence/ci-followup/keyboard/targeted/run.json).
+The complete normal browser suite then
+[passed 62/62](discussion-summaries-evidence/ci-followup/keyboard/browser-full/run.json)
+with one worker, zero retries and no omissions. `npm run check`
+[passed again](discussion-summaries-evidence/ci-followup/keyboard/check.txt), including
+46 application tests. Hosted verification of the keyboard fix is pending at commit
+preparation and will be recorded on PR #8 after push.
 
 ## Review fixes — 16 October 2026
 

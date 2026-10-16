@@ -15,6 +15,9 @@ reload, publish a Unicode-boundary default title, and refresh creation in place.
 The comparison-failure fixture holds the reload request at a barrier and keeps
 its fault active until the retry UI appears. Restored draft text alone does not
 establish that the asynchronous comparison fetch has failed.
+Keyboard source refresh waits for the control to become enabled and confirms its
+focus before pressing Enter. The source heading is visible during initial loading,
+when refresh is disabled; hold that response to test this ordering deterministically.
 
 `npm run test:e2e` uses `scripts/browser-tests.mjs`, the closed validator in
 `scripts/lib/browser-diagnostics.mjs`, and `helpers/browser-reporter.ts`.

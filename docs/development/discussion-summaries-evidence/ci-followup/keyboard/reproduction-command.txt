@@ -1,0 +1,6 @@
+
+> ai-collective-loom@0.1.0 test:e2e
+> node scripts/browser-tests.mjs tests/e2e/summaries.spec.ts --grep summary create, inspect, maintain
+
+BROWSER failed summaries.spec.ts:27 repeat=0
+Browser diagnostics: validated; browser-diagnostics/approved
