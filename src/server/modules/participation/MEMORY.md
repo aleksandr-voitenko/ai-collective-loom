@@ -1,5 +1,34 @@
 # Text participation boundary
 
+Summaries (ADR-010): migration 0010 adds one typed canonical resource per discussion,
+revision-owned coverage and participant-owned preparation headers/members. The
+`summaries.ts` read model is separate from `summary-preparation.ts`; fixed coverage
+inserts live in `publication/summary-storage.ts`, before the common clock tail.
+`summary.create`/`summary.revise` use `discussion-summary-v1`; generic revision
+publication cannot bypass coverage. Creation serializes on the discussion UPDATE
+guard and grants its creator editing atomically. Later writes require explicit
+editor/admin authority; only admins change lists, using `summary.editors`.
+Full preparation fixes up to 100 current opening/comment candidates in one SQL
+statement; explicit selected pairs remain partial. Class 5 custody precedes class 1
+and the sorted resource plan. Handles: 24 hours, 8 active / 128 retained per owner,
+8192 headers total; cleanup deletes at most 800 member rows and keeps tombstones.
+Publication copies immutable members independently. Whole immediate-base carry
+preserves hidden history without new authority. Only a committed irreversible
+expiry refusal with `operation_outcome=rejected` can release an uncertain summary
+intent for correction; ordinary absent status remains uncertain.
+Coverage counts are eligible-only, independent of partial/unknown; >100 current
+sources gives null counts/work_limited. Generic detail never serializes memberships.
+RR source pages and maintenance use current guards, encrypted five-minute / 2 KiB cursors,
+4–128 KiB JSON; maintenance scans 10 summaries / returns 5, member pages scan 100 / return 25.
+Source/reference-only revisions count; bookkeeping, linked targets and summary
+revisions do not. Saved summaries are explicitly unsupported. `web/Summaries.tsx`
+uses the existing journal, current-view callbacks and identity guards; correction
+requires an explicit declaration and keeps the v1→v2 comparison guard. See the
+summary guide and `test:summaries:postgres`/`e2e/summaries.spec.ts`.
+After confirmed summary revision, the composer explicitly fetches the current
+authorized revision and saves a newly keyed draft before retiring the old record.
+It carries that base's entire declaration without selecting later source material.
+
 `publications.ts`, `retrieval.ts`, `administration.ts`, `organization.ts` and `saved-items.ts` implement the synthetic
 `participation-1` slice. Controllers are in `server/http/participation.ts` and
 `identity.ts` and `organization.ts`; shared schemas/guide/parser are in `src/contracts/`.
@@ -29,7 +58,7 @@ Bodies are exact `loom-markdown-v1` or explicit-reference `loom-markdown-v2`,
 16 KiB UTF-8 text plus rationale and 4,096 parsed tokens maximum,
 with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images and
 non-HTTP(S) links do not render as active content. Ordinary links infer nothing.
-Files, summaries, notifications and model execution remain unsupported.
+Files, notifications and model execution remain unsupported.
 
 Eligible retrieval rows contain metadata + exact full-content paths. Default 12, max 25,
 scan max 100, serialized response budget 4–128 KiB. Maximum escaped accepted text
@@ -120,7 +149,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–5. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–6. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -145,13 +174,13 @@ Optional `proposal_context` keeps ordinary discussion creation/digest compatibil
 and binds affected area/settings; community-wide suggestions omit the area and
 resume at the overview instead of inventing a subject. It never reroutes a retained draft. References are
 withheld when affected sources are unavailable. `web/Organization.tsx` reuses the
-extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 5 and
+extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 6 and
 `test:organization:postgres`/`e2e/organization.spec.ts` define the supported slice.
 
 Search (ADR-012) lives in the sibling `search/` module and reuses these exact-body
 and source guards. Current pointer equality is mandatory; reply ancestry is not
 containment. Topic moves affect scope without indexing; closure does not hide text.
-Guide 5 reports `search_only; other_projections_disabled`, not global outbox completion.
+Guide 6 reports `search_only; other_projections_disabled`, not global outbox completion.
 The bounded topic selector is reused with a search-specific label. Search owns its
 query/cursor URL and late-response guards; no search operation enters the intent
 journal or writes personal state. Search's separate author directory uses readable
@@ -173,7 +202,9 @@ Comparison failure blocks legacy correction; failed saves retain the rejected bo
 Uncertain/replayed requests never upgrade. The v2 digest includes every
 declaration field; v1 journal/digest interpretation never changes. Limits: 16 refs,
 512 UTF-8 rationale bytes each, 16 KiB combined body/rationale. Duplicate IDs or
-target scopes fail. Summary/file/private-note sources are excluded.
+target scopes fail. File/private-note sources are excluded. ADR-010 adds typed summaries.
+The full plan accepts up to 2,200 seeds for bounded summary maintenance, while
+retaining the shared 3,840-guard cap; ordinary reference declarations still cap at 16.
 
 `references.ts` provides direct outgoing/incoming reads under REPEATABLE READ,
 current actor and sorted full resource guards. Read races either wait or return

@@ -1,0 +1,28 @@
+
+> ai-collective-loom@0.1.0 test:organization:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/organization.test.ts
+
+✔ populated migration 0005 upgrades without changing retained identities or content (1121.001166ms)
+▶ organization over actual HTTPS, current identities and isolated PostgreSQL
+  ✔ human/agent administrator parity, participant contribution and structural/audit denial (230.313333ms)
+  ✔ metadata history is attributable and distinct from subtree moves and content revisions (49.108875ms)
+  ✔ self/descendant, absent/wrong-kind parents and simultaneous opposite moves cannot create cycles (134.777458ms)
+  ✔ discussion/artifact moves preserve revisions, reply parents, editors and private exact bookmarks (169.516625ms)
+  ✔ stale versions, exact retained retry and rollback do not replace newer organization (106.186708ms)
+  ✔ concurrent exact commands create one decision, event, outbox intent and audit record (18.465458ms)
+  ✔ move versus publication and close versus publication in both lock/commit orders (201.790084ms)
+  ✔ inherited closure blocks creation/replies/revisions but keeps reading and independent child closure (150.578875ms)
+  ✔ bounded roots/destinations, depth, input/byte bounds, and explicit cursor recovery (325.976542ms)
+  ✔ proposal route binding survives rename/move, rejects changed/closed destinations and retains affected reference (140.36675ms)
+  ✔ current authority and source suppression apply to recovery, metadata, destinations and Saved paths (76.572292ms)
+  ✔ server restart and separate HTTPS client processes recover an earlier move without applying it again (1301.531458ms)
+✔ organization over actual HTTPS, current identities and isolated PostgreSQL (4475.92675ms)
+✔ synthetic area, subtree and retained-decision caps refuse new work without losing exact recovery (1684.80575ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7584.98525

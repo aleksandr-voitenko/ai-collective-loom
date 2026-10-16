@@ -9,7 +9,7 @@ import { useQuery,type Context } from './participation-state.js';
 export function IndexingNotice({status}:{status:SearchStatusView}) {
   return <div className="search-indexing">
     {status.indexing!=='ready'&&<p className="notice" role="status">{status.indexing==='unavailable'?'The search worker is unavailable.':'Some current text is still being indexed.'} Search results may be incomplete. You can still browse and open content directly.</p>}
-    <details><summary>Search coverage</summary><p>Current discussion openings, comments and text artifacts only. {status.coverage==='current_supported_text'?'All currently eligible supported text is indexed at this observation.':'Current text coverage has not been established.'} Ranked results use a selected window of at most 200 matches; they are not change history. Refresh after edits or indexing changes.</p></details>
+    <details><summary>Search coverage</summary><p>Current discussion openings, comments, text artifacts and authored summaries only. {status.coverage==='current_supported_text'?'All currently eligible supported text is indexed at this observation.':'Current text coverage has not been established.'} Ranked results use a selected window of at most 200 matches; they are not change history. Refresh after edits or indexing changes.</p></details>
   </div>;
 }
 function TopicName({id}:{id:string}) {
@@ -62,7 +62,7 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
   return <section className="search-page"><h1>Search</h1><p className="subtitle">Find current shared text and open its exact matching revision.</p>
     <form onSubmit={event=>{event.preventDefault();submit();}}><label>Search terms<input name="q" value={query} onChange={e=>setQuery(e.target.value)} required maxLength={256}/></label>
       <p className="hint">Plain words, all required. No phrases, operators, stemming or substring matching.</p>
-      <div className="search-filters"><label>Content kind<select value={kind} onChange={e=>setKind(e.target.value)}><option value="">All text</option><option value="discussion">Discussions</option><option value="comment">Comments</option><option value="artifact">Text artifacts</option></select></label>
+      <div className="search-filters"><label>Content kind<select value={kind} onChange={e=>setKind(e.target.value)}><option value="">All text</option><option value="discussion">Discussions</option><option value="comment">Comments</option><option value="artifact">Text artifacts</option><option value="summary">Discussion summaries</option></select></label>
         <label>Published from (UTC)<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Published before (UTC)<input type="date" value={before} onChange={e=>setBefore(e.target.value)}/></label></div>
       <p>Topic: {topic?<TopicName key={topic} id={topic}/>:<span>All topics</span>}</p>
       <button type="button" onClick={()=>setTopics(v=>!v)}>Choose topic</button>{topic&&<button type="button" onClick={()=>{setTopic('');setDescendants(false);}}>All topics</button>}
@@ -77,7 +77,7 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
     <h2 tabIndex={-1} ref={heading}>Search results</h2>{busy&&<p role="status">Searching…</p>}
     {error&&<div role="alert" className="notice error"><p>{error}</p><button onClick={()=>setRefresh(n=>n+1)}>Retry search page</button><button onClick={restart}>Start a fresh search</button></div>}
     {data&&<><p>Results for “{data.query}”. {data.selection_limited?'Only the selected relevance window is shown. Narrow the filters to explore further.':''}</p>
-      <div className="collection">{data.items.map(item=><article className="search-result" key={item.result_id}><small>{item.kind==='comment'?'Comment':item.kind==='discussion'?'Discussion':'Text artifact'}</small>
+      <div className="collection">{data.items.map(item=><article className="search-result" key={item.result_id}><small>{item.kind==='comment'?'Comment':item.kind==='discussion'?'Discussion':item.kind==='summary'?'Discussion summary':'Text artifact'}</small>
         <h3><Link to={item.browser_url}>{item.title??'Comment by '+item.author.nickname}</Link></h3>
         <p>{item.location.map(a=>a.title).join(' › ')}</p><p className="byline">By {item.author.nickname} · Revision published by {item.publisher.nickname} · <time dateTime={item.published_at}>{new Date(item.published_at).toLocaleString()}</time></p>
         <p><small>Excerpt</small><br/>{item.excerpt.text}</p><Link to={item.browser_context_url}>Open context</Link>

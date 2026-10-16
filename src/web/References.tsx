@@ -6,7 +6,7 @@ import { request, identityGeneration, ApiError } from './participation-client.js
 
 const labels = { related_to: 'Related to', builds_on: 'Builds on', contradicts: 'Contradicts' };
 const targetLabel = (target:ReferenceTargetValue) => target.kind === 'discussion' ? 'Discussion container'
-  : target.revision_id ? 'Exact revision' : target.kind === 'artifact' ? 'Artifact resource' : 'Contribution resource';
+  : target.revision_id ? 'Exact revision' : target.kind === 'artifact' ? 'Artifact resource' : target.kind === 'summary' ? 'Summary resource' : 'Contribution resource';
 export function targetFromSelection(value:string,kind:ReferenceTargetValue['kind'],scope:string,revision:string):ReferenceTargetValue {
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let id=value.trim(),exact=revision.trim();
@@ -70,7 +70,7 @@ export function ReferenceEditor({references,onChange,disabled}:{references:Refer
     {picker&&<div className="reference-picker" role="group" aria-label="Choose reference target">
       <label>Target ID or Loom link<input ref={input} value={value} onChange={event=>{invalidate();setValue(event.target.value);}}/></label>
       <label>Target kind<select value={kind} onChange={event=>{invalidate();setKind(event.target.value as ReferenceTargetValue['kind']);if(event.target.value==='discussion')setScope('resource');}}>
-        <option value="artifact">Text artifact</option><option value="contribution">Opening post or comment</option><option value="discussion">Discussion container</option>
+        <option value="artifact">Text artifact</option><option value="summary">Discussion summary</option><option value="contribution">Opening post or comment</option><option value="discussion">Discussion container</option>
       </select></label>
       <label>Citation scope<select value={scope} onChange={event=>{invalidate();setScope(event.target.value);}}>
         <option value="resource">Resource only (current content)</option><option value="revision" disabled={kind==='discussion'}>Exact revision (fixed version)</option>

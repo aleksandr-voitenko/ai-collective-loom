@@ -17,7 +17,7 @@ export class ReferenceError extends Error {
   }
 }
 type Cursor = { binding: string; boundary: string; after: [string,string] | null; expires: number };
-const contextUrl = (source: ResourceView) => source.discussion_id
+const contextUrl = (source: ResourceView) => source.kind === 'summary' ? `/loom/resource/${source.resource_id}` : source.discussion_id
   ? `/loom/discussion/${source.discussion_id}?focus=${source.resource_id}` : `/loom/resource/${source.resource_id}`;
 function canonicalTarget(target: ReferenceTargetValue): ReferenceTargetValue {
   return { kind: target.kind, resource_id: target.resource_id.toLowerCase(),
@@ -114,7 +114,7 @@ export class RecordedReferences {
       ])]);
       let selectedTarget: ResolvedTargetView | undefined;
       if(incoming) selectedTarget=await this.resolve(tx,actor,selection.target);
-      else { await lockContext(tx,selection.source,'resolution',['contribution','artifact']); await requireRevision(tx,selection.source,selection.revision); }
+      else { await lockContext(tx,selection.source,'resolution',['contribution','artifact','summary']); await requireRevision(tx,selection.source,selection.revision); }
       const page:ReferencePageView={items:[],direction:incoming?'incoming':'outgoing',scope:incoming?(selection.target.revision_id?'revision':'resource'):'source_revision',
         ...(incoming?{target:selection.target}:{source_id:selection.source,source_revision_id:selection.revision}),
         history:incoming?selection.history:'selected_revision',relationship:incoming?selection.relationship:null,

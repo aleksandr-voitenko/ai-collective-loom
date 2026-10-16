@@ -42,6 +42,8 @@ import { ReferenceEditor, ReferenceViews } from "./References.js";
 import type { ReferenceValue } from "../contracts/participation.js";
 import { SaveControl, SavedItemsPage } from "./SavedItems.js";
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
+import { SummarySection, SummaryMaintenance, CoverageDetails, CoverageEditor } from './Summaries.js';
+import type { CoverageDeclarationValue } from '../contracts/summaries.js';
 import "./participation.css";
 
 function Icon({
@@ -224,6 +226,7 @@ export function ParticipationApp() {
         </NavLink>
         <NavLink to="/loom/saved"><Icon name="saved" />Saved items</NavLink>
         <NavLink to="/loom/search"><Icon name="search" />Search</NavLink>
+        <NavLink to="/loom/summaries"><Icon name="discussion" />Summary maintenance</NavLink>
         {self?.role === "administrator" && (
           <NavLink to="/loom/admin">
             <Icon name="topic" />
@@ -431,6 +434,7 @@ function ActiveView({ context }: { context: Context }) {
   if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
   if (kind === "search") return <SearchPageViewComponent context={context} />;
+  if (kind === "summaries") return <SummaryMaintenance context={context} />;
   if (kind === "area" && id) return <AreaPage id={id} context={context} />;
   if (kind === "discussion" && id)
     return <DiscussionPage id={id} context={context} />;
@@ -729,6 +733,8 @@ function Composer({
   initialMentions = [],
   initialFormat = "loom-markdown-v1",
   initialReferences = [],
+  summaryDiscussion,
+  initialCoverage,
   heading,
   onCommitted,
 }: {
@@ -743,6 +749,8 @@ function Composer({
   initialMentions?: AuthoredContent["mentions"];
   initialFormat?: AuthoredContent["format"];
   initialReferences?: ReferenceValue[];
+  summaryDiscussion?: string | undefined;
+  initialCoverage?: CoverageDeclarationValue | undefined;
   heading: string;
   onCommitted?: (value: CommittedView) => void;
 }) {
@@ -773,6 +781,7 @@ function Composer({
   const [base, setBase] = useState(
     record?.body.expected_revision_id ?? fixed.expected_revision_id,
   );
+  const [coverage, setCoverage] = useState<CoverageDeclarationValue | undefined>(record ? record.body.coverage as CoverageDeclarationValue | undefined : initialCoverage);
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [status, setStatus] = useState(""),
@@ -791,13 +800,14 @@ function Composer({
   const locked =
     busy || (!!record && (record.state !== "draft" || !!record.blocked_by));
   const legacyCorrection = record?.state === "rejected" &&
-    kind === "revision.publish" && original?.format === "loom-markdown-v1";
+    (kind === "revision.publish" || kind === 'summary.revise') && original?.format === "loom-markdown-v1";
   // A format refusal has no conflict ID: its retained expected revision is still
   // the exact comparison base. Never use a newer fetched current source instead.
   const comparisonRevision = record?.conflict_revision_id ??
     (legacyCorrection && typeof record.body.expected_revision_id === "string"
       ? record.body.expected_revision_id : undefined);
   const comparisonReady = !!compare && compare.revision_id === comparisonRevision;
+  const requiresComparison = legacyCorrection || (!!summaryDiscussion && !!comparisonRevision);
   useEffect(() => {
     setCompare(undefined);
     setComparisonError("");
@@ -825,11 +835,13 @@ function Composer({
     nextTitle = title,
     nextMentions = mentions,
     nextReferences = references,
+    nextCoverage = coverage,
   ) {
     return {
       ...fixed,
       ...(base ? { expected_revision_id: base } : {}),
       ...(titleField ? { title: nextTitle } : {}),
+      ...(nextCoverage ? { coverage: nextCoverage } : {}),
       content: {
         ...(format === "loom-markdown-v2" || nextReferences.length
           ? { format: "loom-markdown-v2", references: nextReferences }
@@ -844,9 +856,10 @@ function Composer({
     nextTitle = title,
     nextMentions = mentions,
     nextReferences = references,
+    nextCoverage = coverage,
   ) {
     try {
-      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences);
+      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences, nextCoverage);
       const next = await update((current) =>
         context.store.saveDraft(
           current ?? context.store.create(slot, kind, path, body),
@@ -938,7 +951,7 @@ function Composer({
     setError("");
     try {
       const result = await request<CommittedView | { operation_state: string }>(
-        "/api/v1/operations/status",
+        summaryDiscussion ? "/api/v1/summaries/status" : "/api/v1/operations/status",
         {
           self: context.self,
           body: { operation_kind: record.kind, idempotency_key: record.key },
@@ -961,11 +974,14 @@ function Composer({
     return () => window.removeEventListener("online", online);
   }, [check]);
   async function correct() {
-    if (!record || record.state !== "rejected" || busy || (legacyCorrection && !comparisonReady)) return;
+    if (!record || record.state !== "rejected" || busy || (requiresComparison && !comparisonReady)) return;
     const owner = identityGeneration();
     setBusy(true);
     try {
       const revision = comparisonRevision, body = draftBody();
+      // A correction never enlarges the source claim. A carry-forward from an
+      // older base must be chosen again after inspecting the conflict revision.
+      if (summaryDiscussion) delete body.coverage;
       // Only this explicit new-draft transition may adopt the base's v2 contract.
       // Carry its declarations for review, including an empty list; preserve text.
       const adopted = legacyCorrection && comparisonReady && compare?.content.format === "loom-markdown-v2"
@@ -979,10 +995,35 @@ function Composer({
       );
       if (live.current && owner === identityGeneration()) {
         if (revision) setBase(revision);
+        if (summaryDiscussion) setCoverage(undefined);
         if (adopted) { setFormat("loom-markdown-v2"); setReferences(adopted); }
         setCompare(undefined);
         setError("");
       }
+    } catch (failure) {
+      if (live.current && owner === identityGeneration()) setError((failure as Error).message);
+    } finally {
+      if (live.current && owner === identityGeneration()) setBusy(false);
+    }
+  }
+  async function startSummaryRevision() {
+    if (kind !== 'summary.revise' || record?.state !== 'committed' || busy || typeof fixed.resource_id !== 'string') return;
+    const owner = identityGeneration();
+    setBusy(true);
+    setError('');
+    try {
+      const latest = await request<RevisionView>(`/api/v1/resources/${fixed.resource_id}`, { schema: Revision });
+      if (!live.current || owner !== identityGeneration()) return;
+      if (latest.kind !== 'summary' || !latest.can_edit) throw new Error('This summary is no longer available for editing.');
+      // The explicit new draft uses current authored content and carries only its
+      // existing declaration. Saving must succeed before retiring the old request.
+      await update(current => context.store.replace(current!, {
+        resource_id: latest.resource_id,
+        expected_revision_id: latest.revision_id,
+        title: latest.title,
+        content: latest.content,
+        coverage: { carry_forward_revision_id: latest.revision_id },
+      }));
     } catch (failure) {
       if (live.current && owner === identityGeneration()) setError((failure as Error).message);
     } finally {
@@ -994,6 +1035,9 @@ function Composer({
     if (!locked && record?.state !== "rejected")
       persist(value, title, mentions);
   }
+  const declareCoverage=useRef<(next:CoverageDeclarationValue)=>Promise<boolean>>(async()=>false);
+  // Attach a delayed preparation only to the latest draft, not the click's text.
+  declareCoverage.current=async next=>{const saved=await persist(text,title,mentions,references,next);if(saved&&live.current)setCoverage(next);return !!saved;};
   return (
     <section className="composer card" aria-label={heading}>
       <h2>{heading}</h2>
@@ -1018,7 +1062,11 @@ function Composer({
               Inspect exact revision
             </Link>
           </p>
-          <button
+          {kind === 'summary.revise' && <>
+            <button disabled={busy} onClick={() => void startSummaryRevision()}>Start another revision</button>
+            <p className="fineprint">Start from the current summary and keep its source declaration until you explicitly replace it.</p>
+          </>}
+          {!summaryDiscussion && <button
             onClick={() =>
               void update((current) =>
                 context.store.replace(current!, draftBody("", "", [], [])),
@@ -1026,7 +1074,7 @@ function Composer({
             }
           >
             Write another
-          </button>
+          </button>}
         </div>
       ) : (
         <>
@@ -1156,6 +1204,10 @@ function Composer({
             setReferences(next); setFormat("loom-markdown-v2");
             void persist(text, title, mentions, next);
           }}/>
+          {summaryDiscussion && <CoverageEditor context={context} discussion={summaryDiscussion}
+            resource={typeof fixed.resource_id === 'string' ? fixed.resource_id : undefined}
+            base={typeof base === 'string' ? base : undefined} value={coverage} disabled={locked}
+            onChange={next=>declareCoverage.current(next)}/>}
           {record?.state === "rejected" && (
             <div className="notice">
               <strong>Your draft is preserved.</strong>
@@ -1170,7 +1222,7 @@ function Composer({
                     participants={compare.mentioned_participants}
                   />
                   <ReferenceViews sourceId={compare.resource_id} sourceRevision={compare.revision_id}
-                    target={{ kind: compare.kind === "artifact" ? "artifact" : "contribution", resource_id: compare.resource_id, revision_id: compare.revision_id }}/>
+                    target={{ kind: compare.kind === "summary" ? "summary" : compare.kind === "artifact" ? "artifact" : "contribution", resource_id: compare.resource_id, revision_id: compare.revision_id }}/>
                 </>
               )}
               <p>
@@ -1178,18 +1230,19 @@ function Composer({
                 corrected submission to unlock editing. Your changes will be
                 saved as a new draft.
               </p>
-              {legacyCorrection && !comparisonReady && !comparisonError && <p role="status">Loading the comparison revision before correction…</p>}
+              {requiresComparison && !comparisonReady && !comparisonError && <p role="status">Loading the comparison revision before correction…</p>}
               {comparisonError && <><p role="alert">{comparisonError}</p>
                 <button disabled={busy} onClick={() => setComparisonAttempt(value => value + 1)}>Retry comparison revision</button></>}
               {legacyCorrection && comparisonReady && compare?.content.format === "loom-markdown-v2" &&
                 <p>The comparison revision’s references will be copied into your corrected draft. Review or remove them before publishing.</p>}
-              <button disabled={busy || (legacyCorrection && !comparisonReady)} onClick={correct}>Prepare corrected submission</button>
+              {summaryDiscussion && <p>A corrected summary draft needs an explicit source declaration. Later material is never added automatically.</p>}
+              <button disabled={busy || (requiresComparison && !comparisonReady)} onClick={correct}>Prepare corrected submission</button>
             </div>
           )}
           {(!record || record.state === "draft") && (
             <button
               className="primary"
-              disabled={locked || !text.trim() || (titleField && !title.trim())}
+              disabled={locked || !text.trim() || (titleField && !title.trim()) || (!!summaryDiscussion && !coverage)}
               onClick={() => void send()}
             >
               {busy
@@ -1219,7 +1272,8 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
     area: { id: string; title: string; description: string };
     opening: ResourceView;
   }>("/api/v1/discussions/" + id);
-  const [reload, setReload] = useState(0);
+  const [reload, setReload] = useState(0),
+    [summaryReload, setSummaryReload] = useState(0);
   if (error)
     return (
       <>
@@ -1228,6 +1282,8 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
       </>
     );
   if (!data) return <p role="status">Opening discussion…</p>;
+  // Keep the input's UTF-16 length limit without splitting a supplementary character.
+  const summaryTitle = ('Summary: '+data.opening.title).slice(0,160).replace(/[\uD800-\uDBFF]$/, '');
   return (
     <>
       <div className="breadcrumb">
@@ -1247,6 +1303,11 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
       </div>
       {data.opening.affected_area_id && <p>Organizational suggestion concerning <Link to={'/loom/area/'+data.opening.affected_area_id}>this topic</Link>.</p>}
       <ReferenceViews key={id} target={{kind:"discussion",resource_id:id}}/>
+      <SummarySection key={summaryReload} discussion={id}/>
+      {new URLSearchParams(location.search).get('summary') === 'create' && <Composer
+        context={context} kind="summary.create" path="/api/v1/summaries" slot={'summary.create:'+id}
+        fixed={{discussion_id:id}} titleField initialTitle={summaryTitle}
+        summaryDiscussion={id} heading="Create discussion summary" onCommitted={() => setSummaryReload(n => n + 1)}/>}
       {context.self.role === "administrator" && <OrganizationActions id={id} kind="discussion"/>}
       <div className="reading-grid">
         <div>
@@ -1672,9 +1733,9 @@ function ResourcePage({
             {data.revision_number} · published by {data.publisher.nickname}
           </p>
         </div>
-        <SaveControl context={context} target={revision
+        {data.kind === 'summary' ? <span className="fineprint">Saving summaries is not supported in this release.</span> : <SaveControl context={context} target={revision
           ? { kind: "revision", resource_id: id, revision_id: revision }
-          : { kind: data.kind === "artifact" ? "artifact" : "contribution", resource_id: id }} />
+          : { kind: data.kind === "artifact" ? "artifact" : "contribution", resource_id: id }} />}
         <button onClick={() => setHistory((value) => !value)}>
           Revision history
         </button>
@@ -1698,7 +1759,7 @@ function ResourcePage({
           participants={data.mentioned_participants}
         />
         <ReferenceViews key={id+data.revision_id+(revision??'current')} sourceId={id} sourceRevision={data.revision_id}
-          target={{kind:data.kind === "artifact" ? "artifact" : "contribution",resource_id:id,...(revision?{revision_id:revision}:{})}}/>
+          target={{kind:data.kind === "summary" ? "summary" : data.kind === "artifact" ? "artifact" : "contribution",resource_id:id,...(revision?{revision_id:revision}:{})}}/>
         {data.parent_id && (
           <p className="parent-context">
             In reply to{" "}
@@ -1708,7 +1769,7 @@ function ResourcePage({
           </p>
         )}
         <div className="post-footer">
-          {!revision && <SaveControl context={context} target={{ kind: "revision", resource_id: id, revision_id: data.revision_id }} />}
+          {!revision && data.kind !== 'summary' && <SaveControl context={context} target={{ kind: "revision", resource_id: id, revision_id: data.revision_id }} />}
           {data.can_edit && (
             <button
               className="text-button"
@@ -1717,18 +1778,19 @@ function ResourcePage({
               Edit this text
             </button>
           )}
-          {data.discussion_id && (
+          {data.discussion_id && data.kind !== 'summary' && (
             <Link to={`/loom/discussion/${data.discussion_id}?focus=${id}`}>
               Reply in this branch
             </Link>
           )}
         </div>
       </article>
+      {data.kind === 'summary' && <CoverageDetails key={data.revision_id} id={id} revision={data.revision_id}/>}
       {edit && (
         <Composer
           context={context}
-          kind="revision.publish"
-          path="/api/v1/revisions"
+          kind={data.kind === 'summary' ? 'summary.revise' : 'revision.publish'}
+          path={data.kind === 'summary' ? '/api/v1/summary-revisions' : '/api/v1/revisions'}
           slot={"edit:" + id}
           fixed={{
             resource_id: id,
@@ -1741,12 +1803,14 @@ function ResourcePage({
           initialMentions={data.content.mentions}
           initialFormat={data.content.format}
           initialReferences={data.content.format === "loom-markdown-v2" ? data.content.references : []}
+          summaryDiscussion={data.kind === 'summary' ? data.discussion_id! : undefined}
+          initialCoverage={data.kind === 'summary' ? {carry_forward_revision_id:data.revision_id} : undefined}
           heading="Edit text"
         />
       )}
       {history && <RevisionHistory id={id} />}
       {data.kind === "artifact" && context.self.role === "administrator" && <OrganizationActions id={id} kind="artifact"/>}
-      {data.kind === "artifact" && <Editors id={id} context={context} />}
+      {(data.kind === "artifact" || data.kind === 'summary') && <Editors id={id} context={context} kind={data.kind} />}
     </>
   );
 }
@@ -1801,31 +1865,34 @@ function Overview({ context }: { context: Context }) {
     </>
   );
 }
-function Editors({ id, context }: { id: string; context: Context }) {
+function Editors({ id, context, kind }: { id: string; context: Context; kind:'artifact'|'summary' }) {
+  const slot=kind+'.editors:'+id,path=kind==='summary'?'/api/v1/summaries/editors':'/api/v1/editors';
+  const [record,update]=useIntent(()=>context.store.all().find(r=>r.slot===slot));
   const { data, error, refresh } = useQuery<{
     version: number;
     can_manage: boolean;
     editors: { id: string; nickname: string; kind: string }[];
   }>("/api/v1/resources/" + id + "/editors");
-  const [editing, setEditing] = useState(false),
-    [selected, setSelected] = useState<string[]>([]),
-    [failure, setFailure] = useState("");
+  const [editing, setEditing] = useState(!!record),
+    [selected, setSelected] = useState<string[]>((record?.body.participant_ids as string[]|undefined)??[]),
+    [failure, setFailure] = useState(""),[busy,setBusy]=useState(false);
+  const live=useRef(false),owner=useRef(identityGeneration());
+  useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
+  const current=()=>live.current&&owner.current===identityGeneration();
   async function save() {
+    if(busy)return;setBusy(true);setFailure('');let sent:Intent|undefined,uncertain=false;
     try {
-      await request("/api/v1/editors", {
-        self: context.self,
-        body: {
-          resource_id: id,
-          expected_version: data!.version,
-          participant_ids: selected,
-          idempotency_key: crypto.randomUUID(),
-        },
-      });
-      setEditing(false);
-      refresh();
+      sent=await update(existing=>{uncertain=existing?.state==='uncertain';const body={resource_id:id,expected_version:data!.version,participant_ids:selected};
+        return context.store.prepareDispatch(existing??context.store.create(slot,kind+'.editors',path,body),body);});
+      if(!sent)return;
+      await request(path,{self:context.self,body:sent.body});
+      await update(async existing=>{await context.store.complete(sent!);return existing?.key===sent!.key?undefined:existing;});
+      if(current()){setEditing(false);refresh();}
     } catch (error) {
-      setFailure((error as Error).message);
-    }
+      if(sent&&isDefinitiveRejection(error,uncertain))try{await update(()=>context.store.settle(sent!,{state:'rejected'}));}
+      catch(storageError){if(current())setFailure((storageError as Error).message);return;}
+      if(current())setFailure((error as Error).message);
+    }finally{if(current())setBusy(false);}
   }
   return (
     <details className="section">
@@ -1839,6 +1906,7 @@ function Editors({ id, context }: { id: string; context: Context }) {
           </p>
           {data.can_manage && (
             <button
+              disabled={busy||!!record}
               onClick={() => {
                 setSelected(data.editors.map((p) => p.id));
                 setEditing((value) => !value);
@@ -1857,6 +1925,7 @@ function Editors({ id, context }: { id: string; context: Context }) {
                     <label className="list-row">
                       <input
                         type="checkbox"
+                        disabled={busy||!!record}
                         checked={selected.includes(p.id)}
                         onChange={(event) =>
                           setSelected((value) =>
@@ -1871,7 +1940,8 @@ function Editors({ id, context }: { id: string; context: Context }) {
                   );
                 }}
               />
-              <button onClick={() => void save()}>Save editor list</button>
+              {record?.state==='rejected'?<button onClick={()=>void update(async existing=>{await context.store.remove(existing!);refresh();return undefined;}).catch(e=>setFailure(e.message))}>Dismiss rejected editor request</button>
+                :<button disabled={busy} onClick={() => void save()}>{record?.state==='uncertain'?'Retry same editor change':'Save editor list'}</button>}
             </>
           )}
         </>

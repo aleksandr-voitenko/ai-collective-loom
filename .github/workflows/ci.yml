@@ -58,6 +58,7 @@ jobs:
       - run: npm run test:organization:postgres
       - run: npm run test:search:postgres
       - run: npm run test:references:postgres
+      - run: npm run test:summaries:postgres
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser-diagnostics
       - run: npm run test:e2e

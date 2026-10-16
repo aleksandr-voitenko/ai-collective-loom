@@ -65,7 +65,7 @@ test('current scoped lexical search through HTTPS and native worker recovery',{t
     for(const term of ['running','Alice','café','Привет','東京','foo_bar','foo.bar','C++'])assert.ok((await search(term)).body.items.length,term);
     for(const term of ['run','runn','caf','京'])assert.equal((await search(term)).body.items.length,0,term);
     for(const term of ['', '   ','---','"phrase"','a | b','foo:*','x'.repeat(257),'界'.repeat(86),'a b c d e f g h i j k l m n o p q'])assert.equal((await human.client.call(q(term))).status,400,term);
-    for(const extra of [{unknown:'x'},{kind:'summary'},{historical:'true'},{descendants:'true'},{descendants:'false'},{from:'2026-02-30T00:00:00Z'},{from:'2026-10-10T00:00:00Z',before:'2026-10-01T00:00:00Z'},{limit:'26'},{max_response_bytes:'4095'}])assert.equal((await human.client.call(q('zephyr',extra))).status,400);
+    for(const extra of [{unknown:'x'},{kind:'file'},{historical:'true'},{descendants:'true'},{descendants:'false'},{from:'2026-02-30T00:00:00Z'},{from:'2026-10-10T00:00:00Z',before:'2026-10-01T00:00:00Z'},{limit:'26'},{max_response_bytes:'4095'}])assert.equal((await human.client.call(q('zephyr',extra))).status,400);
   });
   await t.test('current R2 without index never returns R1; original author differs from revision publisher',async()=>{
     const cursor=(await search('zephyr',{limit:'1'})).body.next_cursor;

@@ -5,12 +5,13 @@ in the unchanged architecture proposal; numerical limits are not production poli
 
 ## Population and query
 
-Index only typed discussion openings, comments and text artifacts in
+Index only typed discussion openings, comments, text artifacts and summaries in
 `loom-markdown-v1` or `loom-markdown-v2` (ADR-021). Only source-authored title/body
 is searched; reference rationale and resolved target metadata are excluded.
 A discussion title belongs to its opening revision: the one
 discussion result identifies the discussion and that exact opening resource/revision.
-Comments and artifacts retain their own resource identity. Summaries, files,
+Comments, artifacts and summaries retain their own resource identity. ADR-010
+adds summary population/placement; only independent summary title/body is indexed. Files,
 private notes, Saved state, administrative records and historical search are excluded.
 Author filtering means original resource author; revision publisher is separately
 attributed. The time interval is inclusive `from`, exclusive `before`, against the

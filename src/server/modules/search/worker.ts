@@ -14,10 +14,18 @@ export async function discoveryGuard(tx: SqlTransaction) {
 }
 // Both backfill and retrieval use this typed population; arbitrary resource
 // envelopes, historical text/plain fixtures and private collections cannot enter it.
-export const typedSources = `SELECT r.id,r.current_revision_id FROM loom.resources r
+const previousTypedSources = `SELECT r.id,r.current_revision_id FROM loom.resources r
   WHERE r.current_revision_id IS NOT NULL AND
   ((r.kind='artifact' AND EXISTS(SELECT 1 FROM loom.artifacts a WHERE a.id=r.id)) OR
    (r.kind='contribution' AND EXISTS(SELECT 1 FROM loom.contributions c WHERE c.id=r.id)))`;
+export const typedSources = previousTypedSources.slice(0,-1)+` OR
+   (r.kind='summary' AND EXISTS(SELECT 1 FROM loom.summaries s WHERE s.id=r.id)))`;
+// An additive migration may follow a populated older synthetic installation.
+// Continue its typed text work until the new companion table exists; never infer
+// summary eligibility from an untyped resource envelope.
+async function population(tx:SqlTransaction) {
+  return (await tx.query<{ready:boolean}>("SELECT to_regclass('loom.summaries') IS NOT NULL AS ready",[])).rows[0]!.ready?typedSources:previousTypedSources;
+}
 
 export class SearchWorker {
   readonly owner = randomUUID();
@@ -27,17 +35,18 @@ export class SearchWorker {
   discover() {
     return this.database.transaction(async tx => {
       await discoveryGuard(tx);
+      const sources=await population(tx);
       const state = (await tx.query<{ generation: number; source_after: string | null; scan_complete: boolean; event_after: string; event_after_intent: string | null }>(
         'SELECT generation,source_after,scan_complete,event_after::text,event_after_intent FROM loom.search_state WHERE id=1', [])).rows[0]!;
       const size = (await tx.query<{ n: number }>('SELECT count(*)::int AS n FROM (SELECT id FROM loom.search_jobs LIMIT $1) j', [workerLimits.jobs])).rows[0]!.n;
-      const population = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM (${typedSources} LIMIT $1) s`, [workerLimits.sources + 1])).rows[0]!.n;
-      if (size + 2 * workerLimits.discovery > workerLimits.jobs || population > workerLimits.sources) {
+      const populationSize = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM (${sources} LIMIT $1) s`, [workerLimits.sources + 1])).rows[0]!.n;
+      if (size + 2 * workerLimits.discovery > workerLimits.jobs || populationSize > workerLimits.sources) {
         await tx.query('UPDATE loom.search_state SET capacity_limited=true,heartbeat_at=clock_timestamp() WHERE id=1', []);
         return { enqueued: 0, limited: true };
       }
       let enqueued = 0;
       if (!state.scan_complete) {
-        const rows = (await tx.query<{ id: string; current_revision_id: string }>(`${typedSources}
+        const rows = (await tx.query<{ id: string; current_revision_id: string }>(`${sources}
           AND ($1::uuid IS NULL OR r.id>$1) ORDER BY r.id LIMIT $2`, [state.source_after, workerLimits.discovery])).rows;
         for (const row of rows) enqueued += (await tx.query(`INSERT INTO loom.search_jobs(generation,resource_id,revision_id,kind)
           VALUES ($1,$2,$3,'revision') ON CONFLICT DO NOTHING`, [state.generation, row.id, row.current_revision_id])).rowCount ?? 0;
@@ -99,9 +108,10 @@ export class SearchWorker {
     if (claim.kind === 'organization') return { kind: 'organization' };
     if (claim.kind !== 'revision' || !claim.revision_id || !claim.resource_id) return { kind: 'failure', failure: 'unsupported_event' };
     return this.database.transaction(async tx => {
+      const sources=await population(tx);
       const row = (await tx.query<{ title: string | null; body: string; revision_number: string; format: string; bytes: number; typed: boolean }>(`
         SELECT v.title,v.content_text AS body,v.revision_number::text,v.content_format AS format,octet_length(v.content_text) AS bytes,
-        EXISTS(SELECT 1 FROM (${typedSources}) s WHERE s.id=v.resource_id) AS typed
+        EXISTS(SELECT 1 FROM (${sources}) s WHERE s.id=v.resource_id) AS typed
         FROM loom.revisions v WHERE v.id=$1 AND v.resource_id=$2`, [claim.revision_id,claim.resource_id])).rows[0];
       if (!row || !row.typed || !['loom-markdown-v1','loom-markdown-v2'].includes(row.format)) return { kind: 'failure', failure: 'unsupported_source' };
       if (row.bytes > 16384) return { kind: 'failure', failure: 'source_limit' };

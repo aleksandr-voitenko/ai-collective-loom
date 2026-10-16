@@ -895,3 +895,9 @@
 .reference-rationale { white-space: pre-wrap; }
 .reference-results h3:focus { outline: 2px solid #287348; outline-offset: 3px; }
 .reference-views code, .reference-editor code { overflow-wrap: anywhere; }
+.loom-app .summary-card { padding: 24px 26px; margin: 16px 0; overflow-wrap: anywhere; }
+.summary-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.summary-list { padding: 0; list-style: none; }
+.coverage-editor { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.coverage-editor code { overflow-wrap: anywhere; }
+@media (max-width: 760px) { .loom-app .summary-card { padding: 20px 18px; } }

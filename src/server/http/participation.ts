@@ -24,6 +24,8 @@ import { registerSearch } from './search.js';
 import { SearchError } from '../modules/search/search.js';
 import { registerReferences } from './references.js';
 import { ReferenceError } from '../modules/participation/references.js';
+import { registerSummaries } from './summaries.js';
+import { SummaryError } from '../modules/participation/summary-context.js';
 
 export interface ParticipationServices {
   database: Transactions;
@@ -60,6 +62,11 @@ export function participantError(
     code = error.code;
     message = error.message;
     status = error.status;
+  } else if (error instanceof SummaryError) {
+    code=error.code;message=error.message;
+    status=code==='summary_source_limit'||code==='summary_preparation_limit'?429:409;
+    action=code==='summary_changed'?'replay_view':code==='summary_already_exists'?'inspect_discussion_summary':
+      code==='summary_preparation_expired'?'retain_draft_and_reconcile':'review_declaration';
   } else if (error instanceof ReferenceError) {
     code=error.code; message=error.message;
     status=code==='references_changed'?409:429;
@@ -108,6 +115,7 @@ export function participantError(
         recovery: { action },
         ...(current !== undefined ? { current_revision_id: current } : {}),
         ...(minimum ? { minimum_response_bytes: minimum } : {}),
+        ...(error instanceof SummaryError && error.definitive ? { operation_outcome: "rejected" } : {}),
         ...(status >= 500 && request.method === "POST"
           ? { operation_outcome: "unknown" }
           : {}),
@@ -124,6 +132,7 @@ export async function registerParticipation(
   registerOrganization(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerReferences(app, services.database, actor);
+  registerSummaries(app, services.database, actor);
   const publications = new ParticipationPublications(services.database),
     reads = new ParticipationRetrieval(services.database),
     admin = new ParticipationAdministration(services.database);

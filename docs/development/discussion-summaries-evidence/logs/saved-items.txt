@@ -1,0 +1,23 @@
+
+> ai-collective-loom@0.1.0 test:saved-items:postgres
+> node scripts/check-runtime.mjs && node --import tsx --test tests/integration/saved-items.test.ts
+
+▶ private Saved items over real HTTPS and isolated PostgreSQL
+  ✔ strict owner-only contracts and human/agent parity, with no shared side effects (258.930042ms)
+  ✔ same and distinct concurrent keys create one logical target; original replay never reapplies (133.359417ms)
+  ✔ initial Unsave tombstone fences delayed Save; confirmed Save fences delayed Unsave (76.262375ms)
+  ✔ resource and exact R1 remain distinct after R2; SQL enforces membership and immutability (58.689458ms)
+  ✔ suppression removes metadata, exact targets do not redirect, owner may unsave unavailable entries (55.129ms)
+  ✔ bounded pages, owner-bound cursors, source changes and collection changes are explicit (239.90975ms)
+  ✔ synthetic retained-state quotas and bounded owner traversal fail explicitly, never as empty completion (235.459167ms)
+  ✔ atomic rollback, lost acknowledgement, replacement credentials, revoked authority and restart (525.9485ms)
+  ✔ standalone process journal survives discarded response and opposite action before exact retry (332.985667ms)
+✔ private Saved items over real HTTPS and isolated PostgreSQL (3498.844042ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3801.166875

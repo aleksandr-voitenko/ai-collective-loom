@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "5";
+export const guideRevision = "6";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -22,7 +22,7 @@ export const UUID = Type.String({
 export const NullableId = Type.Union([UUID, Type.Null()]);
 export const Title = Type.String({ minLength: 1, maxLength: 160 });
 export const ReferenceTarget = Type.Object({
-  kind: Type.Union([Type.Literal("discussion"), Type.Literal("contribution"), Type.Literal("artifact")]),
+  kind: Type.Union([Type.Literal("discussion"), Type.Literal("contribution"), Type.Literal("artifact"), Type.Literal("summary")]),
   resource_id: UUID,
   revision_id: Type.Optional(UUID),
 }, closed);
@@ -293,7 +293,7 @@ export const ParticipationError = Type.Object(
         request_id: UUID,
         current_revision_id: Type.Optional(NullableId),
         minimum_response_bytes: Type.Optional(Type.Integer()),
-        operation_outcome: Type.Optional(Type.Literal("unknown")),
+        operation_outcome: Type.Optional(Type.Union([Type.Literal("unknown"),Type.Literal("rejected")])),
         recovery: Type.Object({ action: Type.String() }, closed),
       },
       closed,

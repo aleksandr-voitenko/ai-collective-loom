@@ -32,20 +32,21 @@ export function normalizeSearch(options:SearchOptions) {
 // areas, artifact -> areas. Reply parents are deliberately absent from this graph.
 const eligibleSql=`WITH RECURSIVE population AS MATERIALIZED (
   SELECT r.id,r.kind,r.owner_resource_id,r.state,r.current_revision_id,r.original_author_id,
-    v.availability,v.content_format,v.created_at,c.discussion_id,c.parent_id
-  FROM (${typedSources} LIMIT 5001) s JOIN loom.resources r ON r.id=s.id
+    v.availability,v.content_format,v.created_at,COALESCE(c.discussion_id,s.discussion_id) AS discussion_id,c.parent_id
+  FROM (${typedSources} LIMIT 5001) sources JOIN loom.resources r ON r.id=sources.id
   JOIN loom.revisions v ON v.id=r.current_revision_id AND v.resource_id=r.id
   LEFT JOIN loom.contributions c ON c.id=r.id
+  LEFT JOIN loom.summaries s ON s.id=r.id
 ), owners AS (
   SELECT id AS source,id,kind,owner_resource_id,ARRAY[id] AS path,state='active' AS eligible,1 AS depth
     FROM population
   UNION ALL
   SELECT o.source,p.id,p.kind,p.owner_resource_id,o.path||p.id,
-    o.eligible AND p.state='active' AND p.kind=CASE WHEN o.kind='contribution' THEN 'discussion' ELSE 'area' END,o.depth+1
+    o.eligible AND p.state='active' AND p.kind=CASE WHEN o.kind IN ('contribution','summary') THEN 'discussion' ELSE 'area' END,o.depth+1
     FROM owners o JOIN loom.resources p ON p.id=o.owner_resource_id
     WHERE o.depth<32 AND NOT p.id=ANY(o.path)
 ), eligible AS MATERIALIZED (
-  SELECT p.*,o.path,CASE WHEN p.kind='artifact' THEN 'artifact' WHEN p.parent_id IS NULL THEN 'discussion' ELSE 'comment' END AS search_kind,
+  SELECT p.*,o.path,CASE WHEN p.kind IN ('artifact','summary') THEN p.kind WHEN p.parent_id IS NULL THEN 'discussion' ELSE 'comment' END AS search_kind,
     CASE WHEN p.kind='artifact' THEN p.owner_resource_id ELSE d.owner_resource_id END AS area_id
   FROM population p JOIN owners o ON o.source=p.id AND o.owner_resource_id IS NULL AND o.kind='area' AND o.eligible
   LEFT JOIN loom.resources d ON d.id=p.discussion_id
@@ -133,7 +134,7 @@ export class TextSearch {
       const nodes=(await tx.query<{n:number}>('SELECT numnode(plainto_tsquery(\'pg_catalog.simple\',$1)) AS n',[normalized.q])).rows[0]!.n;
       if(nodes===0||nodes>searchLimits.queryNodes)throw new SearchError('invalid_search');
       const scope=normalized.scope;
-      const matches=(await tx.query<{id:string;search_kind:'discussion'|'comment'|'artifact';revision_id:string;body:string}>(`${eligibleSql}
+      const matches=(await tx.query<{id:string;search_kind:'discussion'|'comment'|'artifact'|'summary';revision_id:string;body:string}>(`${eligibleSql}
         SELECT e.id,e.search_kind,d.revision_id,d.body FROM eligible e
         JOIN loom.search_documents d ON d.resource_id=e.id AND d.revision_id=e.current_revision_id AND d.generation=$1
         WHERE d.document @@ plainto_tsquery('pg_catalog.simple',$2)
@@ -158,8 +159,8 @@ export class TextSearch {
           area_id:source.area_id,area_title:source.area_title,location:ids.map(id=>areas.find(a=>a.id===id)!).filter(Boolean),
           discussion_id:source.discussion_id,parent_id:source.parent_id,excerpt:{text:excerpt(row.body,normalized.q),representation:'excerpt',omitted_detail:'full_body'},
           full_content_url:source.full_content_url,browser_url:`/loom/resource/${row.id}/${row.revision_id}`,
-          context_url:source.discussion_id?`/api/v1/contributions/${row.id}/context`:`/api/v1/resources/${row.id}`,
-          browser_context_url:source.discussion_id?`/loom/discussion/${source.discussion_id}?focus=${row.id}`:`/loom/resource/${row.id}`};
+          context_url:row.search_kind==='summary'?`/api/v1/discussions/${source.discussion_id}/summary`:source.discussion_id?`/api/v1/contributions/${row.id}/context`:`/api/v1/resources/${row.id}`,
+          browser_context_url:row.search_kind==='summary'?`/loom/resource/${row.id}`:source.discussion_id?`/loom/discussion/${source.discussion_id}?focus=${row.id}`:`/loom/resource/${row.id}`};
         view.items.push(item);view.next_cursor=cursor(offset+1);view.window_exhausted=view.next_cursor===null;
         if(Buffer.byteLength(JSON.stringify(view))>budget){view.items.pop();if(!view.items.length)fit({...view,items:[item]},budget);break;}
         offset++;

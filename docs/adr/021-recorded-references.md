@@ -139,6 +139,8 @@ current/history/byte/work pagination and source/target independence. Browser che
 cover journal correction/reload/restart/stale tabs, exact navigation, late account/
 route responses, keyboard/narrow layouts and development StrictMode. Normal CI,
 full browser and diagnostic checks remain required; record actual results separately.
-Summary, coverage/change-note, file/path and private-note integration remain open.
+ADR-010 extends this same model to summary sources and resource/exact targets.
+Coverage membership itself creates no assertion. Change-note, file/path and
+private-note integration remain open.
 Same-machine tests do not establish provider-agent or cross-machine trials, real
 identity/retention/restore policy, production capacity or broad AC completion.

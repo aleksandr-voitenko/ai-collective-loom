@@ -30,6 +30,9 @@ import {
 } from "../publication/publication.js";
 import { structureGuard, advanceHierarchy, OrganizationError } from "./organization-context.js";
 import { lockReferencePlan, prepareReferences } from "./reference-context.js";
+import { SummaryCreateInput, SummaryRevisionInput, type CoverageDeclarationValue } from "../../../contracts/summaries.js";
+import { SummaryError, preparationGuard, preparation, expirePreparation, preparedMembers, coverageSet, authorizeMember } from "./summary-context.js";
+import type { PreparedCoverage } from "../publication/summary-storage.js";
 
 const schemas: Record<string, TSchema> = {
   "discussion.create": DiscussionInput,
@@ -37,6 +40,8 @@ const schemas: Record<string, TSchema> = {
   "artifact.create": ArtifactInput,
   "revision.publish": RevisionInput,
   "community.setup": SetupInput,
+  "summary.create": SummaryCreateInput,
+  "summary.revise": SummaryRevisionInput,
 };
 export type PublicationKind = keyof typeof schemas;
 export const participationSemanticVersion = "participation-text-v1";
@@ -54,6 +59,7 @@ type Request = {
   ordinary_area_name?: string;
   proposal_area_name?: string;
   proposal_context?: { affected_area_id?: string; expected_settings_version: number };
+  coverage?: CoverageDeclarationValue;
 };
 
 function ordered(value: unknown): unknown {
@@ -85,6 +91,10 @@ function prepare(kind: string, value: unknown) {
     )
       (input as Record<string, unknown>)[key] = field.toLowerCase();
   const content = input.content ?? input.overview!;
+  if (input.coverage) for (const key of Object.keys(input.coverage)) {
+    const coverage = input.coverage as Record<string,string>;
+    coverage[key] = coverage[key]!.toLowerCase();
+  }
   if (input.proposal_context?.affected_area_id) input.proposal_context.affected_area_id = input.proposal_context.affected_area_id.toLowerCase();
   content.mentions.forEach((entity) => {
     entity.participant_id = entity.participant_id.toLowerCase();
@@ -112,7 +122,8 @@ function prepare(kind: string, value: unknown) {
       throw new PublicationError("invalid_input");
   }
   const { idempotency_key: _key, ...semantic } = input;
-  const version = content.format === "loom-markdown-v2" ? "participation-text-v2" : participationSemanticVersion;
+  const version = kind.startsWith("summary.") ? "discussion-summary-v1"
+    : content.format === "loom-markdown-v2" ? "participation-text-v2" : participationSemanticVersion;
   return { input, content, version, digest: digestRequest(kind, semantic, version) };
 }
 async function outcome(
@@ -140,7 +151,7 @@ export class ParticipationPublications {
     const { input, content, digest, version } = prepare(kind, value),
       identity = identityOf(actorContext);
     try {
-      return await this.database.transaction(async (tx) => {
+      const completed = await this.database.transaction(async (tx) => {
         const saved = await outcome(
           tx,
           identity.participantId,
@@ -165,7 +176,7 @@ export class ParticipationPublications {
         if (saved) {
           const chain = await lockContext(tx, saved.resource_id, "resolution");
           await requireRevision(tx, saved.resource_id, saved.revision_id);
-          if (kind === "revision.publish")
+          if (kind === "revision.publish" || kind === "summary.revise")
             await authorizePublication(tx, actor, chain);
           else open(chain);
           if (
@@ -182,6 +193,22 @@ export class ParticipationPublications {
           );
           if (!found.rowCount) throw new PublicationError("invalid_input");
         }
+        let coverage: PreparedCoverage | undefined;
+        if (input.coverage) {
+          if ('preparation_id' in input.coverage) {
+            await preparationGuard(tx);
+            const snapshot = await preparation(tx, actor.participantId, input.coverage.preparation_id,true);
+            if (!snapshot.valid) return expirePreparation(tx,snapshot.id);
+            coverage = { discussion_id: snapshot.discussion_id, scope: snapshot.scope, preparation_id: snapshot.id,
+              carried_from_revision_id: null, members: await preparedMembers(tx, snapshot.id) };
+          } else {
+            if (kind !== 'summary.revise' || input.coverage.carry_forward_revision_id !== input.expected_revision_id)
+              throw new PublicationError('invalid_input');
+            const prior = await coverageSet(tx, input.coverage.carry_forward_revision_id);
+            if (prior.summary_id !== input.resource_id) throw new PublicationError('unavailable');
+            coverage = {...prior, preparation_id: null, carried_from_revision_id: input.coverage.carry_forward_revision_id};
+          }
+        }
         if (input.proposal_context) {
           // Freeze the designation with the same configuration-before-structure
           // order used by settings. Exact committed retries resolved above.
@@ -189,23 +216,28 @@ export class ParticipationPublications {
           const configured = (await tx.query<{version:number;proposal_area_id:string|null}>("SELECT version,proposal_area_id FROM loom.community_settings WHERE id=1 FOR SHARE", [])).rows[0]!;
           if (configured.version !== input.proposal_context.expected_settings_version || configured.proposal_area_id !== input.area_id) throw new OrganizationError("proposal_route_changed");
         }
-        if (content.format === "loom-markdown-v2") {
+        if (content.format === "loom-markdown-v2" || coverage) {
           // Setup must take the exclusive structure guard before any shared plan.
           if (kind === "community.setup") {
             await tx.query("SELECT pg_advisory_xact_lock($1::integer,$2::integer)", [0x4c4f4f4d, 3]);
             await structureGuard(tx, true);
           }
-          await lockReferencePlan(tx, [input.resource_id, input.area_id, input.parent_id,
-            input.proposal_context?.affected_area_id, ...content.references.map(ref => ref.target.resource_id)]
-            .filter((id): id is string => !!id), kind === "revision.publish" ? input.resource_id : undefined);
+          await lockReferencePlan(tx, [input.resource_id, input.area_id, input.parent_id, coverage?.discussion_id,
+            input.proposal_context?.affected_area_id, ...(content.format === 'loom-markdown-v2' ? content.references.map(ref => ref.target.resource_id) : []),
+            ...(coverage?.members.map(m=>m.contribution_id) ?? [])]
+            .filter((id): id is string => !!id), kind === 'summary.create' ? input.discussion_id
+              : kind === "revision.publish" || kind === 'summary.revise' ? input.resource_id : undefined);
         }
         if (input.proposal_context?.affected_area_id) await lockContext(tx, input.proposal_context.affected_area_id, "resolution", ["area"]);
         let chain: Resource[],
           resourceId: string,
           title = input.title ?? null;
-        if (kind === "revision.publish") {
+        if (kind === "revision.publish" || kind === 'summary.revise') {
           chain = await lockContext(tx, input.resource_id!, "publication");
           const resource = chain[0]!;
+          if (resource.kind === 'summary' && kind !== 'summary.revise') throw new SummaryError('summary_coverage_required');
+          if (kind === 'summary.revise' && (resource.kind !== 'summary' || !coverage || coverage.discussion_id !== resource.owner_resource_id))
+            throw new PublicationError('unavailable');
           if (!resource.current_revision_id)
             throw new PublicationError("unavailable");
           await requireRevision(tx, resource.id, resource.current_revision_id);
@@ -226,6 +258,21 @@ export class ParticipationPublications {
           if ((old.title === null) !== (title === null))
             throw new PublicationError("invalid_input");
           resourceId = resource.id;
+        } else if (kind === 'summary.create') {
+          const owners = await lockContext(tx, input.discussion_id!, 'resolution', ['discussion']);
+          open(owners);
+          if (!coverage || coverage.discussion_id !== input.discussion_id || !coverage.preparation_id) throw new PublicationError('invalid_input');
+          if ((await tx.query('SELECT id FROM loom.summaries WHERE discussion_id=$1', [input.discussion_id])).rowCount)
+            throw new SummaryError('summary_already_exists');
+          // Validate before inserts. A prepared historical revision is valid, but
+          // neither the handle nor earlier eligibility reserves current authority.
+          if (!(await preparation(tx, actor.participantId, coverage.preparation_id,true)).valid)
+            return expirePreparation(tx,coverage.preparation_id);
+          for (const member of coverage.members) await authorizeMember(tx, coverage.discussion_id, member);
+          resourceId = await this.createResource(tx, actor.participantId, 'summary', input.discussion_id!);
+          await tx.query('INSERT INTO loom.summaries(id,discussion_id) VALUES ($1,$2)', [resourceId,input.discussion_id]);
+          await tx.query('INSERT INTO loom.resource_editors VALUES ($1,$2)', [resourceId,actor.participantId]);
+          chain = await lockContext(tx, resourceId, 'publication', ['summary']);
         } else if (kind === "community.setup") {
           await tx.query(
             "SELECT pg_advisory_xact_lock($1::integer,$2::integer)",
@@ -362,6 +409,11 @@ export class ParticipationPublications {
           // before insertion; no competing transaction can yet see these identities.
           chain = await lockContext(tx, resourceId, "publication");
         }
+        if (kind === 'summary.revise' && coverage?.preparation_id) {
+          if (!(await preparation(tx, actor.participantId, coverage.preparation_id,true)).valid)
+            return expirePreparation(tx,coverage.preparation_id);
+          for (const member of coverage.members) await authorizeMember(tx, coverage.discussion_id, member);
+        }
         return commitRevision(
           tx,
           actor,
@@ -372,14 +424,17 @@ export class ParticipationPublications {
             content,
             title,
             mentions: content.mentions,
+            ...(coverage ? { coverage } : {}),
             ...(content.format === "loom-markdown-v2" ? { references: await prepareReferences(tx, resourceId,
               input.expected_revision_id ?? null, content.references) } : {}),
           },
           { kind, version, digest },
         );
       });
+      if (completed instanceof SummaryError) throw completed;
+      return completed;
     } catch (error) {
-      if (error instanceof OrganizationError) throw error;
+      if (error instanceof OrganizationError || error instanceof SummaryError) throw error;
       return safeError(error);
     }
   }

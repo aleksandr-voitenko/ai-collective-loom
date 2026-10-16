@@ -137,7 +137,7 @@ export class ParticipationRetrieval {
       }>(
         `SELECT v.title,v.revision_number::text,v.publisher_id,v.created_at,
       a.nickname AS author_nickname,a.kind AS author_kind,p.nickname AS publisher_nickname,p.kind AS publisher_kind,
-      c.discussion_id,c.parent_id,EXISTS(SELECT 1 FROM loom.resource_editors WHERE resource_id=$1 AND participant_id=$3) AS is_editor
+      COALESCE(c.discussion_id,(SELECT owner_resource_id FROM loom.resources WHERE id=$1 AND kind='summary')) AS discussion_id,c.parent_id,EXISTS(SELECT 1 FROM loom.resource_editors WHERE resource_id=$1 AND participant_id=$3) AS is_editor
       FROM loom.revisions v JOIN loom.participants p ON p.id=v.publisher_id
       JOIN loom.participants a ON a.id=$4 LEFT JOIN loom.contributions c ON c.id=v.resource_id
       WHERE v.id=$2 AND v.resource_id=$1`,
@@ -576,7 +576,7 @@ export class ParticipationRetrieval {
           [id],
         )
       ).rows[0]!;
-      if (row.kind !== "artifact") throw new PublicationError("unavailable");
+      if (row.kind !== "artifact" && row.kind !== 'summary') throw new PublicationError("unavailable");
       const editors = (
         await tx.query<{ id: string; nickname: string; kind: string }>(
           "SELECT p.id,p.nickname,p.kind FROM loom.resource_editors e JOIN loom.participants p ON p.id=e.participant_id WHERE e.resource_id=$1 ORDER BY p.id LIMIT 32",
