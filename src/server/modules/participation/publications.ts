@@ -173,10 +173,16 @@ export class ParticipationPublications {
           kind,
           input.idempotency_key,
         );
+        // Parent authorship is immutable. Discover it before the complete sorted
+        // participant plan; never introduce a participant guard after resources.
+        const replyAuthor = kind === 'reply.create' && !saved ? (await tx.query<{id:string}>(
+          'SELECT r.original_author_id AS id FROM loom.contributions c JOIN loom.resources r ON r.id=c.id WHERE c.id=$1',
+          [input.parent_id])).rows[0]?.id : undefined;
         // All participant locks precede credential/resource guards in UUID order.
         for (const id of [
           ...new Set([
             identity.participantId,
+            ...(replyAuthor ? [replyAuthor] : []),
             ...content.mentions.map((m) => m.participant_id),
             ...(input.change_note?.mentions.map(m => m.participant_id) ?? []),
           ]),
@@ -426,6 +432,13 @@ export class ParticipationPublications {
           }
           if (kind === "discussion.create" && input.proposal_context?.affected_area_id)
             await tx.query("INSERT INTO loom.discussion_area_references(discussion_id,area_id) VALUES ($1,$2)", [ownerId,input.proposal_context.affected_area_id]);
+          // Additive compatibility: populated upgrade fixtures still run the old
+          // schema. Old requests/digests remain unchanged; only new facts are added.
+          if (kind === 'reply.create' && replyAuthor && (await tx.query<{ready:boolean}>(
+            "SELECT to_regclass('loom.notification_reply_facts') IS NOT NULL AS ready", [])).rows[0]!.ready) {
+            await tx.query(`INSERT INTO loom.notification_reply_facts(reply_id,recipient_id,eligible)
+              SELECT $1,id,state='active' AND kind IN ('human','agent') FROM loom.participants WHERE id=$2`, [resourceId,replyAuthor]);
+          }
           // New rows are owned by this transaction. Existing owner locks were taken
           // before insertion; no competing transaction can yet see these identities.
           chain = await lockContext(tx, resourceId, "publication");

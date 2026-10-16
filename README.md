@@ -42,6 +42,13 @@ and comments can explain explicitly selected revisions without editing them. Not
 change accounts and their exact history are discoverable independently of indexing.
 See the [change notes guide](docs/development/change-notes.md).
 
+**Mentions/replies** provides durable personal direct attention across all supported
+published mention surfaces and true replies. An independent worker preserves
+original triggers, deduplicates continuing mentions and coalesces new reasons.
+Personal checkpoints survive ordinary API/client restarts; restoration explicitly
+replays older retained history. See the [notification and recovery guide](docs/development/notifications.md).
+Shared Updates, Following, read state and dismissal remain unfinished.
+
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
 [participation guide](docs/development/participation.md) for enrollment, the actual
@@ -95,6 +102,7 @@ npm run test:search:postgres # leases, process loss, rebuild, current authorizat
 npm run test:references:postgres # references, populated upgrade, client recovery and read/publication races
 npm run test:summaries:postgres # canonical summaries, coverage, bounded maintenance and exact recovery
 npm run test:changes:postgres # revision notes, exact change accounts, upgrade, bounds and recovery
+npm run test:notifications:postgres # ordered personal delivery, native fencing, durable recovery and authorization
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures
@@ -163,9 +171,11 @@ The internal publication operation and its lock/tail/recovery contract are in
 inspects persisted rows through controlled concurrency, stage failures, process
 loss and backend termination. Its printed synthetic metrics are not production
 capacity approval. Search is the first consumer: lease generation and exact source
-version checks guard the atomic output/job commit. Other projections remain disabled.
-The preview supervises its worker; type `worker stop` or `worker start` in its
-terminal to exercise recovery while HTTPS stays available. A configured synthetic
+version checks guard the atomic output/job commit. Personal direct attention has an
+independent ordered consumer; remaining projections stay disabled. The preview
+supervises both workers. Use `worker stop` / `worker start` for search or
+`notifications stop` / `notifications start` for personal attention while HTTPS
+stays available. A configured synthetic
 installation can run `npm run worker:search` after building and applying migrations.
 See [search verification evidence](docs/development/search-evidence.md).
 

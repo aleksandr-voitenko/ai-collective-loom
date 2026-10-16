@@ -5,7 +5,9 @@ Implementation and verification record: `LC-20261015-94TS`.
 `search.ts` supplies participant selection/status and administrator recovery;
 `worker.ts` owns durable work. `server/search-worker.ts` is the same-release native
 Node entry, running as constrained `loom_app`, without participant credentials.
-Other outbox consumers remain unimplemented. Sources and intents are immutable inputs.
+Personal notifications are an independent ordered sibling consumer (ADR-023).
+Search keeps latest-revision-wins semantics and never changes notification identity.
+Sources and intents are immutable inputs.
 
 Typed artifacts, contributions and canonical summaries in `loom-markdown-v1`, `loom-markdown-v2` and `loom-markdown-v3`
 are the population (ADR-010). Before migration 0010 the worker detects the absent

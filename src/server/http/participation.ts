@@ -21,6 +21,8 @@ import { SavedItemsError } from "../modules/participation/saved-items.js";
 import { registerOrganization } from "./organization.js";
 import { OrganizationError } from "../modules/participation/organization-context.js";
 import { registerSearch } from './search.js';
+import { registerNotifications } from './notifications.js';
+import { NotificationError } from '../modules/notifications/retrieval.js';
 import { SearchError } from '../modules/search/search.js';
 import { registerReferences } from './references.js';
 import { registerChanges } from './changes.js';
@@ -69,6 +71,12 @@ export function participantError(
     status=code==='summary_source_limit'||code==='summary_preparation_limit'?429:409;
     action=code==='summary_changed'?'replay_view':code==='summary_already_exists'?'inspect_discussion_summary':
       code==='summary_preparation_expired'?'retain_draft_and_reconcile':'review_declaration';
+  } else if (error instanceof NotificationError) {
+    code=error.code;message=error.message;
+    status=code==='notification_descriptor_expired'||code==='notification_history_gap'?410:code==='notification_work_limit'?429:409;
+    action=code==='notification_descriptor_expired'?'renew_traversal':code==='visibility_replay_required'?'replay_retained_history':
+      code==='notification_history_gap'?'resynchronize_retained_history':code==='notification_epoch_changed'?'deployment_recovery_required':
+      code==='notification_view_changed'||code==='notification_work_limit'?'retry_same_request':'correct_request';
   } else if (error instanceof ReferenceError) {
     code=error.code; message=error.message;
     status=code==='references_changed'?409:429;
@@ -107,6 +115,9 @@ export function participantError(
   if (code === "invalid_cursor") action = "replay_view";
   if (code === "idempotency_conflict" || status >= 500)
     action = "reconcile_operation";
+  const personalRead = request.routeOptions.url === '/api/v1/me/notifications/query' ||
+    request.routeOptions.url === '/api/v1/me/notifications/:id';
+  if (personalRead && status >= 500) action = 'retry_same_request';
   return reply
     .code(status)
     .send({
@@ -118,7 +129,7 @@ export function participantError(
         ...(current !== undefined ? { current_revision_id: current } : {}),
         ...(minimum ? { minimum_response_bytes: minimum } : {}),
         ...(error instanceof SummaryError && error.definitive ? { operation_outcome: "rejected" } : {}),
-        ...(status >= 500 && request.method === "POST"
+        ...(status >= 500 && request.method === "POST" && !personalRead
           ? { operation_outcome: "unknown" }
           : {}),
       },
@@ -133,6 +144,7 @@ export async function registerParticipation(
   registerSavedItems(app, services.database, actor);
   registerOrganization(app, services.database, actor);
   registerSearch(app, services.database, actor);
+  registerNotifications(app, services.database, actor);
   registerReferences(app, services.database, actor);
   registerChanges(app, services.database, actor);
   registerSummaries(app, services.database, actor);

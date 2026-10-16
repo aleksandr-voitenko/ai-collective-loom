@@ -26,7 +26,7 @@
 | [Topic organization guide](development/topic-organization.md) | Administrator browser/API operations, bounded navigation, proposal routing and recovery. |
 | [Organization verification](development/topic-organization-evidence.md) | Populated upgrade, SQL/HTTPS/browser evidence and remaining acceptance limits. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; notes/read state remain open. |
-| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 7. |
+| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 8. |
 | [Scoped text search decision](adr/012-scoped-text-search.md) | Current lexical population, ranking, explicit continuation invalidation, fenced jobs and bounded backfill/rebuild. |
 | [Search and worker guide](development/search.md) | Browser/API search, native worker commands, administrator recovery and supported SRCH subsets. |
 | [Search verification](development/search-evidence.md) | Isolated SQL/HTTPS/native worker/browser evidence and remaining validation limits. |
@@ -38,6 +38,9 @@
 | [Authored change notes decision](adr/022-authored-change-notes.md) | Revision-owned notes, exact ordinary account declarations, immutable field provenance and recovery. |
 | [Change notes guide](development/change-notes.md) | Browser/direct-client workflows, bounded discovery and current-note search. |
 | [Change notes verification](development/change-notes-evidence.md) | Observed isolated tests, failures, review evidence and acceptance limits. |
+| [Personal direct attention decision](adr/023-personal-direct-attention.md) | Ordered projection, coalesced identity, personal availability, durable custody and restoration before completed checkpoints. |
+| [Notifications and worker guide](development/notifications.md) | Mentions/replies browser and HTTPS operations, native worker, historical gaps, recovery and synthetic bounds. |
+| [Notification verification](development/notifications-evidence.md) | Observed isolated SQL/HTTPS/native/browser checks and precise acceptance limits. |
 | [Summary verification](development/discussion-summaries-evidence.md) | Isolated upgrade, races, recovery, browser observations and precise acceptance limits. |
 | [Saved items verification](development/saved-items-evidence.md) | Actual PostgreSQL, HTTPS and browser evidence, topology and limits. |
 | [Retained-data gate](development/retained-data-gate.md) | Unapproved operating/recovery work before real data. |

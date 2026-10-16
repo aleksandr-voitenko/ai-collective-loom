@@ -31,7 +31,7 @@ installed separately from the bootstrap in the runtime foundation described by
 | Application skeleton and executable contracts | Runtime foundation implemented: exact TypeScript/Fastify/React/Data Mode/Vite and pg packages, actual lockfile, operational API/browser, strict schemas/OpenAPI 3.0.3, safe errors, role readiness and transaction primitives. Local build/typecheck, transport/router, and isolated PostgreSQL/HTTP checks exercise these boundaries. Participant contracts/authentication and storage-client/version-grant compatibility remain open; no product API-01–07 or AC/AV completion is inferred. | Architecture §§3, 14, 17; ADR-002, ADR-003; API-01–07 |
 | Publication/idempotency primitive | Internal text-revision operation implemented: serialized participant/operation/key, versioned semantic digest, reauthorized exact replay before new-write preconditions, atomic revision/pointer/event/intent/outcome. Real PostgreSQL barriers inspect convergence, changed input, stale writes, all-stage rollback, credential/editor/suppression state and post-commit process loss. Synthetic HTTP constructors, minimal Markdown/entities and client durable intent now reuse it (participation-1); full file/entity support and reviewed retention remain open; no full AC14/AC31/AV01 completion is inferred. | Architecture §§5–7; ADR-003, ADR-006, ADR-015; API-05, AC14, AV01 |
 | Controlled identity/admission | Synthetic protocol implemented with real passkey verification, opaque sessions/agent credentials, shared actor/current policy, controlled initialization, admission, one-time issuance and safe recovery. PostgreSQL barriers/row inspection exercise bootstrap/account/ticket/counter races, response loss, ordinary admin denial, lifecycle changes, rollback and secret disclosure. Six concrete policy candidates remain unapproved. An opt-in synthetic HTTPS/browser workspace is implemented; production admission and operator/human proof ceremonies remain gated. No full AC45/AC54 completion is inferred. | Architecture §§6,14; ADR-004, ADR-015; IDN-01–05/07, API-08, SEC-01/02/05/06 |
-| Fenced job-output publication | Implemented for synthetic search: resource/revision → job → index-state guards precede lease/owner/generation and current-source checks; output and success share COMMIT. Native process barriers exercise actual lease expiry/reclaim, late A after B, R2 before R1 and process loss before/after COMMIT. Search owns independent discovery, retained failures and resumable rebuild. Other consumers and production job/retention policies remain open. | Architecture §7.5; ADR-006/012; OPS-03 |
+| Fenced job-output publication | Implemented for synthetic search: resource/revision → job → index-state guards precede lease/owner/generation and current-source checks; output and success share COMMIT. Native process barriers exercise actual lease expiry/reclaim, late A after B, R2 before R1 and process loss before/after COMMIT. Search owns independent discovery, retained failures and resumable rebuild. Personal direct attention now uses its independent ordered consumer (ADR-023); remaining consumers and production job/retention policies remain open. | Architecture §7.5; ADR-006/012; OPS-03 |
 | Committed event ordering | Transactional row-clock tail implemented for shared publications and administrator organization. PostgreSQL tests inspect visible clock/event coverage through reversed preparation order, rollback, killed publication connections and move/close races in both commit orders. Structural events retain before/after scopes without rewriting old event ancestry. Future lifecycle operations must use the same tail. Full traversal/checkpoint/restoration behavior and a representative operating envelope remain open. | Architecture §7.3; ADR-006, ADR-020; ATT-08, AC08 |
 | Version-pinned storage adapter | Implement real owner staging/preparation/final versions. Test replayed upload URLs, exact source-version copy, interruptions, multipart checksums and file-context authorization against local AND selected managed storage. | Architecture §8; ART-02–05, AC04–05 |
 
@@ -78,8 +78,27 @@ summary coverage distinguishes summary notes from ordinary account sources.
 See [ADR-022](../adr/022-authored-change-notes.md), the [guide](change-notes.md)
 and [evidence](change-notes-evidence.md). This implements related KNW-02–06,
 MEN-01/02 provenance, REF-01–03, SRCH-02/04–07 and API/recovery portions; it does not
-complete notification delivery, Updates, file/private-note integration, broad human/
+complete full Updates, file/private-note integration, broad human/
 provider-agent acceptance, production capacity or retained-data policy.
+
+## Durable personal direct attention
+
+The synthetic increment implements MEN-01/02 for supported published text and
+notes, true immediate-parent replies and the personal direct-attention portions of
+ATT/API retrieval and AC60. Main claims retain identity across revisions; new
+revision notes remain distinct; new reasons coalesce into one delivery. Independent
+ordered jobs and per-recipient committed clocks support delayed availability,
+fixed intervals, restarts and restoration before completed lower bounds. The
+browser Mentions/replies view and standalone HTTPS reader share the same contract.
+See [ADR-023](../adr/023-personal-direct-attention.md), the [guide](notifications.md)
+and [performed checks](notifications-evidence.md).
+
+Old unmentioned replies without publication-time eligibility facts remain explicit
+historical gaps. This does not claim complete historical recovery, the full shared
+Updates/Following subsystem, routine mutes, highlights/grouping, read state,
+dismissal, file/private-note integration, moderation administration, production
+operations, comfortable human use or provider/cross-machine validation. These
+remain unfinished requirements rather than optional policy changes.
 
 ## Subsequent correctness gates
 
@@ -90,7 +109,7 @@ history, safe unknown comparison and bounded maintenance. Summary references and
 current authored-text indexing reuse existing mechanisms. See [ADR-010](../adr/010-discussion-summary-coverage.md),
 the [guide](discussion-summaries.md) and [observed evidence](discussion-summaries-evidence.md).
 AC51/52 and applicable summary/source portions of AC10/31/37/38/54/55/57/59 are
-bounded scripted journeys, not broad scenario closure. Notifications, files,
+bounded scripted journeys, not broad scenario closure. Summary-maintenance alerts, files,
 reservations, full moderation UI, representative human and
 provider-agent trials, retained-data recovery and production capacity remain open.
 The 100-source/10-summary scan and preparation retention/custody limits are
@@ -106,7 +125,7 @@ and [observed evidence](topic-organization-evidence.md).
 This covers administrator portions of ORG-01–06 and ART-08 and the relevant
 organization portions of AC02/12/32/39/40/44/53; it does not complete those broad
 scenarios. Optional moderator assignments/delegation, Updates, subscriptions,
-notifications, attention traversal and real joint human/agent usability remain open.
+routine activity notifications, shared attention traversal and real joint human/agent usability remain open.
 The 12-level/500-area/10,000-decision bounds and single-process cursor custody are
 synthetic constraints requiring review before real use.
 
@@ -140,7 +159,7 @@ first Save; retrying an earlier Save after Unsave returns its original outcome a
 the current unsaved state without reapplying it. See [ADR-013](../adr/013-private-saved-items.md),
 the [guide](saved-items.md) and [observed evidence](saved-items-evidence.md).
 The candidate 500-target/10,000-decision retention bounds are not production approval.
-Notes, read state, Following, notifications and complete Updates remain open.
+Notes, read state, Following and complete shared Updates remain open. Personal mentions/replies are independent (ADR-023).
 
 Browser failure diagnostics now have a closed structured contract, pre-close
 context/tab capture, local canary/failure verification and a gated CI upload path.
@@ -154,7 +173,7 @@ investigations separate from verified diagnostic delivery; see
 
 | Work | Required clarification/test | Close before |
 |---|---|---|
-| Restored visibility behind completed checkpoints | Recovery must reach restored retained events earlier than the active interval lower bound, including personal delivery history; filters cannot hide control conditions. | Complete-feed support. |
+| Restored visibility behind completed checkpoints | Personal direct attention implements retained-history replay before completed lower bounds, evaluated before reason filters (ADR-023). Shared stream/grouped Updates restoration remains open. | Full shared complete-feed support. |
 | Stable grouped traversal | Pick an actual stable group-key algorithm; suppress the event determining an already returned group's key and ensure no gap/duplicate/reordering surprise. | Grouped Updates. |
 | Compatible publication/retrieval limits | Synthetic text slice implemented: 16 KiB UTF-8 text, 128 KiB request/response budget, full exact-body links, explicit smaller-budget failure and bounded scan continuations. Maximum JSON-escaped/control text and multibyte boundaries exercised over HTTPS. Larger text/files and approved workload limits remain open. | Increasing text/file limits or real use. |
 | Late personal-state writes | Saved items use per-target versions, retained no-op Unsave tombstones and original/current reconciliation; actual HTTPS and browser races exercise delayed and replayed commands. Automatic reads still need their own ordering contract so they cannot undo newer explicit unread intent. | Automatic reading and remaining personal state. |

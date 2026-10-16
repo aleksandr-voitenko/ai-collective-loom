@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
   steps: 16, tests: 128, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
-export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
+export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
   'collector_missing', 'collector_unfinished', 'page_closed_before_capture', 'page_limit', 'context_limit', 'pending_limit', 'byte_limit'];
 export const details = ['none', 'default', 'persistent', 'explicit', 'dom_ready', 'load', 'closed',
@@ -19,6 +19,8 @@ export const controlNames = ['save_discussion', 'unsave_discussion', 'sign_in', 
 export const controlLabels = ['Save discussion', 'Unsave discussion', 'Sign in with passkey', 'Create passkey', 'Reply',
   'Check saved status', 'Retry same change', 'Retry collection', 'Sign out', 'Confirm move', 'Save topic', 'Check organization status', 'Retry same organization change', 'Search shared text', 'Refresh search', 'Add reference', 'Check target', 'Refresh references'];
 const routePatterns = [
+  '/loom/notifications', '/api/v1/me/notifications/query', '/api/v1/me/notifications/:id',
+  '/api/v1/admin/notifications/health', '/api/v1/admin/notifications/failures', '/api/v1/admin/notifications/retry', '/api/v1/admin/notifications/reconcile',
   '/api/v1/changes', '/api/v1/resources/:id/revisions/:id/change-note', '/api/v1/resources/:id/revisions/:id/change-coverage',
   '/loom/summaries', '/api/v1/summaries', '/api/v1/summary-revisions', '/api/v1/summaries/status', '/api/v1/summaries/editors', '/api/v1/summaries/maintenance',
   '/api/v1/summary-preparations', '/api/v1/summary-preparations/cleanup', '/api/v1/summary-preparations/:id', '/api/v1/summary-preparations/:id/members',
