@@ -181,7 +181,7 @@ inspect that it has exited before removing its abandoned `.lock` file. Keep the 
 
 These are disclosed synthetic limits, not production capacity. See the
 [observed evidence](following-evidence.md). W01 implements shared-only portions;
-W02 grouped Updates, highlights, combined personal/shared checkpoints, mutes,
-dismissal and read/unread remain open. Files, private notes, full moderation,
+W02 [combined Updates](updates.md) adds grouping, highlights and paired personal/shared
+checkpoints. Mutes, dismissal and read/unread remain open. Files, private notes, full moderation,
 agent execution, real human usability and cross-machine/provider trials remain
 outside this increment. Following is neither permission nor task assignment.

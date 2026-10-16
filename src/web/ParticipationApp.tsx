@@ -46,6 +46,8 @@ import { NotificationsPage } from './Notifications.js';
 import { NotificationRecovery } from './notification-recovery.js';
 import { FollowControl, FollowingPage } from './Following.js';
 import { SharedChangesPage } from './SharedChanges.js';
+import { UpdatesPage } from './Updates.js';
+import { UpdatesRecovery } from './updates-recovery.js';
 import { SharedRecovery } from './shared-recovery.js';
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import { SummarySection, SummaryMaintenance, CoverageDetails, CoverageEditor } from './Summaries.js';
@@ -204,6 +206,9 @@ export function ParticipationApp() {
       try {if(community)await new NotificationRecovery(community.instance_id,self.participant_id).clear();}
       catch {cleanupFailures.push('notification recovery could not be cleared.');}
       if(cleanupOwner!==identityGeneration())return;
+      try {if(community)await new UpdatesRecovery(community.instance_id,self.participant_id).clear();}
+      catch {cleanupFailures.push('Updates recovery could not be cleared.');}
+      if(cleanupOwner!==identityGeneration())return;
       try {if(community)await new SharedRecovery(community.instance_id,self.participant_id).clear();}
       catch {cleanupFailures.push('shared change recovery could not be cleared.');}
       if(cleanupOwner!==identityGeneration())return;
@@ -233,6 +238,7 @@ export function ParticipationApp() {
         {community?.community_name ?? "Collective Loom"}
       </Link>
       <nav aria-label="Community navigation">
+        <NavLink to="/loom/updates"><Icon name="discussion" />Updates</NavLink>
         <NavLink to="/loom" end>
           <Icon name="topic" />
           Topics
@@ -318,7 +324,7 @@ export function ParticipationApp() {
                   ? "Artifacts"
                   : location.pathname.includes('/following') ? 'Following'
                   : location.pathname.includes('/changes') ? 'Changes'
-                  : location.pathname.includes('/notifications') ? 'Mentions/replies' : location.pathname.includes("/saved") ? "Saved items" : location.pathname.includes("/search") ? "Search" : "Topics"}
+                  : location.pathname.includes('/updates') ? 'Updates' : location.pathname.includes('/notifications') ? 'Mentions/replies' : location.pathname.includes("/saved") ? "Saved items" : location.pathname.includes("/search") ? "Search" : "Topics"}
           </span>
           <span className="release-label">Synthetic preview</span>
         </header>
@@ -458,6 +464,7 @@ function ActiveView({ context }: { context: Context }) {
   if (kind === "saved") return <SavedItemsPage context={context} />;
   if (kind === 'notifications') return <NotificationsPage context={context} />;
   if (kind === 'following') return <FollowingPage context={context} />;
+  if (kind === 'updates') return <UpdatesPage context={context} />;
   if (kind === 'changes') return <SharedChangesPage context={context} />;
   if (kind === "search") return <SearchPageViewComponent context={context} />;
   if (kind === "summaries") return <SummaryMaintenance context={context} />;

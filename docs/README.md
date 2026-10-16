@@ -26,7 +26,7 @@
 | [Topic organization guide](development/topic-organization.md) | Administrator browser/API operations, bounded navigation, proposal routing and recovery. |
 | [Organization verification](development/topic-organization-evidence.md) | Populated upgrade, SQL/HTTPS/browser evidence and remaining acceptance limits. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; notes/read state remain open. |
-| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 9. |
+| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 10. |
 | [Scoped text search decision](adr/012-scoped-text-search.md) | Current lexical population, ranking, explicit continuation invalidation, fenced jobs and bounded backfill/rebuild. |
 | [Search and worker guide](development/search.md) | Browser/API search, native worker commands, administrator recovery and supported SRCH subsets. |
 | [Search verification](development/search-evidence.md) | Isolated SQL/HTTPS/native worker/browser evidence and remaining validation limits. |
@@ -43,6 +43,9 @@
 | [Following decision](adr/024-following-shared-changes.md) | Owner-private definitions, event-time matching, complete shared intervals and independent recovery. |
 | [Following guide](development/following.md) | Browser controls, direct HTTPS, standalone recovery and synthetic bounds. |
 | [Following verification](development/following-evidence.md) | Observed checks, failures and W01 acceptance boundaries. |
+| [Combined Updates decision](adr/025-combined-updates.md) | Frozen ownership groups, deterministic highlights, two-stream checkpoints and finite custody. |
+| [Updates guide](development/updates.md) | Compact browser cards, exact member retrieval, HTTPS client and explicit recovery. |
+| [Updates verification](development/updates-evidence.md) | W02 scope, actual local checks, retained failures and acceptance limits. |
 | [Notification verification](development/notifications-evidence.md) | Observed isolated SQL/HTTPS/native/browser checks and precise acceptance limits. |
 | [Summary verification](development/discussion-summaries-evidence.md) | Isolated upgrade, races, recovery, browser observations and precise acceptance limits. |
 | [Saved items verification](development/saved-items-evidence.md) | Actual PostgreSQL, HTTPS and browser evidence, topology and limits. |

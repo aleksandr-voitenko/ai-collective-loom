@@ -51,8 +51,14 @@ Participants can Follow topics (with explicit subtopics), discussions and artifa
 The Following page manages independent choices; chronological Changes retrieves
 retained shared events with exact links, fixed intervals and durable recovery.
 Moves preserve historical relevance, and direct Mentions/replies remains independent.
-See the [Following guide](docs/development/following.md). Grouped Updates, combined
-attention, read state, mutes and dismissal remain unfinished.
+See the [Following guide](docs/development/following.md). **Updates** combines those
+followed changes with personal attention into compact discussion/artifact cards,
+bounded source lists and attributed revision notes. Highlights can switch to all
+matching groups within the same fixed interval. Independent paired checkpoints
+preserve delayed personal deliveries. Missing or unknown history has an explicit
+incomplete-baseline recovery path that preserves scope and personal reasons.
+See the [Updates guide](docs/development/updates.md).
+Read state, mutes and dismissal remain unfinished.
 
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
@@ -109,6 +115,7 @@ npm run test:summaries:postgres # canonical summaries, coverage, bounded mainten
 npm run test:changes:postgres # revision notes, exact change accounts, upgrade, bounds and recovery
 npm run test:notifications:postgres # ordered personal delivery, native fencing, durable recovery and authorization
 npm run test:following:postgres # private definitions, shared intervals, moves, current authority and restart recovery
+npm run test:updates:postgres # combined grouping, paired recovery, guard races, bounds and populated upgrade
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures

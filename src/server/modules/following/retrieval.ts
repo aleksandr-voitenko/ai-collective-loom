@@ -14,13 +14,13 @@ type State={cursor_key:Buffer;recovery_epoch:string;instance_id:string;visibilit
 type Descriptor={purpose:'shared-changes-1';v:1;owner:string;instance:string;epoch:string;visibility:string;
   kind:'traversal'|'checkpoint';scope:'following'|'explicit';definitions:C.BoundDefinitionView[];
   id:string;lower:string;upper:string;after:string;expires:number;unknown:boolean;history:'retained'|'incomplete';baseline:boolean};
-type Candidate={id:string;position:string;kind:string;resource_id:string;revision_id:string|null;publisher_id:string;created_at:Date;
+export type SharedCandidate={id:string;position:string;kind:string;resource_id:string;revision_id:string|null;publisher_id:string;created_at:Date;
   area_scope_ids:string[];before_area_scope_ids:string[]|null;after_area_scope_ids:string[]|null;affected_target_ids:string[]|null;
   resource_kind:string;discussion_id:string|null;parent_id:string|null;revision_number:string|null;content_format:string|null;
   actor_kind:string;nickname:string;typed:boolean;note:boolean;operation_kind:string|null};
 // Untyped retained work still has canonical ownership. Preserve that scope for
 // unknown-coverage decisions; missing companion rows do not classify it as typed.
-const candidatesSql=`SELECT e.*,e.position::text,r.kind AS resource_kind,v.revision_number::text,v.content_format,
+export const sharedCandidatesSql=`SELECT e.*,e.position::text,r.kind AS resource_kind,v.revision_number::text,v.content_format,
   COALESCE(c.discussion_id,s.discussion_id,CASE WHEN r.kind IN ('contribution','summary') THEN r.owner_resource_id END) AS discussion_id,
   c.parent_id,p.kind AS actor_kind,p.nickname,
   (c.id IS NOT NULL OR a.id IS NOT NULL OR s.id IS NOT NULL OR ar.id IS NOT NULL OR d.id IS NOT NULL) AS typed,
@@ -31,7 +31,7 @@ const candidatesSql=`SELECT e.*,e.position::text,r.kind AS resource_kind,v.revis
   LEFT JOIN loom.areas ar ON ar.id=r.id LEFT JOIN loom.discussions d ON d.id=r.id
   LEFT JOIN loom.organization_operations o ON o.source_event_id=e.id`;
 
-function categories(row:Candidate):C.FollowSettingsView['preferences']|undefined{
+export function sharedCategories(row:SharedCandidate):C.FollowSettingsView['preferences']|undefined{
   if(!row.typed)return;
   if(row.kind==='organization.changed')return ['structural'];
   if(row.kind!=='revision.published'||!['loom-markdown-v1','loom-markdown-v2','loom-markdown-v3'].includes(row.content_format??''))return;
@@ -39,8 +39,8 @@ function categories(row:Candidate):C.FollowSettingsView['preferences']|undefined
     row.resource_kind==='contribution'?(row.parent_id?'replies':row.revision_number==='1'?'new_discussions':'discussion_edits'):undefined;
   return category?[category,...(row.note?['change_notes' as const]:[])]:undefined;
 }
-function matches(row:Candidate,definitions:C.BoundDefinitionView[]){
-  const kinds=categories(row),reasons:C.MatchReasonView[]=[];
+export function sharedMatches(row:SharedCandidate,definitions:C.BoundDefinitionView[]){
+  const kinds=sharedCategories(row),reasons:C.MatchReasonView[]=[];
   let unknown=false;
   definitions.forEach((definition,index)=>{
     const {target,include_descendants,preferences}=definition;
@@ -137,7 +137,7 @@ export class SharedChanges {
         purpose:C.sharedContract,v:1,owner:actor.participantId,instance:state.instance_id,epoch:state.recovery_epoch,visibility:state.visibility,
         scope,definitions,id:randomUUID(),kind:'traversal',lower,upper:state.position,after:lower,expires:Date.now()+86400000,
         unknown:false,history:resync||saved?.history==='incomplete'?'incomplete':'retained',baseline:resync};
-      const candidates=bound.baseline||!definitions.length?[]:(await tx.query<Candidate>(`${candidatesSql}
+      const candidates=bound.baseline||!definitions.length?[]:(await tx.query<SharedCandidate>(`${sharedCandidatesSql}
         WHERE e.position>$1 AND e.position<=$2 ORDER BY e.position LIMIT 101`,[bound.after,bound.upper])).rows;
       await lockReferencePlan(tx,[...definitions.map(d=>d.target.resource_id),...candidates.slice(0,100).flatMap(r=>[r.resource_id,...(r.discussion_id?[r.discussion_id]:[])])]);
       if(!saved&&scope==='explicit')await followSource(tx,definitions[0]!.target);
@@ -154,7 +154,7 @@ export class SharedChanges {
         if(row.actor_kind!=='internal')try{
           await lockContext(tx,row.resource_id,'resolution',['area','discussion','contribution','artifact','summary']);
           if(row.revision_id)await requireRevision(tx,row.resource_id,row.revision_id);
-          const match=matches(row,definitions);uncertain=match.unknown;
+          const match=sharedMatches(row,definitions);uncertain=match.unknown;
           if(match.reasons.length)item=await this.item(tx,row,match.reasons);
         }catch(error){if(!unavailable(error))throw error;}
         if(item){
@@ -183,7 +183,8 @@ export class SharedChanges {
     ]:d.target.kind==='discussion'?[{label:'Discussion opening and bounded branch inventory',url:`/api/v1/discussions/${d.target.resource_id}`}]:
       [{label:'Retained artifact revisions',url:`/api/v1/resources/${d.target.resource_id}/history`}]);
   }
-  private async item(tx:SqlTransaction,row:Candidate,reasons:C.MatchReasonView[],offset=0):Promise<C.SharedItemView>{
+  /** Internal projection: caller owns the transaction and complete resource plan. */
+  async item(tx:SqlTransaction,row:SharedCandidate,reasons:C.MatchReasonView[],offset=0):Promise<C.SharedItemView>{
     await lockContext(tx,row.resource_id,'resolution',['area','discussion','contribution','artifact','summary']);
     if(row.revision_id)await requireRevision(tx,row.resource_id,row.revision_id);
     const target:C.FollowTargetView=row.discussion_id?{kind:'discussion',resource_id:row.discussion_id}:{kind:row.resource_kind as C.FollowTargetView['kind'],resource_id:row.resource_id};
@@ -206,10 +207,10 @@ export class SharedChanges {
     const actor=await lockActor(tx,context),state=await this.state(tx),bound=this.decode(state,input.cursor,actor.participantId);
     if(bound.kind!=='traversal')throw new FollowingError('shared_token_invalid');
     this.checkContinuity(state,bound);
-    const row=(await tx.query<Candidate>(`${candidatesSql} WHERE e.id=$1 AND e.position>$2 AND e.position<=$3`,[input.event_id,bound.lower,bound.upper])).rows[0];
+    const row=(await tx.query<SharedCandidate>(`${sharedCandidatesSql} WHERE e.id=$1 AND e.position>$2 AND e.position<=$3`,[input.event_id,bound.lower,bound.upper])).rows[0];
     if(!row||!row.typed||row.actor_kind==='internal')throw new PublicationError('unavailable');
     await lockReferencePlan(tx,[row.resource_id,...(row.discussion_id?[row.discussion_id]:[])]);
-    const reasons=matches(row,bound.definitions).reasons;
+    const reasons=sharedMatches(row,bound.definitions).reasons;
     if(!reasons.length)throw new PublicationError('unavailable');
     return fit(await this.item(tx,row,reasons,input.reason_offset??0),input.max_response_bytes??131072);
   },true);}

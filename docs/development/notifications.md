@@ -2,9 +2,10 @@
 
 **Mentions/replies** is the synthetic release's complete, bounded personal feed of
 published mentions and true replies. It is independent of Saved items and source
-browsing. It does not implement shared Updates, Following/mutes, highlights,
-read/unread state, dismissal, files/private notes, delivery by email/push/webhook,
-agent execution or production operations. These remain product requirements.
+browsing. [Following](following.md) and [combined Updates](updates.md) have separate
+contracts and client recovery. Routine mutes, read/unread state, dismissal,
+files/private notes, delivery by email/push/webhook, agent execution and production
+operations remain open product requirements.
 
 All existing authored formats participate without changing their bytes or retry
 digests: v1/v2/v3 openings, comments, summaries, artifact text, artifact/summary

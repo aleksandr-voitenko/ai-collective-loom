@@ -1,5 +1,32 @@
 # Browser test diagnostics
 
+Combined Updates uses `integration/updates*.test.ts` for independent expected
+event/delivery sets, bounded preparation/expansion, highlights→complete fixed bounds,
+late personal repair, visibility replay before completed floors, both guard orders,
+component/count failure rollback, capacity, populated0013 upgrade and native
+HTTPS/API restart. `helpers/updates-gates.ts` pauses actual SQL transactions, not
+mock authorization. Tokens use randomized encryption: compare semantic identities
+and coverage rather than ciphertext equality. Continuing unchanged main mentions
+does not generate another signal; revision-note mentions retain exact-revision identity.
+`web/updates.test.tsx` covers development StrictMode, separate expansion budgets,
+failed storage, stale tabs, route/filter/identity fencing and policy withdrawal.
+`e2e/updates.spec.ts` uses the normal Chromium runner, real API/native worker,
+twenty-reply group, summary context/exact history, reload/back, focus, narrow layout
+and sign-out blocked on cleanup. Deliberate screenshots use
+LOOM_UPDATES_REVIEW_SCREENS=1 and remain separate from diagnostic uploads.
+Quota race regressions hold an actual RR snapshot across a competing creation at
+both owner/global caps; migration0015 must force retry before a stale count can
+reserve a view. Its populated upgrade retains all prior tables and custody rows.
+Native tests SIGKILL a reader while it holds the journal, prove a live competitor
+is refused, then recover both displayed pages. SQLite lock sidecars stay in place.
+StrictMode and Chromium member-race retries must reauthorize a withdrawn overview
+and preserve the prior expansion until an unseen successor has been saved.
+Recovery regressions start without a saved descriptor for personal/mention and
+explicit-artifact/reply gaps. A populated pre-0013 structural upgrade exercises the
+successful unknown-history response, explicit baseline, reload and newer activity.
+Assert the request and resulting scope/reason, qualified history and independent
+source/delivery clocks; a successful HTTP response alone missed these browser gaps.
+
 Following/shared retrieval uses `integration/following*.test.ts`: owner-private
 versions and rollback/replay, independent expected event sets, old typed upgrades,
 ancestor impacts, fixed clock/definition capture, both authority guard orders,

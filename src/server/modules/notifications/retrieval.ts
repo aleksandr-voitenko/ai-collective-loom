@@ -25,7 +25,7 @@ export class NotificationError extends Error {
 type Descriptor={v:1;owner:string;epoch:string;instance:string;visibility:string;reason:'all'|'mention'|'reply';
   kind:'traversal'|'checkpoint';id:string;lower:string;upper:string;after:string;expires:number;history:'retained'|'incomplete'};
 type State={cursor_key:Buffer;recovery_epoch:string;instance_id:string;visibility:string};
-type Candidate={id:string;signal_id:string;position:string;available_at:Date;resource_id:string;revision_id:string;source_event_id:string;
+export type PersonalCandidate={id:string;signal_id:string;position:string;available_at:Date;resource_id:string;revision_id:string;source_event_id:string;
   parent_id:string|null;discussion_id:string|null};
 type Authority=Awaited<ReturnType<typeof lockActor>>;
 const isUnavailable=(error:unknown)=>error instanceof PublicationError && error.code==='unavailable';
@@ -99,7 +99,7 @@ export class PersonalNotifications {
         v:1,owner:actor.participantId,epoch:state.recovery_epoch,instance:state.instance_id,visibility:state.visibility,
         reason:saved?.reason??options.reason??'all',kind:'traversal',id:randomUUID(),lower,upper:clock.position,after:lower,
         expires:Date.now()+limits.cursorSeconds*1000,history:replay&&clock.retained_after!=='0'?'incomplete':'retained'};
-      const candidates=(await tx.query<Candidate>(`SELECT d.id,d.signal_id,d.position::text,d.available_at,s.resource_id,s.revision_id,s.source_event_id,
+      const candidates=(await tx.query<PersonalCandidate>(`SELECT d.id,d.signal_id,d.position::text,d.available_at,s.resource_id,s.revision_id,s.source_event_id,
         c.parent_id,COALESCE(c.discussion_id,CASE WHEN r.kind='summary' THEN r.owner_resource_id END) AS discussion_id
         FROM loom.personal_deliveries d JOIN loom.notification_signals s ON s.id=d.signal_id JOIN loom.resources r ON r.id=s.resource_id
         LEFT JOIN loom.contributions c ON c.id=s.resource_id WHERE d.recipient_id=$1 AND d.position>$2 AND d.position<=$3
@@ -135,11 +135,12 @@ export class PersonalNotifications {
       return fit(page,budget);
     });
   }
-  private reasons(tx:SqlTransaction,signal:string){
+  reasons(tx:SqlTransaction,signal:string){
     return tx.query<{kind:'main_mention'|'direct_reply'|'note_mention';source_field:'main'|'reply'|'change_note'}>(
       'SELECT kind,source_field FROM loom.notification_claims WHERE signal_id=$1 ORDER BY kind LIMIT 3',[signal]).then(r=>r.rows);
   }
-  private async item(tx:SqlTransaction,actor:Authority,row:Candidate,reasons:Awaited<ReturnType<PersonalNotifications['reasons']>>):Promise<NotificationItemView>{
+  /** Internal projection: caller owns the transaction and complete resource plan. */
+  async item(tx:SqlTransaction,actor:Authority,row:PersonalCandidate,reasons:Awaited<ReturnType<PersonalNotifications['reasons']>>):Promise<NotificationItemView>{
     const source=await this.reads.resource(tx,actor,row.resource_id,row.revision_id);
     const current=(await lockContext(tx,row.resource_id,'resolution'))[0]!.current_revision_id;
     const currentAvailable=!!current&&(await tx.query("SELECT id FROM loom.revisions WHERE id=$1 AND availability='available' FOR SHARE",[current])).rowCount===1;
@@ -163,7 +164,7 @@ export class PersonalNotifications {
   }
   detail(actorContext:ActorContext,id:string){return this.run(async tx=>{
     const actor=await lockActor(tx,actorContext);
-    const row=(await tx.query<Candidate>(`SELECT d.id,d.signal_id,d.position::text,d.available_at,s.resource_id,s.revision_id,s.source_event_id,c.parent_id,
+    const row=(await tx.query<PersonalCandidate>(`SELECT d.id,d.signal_id,d.position::text,d.available_at,s.resource_id,s.revision_id,s.source_event_id,c.parent_id,
       COALESCE(c.discussion_id,CASE WHEN r.kind='summary' THEN r.owner_resource_id END) AS discussion_id
       FROM loom.personal_deliveries d JOIN loom.notification_signals s ON s.id=d.signal_id JOIN loom.resources r ON r.id=s.resource_id
       LEFT JOIN loom.contributions c ON c.id=s.resource_id WHERE d.id=$1 AND d.recipient_id=$2`,[id,actor.participantId])).rows[0];
@@ -171,9 +172,9 @@ export class PersonalNotifications {
     await lockReferencePlan(tx,[row.resource_id,row.parent_id,row.discussion_id].filter((v):v is string=>!!v));
     return fit(await this.item(tx,actor,row,await this.reasons(tx,row.signal_id)),131072);
   });}
-  private statusSources(tx:SqlTransaction){return tx.query<{id:string;current_revision_id:string|null}>(
+  statusSources(tx:SqlTransaction){return tx.query<{id:string;current_revision_id:string|null}>(
     `${notificationSources} ORDER BY r.id LIMIT 26`,[]).then(r=>r.rows);}
-  private async projection(tx:SqlTransaction,sources:Awaited<ReturnType<PersonalNotifications['statusSources']>>):Promise<NotificationPageView['projection']>{
+  async projection(tx:SqlTransaction,sources:Awaited<ReturnType<PersonalNotifications['statusSources']>>):Promise<NotificationPageView['projection']>{
     let state:'complete'|'incomplete'|'unknown'=sources.length>limits.statusSources?'unknown':'complete';
     for(const row of sources.slice(0,limits.statusSources))try{
       await lockContext(tx,row.id,'resolution');

@@ -38,7 +38,7 @@ function form(t: TestContext) {
       replay_retention: "retained_without_automatic_expiry; destructive_restore_unsupported", derived_effects: "search_and_personal_direct_attention; other_projections_disabled",
       notification_contract: "personal-attention-1", notifications_url: "/api/v1/me/notifications/query",
       following_contract: "following-1", following_url: "/api/v1/me/following",
-      shared_changes_contract: "shared-changes-1", shared_changes_url: "/api/v1/shared-changes/query",
+      updates_contract:"combined-updates-1",updates_url:"/api/v1/me/updates/query",shared_changes_contract: "shared-changes-1", shared_changes_url: "/api/v1/shared-changes/query",
     },
     store: new IntentStore(instance, participant, localStorage, location.origin, locks),
     refreshCommunity: () => {},

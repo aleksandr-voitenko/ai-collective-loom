@@ -77,11 +77,15 @@ not consume each other's deliveries. Native supervisor supports notifications
 stop/start separately from search. Build before tests that launch compiled files.
 
 See `tests/MEMORY.md` and notification evidence for real PostgreSQL/HTTPS/native
-barriers, upgrade, recovery, StrictMode and browser coverage. Grouped Updates,
-mutes, read state/dismissal, file/private-note integration, moderation
+barriers, upgrade, recovery, StrictMode and browser coverage. Mutes,
+read state/dismissal, file/private-note integration, moderation
 administration, production and human/provider/cross-machine validation remain open.
 
 Following/shared Changes use independent direct event reads and token custody in
 `../following/` (ADR-024). Advancing shared checkpoints cannot consume personal
 positions or hide a later repaired delivery. Migration0013 leaves this module’s
 persisted key, epoch, claims, deliveries and worker behavior unchanged.
+Sibling `updates/` (ADR-025) reuses internal reason/item and projection policy under
+its own complete actor/owner/source guard plan. Its personal availability interval
+stays independent of shared boundaries, including repaired older publications.
+Migration0014 and combined reads do not mutate worker/claim/delivery/standalone state.

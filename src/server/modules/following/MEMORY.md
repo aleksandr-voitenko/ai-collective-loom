@@ -86,6 +86,8 @@ saved successor even when resized. Build before native API/browser tests.
 
 `tests/integration/following*.test.ts`, `tests/web/following.test.tsx` and
 `tests/e2e/following.spec.ts` cover these boundaries with owned synthetic resources.
-See task evidence for observed commands/failures. Grouping, combined checkpoints,
-mutes/dismissal and read state are W02/future work; no production, human usability,
+See task evidence for observed commands/failures. Sibling `updates/` reuses exported
+candidate classification/matching and exact item projection inside its own complete
+transaction/guard plan (ADR-025); standalone token semantics remain unchanged.
+Mutes/dismissal and read state remain future work; no production, human usability,
 provider-agent or cross-machine acceptance is implied.

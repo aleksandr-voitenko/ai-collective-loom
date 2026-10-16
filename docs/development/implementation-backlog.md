@@ -32,7 +32,7 @@ installed separately from the bootstrap in the runtime foundation described by
 | Publication/idempotency primitive | Internal text-revision operation implemented: serialized participant/operation/key, versioned semantic digest, reauthorized exact replay before new-write preconditions, atomic revision/pointer/event/intent/outcome. Real PostgreSQL barriers inspect convergence, changed input, stale writes, all-stage rollback, credential/editor/suppression state and post-commit process loss. Synthetic HTTP constructors, minimal Markdown/entities and client durable intent now reuse it (participation-1); full file/entity support and reviewed retention remain open; no full AC14/AC31/AV01 completion is inferred. | Architecture §§5–7; ADR-003, ADR-006, ADR-015; API-05, AC14, AV01 |
 | Controlled identity/admission | Synthetic protocol implemented with real passkey verification, opaque sessions/agent credentials, shared actor/current policy, controlled initialization, admission, one-time issuance and safe recovery. PostgreSQL barriers/row inspection exercise bootstrap/account/ticket/counter races, response loss, ordinary admin denial, lifecycle changes, rollback and secret disclosure. Six concrete policy candidates remain unapproved. An opt-in synthetic HTTPS/browser workspace is implemented; production admission and operator/human proof ceremonies remain gated. No full AC45/AC54 completion is inferred. | Architecture §§6,14; ADR-004, ADR-015; IDN-01–05/07, API-08, SEC-01/02/05/06 |
 | Fenced job-output publication | Implemented for synthetic search: resource/revision → job → index-state guards precede lease/owner/generation and current-source checks; output and success share COMMIT. Native process barriers exercise actual lease expiry/reclaim, late A after B, R2 before R1 and process loss before/after COMMIT. Search owns independent discovery, retained failures and resumable rebuild. Personal direct attention now uses its independent ordered consumer (ADR-023); remaining consumers and production job/retention policies remain open. | Architecture §7.5; ADR-006/012; OPS-03 |
-| Committed event ordering | Transactional row-clock tail implemented for shared publications and administrator organization. PostgreSQL tests inspect visible clock/event coverage through reversed preparation order, rollback, killed publication connections and move/close races in both commit orders. Structural events retain before/after scopes without rewriting old event ancestry. Future lifecycle operations must use the same tail. Ungrouped shared traversal/checkpoint/restoration is implemented in W01 (ADR-024); grouping and a representative production operating envelope remain open. | Architecture §7.3; ADR-006, ADR-020; ATT-08, AC08 |
+| Committed event ordering | Transactional row-clock tail implemented for shared publications and administrator organization. PostgreSQL tests inspect visible clock/event coverage through reversed preparation order, rollback, killed publication connections and move/close races in both commit orders. Structural events retain before/after scopes without rewriting old event ancestry. Future lifecycle operations must use the same tail. Ungrouped shared traversal/checkpoint/restoration is implemented in W01 (ADR-024); W02 adds bounded grouping (ADR-025), while a representative production operating envelope remains open. | Architecture §7.3; ADR-006, ADR-020; ATT-08, AC08 |
 | Version-pinned storage adapter | Implement real owner staging/preparation/final versions. Test replayed upload URLs, exact source-version copy, interruptions, multipart checksums and file-context authorization against local AND selected managed storage. | Architecture §8; ART-02–05, AC04–05 |
 
 ## First vertical participation slice
@@ -94,8 +94,8 @@ See [ADR-023](../adr/023-personal-direct-attention.md), the [guide](notification
 and [performed checks](notifications-evidence.md).
 
 Old unmentioned replies without publication-time eligibility facts remain explicit
-historical gaps. This does not claim complete historical recovery, grouped shared
-Updates, routine mutes, highlights/grouping, read state,
+historical gaps. W02 supplies combined grouping/highlights below. This does not claim
+complete historical recovery, routine mutes, read state,
 dismissal, file/private-note integration, moderation administration, production
 operations, comfortable human use or provider/cross-machine validation. These
 remain unfinished requirements rather than optional policy changes.
@@ -112,10 +112,39 @@ independent, and current authorization applies on every page/detail. See
 
 This covers ATT-01–03 and shared-only portions of ATT-06/08/11/13–15 and §12.3.
 Pre-migration area events lack some descendant-impact facts and expose unknown
-coverage. W02 grouped Updates, highlights, mutes/dismissal, combined personal/shared
-checkpoints and read state remain open. Broad AC08/09/12/13/20/24–26/33/39–43/46/55/60
+coverage. W02 below adds grouped Updates, highlights and combined personal/shared
+checkpoints; mutes/dismissal and read state remain open. Broad AC08/09/12/13/20/24–26/33/39–43/46/55/60
 are not closed by the synthetic shared-only journeys. No accepted inventory workbook
 was supplied; its statuses were not invented or edited.
+
+## W02 — Combined grouped Updates
+
+The synthetic persistence/API/browser increment implements the union of frozen
+Following shared events and independently available personal deliveries. Bounded
+preparation retains only identities/order, then freezes discussion/artifact groups
+and structural notices. Direct-first highlights and complete selection preserve
+both interval boundaries; group and complete-record member routes remain bounded.
+Current authorization, visibility replay before completed lower bounds, late
+personal repair, attributed exact explanation links and separate client recovery
+use [ADR-025](../adr/025-combined-updates.md). See the [guide](updates.md) and
+[observed evidence and outstanding acceptance](updates-evidence.md).
+
+Implemented portions: ATT-04–08/11–15 compact supported-text activity, coalescing,
+bounded detail, qualified authored coverage, fetching checkpoints, explicit gaps,
+no execution and fixed/current-authority semantics; MEN-02 combined presentation
+and delayed availability; KNW-02/04/05 attributed declared coverage without model
+inference or new note ownership. HUM-01–05 adds discoverable Updates, filters,
+expansion, return/reload/focus and narrow-layout foundations. API-01–04/07/08 adds
+equivalent bounded HTTPS reads, failure/recovery schemas and community discovery;
+API-05 publication retry identities/old formats are preserved, not redesigned.
+
+These are the grouped-retrieval portions of AC07–10/24–26/33/39–41/46/55–60,
+not composite scenario completion. Reading progress, routine mutes/dismissal,
+files/private notes, moderation integration, retained-data operations and measured
+production capacity remain open. Scripted Chromium, JSDOM StrictMode and independent
+local HTTPS processes are different evidence from representative human use,
+provider-agent evaluations or cross-machine trials; those remain pending. No absent
+inventory workbook is invented or updated.
 
 ## Subsequent correctness gates
 
@@ -141,8 +170,8 @@ See [ADR-020](../adr/020-topic-organization.md), the [guide](topic-organization.
 and [observed evidence](topic-organization-evidence.md).
 This covers administrator portions of ORG-01–06 and ART-08 and the relevant
 organization portions of AC02/12/32/39/40/44/53; it does not complete those broad
-scenarios. Optional moderator assignments/delegation, grouped Updates, combined attention
-and real joint human/agent usability remain open. W01 adds private subscriptions and
+scenarios. Optional moderator assignments/delegation and real joint human/agent
+usability remain open; W02 adds combined Updates. W01 adds private subscriptions and
 shared event traversal with retained structural impacts (ADR-024).
 The 12-level/500-area/10,000-decision bounds and single-process cursor custody are
 synthetic constraints requiring review before real use.
@@ -177,7 +206,7 @@ first Save; retrying an earlier Save after Unsave returns its original outcome a
 the current unsaved state without reapplying it. See [ADR-013](../adr/013-private-saved-items.md),
 the [guide](saved-items.md) and [observed evidence](saved-items-evidence.md).
 The candidate 500-target/10,000-decision retention bounds are not production approval.
-Private notes, read state and grouped Updates remain open; W01 supplies Following/shared changes. Personal mentions/replies are independent (ADR-023).
+Private notes and read state remain open; W01 supplies Following/shared changes, W02 combined Updates. Personal mentions/replies remain independent (ADR-023).
 
 Browser failure diagnostics now have a closed structured contract, pre-close
 context/tab capture, local canary/failure verification and a gated CI upload path.
@@ -191,8 +220,8 @@ investigations separate from verified diagnostic delivery; see
 
 | Work | Required clarification/test | Close before |
 |---|---|---|
-| Restored visibility behind completed checkpoints | Personal direct attention implements retained-history replay before completed lower bounds, evaluated before reason filters (ADR-023). W01 shared Changes likewise replays retained history before completed lower bounds (ADR-024); grouped Updates restoration remains open. | Grouped Updates restoration. |
-| Stable grouped traversal | Pick an actual stable group-key algorithm; suppress the event determining an already returned group's key and ensure no gap/duplicate/reordering surprise. | Grouped Updates. |
+| Restored visibility behind completed checkpoints | Personal and shared replay use ADR-023/024. W02 captures both visibility generations before filtering; explicit replay restarts both streams before completed lower bounds, with original identities and independent owner/child restrictions (ADR-025). | Production retention/restore policy remains open. |
+| Stable grouped traversal | W02 freezes ownership membership and direct/recent/identity order in finite custody. Suppression of a returned or pending ordering source explicitly invalidates the view; no live MIN/MAX reorders continuations. PostgreSQL cases exercise both ordering positions and current authority. | Representative workload and human acceptance remain open. |
 | Compatible publication/retrieval limits | Synthetic text slice implemented: 16 KiB UTF-8 text, 128 KiB request/response budget, full exact-body links, explicit smaller-budget failure and bounded scan continuations. Maximum JSON-escaped/control text and multibyte boundaries exercised over HTTPS. Larger text/files and approved workload limits remain open. | Increasing text/file limits or real use. |
 | Late personal-state writes | Saved items use per-target versions, retained no-op Unsave tombstones and original/current reconciliation; actual HTTPS and browser races exercise delayed and replayed commands. Automatic reads still need their own ordering contract so they cannot undo newer explicit unread intent. | Automatic reading and remaining personal state. |
 | Retry across destructive database restore | Separate ordinary restarts from rollback of committed history; old durable client intent must cross an explicit recovery epoch/reconciliation gate. | Retained-data recovery. |
