@@ -103,7 +103,10 @@ test('summary change context opens the discussion while historical summary revis
   const f=await setup(page,context,server);
   const opening=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Shared summary context',content:authored('Navigation opening')});
   const discussion=(await api(page,'/api/v1/resources/'+opening.resource_id)).discussion_id;
-  const reply=await api(page,'/api/v1/replies',{idempotency_key:randomUUID(),discussion_id:discussion,parent_id:opening.resource_id,content:authored('Focused reply material')});
+  // Repeated authored text is valid. Navigation must identify the contribution
+  // and revision, not whichever matching text happens to finish loading first.
+  const reply=await api(page,'/api/v1/replies',{idempotency_key:randomUUID(),discussion_id:discussion,parent_id:opening.resource_id,content:authored('Navigation opening')});
+  const prose=(source:{resource_id:string;revision_id:string})=>page.locator(`article[data-resource-id="${source.resource_id}"] [data-presented-revision="${source.revision_id}"] .prose`);
   const preparation=await api(page,'/api/v1/summary-preparations',{idempotency_key:randomUUID(),discussion_id:discussion,scope:'full'});
   const summary=await api(page,'/api/v1/summaries',{idempotency_key:randomUUID(),discussion_id:discussion,title:'Summary R1',content:authored('Original summary text'),coverage:{preparation_id:preparation.preparation_id}});
   await api(page,'/api/v1/me/following/state',{target:{kind:'discussion',resource_id:discussion},include_descendants:false,preferences:['replies','summaries'],following:true,expected_version:0,idempotency_key:randomUUID()});
@@ -115,7 +118,10 @@ test('summary change context opens the discussion while historical summary revis
   await row(summary).getByRole('link',{name:'Current context',exact:true}).click();
   await expect(page).toHaveURL(server.origin+'/loom/discussion/'+discussion);
   await expect(page.getByRole('heading',{name:'Shared summary context',level:1,exact:true})).toBeVisible();
-  await expect(page.getByText('Navigation opening',{exact:true})).toBeVisible();
+  await expect(prose(opening)).toBeVisible();
+  await expect(prose(opening)).toHaveText('Navigation opening');
+  await expect(prose(reply)).toBeVisible();
+  await expect(prose(reply)).toHaveText('Navigation opening');
   await expect(page.getByText('This branch is unavailable in this discussion.')).toHaveCount(0);
   await page.getByRole('region',{name:'Discussion summary'}).getByRole('link',{name:'Summary R2',exact:true}).click();
   await expect(page.getByText('Current summary text',{exact:true})).toBeVisible();
@@ -136,7 +142,9 @@ test('summary change context opens the discussion while historical summary revis
   await row(reply).getByRole('link',{name:'Current context',exact:true}).click();
   await expect(page).toHaveURL(server.origin+`/loom/discussion/${discussion}?focus=${reply.resource_id}`);
   await expect(page.getByText('Focused branch',{exact:true})).toBeVisible();
-  await expect(page.getByText('Focused reply material',{exact:true})).toBeVisible();
+  await expect(prose(reply)).toBeVisible();
+  await expect(prose(reply)).toHaveText('Navigation opening');
+  await expect(prose(opening)).toHaveCount(0);
   await expect(page.getByText('This branch is unavailable in this discussion.')).toHaveCount(0);
 });
 
