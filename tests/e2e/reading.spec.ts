@@ -1,11 +1,12 @@
 import { chromium,type Page,type BrowserContext } from '@playwright/test';
 import { test,expect } from '../helpers/browser-fixtures.js';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp,rm,readFile } from 'node:fs/promises';
+import { access,mkdtemp,rm,readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { syntheticServer } from '../helpers/participation-server.js';
+import type { BrowserDiagnostics } from '../helpers/browser-diagnostics.js';
 const endpoint='/api/v1/me/reading';
 const text=(text:string)=>({format:'loom-markdown-v1',text,mentions:[]});
 function barrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};}
@@ -32,6 +33,50 @@ const pair=(s:any)=>({resource_id:s.resource_id,revision_id:s.revision_id});
 const state=async(page:Page,s:any)=>(await api(page,endpoint+'/lookup',{targets:[pair(s)]})).items[0];
 async function enable(page:Page,origin:string){await page.goto(origin+'/loom/reading');await page.getByLabel('Automatically mark presented text read — prototype, this account on this browser').check();await expect.poll(()=>page.evaluate(()=>Object.keys(localStorage).some(k=>k.endsWith(':automatic')&&localStorage.getItem(k)==='true'))).toBe(true);}
 async function exact(page:Page,origin:string,s:any){await page.goto(origin+`/loom/resource/${s.resource_id}/${s.revision_id}`);await expect(control(page,s.revision_id).getByRole('button',{name:'Mark unread',exact:true})).toBeEnabled();}
+
+async function nativeLifecycleBrowser(diagnostics:BrowserDiagnostics){
+  // The ordinary harness forces focus in its own CDP session; another session
+  // cannot undo that override. Connect to native Chromium without that default.
+  const directory=await mkdtemp(join(tmpdir(),'loom-reading-lifecycle-'));
+  const native=spawn(chromium.executablePath(),['--headless','--no-sandbox','--no-first-run','--ignore-certificate-errors','--remote-debugging-port=0','--user-data-dir='+directory,'about:blank'],{stdio:'ignore'});
+  let launchError:Error|undefined;
+  const stopped=new Promise<void>(resolve=>{
+    native.once('error',error=>{launchError=error;resolve();});native.once('close',()=>resolve());
+  });
+  let browser:Awaited<ReturnType<typeof chromium.connectOverCDP>>|undefined;
+  const contexts:BrowserContext[]=[];
+  async function close(){
+    try{
+      if(browser?.isConnected()){
+        for(const context of contexts)for(const page of context.pages())await diagnostics.snapshot(page);
+        // Closing a CDP-attached default context only disconnects Playwright.
+        // Ask Chromium to finish its profile writers before removing the profile;
+        // SIGTERM + parent exit still allowed rm to fail with ENOTEMPTY on Linux.
+        const session=await browser.newBrowserCDPSession();
+        await session.send('Browser.close');
+        await expect.poll(()=>native.exitCode).toBe(0);
+      }
+    }finally{
+      // Startup/close failures still dispose this test-owned process and propagate.
+      if(native.exitCode===null&&native.signalCode===null)native.kill('SIGTERM');
+      await stopped;
+      try{
+        for(const context of contexts)await context.close();
+        if(browser?.isConnected())await browser.close();
+        if(launchError)throw launchError;
+      }finally{await rm(directory,{recursive:true,force:true});}
+    }
+  }
+  try{
+    let port='';await expect.poll(async()=>{
+      if(launchError)throw launchError;
+      try{port=(await readFile(join(directory,'DevToolsActivePort'),'utf8')).split('\n')[0]!;return Number(port)>0;}catch{return false;}
+    }).toBe(true);
+    browser=await chromium.connectOverCDP('http://127.0.0.1:'+port,{noDefaults:true});
+    const context=diagnostics.track(browser.contexts()[0]!,'explicit');contexts.push(context);
+    return {context,directory,close};
+  }catch(error){await close();throw error;}
+}
 
 test('manual selective reading, exact historical IDs and a frozen bounded selection preserve Saved and newer revisions',async({page,context,server})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.name));const d=await setup(page,context,server),x=await d.reply('Older skipped X'),y=await d.reply('Newer selected Y');
@@ -168,15 +213,9 @@ test('status and local-save failures preserve full text, keyboard focus and unre
 });
 
 test('background lifecycle and late abandoned responses cannot qualify; foreground reopening can',async({server,diagnostics})=>{
-  // The ordinary harness forces focus in its own CDP session; another session
-  // cannot undo that override. Connect to native Chromium without that default.
-  const directory=await mkdtemp(join(tmpdir(),'loom-reading-lifecycle-'));
-  const native=spawn(chromium.executablePath(),['--headless','--no-sandbox','--no-first-run','--ignore-certificate-errors','--remote-debugging-port=0','--user-data-dir='+directory,'about:blank'],{stdio:'ignore'});
-  let browser:Awaited<ReturnType<typeof chromium.connectOverCDP>>|undefined;
+  const native=await nativeLifecycleBrowser(diagnostics),context=native.context;
   try{
-    let port='';await expect.poll(async()=>{try{port=(await readFile(join(directory,'DevToolsActivePort'),'utf8')).split('\n')[0]!;return Number(port)>0;}catch{return false;}}).toBe(true);
-    browser=await chromium.connectOverCDP('http://127.0.0.1:'+port,{noDefaults:true});
-    const context=diagnostics.track(browser.contexts()[0]!,'explicit'),page=await context.newPage();
+    const page=await context.newPage();
     await page.setViewportSize({width:1440,height:1000});
     const d=await setup(page,context,server),a=await d.artifact('Foreground eligible text'),b=await d.artifact('Abandoned late text');await enable(page,server.origin);
     const lifecycle=await context.newCDPSession(page);
@@ -195,13 +234,19 @@ test('background lifecycle and late abandoned responses cannot qualify; foregrou
     });
     try{await page.goto(server.origin+`/loom/resource/${b.resource_id}/${b.revision_id}`);await late.promise;await page.goto(server.origin+'/loom/reading');finish.release();await page.unrouteAll({behavior:'wait'});await page.waitForTimeout(1400);expect((await state(page,b)).version).toBe(0);}
     finally{finish.release();}
-  }finally{
-    try{if(browser)for(const context of browser.contexts())await context.close();}
-    finally{
-      await browser?.close().catch(()=>{});
-      if(native.exitCode===null&&native.signalCode===null){const ended=new Promise<void>(resolve=>native.once('exit',()=>resolve()));native.kill('SIGTERM');await ended;}
-      await rm(directory,{recursive:true,force:true});
-    }
+  }finally{await native.close();}
+});
+
+test('native lifecycle shutdown removes profiles after pending storage writes',async({server,diagnostics})=>{
+  for(let i=0;i<3;i++){
+    const native=await nativeLifecycleBrowser(diagnostics),context=native.context;
+    try{
+      const page=await context.newPage();
+      await page.goto(server.origin+'/loom');
+      await page.evaluate(()=>{for(let n=0;n<10;n++)localStorage.setItem('synthetic-cleanup-'+n,'x'.repeat(100000));});
+    }finally{await native.close();}
+    expect(context.browser()!.isConnected()).toBe(false);
+    await expect(access(native.directory)).rejects.toMatchObject({code:'ENOENT'});
   }
 });
 
