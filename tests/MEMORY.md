@@ -79,6 +79,10 @@ revisions after an update, exact historical text and ordinary reply focusing. Th
 contribution context endpoint must continue rejecting a summary resource ID.
 Scope full-text checks to the contribution and exact revision; duplicate opening/
 reply text is a valid fixture and must not make navigation assertions ambiguous.
+The revalidation regression holds the community response until both contributions
+and reading controls are mounted, then waits for the changed community name to
+render. Require one exact body, reading-control set and source-reference region per
+contribution: duplicate sibling React keys can leave extra bodies after rerender.
 CI repair evidence and reproduction limits: `docs/development/ci-browser-reliability.md`.
 `e2e/following.spec.ts` uses the normal one-worker, zero-retry runner and closed route
 vocabulary. Preserve approved failures before rerunning. Deliberate synthetic visual

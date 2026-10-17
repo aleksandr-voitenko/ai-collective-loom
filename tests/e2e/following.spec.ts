@@ -148,6 +148,46 @@ test('summary change context opens the discussion while historical summary revis
   await expect(page.getByText('This branch is unavailable in this discussion.')).toHaveCount(0);
 });
 
+test('summary context keeps one exact text and control set when community revalidation finishes after contributions',async({page,context,server})=>{
+  const f=await setup(page,context,server);
+  const opening=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Revalidated discussion',content:authored('Repeated navigation text')});
+  const discussion=(await api(page,'/api/v1/resources/'+opening.resource_id)).discussion_id;
+  const reply=await api(page,'/api/v1/replies',{idempotency_key:randomUUID(),discussion_id:discussion,parent_id:opening.resource_id,content:authored('Repeated navigation text')});
+  const preparation=await api(page,'/api/v1/summary-preparations',{idempotency_key:randomUUID(),discussion_id:discussion,scope:'full'});
+  const summary=await api(page,'/api/v1/summaries',{idempotency_key:randomUUID(),discussion_id:discussion,title:'Revalidated summary',content:authored('Summary context'),coverage:{preparation_id:preparation.preparation_id}});
+  await api(page,'/api/v1/me/following/state',{target:{kind:'discussion',resource_id:discussion},include_descendants:false,preferences:['replies','summaries'],following:true,expected_version:0,idempotency_key:randomUUID()});
+  await page.goto(server.origin+'/loom/changes');await expect(page.locator('.notification-list > li')).toHaveCount(2);
+  const community=(await f.admin.call('/api/v1/community')).body;
+  expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:community.settings_version,
+    community_name:'Revalidated community',overview_id:community.overview.resource_id,proposal_area_id:community.proposal_area.resource_id})).status).toBe(200);
+  const ready=barrier(),release=barrier();
+  // Revalidation rerenders already-mounted contributions. Its changed community
+  // name is the commit barrier; response completion alone does not prove a render.
+  await page.route('**/api/v1/community',async route=>{const response=await route.fetch();ready.release();await release.promise;await route.fulfill({response});});
+  const article=(source:{resource_id:string})=>page.locator(`article[data-resource-id="${source.resource_id}"]`);
+  const body=(source:{resource_id:string;revision_id:string})=>article(source).locator(`[data-presented-revision="${source.revision_id}"] .prose`);
+  const controls=(source:{resource_id:string;revision_id:string})=>article(source).locator(`[data-reading-target="${source.revision_id}"]`);
+  try{
+    await page.locator('.notification-list > li').filter({has:page.locator(`a[href="/loom/resource/${summary.resource_id}/${summary.revision_id}"]`)}).getByRole('link',{name:'Current context',exact:true}).click();
+    await ready.promise;
+    for(const source of [opening,reply]){
+      await expect(body(source)).toHaveText('Repeated navigation text');
+      await expect(controls(source).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
+    }
+    release.release();
+    await expect(page.getByRole('link',{name:'Revalidated community — Community overview · Start here',exact:true})).toBeVisible();
+    for(const source of [opening,reply]){
+      await expect(article(source)).toHaveCount(1);
+      await expect(body(source)).toHaveCount(1);
+      await expect(body(source)).toHaveText('Repeated navigation text');
+      await expect(controls(source)).toHaveCount(1);
+      await expect(controls(source).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
+      await expect(controls(source).getByRole('button',{name:'Mark unread',exact:true})).toBeEnabled();
+      await expect(article(source).getByRole('region',{name:'Source references',exact:true})).toHaveCount(1);
+    }
+  }finally{release.release();await page.unrouteAll({behavior:'wait'});}
+});
+
 test('expired shared page renewal preserves the displayed five-item page after reload',async({page,context,server})=>{
   await material(page,context,server,20);await page.goto(server.origin+'/loom/changes');
   await expect(page.locator('.notification-list > li')).toHaveCount(12);
