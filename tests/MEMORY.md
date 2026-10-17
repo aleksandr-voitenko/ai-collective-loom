@@ -17,7 +17,12 @@ failed saves/removal and late duplicates must preserve or retire the exact recor
 Only fixed reading routes/spec names join the closed diagnostic vocabulary.
 The native lifecycle test connects with `noDefaults:true`: another CDP session
 cannot remove Playwright's own per-session focus override. Set its viewport and
-fixture HTTPS handling explicitly. It exercises Chromium hidden/frozen state;
+fixture HTTPS handling explicitly. Its native owner snapshots pages, sends CDP
+`Browser.close`, waits for successful process exit, then disposes the tracked
+context and profile. Closing a CDP-attached default context only disconnects;
+SIGTERM followed by profile removal failed intermittently on Linux (`ENOTEMPTY`).
+The storage-write cleanup regression exercises three owned profiles. The lifecycle
+case still exercises Chromium hidden/frozen state;
 running hidden/unfocused logic has separate stubbed tests. Neither is an OS or
 physical-device usability trial. Preserve existing sign-out cleanup message order.
 
@@ -72,6 +77,9 @@ expires only its fixture's encrypted descriptor and renews through real HTTPS.
 Navigation checks cover summary events' containing-discussion context, both summary
 revisions after an update, exact historical text and ordinary reply focusing. The
 contribution context endpoint must continue rejecting a summary resource ID.
+Scope full-text checks to the contribution and exact revision; duplicate opening/
+reply text is a valid fixture and must not make navigation assertions ambiguous.
+CI repair evidence and reproduction limits: `docs/development/ci-browser-reliability.md`.
 `e2e/following.spec.ts` uses the normal one-worker, zero-retry runner and closed route
 vocabulary. Preserve approved failures before rerunning. Deliberate synthetic visual
 review uses LOOM_FOLLOWING_REVIEW_SCREENS=1, separately from diagnostic uploads.
