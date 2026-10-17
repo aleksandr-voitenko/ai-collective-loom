@@ -281,6 +281,9 @@ Limits:10000 states/50000 operations/100000 members per owner,16KiB request/32Ki
 response,SQL2.5s/lock1.5s/transaction15s,owner32/guards3840. No expiry/eviction;
 lookup and exact reconciliation remain usable at quota. See ADR-026.
 `web/Reading.tsx` instruments only full main text, not `AuthoredText` globally.
+`ParticipationApp.tsx` contribution bodies give reading and reference siblings
+distinct revision-based keys. Sharing a revision key can leave duplicate text/controls
+after a late community rerender; `e2e/following.spec.ts` gates that order explicitly.
 Opt-in presentation requires every<=160px vertical band visible/foreground/focused
 for1000ms sampled100ms. It accumulates across scrolling within the route episode;
 overflowing horizontal code and>2048 bands remain manual. Manual Unread or observing

@@ -1591,12 +1591,13 @@ function ContributionBody({
           </Link>
         </p>
       )}
-      <ReadingText key={data.revision_id} target={{resource_id:id,revision_id:data.revision_id}} number={data.revision_number} selectable
+      {/* Both siblings reset for a new revision, but their keys must remain distinct. */}
+      <ReadingText key={'reading:'+data.revision_id} target={{resource_id:id,revision_id:data.revision_id}} number={data.revision_number} selectable
         content={data.content}
         participants={data.mentioned_participants}
       />
       <ChangeDetails revision={data}/>
-      <ReferenceViews key={data.revision_id} sourceId={id} sourceRevision={data.revision_id} target={{kind:"contribution",resource_id:id}}/>
+      <ReferenceViews key={'references:'+data.revision_id} sourceId={id} sourceRevision={data.revision_id} target={{kind:"contribution",resource_id:id}}/>
       <div className="post-footer">
         <SaveControl context={context} target={{ kind: "contribution", resource_id: id }} label="contribution" />
         <button
