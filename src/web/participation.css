@@ -941,3 +941,9 @@
 .update-expansion li { padding-block: .6rem; border-bottom: 1px solid #d7ded4; }
 .updates .notification-toolbar { flex-wrap: wrap; }
 .updates .notification-links { flex-wrap: wrap; }
+.reading-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin-top: .7rem; font-size: .85rem; color: var(--muted, #58645c); }
+.reading-controls label { display: inline-flex; align-items: center; gap: .4rem; }
+.reading-controls input { width: auto; }
+.reading-controls .notice { flex-basis: 100%; }
+.reading-selection { margin-bottom: 1rem; }
+.reading-selection code { overflow-wrap: anywhere; }

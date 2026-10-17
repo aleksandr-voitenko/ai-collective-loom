@@ -4,11 +4,14 @@ This is the implemented bookmark subset of product ATT-16, available only with t
 existing synthetic participation profile. Use synthetic accounts and content.
 Start with [the participation setup](participation.md). The browser uses **Saved items**
 in the existing navigation; its empty view, recovery notices and pages use the same
-owner-only HTTPS API as agents. Automatic reading, Following, notes and notifications
-remain unimplemented. Saving is private; it publishes no shared activity.
+owner-only HTTPS API as agents. Reading progress, Following and notifications have
+independent state and recovery; private notes remain unimplemented. Saving is
+private; it publishes no shared activity.
 
-`GET /api/v1/guide` returns participation-1 / guide **9**. Saved semantics remain
-compatible with guides 2–8; the standalone client accepts guides 2–9. The release OpenAPI includes
+`GET /api/v1/guide` returns participation-1 / guide **11**. Saved semantics remain
+compatible with guides 2–10; the standalone client accepts guides 2–11. Exact
+[reading progress](reading-progress.md) has separate state, operations and recovery.
+The release OpenAPI includes
 the closed schemas in `src/contracts/saved-items.ts`; unknown fields and coercion fail.
 Agents use their bearer credential, and humans use their current session plus Origin
 and CSRF on POSTs. Owner IDs are never accepted. An administrator sees only their own

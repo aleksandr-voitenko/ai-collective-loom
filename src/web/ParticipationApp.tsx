@@ -49,6 +49,8 @@ import { SharedChangesPage } from './SharedChanges.js';
 import { UpdatesPage } from './Updates.js';
 import { UpdatesRecovery } from './updates-recovery.js';
 import { SharedRecovery } from './shared-recovery.js';
+import { ReadingProvider, ReadingText, ReadingSelection, ReadingPageViewComponent } from './Reading.js';
+import { ReadingRecovery, exportReadingRecovery } from './reading-recovery.js';
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import { SummarySection, SummaryMaintenance, CoverageDetails, CoverageEditor } from './Summaries.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
@@ -212,6 +214,9 @@ export function ParticipationApp() {
       try {if(community)await new SharedRecovery(community.instance_id,self.participant_id).clear();}
       catch {cleanupFailures.push('shared change recovery could not be cleared.');}
       if(cleanupOwner!==identityGeneration())return;
+      try {if(community)await new ReadingRecovery(community.instance_id,self.participant_id).clear();}
+      catch {cleanupFailures.push('reading recovery could not be cleared.');}
+      if(cleanupOwner!==identityGeneration())return;
       if(cleanupFailures.length)setError(`Signed out, but ${cleanupFailures.join(' ')} They remain scoped to this account on this browser.`);
       navigate("/loom");
     } catch (failure) {
@@ -249,6 +254,7 @@ export function ParticipationApp() {
         </NavLink>
         <NavLink to="/loom/following"><Icon name="topic" />Following</NavLink>
         <NavLink to="/loom/saved"><Icon name="saved" />Saved items</NavLink>
+        <NavLink to="/loom/reading"><Icon name="discussion" />Reading progress</NavLink>
         <NavLink to="/loom/notifications"><Icon name="discussion" />Mentions/replies</NavLink>
         <NavLink to="/loom/search"><Icon name="search" />Search</NavLink>
         <NavLink to="/loom/summaries"><Icon name="discussion" />Summary maintenance</NavLink>
@@ -275,8 +281,10 @@ export function ParticipationApp() {
             aria-label="Sign out"
             title="Sign out"
             onClick={() => {
-              if (store?.all().length) setSignout(true);
-              else void logout();
+              try{
+                if (store?.all().length || (community&&new ReadingRecovery(community.instance_id,self.participant_id).all().length)) setSignout(true);
+                else void logout();
+              }catch{setSignout(true);}
             }}
           >
             ↪
@@ -349,7 +357,8 @@ export function ParticipationApp() {
               }}
             />
           ) : community && store ? (
-            <ActiveView
+            <ReadingProvider key={`${self.participant_id}:${community.instance_id}:${location.pathname}:${location.pathname === '/loom/changes' ? '' : location.search}`}
+              context={{self,community,store,refreshCommunity:()=>setEpoch(n=>n+1)}}><ActiveView
               // Changes owns a separate key for scoped results. Its persistent
               // controls must survive query edits; other views retain their key.
               key={`${self.participant_id}:${community.instance_id}:${location.pathname}:${location.pathname === '/loom/changes' ? '' : location.search}`}
@@ -359,7 +368,7 @@ export function ParticipationApp() {
                 store,
                 refreshCommunity: () => setEpoch((n) => n + 1),
               }}
-            />
+            /></ReadingProvider>
           ) : (
             <p role="status">Loading community…</p>
           )}
@@ -378,6 +387,8 @@ export function ParticipationApp() {
           published.
         </p>
         <p>Unconfirmed Saved items changes may also have completed. Server bookmarks remain saved after signing out.</p>
+        <p>Unconfirmed reading changes may also have completed. Signing out clears this browser’s reading recovery and automatic preference; server reading state remains.</p>
+        <button onClick={() => {try{if(community&&self)exportReadingRecovery(community.instance_id,self.participant_id);}catch(failure){setError((failure as Error).message);}}}>Export reading recovery</button>
         <button onClick={() => store && exportDrafts(store)}>
           Export drafts
         </button>
@@ -460,6 +471,7 @@ function ActiveView({ context }: { context: Context }) {
     kind = path[0],
     id = path[1];
   if (!kind) return <Topics context={context} />;
+  if (kind === 'reading') return <ReadingPageViewComponent/>;
   if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
   if (kind === 'notifications') return <NotificationsPage context={context} />;
@@ -1381,6 +1393,7 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
       {context.self.role === "administrator" && <OrganizationActions id={id} kind="discussion"/>}
       <div className="reading-grid">
         <div>
+          <ReadingSelection/>
           {focus ? (
             <FocusedBranch id={focus} discussionId={id} context={context} />
           ) : (
@@ -1578,7 +1591,7 @@ function ContributionBody({
           </Link>
         </p>
       )}
-      <AuthoredText
+      <ReadingText key={data.revision_id} target={{resource_id:id,revision_id:data.revision_id}} number={data.revision_number} selectable
         content={data.content}
         participants={data.mentioned_participants}
       />
@@ -1825,7 +1838,7 @@ function ResourcePage({
             <span className="author-badge">Agent</span>
           )}
         </div>
-        <AuthoredText
+        <ReadingText key={data.revision_id} target={{resource_id:id,revision_id:data.revision_id}} number={data.revision_number}
           content={data.content}
           participants={data.mentioned_participants}
         />

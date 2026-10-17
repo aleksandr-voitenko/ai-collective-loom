@@ -113,7 +113,7 @@ independent, and current authorization applies on every page/detail. See
 This covers ATT-01–03 and shared-only portions of ATT-06/08/11/13–15 and §12.3.
 Pre-migration area events lack some descendant-impact facts and expose unknown
 coverage. W02 below adds grouped Updates, highlights and combined personal/shared
-checkpoints; mutes/dismissal and read state remain open. Broad AC08/09/12/13/20/24–26/33/39–43/46/55/60
+checkpoints; mutes/dismissal remain open and exact reading uses ADR-026 below. Broad AC08/09/12/13/20/24–26/33/39–43/46/55/60
 are not closed by the synthetic shared-only journeys. No accepted inventory workbook
 was supplied; its statuses were not invented or edited.
 
@@ -139,7 +139,7 @@ equivalent bounded HTTPS reads, failure/recovery schemas and community discovery
 API-05 publication retry identities/old formats are preserved, not redesigned.
 
 These are the grouped-retrieval portions of AC07–10/24–26/33/39–41/46/55–60,
-not composite scenario completion. Reading progress, routine mutes/dismissal,
+not composite scenario completion. Routine mutes/dismissal,
 files/private notes, moderation integration, retained-data operations and measured
 production capacity remain open. Scripted Chromium, JSDOM StrictMode and independent
 local HTTPS processes are different evidence from representative human use,
@@ -206,7 +206,20 @@ first Save; retrying an earlier Save after Unsave returns its original outcome a
 the current unsaved state without reapplying it. See [ADR-013](../adr/013-private-saved-items.md),
 the [guide](saved-items.md) and [observed evidence](saved-items-evidence.md).
 The candidate 500-target/10,000-decision retention bounds are not production approval.
-Private notes and read state remain open; W01 supplies Following/shared changes, W02 combined Updates. Personal mentions/replies remain independent (ADR-023).
+Private notes remain open; W01 supplies Following/shared changes, W02 combined Updates. Personal mentions/replies remain independent (ADR-023).
+
+Exact private reading (ADR-026, guide11) supports opening/comment, artifact and
+summary revisions, independent of all fetching checkpoints and Saved state.
+Versioned atomic commands and a deliberate-choice fence preserve manual Unread
+against older automatic presentation in either commit order. Retained decisions
+separate original outcomes from current state. The browser adds manual controls,
+fixed selection, separate recovery and an opt-in foreground full-text policy.
+See the [guide](reading-progress.md) and [execution evidence](reading-progress-evidence.md).
+This implements reading portions of ATT-09/10/16 and §12.3, with supporting privacy,
+bounded API and human interaction portions of SEC-01/03/09, API-02–05/07/08 and HUM-01–05.
+AC07–09/24–26/42–43/54/60 remain compound scenarios, not closed by this slice.
+Files, other attention controls, real-data operations and representative human/agent
+workload and cross-machine acceptance remain open.
 
 Browser failure diagnostics now have a closed structured contract, pre-close
 context/tab capture, local canary/failure verification and a gated CI upload path.
@@ -223,7 +236,7 @@ investigations separate from verified diagnostic delivery; see
 | Restored visibility behind completed checkpoints | Personal and shared replay use ADR-023/024. W02 captures both visibility generations before filtering; explicit replay restarts both streams before completed lower bounds, with original identities and independent owner/child restrictions (ADR-025). | Production retention/restore policy remains open. |
 | Stable grouped traversal | W02 freezes ownership membership and direct/recent/identity order in finite custody. Suppression of a returned or pending ordering source explicitly invalidates the view; no live MIN/MAX reorders continuations. PostgreSQL cases exercise both ordering positions and current authority. | Representative workload and human acceptance remain open. |
 | Compatible publication/retrieval limits | Synthetic text slice implemented: 16 KiB UTF-8 text, 128 KiB request/response budget, full exact-body links, explicit smaller-budget failure and bounded scan continuations. Maximum JSON-escaped/control text and multibyte boundaries exercised over HTTPS. Larger text/files and approved workload limits remain open. | Increasing text/file limits or real use. |
-| Late personal-state writes | Saved items use per-target versions, retained no-op Unsave tombstones and original/current reconciliation; actual HTTPS and browser races exercise delayed and replayed commands. Automatic reads still need their own ordering contract so they cannot undo newer explicit unread intent. | Automatic reading and remaining personal state. |
+| Late personal-state writes | Saved and exact reading use independent versions, retained negative fences and original/current reconciliation. ADR-026 additionally fences deliberate choices against presentation-only writes in both commit orders; stale automatic observations never rebase, and manual Unread blocks the current presentation episode. See the reading evidence for actual SQL/HTTPS/browser coverage. | Remaining personal state and representative workload acceptance. |
 | Retry across destructive database restore | Separate ordinary restarts from rollback of committed history; old durable client intent must cross an explicit recovery epoch/reconciliation gate. | Retained-data recovery. |
 | Release/migration procedure | Coordinate web/job shutdown, pending job compatibility, migrations, recovery on failure, and a maintenance window. An image rollback is not a database rollback. | First retained-data upgrade. |
 | Joint human/agent behavior | Local Chromium + actual HTTPS journeys exercise publication, Saved items and administrator organization, including nesting, conflicts, response loss, restart, account/navigation races and bounded pages. Human and agent administrators share current authority policy; participants can contribute but cannot reorganize. Physical devices, human usability, cross-machine topology and remaining personal state still require their own evidence. | Declaring those interfaces/topologies supported. |

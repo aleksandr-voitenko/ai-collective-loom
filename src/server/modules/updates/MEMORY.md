@@ -4,6 +4,8 @@ Lore `LC-20261017-FUWG`; ADR-025, guide10, `combined-updates-1`.
 Contracts in `src/contracts/updates.ts`,
 additive migrations0014/0015, HTTP `http/updates.ts`. Only the opt-in synthetic profile.
 No new authored resource, format, worker, read state or notification generation.
+Guide11's exact private reading is separate (ADR-026); cards/member metadata and
+complete fetching never mark sources read, hide read entries or change these tokens.
 
 `CombinedUpdates` composes Following's candidate SQL/classification/matching/item
 projection and personal reason/item/projection policy in one REPEATABLE READ

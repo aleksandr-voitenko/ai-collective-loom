@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "10";
+export const guideRevision = "11";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -304,6 +304,8 @@ export const Onboarding = Type.Object(
     ),
     derived_effects: Type.Literal("search_and_personal_direct_attention; other_projections_disabled"),
     updates_contract: Type.Literal("combined-updates-1"),
+    reading_contract: Type.Literal('reading-state-1'),
+    reading_url: Type.Literal('/api/v1/me/reading/lookup'),
     updates_url: Type.Literal("/api/v1/me/updates/query"),
     notification_contract: Type.Literal("personal-attention-1"),
     notifications_url: Type.Literal("/api/v1/me/notifications/query"),

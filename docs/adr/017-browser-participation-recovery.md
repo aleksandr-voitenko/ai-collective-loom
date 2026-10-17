@@ -236,3 +236,13 @@ this transition, and the server's v2 anti-stripping guard remains mandatory.
 ## Guide 7 extension — ADR-022
 
 Note/account fields share the existing journal, ownership and uncertain-request rules. A genuinely new revision starts without a copied note; reloading a saved attempt retains its note. Starting another artifact/summary revision fetches current content and saves a new key/base before replacing the old record. Correction retains attempted notes and requires deliberate handling of an account carry from an obsolete base. Late selection uses current draft callbacks; field labels remain stable after text entry. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.
+
+## Guide 11 extension — ADR-026
+
+Exact reading uses independent bounded Web-Locked recovery so frequent presentation
+does not consume publication draft custody. Persist exact command before dispatch;
+attempt counts protect uncertain retries from a late first refusal. Identity fencing
+precedes sign-out cleanup, with separate export. Manual Unread blocks the current
+presentation episode; status refresh and effect replay cannot create a replacement
+automatic intent. [ADR-026](026-private-reading-progress.md) defines thresholds,
+ordering, limits and reopening. GET and feed retrieval remain free of reading effects.

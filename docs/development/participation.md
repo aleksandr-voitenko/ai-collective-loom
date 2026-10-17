@@ -92,7 +92,7 @@ or the Compose development volumes. The original foundation startup remains defa
 
 `GET /api/v1/openapi.json` describes the actually registered release. With the
 synthetic profile its version is `participation-1`; the authenticated
-`GET /api/v1/guide` has guide revision `9`. The checked-in source is
+`GET /api/v1/guide` has guide revision `11`. The checked-in source is
 `src/contracts/participation.ts` and `src/contracts/guide.ts`, not the imported
 illustrative architecture examples. Unknown fields and semantic coercion fail.
 
@@ -105,6 +105,7 @@ illustrative architecture examples. Unknown fields and semantic coercion fail.
 | Bounded context | `GET /areas`, `/areas/:id`, `/areas/:id/discussions`, `/areas/:id/artifacts`, `/artifacts`, `/contributions/:id/children`, `/contributions/:id/ancestors`, `/participants`. |
 | Editors | `GET /resources/:id/editors`; administrator `POST /editors` with expected list version. |
 | Private bookmarks | `GET /me/saved-items`; `POST /me/saved-items/lookup`, `/state`, `/status`. See the Saved items guide for its separate desired-state/recovery contract. |
+| Exact private reading | `POST /me/reading/lookup`, `/state`, `/status`; principal-owned exact main-text revisions, versioned atomic selection and original/current recovery. See the [reading guide](reading-progress.md). |
 | Current text search | `GET /search`, `GET /search/status`; administrator health/failures and retry/rebuild under `/admin/search`. See the [search guide](search.md) for filters, exact links, explicit refresh and worker commands. |
 | Following / shared Changes | Owner-private `/me/following` lookup/state/status/list and `/shared-changes/query`/detail; independent shared checkpoints. See the [Following guide](following.md). |
 | Combined Updates | `/me/updates/query`, `/members` and `/reasons` bind shared and personal intervals, ownership groups, highlights/complete selection and exact metadata. The existing source-body routes remain separate. See the [Updates guide](updates.md). |

@@ -78,6 +78,9 @@ assert.equal(sourceFile('/private/synthetic/following.spec.ts'),'following.spec.
 for(const path of ['/loom/following','/loom/changes','/api/v1/me/following','/api/v1/me/following/lookup','/api/v1/me/following/state','/api/v1/me/following/status','/api/v1/shared-changes/query','/api/v1/shared-changes/detail'])
   assert.equal(routeTemplate('https://example.test'+path+'?scope='+canary+'&cursor='+canary,'https://example.test'),path);
 assert.equal(new Set(controlNames).size,controlLabels.length);
+assert.equal(sourceFile('/private/synthetic/reading.spec.ts'),'reading.spec.ts');
+for(const path of ['/loom/reading','/api/v1/me/reading/lookup','/api/v1/me/reading/state','/api/v1/me/reading/status'])
+  assert.equal(routeTemplate('https://example.test'+path+'?revision_id='+canary+'&idempotency_key='+canary,'https://example.test'),path);
 
 const large = structuredClone(missing.capture);
 large.events = Array.from({ length: limits.events }, () => ({ ...large.events[0], ms: 86_400_000,

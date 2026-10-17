@@ -78,8 +78,10 @@ stop/start separately from search. Build before tests that launch compiled files
 
 See `tests/MEMORY.md` and notification evidence for real PostgreSQL/HTTPS/native
 barriers, upgrade, recovery, StrictMode and browser coverage. Mutes,
-read state/dismissal, file/private-note integration, moderation
+dismissal, file/private-note integration, moderation
 administration, production and human/provider/cross-machine validation remain open.
+Exact private reading lives in `../participation/reading.ts` (ADR-026); fetching
+personal deliveries never marks a source read or consumes its independent state.
 
 Following/shared Changes use independent direct event reads and token custody in
 `../following/` (ADR-024). Advancing shared checkpoints cannot consume personal

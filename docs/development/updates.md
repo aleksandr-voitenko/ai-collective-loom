@@ -170,6 +170,9 @@ a journal. The sidecar contains no content, credential or recovery record. A leg
 verify none is active, then remove only that legacy lock before retrying the saved
 journal. Never remove an active `.lock.sqlite` sidecar.
 
-Reading progress, mutes/dismissal, files/private notes, moderation administration,
+[Exact reading progress](reading-progress.md) has separate operations and recovery.
+Cards, expanded metadata, notes and complete-feed exhaustion do not mark sources
+read or remove read entries. Existing grouping and checkpoint formats are unchanged.
+Mutes/dismissal, files/private notes, moderation administration,
 production retention/restore operations and representative human/provider/cross-machine
 acceptance remain open. Composite product scenarios are not closed by this subset.

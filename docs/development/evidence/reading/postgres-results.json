@@ -1,0 +1,197 @@
+[
+  {
+    "suite": "test:reading:postgres",
+    "exit": 0,
+    "seconds": 21,
+    "counts": [
+      "ℹ tests 15",
+      "ℹ pass 15",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 21283.05275"
+    ]
+  },
+  {
+    "suite": "test:app:postgres",
+    "exit": 0,
+    "seconds": 4,
+    "counts": [
+      "ℹ tests 9",
+      "ℹ pass 9",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 4268.37425"
+    ]
+  },
+  {
+    "suite": "test:publication:postgres",
+    "exit": 0,
+    "seconds": 2,
+    "counts": [
+      "ℹ tests 16",
+      "ℹ pass 16",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 1965.305125"
+    ]
+  },
+  {
+    "suite": "test:identity:postgres",
+    "exit": 0,
+    "seconds": 2,
+    "counts": [
+      "ℹ tests 22",
+      "ℹ pass 22",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 2128.970917"
+    ]
+  },
+  {
+    "suite": "test:participation:postgres",
+    "exit": 0,
+    "seconds": 6,
+    "counts": [
+      "ℹ tests 12",
+      "ℹ pass 12",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 5391.479625"
+    ]
+  },
+  {
+    "suite": "test:saved-items:postgres",
+    "exit": 0,
+    "seconds": 4,
+    "counts": [
+      "ℹ tests 10",
+      "ℹ pass 10",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 4130.130167"
+    ]
+  },
+  {
+    "suite": "test:organization:postgres",
+    "exit": 0,
+    "seconds": 8,
+    "counts": [
+      "ℹ tests 15",
+      "ℹ pass 15",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 8215.958459"
+    ]
+  },
+  {
+    "suite": "test:search:postgres",
+    "exit": 0,
+    "seconds": 34,
+    "counts": [
+      "ℹ tests 46",
+      "ℹ pass 46",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 33972.2735"
+    ]
+  },
+  {
+    "suite": "test:references:postgres",
+    "exit": 0,
+    "seconds": 17,
+    "counts": [
+      "ℹ tests 26",
+      "ℹ pass 26",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 17346.217292"
+    ]
+  },
+  {
+    "suite": "test:summaries:postgres",
+    "exit": 0,
+    "seconds": 16,
+    "counts": [
+      "ℹ tests 14",
+      "ℹ pass 14",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 15522.769375"
+    ]
+  },
+  {
+    "suite": "test:changes:postgres",
+    "exit": 0,
+    "seconds": 13,
+    "counts": [
+      "ℹ tests 12",
+      "ℹ pass 12",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 13293.092959"
+    ]
+  },
+  {
+    "suite": "test:notifications:postgres",
+    "exit": 0,
+    "seconds": 37,
+    "counts": [
+      "ℹ tests 16",
+      "ℹ pass 16",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 37254.377"
+    ]
+  },
+  {
+    "suite": "test:following:postgres",
+    "exit": 0,
+    "seconds": 21,
+    "counts": [
+      "ℹ tests 18",
+      "ℹ pass 18",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 21003.236334"
+    ]
+  },
+  {
+    "suite": "test:updates:postgres",
+    "exit": 0,
+    "seconds": 30,
+    "counts": [
+      "ℹ tests 23",
+      "ℹ pass 23",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 29605.828541"
+    ]
+  },
+  {
+    "suite": "test:migrations:postgres",
+    "exit": 0,
+    "seconds": 3,
+    "counts": [
+      "ℹ tests 9",
+      "ℹ pass 9",
+      "ℹ fail 0",
+      "ℹ cancelled 0",
+      "ℹ skipped 0",
+      "ℹ duration_ms 2624.561834"
+    ]
+  }
+]
