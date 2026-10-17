@@ -1,5 +1,26 @@
 # Browser test diagnostics
 
+Exact reading uses `integration/reading*.test.ts` for all-prior-table upgrade/digest
+preservation, independent revision sets, atomic lists, deliberate Unread precedence,
+ABA/retry, quota/failure rollback and native HTTPS credential/restart/COMMIT loss.
+Guard tests pause the final reading transaction, not the earlier authentication
+probe. Shape sizing and actual API row-growth measurements are distinct evidence.
+`web/reading.test.tsx` tests StrictMode, ownership, monotonic responses, storage
+bounds and presentation exclusions; `e2e/reading.spec.ts` checks rendered exact IDs,
+real requests, long scrolling, cross-tab delayed automation, process restart,
+focus/mobile and blocked sign-out. Optional LOOM_READING_REVIEW_SCREENS=1 writes
+explicit synthetic review images under /private/tmp, outside diagnostic uploads.
+Conflict regressions use two exact targets and both completion orders; assert the
+warning belongs only to the refused target and survives refresh/reopening until
+dismissal. The journal keeps known conflicts distinct from uncertain dispatches;
+failed saves/removal and late duplicates must preserve or retire the exact record.
+Only fixed reading routes/spec names join the closed diagnostic vocabulary.
+The native lifecycle test connects with `noDefaults:true`: another CDP session
+cannot remove Playwright's own per-session focus override. Set its viewport and
+fixture HTTPS handling explicitly. It exercises Chromium hidden/frozen state;
+running hidden/unfocused logic has separate stubbed tests. Neither is an OS or
+physical-device usability trial. Preserve existing sign-out cleanup message order.
+
 Combined Updates uses `integration/updates*.test.ts` for independent expected
 event/delivery sets, bounded preparation/expansion, highlights→complete fixed bounds,
 late personal repair, visibility replay before completed floors, both guard orders,

@@ -151,7 +151,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–9. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–11. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -263,3 +263,37 @@ Guide10/community discovery advertises `combined-updates-1` and its query URL.
 projection and personal exact-source policy in one guarded transaction. It preserves
 PR11's contribution-only focused-context rule; summaries open their discussion.
 Updates errors carry retrieval recovery actions, never publication outcome claims.
+
+Guide11 adds `reading-state-1` in `reading.ts`/`http/reading.ts` and migration0016.
+Owner comes only from current authentication. Exact typed main-text resource/revision
+pairs use absent unread/version0, retained negative states and immutable decisions.
+Attempt → actor → owner advisory → full source plan → sorted exact revision guards;
+no clock, event, outbox or worker. Every applied command increments version, even
+no-ops. Manual Unread may supersede presentation-only changes since its expected
+version; last deliberate version prevents overriding another deliberate choice.
+Atomic lists of1–25 normalize UUIDs/sort revisions and reject duplicates. Replay
+resolves before quotas/staleness and reports original separately from current.
+Only known states/outcomes may return safe IDs/status after source suppression;
+unknown hidden/missing pairs fail identically. New Read needs eligibility, known
+Unread remains possible. Source editing rights are unnecessary; exact eligible
+history survives current-revision/parent-comment suppression.
+Limits:10000 states/50000 operations/100000 members per owner,16KiB request/32KiB
+response,SQL2.5s/lock1.5s/transaction15s,owner32/guards3840. No expiry/eviction;
+lookup and exact reconciliation remain usable at quota. See ADR-026.
+`web/Reading.tsx` instruments only full main text, not `AuthoredText` globally.
+Opt-in presentation requires every<=160px vertical band visible/foreground/focused
+for1000ms sampled100ms. It accumulates across scrolling within the route episode;
+overflowing horizontal code and>2048 bands remain manual. Manual Unread or observing
+a later version blocks the episode; passive rerender/status/StrictMode/tab changes
+never rearm. Explicit away/reopen or reload can. Preserve Changes controls' existing
+query-independent provider lifetime. Badge cache follows mounted text;4096 episode
+fences pause automatic observation without eviction until reopening. Manual controls
+remain usable. `reading-recovery.ts` has separate Web-Locked
+128-record/16KiB-per-record/512KiB custody, exact bodies and attempt counts, no
+network under storage locks and identity fencing before cleanup. First-refusal
+classification checks current attempts; retry/terminal late responses cannot
+recreate cleared work. Native `reading-client.mjs` uses immutable fsynced0600 files.
+Confirmed conflicts stay in the bounded browser journal until explicit dismissal,
+with revision-specific feedback independent of other completions, refresh or reload.
+`begin` refuses known conflicts; late duplicate results cannot recreate dismissed
+records, and a late first refusal cannot downgrade a confirmed conflict.

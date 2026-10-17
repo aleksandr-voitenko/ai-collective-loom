@@ -403,6 +403,8 @@ export class ParticipationRetrieval {
           "retained_without_automatic_expiry; destructive_restore_unsupported" as const,
         derived_effects: "search_and_personal_direct_attention; other_projections_disabled" as const,
         updates_contract: "combined-updates-1" as const,
+        reading_contract: 'reading-state-1' as const,
+        reading_url: '/api/v1/me/reading/lookup' as const,
         updates_url: "/api/v1/me/updates/query" as const,
         notification_contract: "personal-attention-1" as const,
         notifications_url: "/api/v1/me/notifications/query" as const,

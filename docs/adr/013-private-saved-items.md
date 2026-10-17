@@ -129,3 +129,8 @@ any replacement must retain owner isolation, stale-command rejection and distinc
 original/current outcomes. Production limits are not approved by synthetic tests.
 See [the executable guide and trial](../development/saved-items.md) and
 [verification evidence](../development/saved-items-evidence.md).
+
+Guide11 adds [exact private reading](026-private-reading-progress.md) in separate
+tables, version fences and browser recovery. It reuses original/current outcome
+principles without changing Saved semantics, quotas or target kinds. A bookmark
+does not imply reading, and Read/Unread cannot remove a Saved target.

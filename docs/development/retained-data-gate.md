@@ -23,6 +23,9 @@ Before a retained-data environment is enabled, approve and exercise:
    and retained operation decisions. Their synthetic caps have no automatic expiry.
    Approve physical-source erasure handling without retargeting exact references or
    allowing stale Save/Unsave replay. Logical removal tests do not certify erasure.
+   Exact private reading adds unread/version and deliberate-choice fences, immutable
+   original decisions and owner quota counters. Its synthetic caps have no expiry;
+   erasure must not reopen version-zero commands or disclose protected source history.
    Personal notifications add immutable claim/signal/delivery identity, per-recipient
    committed clocks and a retained-history floor. Approve any pruning and preserve
    explicit incomplete resynchronization; a rebuild must never recreate old alerts.
@@ -31,6 +34,8 @@ Before a retained-data environment is enabled, approve and exercise:
    history requires a recovery epoch that blocks automatic old-intent replay until
    reconciliation. The ordinary server/browser restart tests do not implement this.
    Include private bookmark versions and decisions in the same recovery contract.
+   Include exact reading states, deliberate fences and decisions together; ordinary
+   reading client/API restarts do not test rollback of committed history.
    Include notification key custody, recovery epoch, reply-eligibility facts,
    source heads/gaps and personal availability. Ordinary restart continuity and
    rejection of an incompatible notification epoch do not certify destructive restore.

@@ -17,6 +17,8 @@ import { registerIdentityRoutes } from "./identity.js";
 import { classifyError } from "./errors.js";
 import { participationGuide } from "../../contracts/guide.js";
 import { registerSavedItems } from "./saved-items.js";
+import { registerReading } from './reading.js';
+import { ReadingLimitError } from '../modules/participation/reading.js';
 import { SavedItemsError } from "../modules/participation/saved-items.js";
 import { registerOrganization } from "./organization.js";
 import { OrganizationError } from "../modules/participation/organization-context.js";
@@ -108,6 +110,8 @@ export function participantError(
     message = error.message;
     status = code === "organization_limit" ? 429 : 409;
     action = code === "organization_limit" ? "review_synthetic_limit" : "refresh_and_review";
+  } else if (error instanceof ReadingLimitError) {
+    code=error.code;message=error.message;status=429;action='review_synthetic_limit';
   } else if (error instanceof SavedItemsError) {
     code = error.code;
     message = error.message;
@@ -135,7 +139,8 @@ export function participantError(
     action = "reconcile_operation";
   const personalRead = request.routeOptions.url === '/api/v1/me/notifications/query' ||
     request.routeOptions.url === '/api/v1/me/notifications/:id' || request.routeOptions.url?.startsWith('/api/v1/shared-changes/') ||
-    request.routeOptions.url?.startsWith('/api/v1/me/updates/');
+    request.routeOptions.url?.startsWith('/api/v1/me/updates/') ||
+    request.routeOptions.url === '/api/v1/me/reading/lookup' || request.routeOptions.url === '/api/v1/me/reading/status';
   if (personalRead && status >= 500) action = 'retry_same_request';
   return reply
     .code(status)
@@ -161,6 +166,7 @@ export async function registerParticipation(
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
   registerSavedItems(app, services.database, actor);
+  registerReading(app, services.database, actor);
   registerOrganization(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerNotifications(app, services.database, actor);

@@ -3,7 +3,9 @@
 **Mentions/replies** is the synthetic release's complete, bounded personal feed of
 published mentions and true replies. It is independent of Saved items and source
 browsing. [Following](following.md) and [combined Updates](updates.md) have separate
-contracts and client recovery. Routine mutes, read/unread state, dismissal,
+contracts and client recovery. [Exact reading progress](reading-progress.md) is
+independent: fetching or exhausting this feed never marks its sources read.
+Routine mutes, dismissal,
 files/private notes, delivery by email/push/webhook, agent execution and production
 operations remain open product requirements.
 
@@ -31,7 +33,7 @@ revision/note links and current context. Publication/availability details and
 coverage/recovery explanation are secondary. Loading, empty pages, incomplete or
 unknown generation, failed retrieval, expired traversal and visibility restoration
 have explicit states. Exhaustion describes only the fixed available interval.
-Reading changes no Saved, subscription, source, read or dismissal state.
+Retrieving this feed changes no Saved, subscription, source, read or dismissal state.
 
 The browser saves a validated token for replaying the **displayed page** before
 exposing its successor. Reload reauthorizes that page. A failed save cannot advance

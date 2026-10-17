@@ -25,8 +25,11 @@
 | [Topic organization decision](adr/020-topic-organization.md) | Authoritative parentage, metadata history, versioned moves/closure and common event ordering. |
 | [Topic organization guide](development/topic-organization.md) | Administrator browser/API operations, bounded navigation, proposal routing and recovery. |
 | [Organization verification](development/topic-organization-evidence.md) | Populated upgrade, SQL/HTTPS/browser evidence and remaining acceptance limits. |
-| [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; notes/read state remain open. |
-| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 10. |
+| [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; reading remains independent. |
+| [Saved items guide](development/saved-items.md) | Private bookmark API, browser behavior and runnable remote-client trial; unchanged Saved semantics through guide 11. |
+| [Private reading decision](adr/026-private-reading-progress.md) | Exact read/unread state, deliberate ordering fence, automatic presentation policy and finite retention. |
+| [Reading progress guide](development/reading-progress.md) | Browser controls, bounded selection, HTTPS examples and independent recovery. |
+| [Reading verification](development/reading-progress-evidence.md) | Observed local checks, failures, cost measurements and acceptance boundaries. |
 | [Scoped text search decision](adr/012-scoped-text-search.md) | Current lexical population, ranking, explicit continuation invalidation, fenced jobs and bounded backfill/rebuild. |
 | [Search and worker guide](development/search.md) | Browser/API search, native worker commands, administrator recovery and supported SRCH subsets. |
 | [Search verification](development/search-evidence.md) | Isolated SQL/HTTPS/native worker/browser evidence and remaining validation limits. |

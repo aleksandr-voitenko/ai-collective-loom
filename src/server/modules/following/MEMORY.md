@@ -89,5 +89,7 @@ saved successor even when resized. Build before native API/browser tests.
 See task evidence for observed commands/failures. Sibling `updates/` reuses exported
 candidate classification/matching and exact item projection inside its own complete
 transaction/guard plan (ADR-025); standalone token semantics remain unchanged.
-Mutes/dismissal and read state remain future work; no production, human usability,
+Mutes/dismissal remain future work. Exact private reading is separate in
+`../participation/reading.ts` (ADR-026); Following and Changes never mark sources read.
+No production, human usability,
 provider-agent or cross-machine acceptance is implied.
