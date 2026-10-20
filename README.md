@@ -134,6 +134,7 @@ npm run test:reading:postgres # exact private state, unread precedence, atomic b
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures
+npm run coverage -- --base origin/main # combined Node, PostgreSQL and Chromium line/branch gates
 npm run test:integration
 npm run test:persistence
 ```
@@ -142,6 +143,11 @@ Browser failures produce bounded JSON in `browser-diagnostics/approved/`.
 The [diagnostic guide](docs/development/browser-diagnostics.md) explains safe
 capture, intentional probes and CI retention. Raw reports and screenshots are
 excluded from that upload path.
+
+Combined coverage reports are in `coverage/approved/index.html`. CI enforces 90%
+changed-line coverage, 85% branch coverage, and no decline from the measured
+application line/branch baseline. See the [coverage guide](docs/development/coverage.md)
+for scope, exact thresholds, source-map checks and report limits.
 
 `dev:init` creates ignored `.env.local` credentials without overwriting an existing
 file. `dev:up` starts PostgreSQL and SeaweedFS, enables versioning on the two local

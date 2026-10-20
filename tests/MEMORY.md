@@ -337,7 +337,14 @@ do not rely on a reporter running while a page is alive. A completed server-clos
 callback is stronger than an asynchronously queued socket-close counter event.
 Never hold requests, route barriers, Web Locks or sockets for diagnostics.
 
-Only `browser-diagnostics/approved/*.json` may be uploaded. The containing runner
+Only `browser-diagnostics/approved/*.json` may be uploaded as browser diagnostics.
+Combined coverage separately publishes authored source and numeric reports from
+`coverage/approved/`; never upload raw counters, maps, logs or browser profiles.
+`helpers/browser-coverage.ts` samples before navigation/disposal without changing
+test deadlines or holding application requests. `tests/coverage/verify.ts` guards
+real Node/browser branch merging, unmapped cold code and safe disposal. Coverage
+method, gates and artifact constraints: `docs/development/coverage.md`.
+The containing runner
 consumes arbitrary console output and removes Playwright's private raw outputs on
 normal child exit. On hard kill, intermediates may remain unsafe; never promote
 them to artifacts. Use the npm entry point, not a reporter override/direct CLI.

@@ -260,6 +260,10 @@ when unavailable.
 Browser checks use a containing runner and allowlisted failure bundles; raw reporter
 output/attachments are not approved artifacts. See `tests/MEMORY.md` and
 `docs/development/browser-diagnostics.md` for collection, teardown and CI gates.
+`npm run coverage` combines Node/JSDOM, all PostgreSQL suites and Chromium client
+execution. Application gates enforce 90% changed lines, 85% branches and exact
+no-decline line/branch baseline ratios. Tooling is reported separately. See
+`docs/development/coverage.md` for source-map invariants and approved reports.
 `test:integration` includes failed-migration rollback and signed GET probes;
 expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.

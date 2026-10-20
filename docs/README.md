@@ -10,6 +10,7 @@
 | [Contract examples and participation guide](architecture/ai-collective-loom-contract-examples-v0.3.md) | Illustrative interaction shapes, not implemented endpoints or a complete OpenAPI schema. |
 | [Implementation backlog](development/implementation-backlog.md) | Unresolved implementation gates and the next bounded vertical slice. |
 | [Local development](development/README.md) | Bootstrap commands, scope, credentials, persistence, and validation limits. |
+| [Combined coverage](development/coverage.md) | Reproducible Node/PostgreSQL/Chromium line and branch reports, CI gates, baseline and artifact boundary. |
 | [Local development decision](adr/019-local-development.md) | Initial local provider choice and reconsideration conditions. |
 | [Application runtime decision](adr/002-application-runtime.md) | Implemented stack, executable contract dialect, validation, and lifecycle boundaries for the foundation. |
 | [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary, shared publication and additive synthetic identity/text domain schema. |

@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version-file: .nvmrc
@@ -34,11 +35,13 @@ jobs:
   local-integration:
     needs: checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Complete coverage includes fast, all PostgreSQL, Chromium, and reporting.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version-file: .nvmrc
@@ -50,24 +53,21 @@ jobs:
       - run: npm run dev:doctor
       - run: npm run dev:up
       - run: npm run app:build
-      - run: npm run test:app:postgres
-      - run: npm run test:publication:postgres
-      - run: npm run test:identity:postgres
-      - run: npm run test:participation:postgres
-      - run: npm run test:saved-items:postgres
-      - run: npm run test:organization:postgres
-      - run: npm run test:search:postgres
-      - run: npm run test:references:postgres
-      - run: npm run test:summaries:postgres
-      - run: npm run test:changes:postgres
-      - run: npm run test:notifications:postgres
-      - run: npm run test:following:postgres
-      - run: npm run test:updates:postgres
-      - run: npm run test:reading:postgres
-      - run: npm run test:attention:postgres
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser-diagnostics
-      - run: npm run test:e2e
+      - name: Combined coverage and regression suites
+        id: coverage
+        env:
+          COVERAGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+        run: npm run coverage
+      - name: Preserve line and branch coverage reports
+        if: always() && steps.coverage.outputs.ready == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          path: coverage/approved/
+          if-no-files-found: error
+          retention-days: 3
       - name: Exercise controlled browser failure before upload
         if: github.event_name == 'workflow_dispatch' && inputs.verify_failure_upload
         run: npm run test:e2e -- --config tests/diagnostics/playwright.config.ts
@@ -83,7 +83,6 @@ jobs:
           path: browser-diagnostics/approved/*.json
           if-no-files-found: error
           retention-days: 3
-      - run: npm run test:migrations:postgres
       - run: npm run test:integration
       - run: npm run test:persistence
       - name: Show local image IDs
