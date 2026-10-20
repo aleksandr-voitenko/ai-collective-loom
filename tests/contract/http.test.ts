@@ -41,7 +41,10 @@ test("unsupported production query fields and identity headers do not create aut
   for (const path of ["/api/v1/community", "/api/v1/discussions", "/fixture/validation", "/fixture/fault",
     "/prototype/identity/accounts", "/prototype/identity/signin/start", "/prototype/identity/bootstrap", "/prototype/identity/reconcile",
     "/api/v1/me/saved-items/state", "/api/v1/me/saved-items/lookup", "/api/v1/me/saved-items/status",
-    "/api/v1/me/reading/state", "/api/v1/me/reading/lookup", "/api/v1/me/reading/status"]) {
+    "/api/v1/me/reading/state", "/api/v1/me/reading/lookup", "/api/v1/me/reading/status",
+    "/api/v1/me/attention/mutes/state", "/api/v1/me/attention/mutes/lookup", "/api/v1/me/attention/dismissals/state",
+    "/api/v1/me/attention/dismissals/lookup", "/api/v1/me/attention/status", "/api/v1/me/attention/list",
+    "/api/v1/me/routine-updates/query", "/api/v1/me/routine-updates/members", "/api/v1/me/routine-updates/reasons", "/api/v1/me/routine-updates/selection"]) {
     const response = await app.inject({ method: "POST", url: path, headers: { "x-loom-participant": "administrator", "x-request-id": "client-supplied-id" }, payload: {} });
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().error.code, "not_found");

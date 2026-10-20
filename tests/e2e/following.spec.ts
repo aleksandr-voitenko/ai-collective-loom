@@ -1,6 +1,7 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomUUID,randomBytes,createCipheriv,createDecipheriv } from 'node:crypto';
 import { mkdir,copyFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { test,expect } from '../helpers/browser-fixtures.js';
 import { setup,api,journal } from '../helpers/change-browser.js';
 import type { Page,BrowserContext } from '@playwright/test';
@@ -22,7 +23,8 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
   const children:string[]=[];for(const parent of [f.area,other]){const state=(await f.admin.call('/api/v1/organization/resources/'+parent)).body;
     const r=await f.admin.call('/api/v1/organization/changes',{kind:'area.create',parent_id:parent,title:'Same leaf',description:'Independent scope',expected_hierarchy_version:state.hierarchy_version,idempotency_key:randomUUID()});expect(r.status).toBe(200);children.push(r.body.outcome.resource_id);}
   await page.goto(server.origin+'/loom/following');await expect(page.getByRole('heading',{name:'No explicit follows'})).toBeVisible();
-  await page.goto(server.origin+'/loom/area/'+f.area);const parent=control(page,'area',f.area);
+  const areaAlias=f.area.toUpperCase();
+  await page.goto(server.origin+'/loom/area/'+areaAlias);const parent=control(page,'area',f.area);
   await expect(parent.getByRole('button',{name:'Follow',exact:true})).toBeEnabled();await parent.getByRole('button',{name:'Follow',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(parent.getByRole('button',{name:'Unfollow',exact:true})).toBeEnabled();await parent.getByText('Follow settings',{exact:true}).click();await parent.getByLabel('Include subtopics').check();
   await parent.getByLabel('Opening edits').uncheck();await parent.getByRole('button',{name:'Save follow settings'}).click();await expect(parent.getByRole('button',{name:'Unfollow',exact:true})).toBeEnabled();
@@ -30,21 +32,23 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
   await page.getByRole('link',{name:'Following',exact:true}).click();await expect(page.locator('.following-row')).toHaveCount(3);
   await expect(page.getByText('General › Same leaf',{exact:true})).toBeVisible();await expect(page.getByText('Proposals › Same leaf',{exact:true})).toBeVisible();await expect(page.getByText(/Including subtopics · New discussions/)).toBeVisible();
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844]] as const){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=fileURLToPath(new URL('../../docs/development/evidence/following/',import.meta.url));await mkdir(destination,{recursive:true});const path=info.outputPath('following-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,destination+'following-'+name+'.png');}}
+    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=join(tmpdir(),'loom-review-evidence','following');await mkdir(destination,{recursive:true});const path=info.outputPath('following-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,join(destination,'following-'+name+'.png'));}}
   await control(page,'area',f.area).getByRole('button',{name:'Unfollow',exact:true}).click();await expect(control(page,'area',f.area).getByRole('status')).toContainText('Explicit follow removed');await page.getByRole('button',{name:'Refresh following'}).click();await expect(page.locator('.following-row')).toHaveCount(2);
   const closed=(await f.admin.call('/api/v1/organization/resources/'+f.area)).body;
   expect((await f.admin.call('/api/v1/organization/changes',{kind:'area.close',resource_id:f.area,expected_version:closed.version,expected_hierarchy_version:closed.hierarchy_version,idempotency_key:randomUUID()})).status).toBe(200);
   await page.goto(server.origin+'/loom/area/'+f.area);await control(page,'area',f.area).getByRole('button',{name:'Follow',exact:true}).click();await expect(control(page,'area',f.area).getByRole('button',{name:'Unfollow',exact:true})).toBeVisible();
+  await page.goto(server.origin+'/loom/following');await expect(page.getByText('Proposals › Same leaf',{exact:true})).toBeVisible();
   const lookupEntered=barrier(),lookupRelease=barrier();
-  await page.route('**/api/v1/me/following/lookup',async route=>{
-    if(route.request().postDataJSON().resource_id===children[1]!){lookupEntered.release();await lookupRelease.promise;}
+  await page.route('**/api/v1/me/attention/previews',async route=>{
+    if(route.request().postDataJSON().targets.some((target:any)=>target.resource_id===children[1]!)){lookupEntered.release();await lookupRelease.promise;}
     await route.continue();
   });
   try{
-    await page.goto(server.origin+'/loom/following');await lookupEntered.promise;
+    await control(page,'area',children[1]!).getByText('Routine attention',{exact:true}).click();
+    await control(page,'area',children[1]!).getByRole('button',{name:'Refresh mute state'}).click();await lookupEntered.promise;
     await expect(page.getByText('Proposals › Same leaf',{exact:true})).toBeVisible();
     await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[children[1]!]);lookupRelease.release();
-    await expect(page.getByRole('heading',{name:'Followed target unavailable'})).toBeVisible();await expect(page.getByText('Proposals › Same leaf',{exact:true})).toHaveCount(0);
+    await expect(page.locator('.following-row').filter({has:control(page,'area',children[1]!)}).getByRole('heading',{name:'Followed target unavailable'})).toBeVisible();await expect(page.getByText('Proposals › Same leaf',{exact:true})).toHaveCount(0);
   }finally{lookupRelease.release();await page.unrouteAll({behavior:'wait'});}
   await control(page,'area',children[1]!).getByRole('button',{name:'Unfollow',exact:true}).click();await expect(control(page,'area',children[1]!).getByRole('status')).toContainText('Explicit follow removed');await page.getByRole('button',{name:'Refresh following'}).click();await expect(page.locator('.following-row')).toHaveCount(2);
   expect((await server.observer.query('SELECT count(*)::int n FROM loom.saved_items')).rows[0].n).toBe(0);
@@ -52,7 +56,7 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
 
 test('failed Following intent writes dispatch nothing; lost committed responses survive reload and stale tabs',async({page,context,server})=>{
   const f=await setup(page,context,server);await page.goto(server.origin+'/loom/resource/'+f.target.resource_id);const follow=control(page,'artifact',f.target.resource_id);await expect(follow.getByRole('button',{name:'Follow',exact:true})).toBeEnabled();
-  let sent=0,lose=true;await page.route('**/api/v1/me/following/state',async route=>{sent++;if(lose){lose=false;await route.fetch();await route.abort('failed');}else await route.continue();});
+  let sent=0,lose=true;await page.route('**/api/v1/me/following/private/state',async route=>{sent++;if(lose){lose=false;await route.fetch();await route.abort('failed');}else await route.continue();});
   await page.evaluate(()=>{const original=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key.startsWith('loom.intent.v1:')){Storage.prototype.setItem=original;throw new DOMException('Following intent not saved','QuotaExceededError');}original.call(this,key,value);};});
   await follow.getByRole('button',{name:'Follow',exact:true}).click();await expect(follow.getByRole('alert')).toContainText('Following intent not saved');expect(sent).toBe(0);
   await follow.getByRole('button',{name:'Refresh follow state'}).click();await follow.getByRole('button',{name:'Follow',exact:true}).click();await expect(follow.getByRole('button',{name:'Check follow status'})).toBeVisible();const original=await journal(page,'following.set');expect(original.state).toBe('uncertain');
@@ -94,7 +98,7 @@ test('chronological Changes freezes displayed pages, replays reload/back, resize
   await page.getByLabel('Next page size').selectOption('5');await page.getByRole('button',{name:'Continue shared interval'}).focus();await page.keyboard.press('Enter');await expect(page.locator('.notification-list > li')).toHaveCount(2);await expect(page.getByText(/This view uses older saved Following settings/)).toBeVisible();await expect(page.getByRole('heading',{name:'Changes',exact:true})).toBeFocused();
   await page.getByRole('button',{name:'Previous shared page'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(12);expect(await page.locator('.notification-list h2').allTextContents()).toEqual(first);
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844]] as const){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=fileURLToPath(new URL('../../docs/development/evidence/following/',import.meta.url));await mkdir(destination,{recursive:true});const path=info.outputPath('changes-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,destination+'changes-'+name+'.png');}}
+    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=join(tmpdir(),'loom-review-evidence','following');await mkdir(destination,{recursive:true});const path=info.outputPath('changes-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,join(destination,'changes-'+name+'.png'));}}
   await page.getByRole('button',{name:'Continue shared interval'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(2);await page.getByRole('button',{name:'Check newer shared changes'}).click();await expect(page.getByRole('alert')).toContainText('Following settings changed');await page.getByRole('button',{name:'Adopt current settings from retained history'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(0);
   expect((await server.observer.query('SELECT count(*)::int n FROM loom.personal_deliveries')).rows[0].n).toBe(0);
 });
@@ -234,7 +238,14 @@ test('shared visibility failures withdraw cached rows, focus recovery and restor
 
 test('late explicit-filter and route responses cannot restore a replaced shared view',async({page,context,server})=>{
   const f=await material(page,context,server,0),entered=barrier(),release=barrier();let held=false;
-  await page.route('**/api/v1/shared-changes/query',async route=>{if(!held){held=true;const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});}else await route.continue();});
+  const firstDone=barrier(),routeEntered=barrier(),routeRelease=barrier();let leaving=false;
+  // Keep interception enabled between phases. Removing the last handler and
+  // immediately reinstalling it let CI requests escape the intended barrier.
+  await page.route('**/api/v1/shared-changes/query',async route=>{
+    if(leaving){const response=await route.fetch();routeEntered.release();await routeRelease.promise;await route.fulfill({response}).catch(()=>{});}
+    else if(!held){held=true;try{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});}finally{firstDone.release();}}
+    else await route.continue();
+  });
   try{
     await page.goto(server.origin+'/loom/changes?kind=area&id='+f.area);
     await entered.promise;
@@ -244,11 +255,14 @@ test('late explicit-filter and route responses cannot restore a replaced shared 
     await expect(page.locator('.notification-list > li')).toHaveCount(0);
     release.release();
     await expect(page.getByLabel('Artifact publications',{exact:true})).not.toBeChecked();
+    await firstDone.promise;
+    const refresh=page.getByRole('button',{name:'Refresh scope from retained history'});
+    await expect(refresh).toHaveAttribute('aria-disabled','false');
+    leaving=true;await refresh.click();await routeEntered.promise;
+    await page.getByRole('link',{name:'Topics',exact:true}).first().click();routeRelease.release();
+    await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await expect(page.locator('.notification-list > li')).toHaveCount(0);
   }
-  finally{release.release();await page.unrouteAll({behavior:'wait'});}
-  const routeEntered=barrier(),routeRelease=barrier();await page.route('**/api/v1/shared-changes/query',async route=>{const response=await route.fetch();routeEntered.release();await routeRelease.promise;await route.fulfill({response}).catch(()=>{});});
-  try{await page.getByRole('button',{name:'Refresh scope from retained history'}).click();await routeEntered.promise;await page.getByRole('link',{name:'Topics',exact:true}).first().click();routeRelease.release();await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await expect(page.locator('.notification-list > li')).toHaveCount(0);}
-  finally{routeRelease.release();await page.unrouteAll({behavior:'wait'});}
+  finally{release.release();routeRelease.release();await page.unrouteAll({behavior:'wait'});}
 });
 
 test('sign-out fences shared responses immediately while cleanup waits for its Web Lock',async({page,context,server})=>{

@@ -1,7 +1,8 @@
+import { useAuthorization } from './AuthorizationBoundary.js';
 import { useEffect,useRef,useState,type RefObject } from 'react';
 import { Link,useSearchParams } from 'react-router';
 import * as C from '../contracts/following.js';
-import { ApiError,identityGeneration,request } from './participation-client.js';
+import { ApiError,identityGeneration } from './participation-client.js';
 import type { Context } from './participation-state.js';
 import { SharedRecovery,sharedScopeKey,sharedToken } from './shared-recovery.js';
 import { preferenceLabels } from './Following.js';
@@ -33,6 +34,7 @@ export function SharedChangesPage({context}:{context:Context}){
   </section>;
 }
 function SharedView({context,scope,heading}:{context:Context;scope:C.SharedScopeView;heading:RefObject<HTMLHeadingElement|null>}){
+  const authority=useAuthorization();
   const [page,setPage]=useState<C.SharedPageView>(),[busy,setBusy]=useState(false),[failure,setFailure]=useState<{code:string;text:string}>(),[size,setSize]=useState(12),
     [past,setPast]=useState<C.SharedOptions[]>([]),[reasonDetail,setReasonDetail]=useState<C.SharedItemView>();
   const live=useRef(false),owner=useRef(identityGeneration()),sequence=useRef(0),requestSequence=useRef(0),inflight=useRef(false),
@@ -45,7 +47,7 @@ function SharedView({context,scope,heading}:{context:Context;scope:C.SharedScope
     const mine=++requestSequence.current;attempted.current=options;
     if(active()){setBusy(true);setFailure(undefined);setReasonDetail(undefined);}
     try{
-      const value=await request<C.SharedPageView>('/api/v1/shared-changes/query',{body:options,self:context.self,schema:C.SharedPage,signal:abort.signal});
+      const value=await authority.read<C.SharedPageView>('/api/v1/shared-changes/query',{body:options,self:context.self,schema:C.SharedPage,signal:abort.signal});
       if(!active()||mine!==requestSequence.current)return;
       attempted.current={cursor:value.page_cursor,limit:value.limit,max_response_bytes:value.max_response_bytes};
       const saved=await recovery.save(key,value,sequence.current,()=>active()&&mine===requestSequence.current);
@@ -68,7 +70,7 @@ function SharedView({context,scope,heading}:{context:Context;scope:C.SharedScope
     catch(e){if(active())setFailure({code:'local_recovery_failed',text:(e as Error).message});}}
   async function detail(item:C.SharedItemView,offset=0){
     if(inflight.current||!page)return;const mine=requestSequence.current;inflight.current=true;setBusy(true);
-    try{const value=await request<C.SharedItemView>(item.detail_url,{body:{cursor:page.page_cursor,event_id:item.event_id,reason_offset:offset},self:context.self,schema:C.SharedItem});
+    try{const value=await authority.read<C.SharedItemView>(item.detail_url,{body:{cursor:page.page_cursor,event_id:item.event_id,reason_offset:offset},self:context.self,schema:C.SharedItem});
       if(active()&&mine===requestSequence.current)setReasonDetail(value);
     }catch(e){if(active()&&mine===requestSequence.current){if(e instanceof ApiError&&invalidations.has(e.code)){setPage(undefined);setReasonDetail(undefined);}
       setFailure({code:e instanceof ApiError?e.code:'retrieval_failed',text:(e as Error).message});}}

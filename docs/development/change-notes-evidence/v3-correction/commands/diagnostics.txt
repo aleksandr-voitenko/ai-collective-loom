@@ -1,5 +1,0 @@
-
-> ai-collective-loom@0.1.0 test:browser-diagnostics
-> node scripts/check-runtime.mjs && node --import tsx tests/diagnostics/verify.ts
-
-Browser diagnostics verified: 8 controlled failures, full upload-candidate canaries/bounds, lifecycle and 4 fail-closed validation cases.

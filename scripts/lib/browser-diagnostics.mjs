@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
   steps: 16, tests: 128, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
-export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
+export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
   'collector_missing', 'collector_unfinished', 'page_closed_before_capture', 'page_limit', 'context_limit', 'pending_limit', 'byte_limit'];
 export const details = ['none', 'default', 'persistent', 'explicit', 'dom_ready', 'load', 'closed',
@@ -21,6 +21,10 @@ export const controlLabels = ['Save discussion', 'Unsave discussion', 'Sign in w
 const routePatterns = [
   '/loom/updates', '/api/v1/me/updates/query', '/api/v1/me/updates/members', '/api/v1/me/updates/reasons',
   '/loom/following', '/loom/changes', '/api/v1/me/following', '/api/v1/me/following/lookup', '/api/v1/me/following/state', '/api/v1/me/following/status',
+  '/api/v1/me/following/private', '/api/v1/me/following/private/lookup', '/api/v1/me/following/private/state', '/api/v1/me/following/private/status',
+  '/api/v1/me/attention/previews', '/api/v1/me/attention/private/mutes/lookup', '/api/v1/me/attention/private/mutes/state', '/api/v1/me/attention/private/dismissals/lookup', '/api/v1/me/attention/private/dismissals/state', '/api/v1/me/attention/private/status', '/api/v1/me/attention/private/list',
+  '/loom/attention', '/api/v1/me/attention/mutes/lookup', '/api/v1/me/attention/mutes/state', '/api/v1/me/attention/dismissals/lookup', '/api/v1/me/attention/dismissals/state', '/api/v1/me/attention/status', '/api/v1/me/attention/list',
+  '/api/v1/me/routine-updates/query', '/api/v1/me/routine-updates/members', '/api/v1/me/routine-updates/reasons', '/api/v1/me/routine-updates/selection',
   '/loom/reading', '/api/v1/me/reading/lookup', '/api/v1/me/reading/state', '/api/v1/me/reading/status',
   '/api/v1/shared-changes/query', '/api/v1/shared-changes/detail',
   '/loom/notifications', '/api/v1/me/notifications/query', '/api/v1/me/notifications/:id',

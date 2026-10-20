@@ -124,7 +124,7 @@ behind completed checkpoints; byte/work/token/history/epoch limits; API/client r
 compiled browser and development StrictMode; stopped workers and delayed independent
 personal delivery; all existing PostgreSQL, normal browser and diagnostic suites.
 Observed commands, results, synthetic measurements and earlier failures are recorded
-in [task evidence](../development/following-evidence.md); these do not establish full
+in Lore task records and CI runs; these do not establish full
 product acceptance.
 
 Reconsider these synthetic bounds and conservative historical-gap handling when

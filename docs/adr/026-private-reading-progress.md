@@ -133,7 +133,7 @@ effects. Native restart/response-loss recovery uses exact saved HTTPS requests.
 Production Chromium observes rendered revision IDs and actual progress requests;
 development StrictMode separately covers replay/ownership. Run normal check,
 relevant PostgreSQL suites, complete normal browser and diagnostic safety checks.
-Execution evidence belongs in the feature evidence guide, not this plan.
+Execution evidence belongs in Lore task records and CI runs, not this plan.
 
 Reconsider numerical bounds and the presentation approximation after representative
 human/agent workloads, accessibility studies, new text/file renderers or retained-data

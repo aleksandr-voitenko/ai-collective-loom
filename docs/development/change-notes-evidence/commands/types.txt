@@ -1,8 +1,0 @@
-
-> ai-collective-loom@0.1.0 app:typecheck
-> node scripts/check-runtime.mjs && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.tests.json
-
-tests/integration/changes-bounds.test.ts(9,9): error TS7034: Variable 'sources' implicitly has type 'any[]' in some locations where its type cannot be determined.
-tests/integration/changes-bounds.test.ts(14,118): error TS7005: Variable 'sources' implicitly has an 'any[]' type.
-tests/integration/changes-bounds.test.ts(26,101): error TS7005: Variable 'sources' implicitly has an 'any[]' type.
-tests/integration/changes.test.ts(23,72): error TS2532: Object is possibly 'undefined'.

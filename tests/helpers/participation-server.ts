@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { createServer } from "node:net";
+import { createServer, type AddressInfo, type Server } from "node:net";
 import { isolatedPublicationPostgres } from "./publication-postgres.js";
 import { IdentityAdministration } from "../../src/server/modules/identity/administration.js";
 import { IdentityAuthentication } from "../../src/server/modules/identity/authentication.js";
@@ -18,26 +18,44 @@ export async function syntheticServer(
     port?: number;
     throughMigration?: number;
     transactionWrapper?: (database: Transactions) => Transactions;
+    beforeListen?: (origin: string) => Promise<void>;
   } = {},
 ) {
   const fixture = await isolatedPublicationPostgres(options.throughMigration === undefined ? {} : { throughMigration: options.throughMigration }),
     directory = await mkdtemp(join(tmpdir(), "loom-participation-"));
   let application: Awaited<ReturnType<typeof createApplication>> | undefined;
+  let reserved: Server | undefined;
+  const releaseReservation = async () => {
+    const listener = reserved;
+    reserved = undefined;
+    if (listener)
+      await new Promise<void>((resolve) => listener.close(() => resolve()));
+  };
   const close = async () => {
+    await releaseReservation();
     await application?.close();
     await fixture.close();
     await rm(directory, { recursive: true, force: true });
   };
-  try {
-    let port = options.port;
-    if (!port) {
-      const reserved = createServer();
-      await new Promise<void>((resolve) =>
-        reserved.listen(0, "127.0.0.1", resolve),
-      );
-      port = (reserved.address() as { port: number }).port;
-      await new Promise<void>((resolve) => reserved.close(() => resolve()));
+  const reserve = async (port: number) => {
+    // Identity policy needs the exact origin before initialization. A bound-only
+    // socket can still lose its port on Linux; keep a listener until HTTPS takes it.
+    const listener = createServer((socket) => socket.destroy());
+    reserved = listener;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        listener.once("error", reject);
+        listener.listen({ host: "127.0.0.1", port }, resolve);
+      });
+      return listener;
+    } catch (error) {
+      await releaseReservation();
+      throw error;
     }
+  };
+  try {
+    const listener = await reserve(options.port ?? 0);
+    const port = (listener.address() as AddressInfo).port;
     const origin = `https://localhost:${port}`,
       policy = syntheticIdentityPolicy(origin),
       database =
@@ -95,21 +113,36 @@ export async function syntheticServer(
       key: await readFile(join(directory, "key.pem"), "utf8"),
       cert: await readFile(join(directory, "cert.pem"), "utf8"),
     };
-    const openApplication = () => createApplication({
-      database: {
-        isReady: () => fixture.database.isReady(),
-        close: async () => {},
-      },
-      logger: false,
-      browserRoot: fileURLToPath(new URL("../../dist/web/", import.meta.url)),
-      tls,
-      participation: { database, authentication, administration },
-    });
-    application = await openApplication();
-    await application.listen({ host: "127.0.0.1", port });
+    const start = async (listener: Server) => {
+      try {
+        const next = await createApplication({
+          database: {
+            isReady: () => fixture.database.isReady(),
+            close: async () => {},
+          },
+          logger: false,
+          browserRoot: fileURLToPath(new URL("../../dist/web/", import.meta.url)),
+          tls,
+          participation: { database, authentication, administration },
+        });
+        application = next;
+        await options.beforeListen?.(origin);
+        // Node's public listen(server) uses the existing listener. Transfer cleanup
+        // ownership on listening; closing the original would close HTTPS too.
+        const listenOptions = Object.assign(listener, { host: "127.0.0.1" });
+        next.server.once("listening", () => { reserved = undefined; });
+        await next.listen(listenOptions);
+        return next;
+      } catch (error) {
+        await releaseReservation();
+        await application?.close();
+        throw error;
+      }
+    };
+    const app = await start(listener);
     return {
       ...fixture,
-      app: application,
+      app,
       origin,
       policy,
       administration,
@@ -119,8 +152,7 @@ export async function syntheticServer(
       directory,
       restart: async () => {
         await application!.close();
-        application=await openApplication();
-        await application.listen({host:'127.0.0.1',port});
+        await start(await reserve(port));
       },
       close,
     };

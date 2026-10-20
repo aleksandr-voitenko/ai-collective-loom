@@ -2,6 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import { closed } from '../contracts/participation.js';
 import type { UpdatesPageView, UpdatesMembersPageView } from '../contracts/updates.js';
+import type { RoutinePageView,RoutineMembersPageView } from '../contracts/routine-updates.js';
 import { identityGeneration } from './participation-client.js';
 
 const Request=Type.Object({cursor:Type.String({minLength:1,maxLength:16384}),limit:Type.Integer({minimum:1,maximum:25}),
@@ -12,12 +13,12 @@ const Record=Type.Object({version:Type.Literal(1),sequence:Type.Integer({minimum
 const Records=Type.Record(Type.String({maxLength:1024}),Record,{maxProperties:16});
 export type UpdatesSaved=Static<typeof Record>;
 export type UpdatesPageRequest=Static<typeof Request>;
-export const displayedRequest=(page:UpdatesPageView|UpdatesMembersPageView):UpdatesPageRequest=>
+export const displayedRequest=(page:UpdatesPageView|UpdatesMembersPageView|RoutinePageView|RoutineMembersPageView):UpdatesPageRequest=>
   ({cursor:page.page_cursor,limit:page.limit,max_response_bytes:page.max_response_bytes});
 export class UpdatesRecovery {
   readonly prefix:string;
   private readonly owner=identityGeneration();
-  constructor(instance:string,participant:string,private readonly storage:Storage=localStorage){this.prefix=`loom.updates-pages:${location.origin}:${instance}:${participant}`;}
+  constructor(instance:string,participant:string,private readonly storage:Storage=localStorage,routine=false){this.prefix=`loom.${routine?'routine-updates':'updates'}-pages:${location.origin}:${instance}:${participant}`;}
   private records():Record<string,UpdatesSaved>{
     const raw=this.storage.getItem(this.prefix);if(raw===null)return {};
     try{const records:unknown=JSON.parse(raw);
@@ -27,7 +28,7 @@ export class UpdatesRecovery {
     }catch{throw new Error('Saved Updates recovery is incompatible. Clear this Updates view explicitly to start retained history again.');}
   }
   read(key:string){return this.records()[key];}
-  async save(key:string,page:UpdatesPageView,expected:number,active:()=>boolean,past:UpdatesPageRequest[],expansion?:UpdatesPageRequest){
+  async save(key:string,page:UpdatesPageView|RoutinePageView,expected:number,active:()=>boolean,past:UpdatesPageRequest[],expansion?:UpdatesPageRequest){
     if(!navigator.locks)throw new Error('This browser needs Web Locks to retain Updates recovery.');
     return navigator.locks.request(this.prefix,()=>{
       if(!active()||this.owner!==identityGeneration())throw new DOMException('View changed.','AbortError');

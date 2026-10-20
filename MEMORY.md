@@ -2,14 +2,18 @@
 
 Product baseline: `docs/ai-collective-loom-product-specification.md` v0.9 remains
 unchanged. Architecture v0.3 and companions are in `docs/architecture/`; use
-`docs/README.md` for source priority and the implementation backlog for open gates.
+`docs/README.md` for source priority and implementation ADRs for open gates.
+Do not recreate `docs/development` or a replacement development folder. Temporary
+guides, task notes and review evidence belong outside the repository in `/tmp`.
+Keep durable setup/coverage commands in root README, decisions in `docs/adr`, and
+implementation constraints in scoped memory. Historical evidence remains in Git.
 The architecture is a proposal; its acceptance mappings are not executed results.
 
 Current implementation includes an opt-in **synthetic text participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`11`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`12`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -17,12 +21,12 @@ serializes organization with publication, followed by the common clock/event tai
 Exact recovery returns original and current state without reapplying earlier moves.
 Proposal discussions bind their destination/settings; topic-specific suggestions
 also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.
-See ADR-020 and `docs/development/topic-organization.md`; optional moderator
+See ADR-020; optional moderator
 delegation remains open. Combined Updates uses ADR-025 below.
 Current shared-text search is implemented for typed openings/comments/artifacts/summaries,
 with exact revisions, live containment, original-author/time/topic filters and
 explicit continuation invalidation. Search and personal direct attention have independent recoverable derived workers;
-remaining projections stay disabled. See ADR-012, `docs/development/search.md` and
+remaining projections stay disabled. See ADR-012 and
 `src/server/modules/search/MEMORY.md` for fencing, backfill, bounds and recovery.
 Personal direct attention (ADR-023, guide 8): migration 0012 backfills typed retained
 revisions in order and consumes intents independently of search. Immutable logical
@@ -30,16 +34,15 @@ claims/signals/deliveries use per-recipient committed clocks. Missing predecesso
 and historical unmentioned-reply eligibility gaps remain explicit. API/browser
 checkpoints survive ordinary restarts; visibility replay reaches all retained
 history before completed lower bounds. No shared Updates/read/dismissal/Follow
-semantics are implied. See `docs/development/notifications.md` and
-`src/server/modules/notifications/MEMORY.md` for bounds, locks and recovery custody.
+semantics are implied. See `src/server/modules/notifications/MEMORY.md` for bounds, locks and recovery custody.
 Following and ungrouped shared Changes (ADR-024, guide9) use migration0013,
 owner-private versioned definitions/decisions and direct committed-event queries.
 Area relevance uses immutable event-time scopes; new ancestor impacts are retained,
 while missing old structural facts keep coverage unknown. Fixed shared checkpoints
 have independent custody, visibility replay and explicit incomplete resynchronization.
-No worker is required, and no personal checkpoint/delivery is consumed. Mutes/dismissal
-remain open; exact reading is independent (ADR-026). See
-`src/server/modules/following/MEMORY.md` and `docs/development/following.md`.
+No worker is required, and no personal checkpoint/delivery is consumed. Routine attention
+is separate (ADR-027), as is exact reading (ADR-026). See
+`src/server/modules/following/MEMORY.md`.
 Combined Updates (ADR-025, guide10) uses additive migrations0014/0015 and independent
 `combined-updates-1` custody. Bounded preparation freezes ownership membership/order
 for the union of followed shared and personal availability intervals. Highlights
@@ -48,32 +51,71 @@ generations invalidate before filters and explicit replay reaches before complet
 lower bounds. Source/explanation authorization stays current. Member metadata,
 group coverage, projection, full bodies and reading remain distinct. No new authored
 format or worker; existing claims/events/tokens/Saved remain independent. See
-`src/server/modules/updates/MEMORY.md` and `docs/development/updates.md` for finite
+`src/server/modules/updates/MEMORY.md` for finite
 custody, recovery, native/browser clients and synthetic acceptance limits.
+Routine attention (ADR-027, guide12) adds migration0017, private until-unmuted
+settings and exact shared-event/personal-delivery dismissal/restore. Stable negative
+fences and applied/conflict decisions survive short-lived grouping custody. Separate
+combined-updates-2 routine endpoints filter before highlights and require explicit
+same-view policy refresh; old combined, standalone and reading contracts stay intact.
+Complete retrieval bypasses private filters; current source/history checks still
+precede selection. Browser attention hosts require
+`web/AuthorizationBoundary.tsx`, backed by the identity-scoped
+`web/protected-content.ts` coordinator. Additive private-controls-1 responses
+separate settings/decisions from bounded protected previews. Safe removal and exact
+recovery do not hydrate sources; old routes/digests/tokens remain compatible.
+Every same-owner source denial revokes older protected projections, even after retry,
+restoration or remount. Cached ancestry cannot prove current dependencies after a
+move or reordered response; client request age cannot order server authorization.
+Positive responses retain freshness fences. Private versions, confirmation and
+command custody stay independent; private receipts cannot authorize content.
+Fresh mixed responses may publish only their own lease-gated fields (previews,
+Saved pages and audited discussion traversal); opaque full hosts still withdraw. The method/endpoint catalogue in
+`web/response-contracts.ts` explicitly classifies every negative success field;
+its contract test checks actual routes/schemas. Saved/Reading receipt denials are
+consumed before private settlement. See ADR-027 for the bounded exception.
+Endpoint error policies distinguish anonymous discovery and separate ceremony
+proofs from authority loss. Anonymous discovery settles quietly; established-owner
+loss revokes once and fences old responses. A separate discovery fence blocks stale
+positive probes. Transport consumes errors once; identity-record misses stay local,
+while ambiguous source failures remain conservative. Session identity and content
+authority are independent endpoint effects: role/editor refusals withdraw older
+protected projections without replacing the owner of exact command journals.
+Ordinary posting closure alone retains independent reads. Administration retains
+private draft/correction/status controls while queries, selected account copies and
+one-time credential display check separate leases. Source/role withdrawal precedes
+journal locks; uncertain bytes stay immutable. See ADR-027 and the tests described in `tests/MEMORY.md`. Posting closure has a certified response hint; absent hints remain conservative.
+Protected reads, including generic queries and reply expansion, require that
+boundary; session and receipt-only command APIs reject other endpoints before
+dispatch. An architecture test forbids direct component transport imports.
+Guarded revision-only failures preserve
+independently authorized history; unclassified source/history denials revoke.
+No source/delivery clock or worker effects. See
+`src/server/modules/attention/MEMORY.md`.
 Recorded references (ADR-021) use explicit `loom-markdown-v2` declarations from
 openings/comments/text artifacts/summaries; old v1 bytes/digests remain unchanged. Immutable
 memberships/withdrawals commit with the source, keeping exact targets and separate
 assertion/change/withdrawal attribution. Direct bounded backlinks use current
 eligibility, explicit resource/exact and current/history scopes, sorted guards and
 restartable snapshot pages. Search supports all three formats' source title/body and current revision notes;
-rationale is displayed but not searched. See `docs/development/recorded-references.md`
+rationale is displayed but not searched. See ADR-021
 and the participation memory; file/private-note integration remains open.
 Discussion summaries (ADR-010) add optional canonical identity, explicit editors,
 immutable exact source declarations, bounded preparation/comparison/maintenance,
 and current authority across API/browser recovery. Coverage is an author claim,
-not reading progress. See `docs/development/discussion-summaries.md`.
+not reading progress. See ADR-010.
 Authored explanations (ADR-022, guide 7; LC-20261016-T9G8): immutable artifact/summary revision notes
 and ordinary opening/comment accounts with bounded exact described revision sets.
 Migration 0011 adds field-local entities/assertions, note/account rows and current
 note indexing, preserving old digests and source bytes. Generic bodies link separate
 authorized note/coverage fields; discovery labels exact/resource and current/history
 scopes. New drafts start without copied notes; existing attempts retain theirs.
-See `docs/development/change-notes.md` and the participation/search scoped memories.
+See ADR-022 and the participation/search scoped memories.
 Private Saved items now support discussion/contribution/artifact resource references
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones
 and immutable applied/conflict decisions, without shared publication side effects.
-See ADR-013 and `docs/development/saved-items.md`; private notes remain open.
+See ADR-013; private notes remain open.
 Synthetic caps are 500 target states/10,000 decisions per
 participant; expiry, erasure and destructive restore remain unapproved.
 Exact private reading (ADR-026, migration0016) adds owner/resource/revision states
@@ -83,14 +125,13 @@ Unread precedence over intervening presentation-only writes. Retained exact deci
 return original/current state without reapplication. No shared events, worker, clock,
 Saved/Following/notification or feed changes. Browser automatic presentation is an
 opt-in per-browser/identity prototype, with separate bounded recovery and explicit
-reopening after Unread. See `docs/development/reading-progress.md`, ADR-026 and the
+reopening after Unread. See ADR-026 and the
 participation memory for limits, authority and custody. Real-data gates remain.
 No real accounts/content are approved: ADR-004 identity/recovery candidates,
 production limits, retained-data operations and cross-machine validation remain
 gates. There is no default administrator or identity-header bypass. Agent memory
 and model execution stay external; uploads/grants and other derived workers stay gated.
-See `docs/development/participation.md`, `participation-evidence.md`,
-`retained-data-gate.md`, ADR-011/015/016/017 and
+See root README retained-data limits, ADR-011/015/016/017 and
 `src/server/modules/participation/MEMORY.md` for the implemented subset.
 The supplied UI v0.6 is preserved under `docs/design/ui-v0.6/`; it guides presentation,
 not product policy or authority. Its finite fixture state is not imported into Loom.
@@ -162,8 +203,8 @@ parameter binding, rollback, safe failures, database loss, graceful shutdown, an
 Vite browser-module/API proxy separation. Application verification includes local
 Node 24/macOS arm64 with Linux/arm64 PostgreSQL and a full passing Ubuntu 24.04
 Linux/amd64 push run for `14c4e83` (CI `38479478697`). The duplicate PR run exposed
-an intermittent browser-fixture teardown failure; see the CI follow-up in
-`docs/development/participation-evidence.md`. This does not establish a cross-machine
+an intermittent browser-fixture teardown failure; see the context-before-server disposal regression in
+`tests/MEMORY.md` and Lore `LC-20261014-WZF5`. This does not establish a cross-machine
 agent trial or approve production policy.
 The database pool is private; transaction callbacks own one checked-out client,
 explicit values, and no automatic retries. Controllers invoke the health boundary or constrained participation services, never
@@ -210,7 +251,7 @@ custody/rotation and human recovery proof are still unimplemented procedures.
 `test:identity:postgres` uses tmpfs PostgreSQL, private HTTP cookie/bearer requests,
 actual ES256 software signatures and barriers for account/ticket/counter races,
 reply loss, rollback, lifecycle authority and sampled disclosure checks. See
-`docs/development/identity-prototype.md` and ADR-004/ADR-015. Actual Chromium virtual-authenticator journeys and an administrator UI now exist.
+ADR-004/ADR-015 and `tests/integration/identity.test.ts`. Actual Chromium virtual-authenticator journeys and an administrator UI now exist.
 Physical-device and human recovery proof trials, real enrollment, approved limits/
 retention and distributed abuse controls remain open; synthetic tests do not complete
 AC45/AC54.
@@ -218,8 +259,11 @@ Identity prototype decisions and verification: Lore-ID `LC-20261012-9JJH`.
 Integration uses real local dependencies; it is separate and never reported passed
 when unavailable.
 Browser checks use a containing runner and allowlisted failure bundles; raw reporter
-output/attachments are not approved artifacts. See `tests/MEMORY.md` and
-`docs/development/browser-diagnostics.md` for collection, teardown and CI gates.
+output/attachments are not approved artifacts. See `tests/MEMORY.md` for collection, teardown and CI gates.
+`npm run coverage` combines Node/JSDOM, all PostgreSQL suites and Chromium client
+execution. Application gates enforce 90% changed lines, 85% branches and exact
+no-decline line/branch baseline ratios. Tooling is reported separately. See
+root README Coverage and `scripts/lib/coverage/` for source-map invariants and approved reports.
 `test:integration` includes failed-migration rollback and signed GET probes;
 expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.

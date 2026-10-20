@@ -24,7 +24,7 @@ Source/reference-only revisions count; bookkeeping, linked targets and summary
 revisions do not. Saved summaries are explicitly unsupported. `web/Summaries.tsx`
 uses the existing journal, current-view callbacks and identity guards; correction
 requires an explicit declaration and keeps the v1→v2 comparison guard. See the
-summary guide and `test:summaries:postgres`/`e2e/summaries.spec.ts`.
+release guide and `test:summaries:postgres`/`e2e/summaries.spec.ts`.
 After confirmed summary revision, the composer explicitly fetches the current
 authorized revision and saves a newly keyed draft before retiring the old record.
 It carries that base's entire declaration without selecting later source material.
@@ -100,7 +100,23 @@ offer independently authorized history without substituting an older current bod
 Setup/admission use the same first-dispatch rejection rule; a later refusal never
 reclassifies an uncertain attempt. One-time credential UI binds participant, kind,
 nickname and credential ID to the result and locks target selection until dismissal;
-secrets never enter intent storage. Focused branches validate discussion membership.
+secrets never enter intent storage. Administration uses a private-settings boundary:
+queries, selected-account copies and one-time secret displays retain separate leases.
+Role/editor refusals withdraw content without revoking the private journal owner;
+first rejection can settle and uncertain retries retain their exact bytes. A late
+receipt cannot refresh account metadata or restore a withdrawn secret display.
+The query hook fences refresh callbacks by their creation generation and blocks
+automatic reads mounted after withdrawal. Explicit refresh restores dispatch;
+a fresh mixed response carries its own lease into subsequent traversal pages.
+Post-command refresh uses `refreshIfCurrent`, preserving the existing query lease
+even when recovery was initiated after withdrawal. Setup/configuration cannot
+restart shell discovery after withdrawal; explicit administration refresh can.
+Configuration success refreshes its own leased query so repeated saves use the
+current settings version.
+Human credential recovery retains its kind from the immutable enrollment command,
+both while pending and after the withdrawn one-time display is dismissed.
+Configuration inputs are seeded by a current leased community query. Ordinary
+posting closure remains distinct from role loss. Focused branches validate discussion membership.
 Recovery/structural-traversal review repairs: `LC-20261014-6LGH` (ADR-016/017).
 Journal serialization, replacement routes and canonical history discovery:
 `LC-20261014-S0JX` (ADR-017).
@@ -123,7 +139,7 @@ The shared fixture and persistent-context wrapper also capture bounded diagnosti
 before close; see `tests/MEMORY.md`. Use the npm browser command so raw reporter
 output/attachments stay out of the approved artifact directory.
 No logged/screenshot credential secret, reset, deployment or physical-device trial
-is implied. See `docs/development/participation-evidence.md` for actual results.
+is implied. Lore task records and CI runs retain actual verification results.
 
 Saved items (ADR-013): HTTP `/api/v1/me/saved-items` derives every owner from the
 principal. `saved-state-v1` hashes target, desired boolean and expected target version;
@@ -221,7 +237,7 @@ boundary; edits/moves/restoration/restart invalidate. No counts or graph scan.
 guards picker/page responses by live view, request sequence and identity generation.
 Known IDs/links work without indexing. Rationale is not searched; all three formats'
 source title/body remain worker/rebuild eligible. Tests: `test:references:postgres`,
-`web/references.test.tsx`, `e2e/references.spec.ts` and the reference evidence guide.
+`web/references.test.tsx` and `e2e/references.spec.ts`.
 
 Authored changes (ADR-022): `change-context.ts` prepares exact account members;
 `publication/change-storage.ts` inserts note/account rows before the common tail;
@@ -300,3 +316,44 @@ Confirmed conflicts stay in the bounded browser journal until explicit dismissal
 with revision-specific feedback independent of other completions, refresh or reload.
 `begin` refuses known conflicts; late duplicate results cannot recreate dismissed
 records, and a late first refusal cannot downgrade a confirmed conflict.
+
+Guide12 discovery additionally advertises attention-controls-1 and the separate
+combined-updates-2 routine URL. `http/attention.ts` remains synthetic-only. Existing
+publication formats/digests, reading conflict custody and distinct reading/reference
+sibling keys remain unchanged. Shell sign-out adds separate attention/routine
+journal cleanup after existing journals, with identity fencing between awaits.
+Full area/discussion/artifact page components own the mandatory authorization
+boundary around their content and Follow/mute controls. Community overview owns
+one around its embedded artifact and proposal form. Source-error refusal withdraws
+the whole page; owner refusal clears the shell identity and checks it again.
+Discussion traversal uses a projections host: query values, retained collection
+pages and reply pages gate their own leases. Fresh structural markers may remain
+while older headers/bodies are withdrawn; opaque child state is removed with its
+owning query. A retained opening ID is only an internal immutable query seed.
+Readable but closed proposal destinations carry optional unavailable_reason:
+publication_closed in onboarding/proposal-route responses. The boundary excludes
+only that certified posting restriction from source denials; suppression and absent
+hints remain conservative. Saved publication bytes and digest rules are unchanged. Shared read
+generations reject earlier content replies. Only guarded current/exact revision
+GET failures add `unavailable_scope: revision` to the existing404 unavailable
+envelope. `RevisionUnavailableError` is raised after resource/ownership guards;
+the HTTP adapter withholds its hint on other routes. Missing/suppressed revisions
+keep independently authorized history discoverable. The browser boundary owns
+classification; generic hooks cannot suppress unavailable errors. Unclassified
+source/history denials withdraw conservatively, including after query unmount.
+All browser protected reads require a boundary capability, including imperative
+reply, reference, summary-source, change, organization, Saved, search and shared
+feed reads. Other authenticated routes supply a default whole-view boundary.
+Reading lookup batches use their registered text hosts' authorities; the provider
+keeps private command custody through withdrawal. Closed session/receipt APIs
+cannot fetch protected endpoints. Organization current-location results retain a
+lease through journal settlement; Saved command denials are observed before metadata
+is stripped. Reading receipt denial uses the same identity coordinator. The closed
+method/endpoint catalogue classifies success fields independently of caller schemas.
+Saved pages preserve private membership/Unsave while checking each page's metadata
+lease; a fresh mixed page may display its own authorized rows, never older cached
+content. Controls seeded by that page do not automatically rehydrate each row.
+The import
+guard and actual component/browser regressions enforce use of the boundary.
+See `web/AuthorizationBoundary.tsx` and ADR-027.
+See `../attention/MEMORY.md` for private choices and complete-feed preservation.

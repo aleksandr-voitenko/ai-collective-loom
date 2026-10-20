@@ -174,6 +174,18 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
 }, testInfo) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  let anonymousProbes=0;
+  const observed=(response:import('@playwright/test').Response)=>{
+    if(new URL(response.url()).pathname==='/api/v1/identity/self'&&response.status()===401)anonymousProbes++;
+  };
+  page.on('response',observed);
+  for(const [index,path] of ['/loom','/loom/saved'].entries()){
+    await page.goto(server.origin+path);
+    await expect(page.getByRole('button',{name:'Sign in with passkey'})).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    expect(anonymousProbes).toBe(index+1);
+  }
+  page.off('response',observed);
   await enter(page, context, server.origin, server.ticket);
   await setup(page);
   await page.getByLabel("Nickname", { exact: true }).fill("lyra");
@@ -945,23 +957,26 @@ test("review regression: rejected admission preserves editable correction and un
   ).toBeEnabled();
   await page.unrouteAll({ behavior: "wait" });
   await page.reload();
+  await page.getByText("Participant accounts",{exact:true}).click();
+  await expect(page.getByText("corrected_agent · agent · active",{exact:true})).toBeVisible();
+  const administrator=await page.evaluate(async()=> (await (await fetch('/api/v1/identity/self')).json()).participant_id);
+  await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[administrator]));
   await page.route("**/api/v1/identity/accounts", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     expect(route.request().postDataJSON()).toEqual(original);
-    await route.fulfill({
-      status: 403,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: { code: "forbidden", message: "Changed authority" },
-      }),
-    });
+    const response=await route.fetch();
+    expect(response.status()).toBe(403);
+    await route.fulfill({response});
   });
   await page
     .getByRole("button", { name: "Retry same account creation" })
     .click();
   await expect(
-    page.getByText("Changed authority", { exact: true }),
+    page.getByText("This action requires current administrator authority.", { exact: true }),
   ).toBeVisible();
+  await expect(page.getByText("corrected_agent · agent · active",{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel("Nickname",{exact:true})).toHaveValue("corrected_agent");
+  expect(await page.evaluate(async()=> (await (await fetch('/api/v1/identity/self')).json()).role)).toBe('participant');
   const uncertain = (await savedIntents(page)).find(
     (r) => r.slot === "admission",
   );
@@ -973,10 +988,81 @@ test("review regression: rejected admission preserves editable correction and un
       .count(),
   ).toBe(0);
   await page.unrouteAll({ behavior: "wait" });
+  await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[administrator]));
   await page.getByRole("button", { name: "Check account operation" }).click();
   await expect(
     page.getByRole("button", { name: "Issue agent credential", exact: true }),
   ).toBeVisible();
+
+  // A selected human account starts from protected metadata, while the pending
+  // enrollment request must keep its own private kind through role withdrawal.
+  await expect.poll(async()=>(await savedIntents(page)).find(r=>r.slot==='admission')).toBeUndefined();
+  expect((await api(page,'/api/v1/identity/accounts',{
+    idempotency_key:randomUUID(),nickname:'human_recovery',kind:'human',role:'participant',
+  })).status()).toBe(200);
+  await page.reload();
+  await page.getByText('Participant accounts',{exact:true}).click();
+  await page.locator('.list-row').filter({hasText:'human_recovery · human · active'}).getByRole('button',{name:'Manage credentials'}).click();
+  let releaseSecret!:()=>void,secretReady=false;
+  const secretHeld=new Promise<void>(resolve=>{releaseSecret=resolve;});
+  await page.route('**/api/v1/identity/credentials',async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    const response=await route.fetch();expect(response.status()).toBe(200);
+    secretReady=true;await secretHeld;await route.fulfill({response});
+  });
+  try{
+    const sent=page.waitForRequest(r=>r.url().endsWith('/api/v1/identity/credentials')&&r.method()==='POST');
+    await page.getByRole('button',{name:'Issue enrollment ticket',exact:true}).click();
+    const original=(await sent).postDataJSON();expect(original.kind).toBe('enrollment');
+    await expect.poll(()=>secretReady).toBe(true);
+    await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[administrator]));
+    await page.getByRole('button',{name:'Refresh accounts',exact:true}).click();
+    await expect(page.getByText('human_recovery · human · active',{exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Issue enrollment ticket',exact:true})).toBeVisible();
+    expect((await savedIntents(page)).find(r=>r.slot==='admission').body).toEqual(original);
+    releaseSecret();
+    await expect.poll(async()=>(await savedIntents(page)).find(r=>r.slot==='admission')).toBeUndefined();
+    await expect(page.getByLabel('Issued secret',{exact:true})).toHaveCount(0);
+    await page.getByRole('button',{name:'Dismiss credential display',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Issue enrollment ticket',exact:true})).toBeVisible();
+  }finally{
+    releaseSecret();await page.unrouteAll({behavior:'wait'});
+    await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[administrator]));
+  }
+
+  // A late account receipt creates private recovery controls. Mounting those
+  // controls must not implicitly start a new credentials read after withdrawal.
+  await page.reload();
+  await page.getByText('Participant accounts',{exact:true}).click();
+  await page.getByLabel('Nickname',{exact:true}).fill('late_account_recovery');
+  let releaseAccount!:()=>void,accountReady=false,credentialReads=0;
+  const accountHeld=new Promise<void>(resolve=>{releaseAccount=resolve;});
+  await page.route('**/api/v1/identity/accounts',async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    const response=await route.fetch();expect(response.status()).toBe(200);
+    accountReady=true;await accountHeld;await route.fulfill({response});
+  });
+  await page.route('**/api/v1/identity/credentials?*',async route=>{credentialReads++;await route.continue();});
+  try{
+    await page.getByRole('button',{name:'Create account',exact:true}).click();
+    await expect.poll(()=>accountReady).toBe(true);
+    await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[administrator]));
+    const refusal=page.waitForResponse(r=>r.url().endsWith('/api/v1/identity/accounts')&&r.request().method()==='GET'&&r.status()===403);
+    await page.getByRole('button',{name:'Refresh accounts',exact:true}).click();await refusal;
+    await expect(page.getByText('human_recovery · human · active',{exact:true})).toHaveCount(0);
+    releaseAccount();
+    await expect.poll(async()=>(await savedIntents(page)).find(r=>r.slot==='admission')).toBeUndefined();
+    await expect(page.getByRole('button',{name:'Issue agent credential',exact:true})).toBeEnabled();
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(credentialReads).toBe(0);
+    await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[administrator]));
+    await page.getByText('Credentials for this account',{exact:true}).click();
+    await page.getByRole('button',{name:'Refresh credentials',exact:true}).click();
+    await expect.poll(()=>credentialReads).toBe(1);
+  }finally{
+    releaseAccount();await page.unrouteAll({behavior:'wait'});
+    await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[administrator]));
+  }
 });
 
 test("review regression: corrected conflict drafts survive navigation and browser process restart", async ({
@@ -1087,11 +1173,14 @@ test("review regression: mismatched and artifact focus never offer reply control
     await page.goto(
       server.origin + `/loom/discussion/${a.discussion}?focus=${focus}`,
     );
-    await expect(
-      page.getByText("This branch is unavailable in this discussion.", {
-        exact: true,
-      }),
-    ).toBeVisible();
+    if(focus===b.resource){
+      await expect(page.getByText('This branch is unavailable in this discussion.',{exact:true})).toBeVisible();
+    }else{
+      // An artifact focus produces an unclassified context404. It cannot
+      // certify continued source access, even though the URL is simply wrong.
+      await expect(page.getByRole('button',{name:'Retry protected view'})).toBeVisible();
+      await expect(page.getByRole('heading',{name:'Discussion A',exact:true})).toHaveCount(0);
+    }
     expect(
       await page.getByRole("button", { name: "Reply", exact: true }).count(),
     ).toBe(0);
@@ -1129,6 +1218,19 @@ test("review regression: suppressed parents preserve browser branches and eligib
       content: text("Eligible nested reply"),
     })
   ).json();
+  // A reply expansion is a protected read too. Settle initial reads so this
+  // real children denial, rather than an overlapping initial lookup, is causal.
+  await page.reload();
+  await expect(page.getByText('Suppressed parent text',{exact:true})).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[d.discussion]);
+  const deniedChildren=page.waitForResponse(r=>r.url().includes(`/contributions/${parent.resource_id}/children`)&&r.status()===404);
+  await page.getByRole('button',{name:'Show nested replies',exact:true}).click();
+  expect((await deniedChildren).status()).toBe(404);
+  await expect(page.getByRole('heading',{name:'Reading the actual context',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Suppressed parent text',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Retry protected view'})).toBeVisible();
+  await server.observer.query("UPDATE loom.resources SET state='active' WHERE id=$1",[d.discussion]);
   await server.observer.query(
     "UPDATE loom.resources SET state='suppressed' WHERE id=$1",
     [parent.resource_id],
@@ -1192,18 +1294,32 @@ test("review regression: suppressed parents preserve browser branches and eligib
   await expect(
     page.getByText("Eligible nested reply", { exact: true }),
   ).toBeVisible();
+  await page.goto(server.origin + `/loom/resource/${child.resource_id}/${randomUUID()}`);
+  await page.getByRole('button',{name:'Revision history',exact:true}).click();
+  await expect(page.getByRole('link',{name:/Revision 1/})).toBeVisible();
+  // A failed history read is a resource refusal; a missing exact revision above
+  // must leave this independently authorized path discoverable.
+  await page.getByRole('button',{name:'Revision history',exact:true}).click();
   await server.observer.query(
     "UPDATE loom.resources SET state='suppressed' WHERE id=$1",
     [child.resource_id],
   );
-  await page.goto(server.origin + `/loom/resource/${child.resource_id}`);
   await page
     .getByRole("button", { name: "Revision history", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Retry this page" }),
+    page.getByRole("button", { name: "Retry protected view" }),
   ).toBeVisible();
   expect(await page.getByRole("link", { name: /Revision 1/ }).count()).toBe(0);
+  const area=(await (await api(page,`/api/v1/discussions/${d.discussion}`)).json()).area;
+  await page.goto(server.origin+`/loom/area/${area.id}`);
+  await expect(page.getByRole('heading',{level:1,name:area.title})).toBeVisible();
+  await page.getByText('Routine attention',{exact:true}).click();
+  await expect(page.getByRole('button',{name:'Mute routine updates'})).toHaveAttribute('aria-disabled','false');
+  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[area.id]);
+  await page.getByRole('group',{name:'Topic content'}).getByRole('button',{name:'Artifacts',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Retry protected view'})).toBeVisible();
+  await expect(page.getByRole('heading',{level:1,name:area.title})).toHaveCount(0);
 });
 
 test("review regression: a stale tab preserves separate edits without overwriting dispatched intent", async ({

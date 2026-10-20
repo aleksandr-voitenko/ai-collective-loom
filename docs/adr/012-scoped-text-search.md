@@ -119,10 +119,10 @@ Verify populated upgrades, interruption, concurrent scanning/publication, native
 process loss, lease theft and stale-source races with deterministic barriers and
 durable row assertions. Exercise real HTTPS human/agent parity, suppression,
 restoration/moves, limits, exact navigation, StrictMode, normal browser regression
-and closed diagnostics. Record measurements and actual outcomes in the search guide;
+and closed diagnostics. Record measurements and actual outcomes in Lore task records;
 do not infer production approval or broad AC completion from synthetic checks.
-Executed results and failure evidence are retained in
-[search verification](../development/search-evidence.md).
+Executed results and failure context remain in Lore `LC-20261015-94TS`
+and subsequent task/CI records.
 
 ## Guide 7 extension — ADR-022
 

@@ -19,7 +19,7 @@ child.stdout.on('data', chunk => {
   // output (including failed assertions with input values) is not persisted.
   line = (line + chunk).slice(-8192);
   const lines = line.split('\n'); line = lines.pop();
-  for (const value of lines) if (/^BROWSER (passed|failed|timedOut|skipped|interrupted) (participation\.spec\.ts|saved-items\.spec\.ts|organization\.spec\.ts|search\.spec\.ts|references\.spec\.ts|summaries\.spec\.ts|changes\.spec\.ts|notifications\.spec\.ts|following\.spec\.ts|reading\.spec\.ts|diagnostics\.probe\.ts|unknown):\d{1,7} repeat=\d{1,7}$/.test(value)) process.stdout.write(value + '\n');
+  for (const value of lines) if (/^BROWSER (passed|failed|timedOut|skipped|interrupted) (participation\.spec\.ts|saved-items\.spec\.ts|organization\.spec\.ts|search\.spec\.ts|references\.spec\.ts|summaries\.spec\.ts|changes\.spec\.ts|notifications\.spec\.ts|following\.spec\.ts|updates\.spec\.ts|attention\.spec\.ts|reading\.spec\.ts|diagnostics\.probe\.ts|unknown):\d{1,7} repeat=\d{1,7}$/.test(value)) process.stdout.write(value + '\n');
 });
 child.stderr.resume();
 let spawnFailed = false;

@@ -1,6 +1,0 @@
-
-> ai-collective-loom@0.1.0 test:e2e
-> node scripts/browser-tests.mjs tests/e2e/summaries.spec.ts --grep summary conflict comparison failure
-
-BROWSER passed summaries.spec.ts:46 repeat=0
-Browser diagnostics: validated; browser-diagnostics/approved

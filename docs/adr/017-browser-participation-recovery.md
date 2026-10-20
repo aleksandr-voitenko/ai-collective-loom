@@ -179,7 +179,7 @@ bookmarks survive. An identity switch invalidates presentation and hides other-o
 recovery; it does not silently discard their unresolved records. Clearing site data
 still loses local intent, not server bookmarks. Same-release Web Locks, synthetic
 identity/retention and destructive-restore gates remain unchanged. See
-[Saved items evidence](../development/saved-items-evidence.md).
+[Saved items browser tests](../../tests/e2e/saved-items.spec.ts) and Lore `LC-20261014-OIAD`.
 
 A local or cross-tab journal change invalidates an in-flight Saved collection read.
 Its late response cannot clear the refresh notice or claim current completion. The

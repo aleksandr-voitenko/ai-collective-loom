@@ -45,6 +45,7 @@ export const OrganizationPageInput = Type.Object({ ...PageInput.properties, pare
 export const ProposalRoute = Type.Object({
   affected_area_id: UUID, settings_version: version,
   state: Type.Union([Type.Literal('ready'),Type.Literal('unavailable'),Type.Literal('setup_incomplete')]),
+  unavailable_reason: Type.Optional(Type.Literal('publication_closed')),
   destination: Type.Union([OrganizationResource,Type.Null()]),
   contacts: Type.Array(Participant,{maxItems:25}), contacts_url: Type.Literal('/api/v1/contacts'),
 },closed);

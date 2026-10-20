@@ -1,9 +1,10 @@
+import { AuthorizationBoundary,useAuthorization } from './AuthorizationBoundary.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Value } from '@sinclair/typebox/value';
-import { SavedItem, SavedPage, SavedResult, SavedStatus, SavedUpdate, type SavedItemView, type SavedPageView,
-  type SavedResultView, type SavedStatusView, type SavedTargetView } from '../contracts/saved-items.js';
-import { IntentStore, identityGeneration, request, isDefinitiveRejection, type Intent, type Self } from './participation-client.js';
+import { SavedPage, SavedUpdate, type SavedItemView, type SavedPageView,
+  type SavedResultView, type SavedTargetView } from '../contracts/saved-items.js';
+import { IntentStore, identityGeneration, isDefinitiveRejection, type Intent, type Self } from './participation-client.js';
 
 type Context = { self: Self; store: IntentStore };
 const base = '/api/v1/me/saved-items';
@@ -41,7 +42,9 @@ function failureText(error: unknown) { return error instanceof Error ? error.mes
 export function SaveControl({ target, context, initial, label }: {
   target: SavedTargetView; context: Context; initial?: SavedItemView; label?: string;
 }) {
+  const authority=useAuthorization();
   const [current, setCurrent] = useState(initial), [pending, setPending] = useState<Intent>(),
+    [sourceGeneration,setSourceGeneration]=useState<number|undefined>(()=>initial?authority.capture():undefined),
     [busy, setBusy] = useState(false), [loading, setLoading] = useState(!initial),
     [error, setError] = useState(''), [message, setMessage] = useState('');
   const live = useRef(true), owner = useRef(identityGeneration()), query = useRef(0), version = useRef(initial?.version ?? -1);
@@ -58,14 +61,16 @@ export function SaveControl({ target, context, initial, label }: {
     if (active()) { setLoading(true); setError(''); }
     try {
       syncPending();
-      const item = await request<SavedItemView>(base + '/lookup', { body: target, self: context.self, schema: SavedItem });
-      if (mine === query.current) accept(item);
+      const {value:item,generation}=await authority.savedLookup(target,context.self);
+      if (mine === query.current) {accept(item);if(active())setSourceGeneration(generation);}
     } catch (failure) { if (active() && mine === query.current) setError(failureText(failure)); }
     finally { if (active() && mine === query.current) setLoading(false); }
   }
   useEffect(() => {
     live.current = true;
-    void refresh();
+    // A list already supplies the initial state. Rehydrating every row on mount
+    // would repeatedly invalidate that same fresh mixed page.
+    if(!initial)void refresh();else syncPending();
     const update = () => { void refresh(); };
     const local = (event: Event) => { if ((event as CustomEvent).detail === prefix) update(); };
     const storage = (event: StorageEvent) => { if (event.key?.startsWith(prefix)) update(); };
@@ -99,8 +104,8 @@ export function SaveControl({ target, context, initial, label }: {
     try {
       retained = retry ? await context.store.prepareDispatch(retry, retry.body) : await begin(context, current!, !current!.saved);
       if (active()) setPending(retained);
-      const result = await request<SavedResultView>(base + '/state', { body: retained.body, self: context.self, schema: SavedResult });
-      await finish(retained, result);
+      const result = await authority.savedCommand(retained.body,'state',context.self);
+      if(result.operation_state!=='not_recorded')await finish(retained, result);
     } catch (failure) {
       if (retained && isDefinitiveRejection(failure, !!retry)) {
         try { await context.store.settle(retained, { state: 'rejected' }); changed(context.store); } catch { /* Preserve the newer journal record. */ }
@@ -112,9 +117,7 @@ export function SaveControl({ target, context, initial, label }: {
     if (!pending || busy) return;
     const record = pending; setBusy(true); setError('');
     try {
-      const result = await request<SavedStatusView>(base + '/status', {
-        body: { idempotency_key: record.key }, self: context.self, schema: SavedStatus,
-      });
+      const result = await authority.savedCommand({ idempotency_key: record.key },'status',context.self);
       if (result.operation_state === 'not_recorded') {
         if (active()) setMessage('No outcome is recorded yet. The original request may still complete; keep this intent or retry it unchanged.');
       } else await finish(record, result);
@@ -124,7 +127,7 @@ export function SaveControl({ target, context, initial, label }: {
   const action = current?.saved ? 'Unsave' : target.kind === 'revision' ? 'Save this revision' : 'Save';
   return <div className="saved-control" data-saved-target={key}>
     {!pending && <button aria-label={label ? `${action} ${label}` : action} aria-pressed={current?.saved ?? false}
-      disabled={busy || loading || !current || (!current.saved && current.source.state === 'unavailable') || !!error}
+      disabled={busy || loading || !current || (!current.saved && (current.source.state === 'unavailable'||!authority.current(sourceGeneration))) || !!error}
       onClick={() => void mutate()}>{busy ? 'Saving…' : loading && !current ? 'Checking saved state…' : action}</button>}
     {pending && <div className="saved-recovery notice">
       <strong>{busy ? 'Waiting for confirmation…' : pending.state === 'rejected' ? 'This change was rejected.' : 'We couldn’t confirm whether this saved-item change completed.'}</strong>
@@ -143,6 +146,11 @@ export function SaveControl({ target, context, initial, label }: {
 }
 
 export function SavedItemsPage({ context }: { context: Context }) {
+  return <AuthorizationBoundary scope="saved" sourcePolicy="settings"><SavedItemsContent context={context}/></AuthorizationBoundary>;
+}
+function SavedItemsContent({context}:{context:Context}){
+  const authority=useAuthorization();
+  const [generation,setGeneration]=useState<number>();
   const [page, setPage] = useState<SavedPageView>(), [cursor, setCursor] = useState<string>(),
     [history, setHistory] = useState<(string | undefined)[]>([]), [error, setError] = useState(''),
     [loading, setLoading] = useState(true), [pending, setPending] = useState<Intent[]>([]),
@@ -157,9 +165,9 @@ export function SavedItemsPage({ context }: { context: Context }) {
     const mine = ++requestId.current; setLoading(true); setError('');
     try {
       syncPending();
-      const data = await request<SavedPageView>(base + '?limit=12' + (next ? '&cursor=' + encodeURIComponent(next) : ''), { schema: SavedPage });
+      const {value:data,generation:lease}=await authority.readProjection<SavedPageView>(base + '?limit=12' + (next ? '&cursor=' + encodeURIComponent(next) : ''), { schema: SavedPage });
       if (active() && mine === requestId.current) {
-        setPage(data); setCursor(next); setHistory(previous); setChangedElsewhere(false);
+        setPage(data);setGeneration(lease); setCursor(next); setHistory(previous); setChangedElsewhere(false);
         if (focus) heading.current?.focus();
       }
     } catch (failure) { if (active() && mine === requestId.current) setError(failureText(failure)); }
@@ -200,7 +208,7 @@ export function SavedItemsPage({ context }: { context: Context }) {
       <div className="collection saved-collection" aria-label="Saved references" aria-busy={loading}>
         {!page.items.length && !error && !changedElsewhere && <div className="empty-state"><h2>No saved items yet</h2><p>Use Save on a discussion, contribution, or artifact, or Save this revision to keep an exact reference.</p></div>}
         {page.items.map(item => {
-          const source = item.source.state === 'available' ? item.source.resource : undefined;
+          const source = authority.current(generation)&&item.source.state === 'available' ? item.source.resource : undefined;
           const exact = item.target.kind === 'revision';
           const url = item.target.kind === 'revision' ? `/loom/resource/${item.target.resource_id}/${item.target.revision_id}`
             : item.target.kind === 'discussion' ? '/loom/discussion/' + item.target.resource_id
@@ -212,7 +220,7 @@ export function SavedItemsPage({ context }: { context: Context }) {
                 {exact ? <Link to={'/loom/resource/' + item.target.resource_id}>View current resource</Link>
                   : item.source.state === 'available' && item.source.observed_revision_id && <Link to={`/loom/resource/${source.resource_id}/${item.source.observed_revision_id}`}>Revision current when saved</Link>}</>
                 : <p>This reference is retained privately. Its source metadata is unavailable; you can still unsave it.</p>}
-            </div><SaveControl context={context} target={item.target} initial={item} />
+            </div><SaveControl context={context} target={item.target} initial={authority.current(generation)?item:{...item,source:{state:'unavailable'}}} />
           </div>;
         })}
       </div>

@@ -30,7 +30,8 @@ import {
   invalidateIdentity,
   isDefinitiveRejection,
   passkey,
-  request,
+  commandRequest,
+  sessionRequest,
   type Intent,
   type Self,
 } from "./participation-client.js";
@@ -46,6 +47,9 @@ import { NotificationsPage } from './Notifications.js';
 import { NotificationRecovery } from './notification-recovery.js';
 import { FollowControl, FollowingPage } from './Following.js';
 import { SharedChangesPage } from './SharedChanges.js';
+import { AttentionPage } from './Attention.js';
+import { AuthorizationBoundary, useAuthorization } from './AuthorizationBoundary.js';
+import { AttentionRecovery, exportAttentionRecovery } from './attention-recovery.js';
 import { UpdatesPage } from './Updates.js';
 import { UpdatesRecovery } from './updates-recovery.js';
 import { SharedRecovery } from './shared-recovery.js';
@@ -135,9 +139,9 @@ export function ParticipationApp() {
     let active = true;
     const controller = new AbortController(),
       owner = identityGeneration();
-    void request<Self>("/api/v1/identity/self", { signal: controller.signal })
+    void sessionRequest<Self>("/api/v1/identity/self", { signal: controller.signal })
       .then(async (value) => {
-        const info = await request<OnboardingView>("/api/v1/community", {
+        const info = await sessionRequest<OnboardingView>("/api/v1/community", {
           signal: controller.signal,
           schema: Onboarding,
         });
@@ -192,7 +196,7 @@ export function ParticipationApp() {
   async function logout() {
     if (!self) return;
     try {
-      await request("/api/v1/identity/logout", { body: {}, self });
+      await sessionRequest("/api/v1/identity/logout", { body: {}, self });
       const cleanupFailures:string[]=[];
       // Fence pending views before awaiting local locks: a late read must not
       // refill a cleared recovery record while another cleanup lock is blocked.
@@ -216,6 +220,12 @@ export function ParticipationApp() {
       if(cleanupOwner!==identityGeneration())return;
       try {if(community)await new ReadingRecovery(community.instance_id,self.participant_id).clear();}
       catch {cleanupFailures.push('reading recovery could not be cleared.');}
+      if(cleanupOwner!==identityGeneration())return;
+      try {if(community)await new AttentionRecovery(community.instance_id,self.participant_id).clear();}
+      catch {cleanupFailures.push('attention recovery could not be cleared.');}
+      if(cleanupOwner!==identityGeneration())return;
+      try {if(community)await new UpdatesRecovery(community.instance_id,self.participant_id,localStorage,true).clear();}
+      catch {cleanupFailures.push('routine Updates recovery could not be cleared.');}
       if(cleanupOwner!==identityGeneration())return;
       if(cleanupFailures.length)setError(`Signed out, but ${cleanupFailures.join(' ')} They remain scoped to this account on this browser.`);
       navigate("/loom");
@@ -254,6 +264,7 @@ export function ParticipationApp() {
         </NavLink>
         <NavLink to="/loom/following"><Icon name="topic" />Following</NavLink>
         <NavLink to="/loom/saved"><Icon name="saved" />Saved items</NavLink>
+        <NavLink to="/loom/attention"><Icon name="discussion" />Attention settings</NavLink>
         <NavLink to="/loom/reading"><Icon name="discussion" />Reading progress</NavLink>
         <NavLink to="/loom/notifications"><Icon name="discussion" />Mentions/replies</NavLink>
         <NavLink to="/loom/search"><Icon name="search" />Search</NavLink>
@@ -282,7 +293,7 @@ export function ParticipationApp() {
             title="Sign out"
             onClick={() => {
               try{
-                if (store?.all().length || (community&&new ReadingRecovery(community.instance_id,self.participant_id).all().length)) setSignout(true);
+                if (store?.all().length || (community&&(new ReadingRecovery(community.instance_id,self.participant_id).all().length||new AttentionRecovery(community.instance_id,self.participant_id).all().length))) setSignout(true);
                 else void logout();
               }catch{setSignout(true);}
             }}
@@ -358,11 +369,12 @@ export function ParticipationApp() {
             />
           ) : community && store ? (
             <ReadingProvider key={`${self.participant_id}:${community.instance_id}:${location.pathname}:${location.pathname === '/loom/changes' ? '' : location.search}`}
-              context={{self,community,store,refreshCommunity:()=>setEpoch(n=>n+1)}}><ActiveView
+              context={{controlsProjection:'private-controls-1',self,community,store,refreshCommunity:()=>setEpoch(n=>n+1)}}><ActiveView
               // Changes owns a separate key for scoped results. Its persistent
               // controls must survive query edits; other views retain their key.
               key={`${self.participant_id}:${community.instance_id}:${location.pathname}:${location.pathname === '/loom/changes' ? '' : location.search}`}
               context={{
+                controlsProjection:'private-controls-1',
                 self,
                 community,
                 store,
@@ -387,6 +399,8 @@ export function ParticipationApp() {
           published.
         </p>
         <p>Unconfirmed Saved items changes may also have completed. Server bookmarks remain saved after signing out.</p>
+        <p>Unconfirmed attention changes may already have completed. Signing out clears this browser’s attention recovery; private server choices remain.</p>
+        <button onClick={() => {try{if(community&&self)exportAttentionRecovery(community.instance_id,self.participant_id);}catch(failure){setError((failure as Error).message);}}}>Export attention recovery</button>
         <p>Unconfirmed reading changes may also have completed. Signing out clears this browser’s reading recovery and automatic preference; server reading state remains.</p>
         <button onClick={() => {try{if(community&&self)exportReadingRecovery(community.instance_id,self.participant_id);}catch(failure){setError((failure as Error).message);}}}>Export reading recovery</button>
         <button onClick={() => store && exportDrafts(store)}>
@@ -466,11 +480,21 @@ function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 function ActiveView({ context }: { context: Context }) {
+  const location=useLocation(),kind=location.pathname.split('/')[2];
+  // Attention pages already own their full-view or private-settings boundary.
+  // The remaining routes must also provide a protected read capability.
+  if(kind==='admin')return <AuthorizationBoundary scope="administration" sourcePolicy="settings"><RouteView context={context}/></AuthorizationBoundary>;
+  if(['attention','notifications','following','updates','area','discussion','resource','overview','saved'].includes(kind??''))
+    return <RouteView context={context}/>;
+  return <AuthorizationBoundary scope={'route:'+location.pathname}><RouteView context={context}/></AuthorizationBoundary>;
+}
+function RouteView({ context }: { context: Context }) {
   const location = useLocation(),
     path = location.pathname.split("/").filter(Boolean).slice(1),
     kind = path[0],
     id = path[1];
   if (!kind) return <Topics context={context} />;
+  if (kind === 'attention') return <AttentionPage context={context}/>;
   if (kind === 'reading') return <ReadingPageViewComponent/>;
   if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
@@ -522,13 +546,14 @@ function Collection({
 }) {
   const [cursor, setCursor] = useState(""),
     [previous, setPrevious] = useState<string[]>([]);
-  const { data: response, error, refresh } = useQuery<PageView>(
+  const authority=useAuthorization();
+  const { data: response, generation, error, refresh } = useQuery<PageView>(
     path + (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
     Page,
   );
-  const retained = useRef<PageView | undefined>(undefined);
-  if (response) retained.current = response;
-  const data = response ?? retained.current;
+  const retained = useRef<{value:PageView;generation:number|undefined}>(undefined);
+  if (response) retained.current = {value:response,generation};
+  const data = response ?? (retained.current&&authority.current(retained.current.generation)?retained.current.value:undefined);
   return (
     <>
       <ErrorText error={error} />
@@ -650,6 +675,9 @@ function Topics({ context }: { context: Context }) {
   );
 }
 function AreaPage({ id, context }: { id: string; context: Context }) {
+  return <AuthorizationBoundary scope={"area:"+id}><AreaContent id={id} context={context}/></AuthorizationBoundary>;
+}
+function AreaContent({ id, context }: { id: string; context: Context }) {
   const query = new URLSearchParams(useLocation().search);
   const [create, setCreate] = useState(query.has("compose")),
     [reload, setReload] = useState(0),
@@ -804,6 +832,7 @@ function Composer({
   heading: string;
   onCommitted?: (value: CommittedView) => void;
 }) {
+  const authority=useAuthorization();
   const location = useLocation();
   const chosen = new URLSearchParams(location.search).get("intent");
   const [record, update] = useIntent(() =>
@@ -871,7 +900,7 @@ function Composer({
     if (record?.state !== "rejected" || !comparisonRevision || typeof fixed.resource_id !== "string") return;
     let active = true;
     const owner = identityGeneration(), controller = new AbortController();
-    void request<RevisionView>(
+    void authority.read<RevisionView>(
       `/api/v1/resources/${fixed.resource_id}/revisions/${comparisonRevision}`,
       { schema: Revision, signal: controller.signal },
     )
@@ -977,7 +1006,7 @@ function Composer({
       });
       if (!intent) return;
       await confirm(
-        await request<CommittedView>(path, {
+        await commandRequest<CommittedView>(path, {
           self: context.self,
           body: intent.body,
           schema: Committed,
@@ -1015,7 +1044,7 @@ function Composer({
     setBusy(true);
     setError("");
     try {
-      const result = await request<CommittedView | { operation_state: string }>(
+      const result = await commandRequest<CommittedView | { operation_state: string }>(
         summaryDiscussion ? "/api/v1/summaries/status" : "/api/v1/operations/status",
         {
           self: context.self,
@@ -1082,7 +1111,7 @@ function Composer({
     setBusy(true);
     setError('');
     try {
-      const latest = await request<RevisionView>(`/api/v1/resources/${fixed.resource_id}`, { schema: Revision });
+      const latest = await authority.read<RevisionView>(`/api/v1/resources/${fixed.resource_id}`, { schema: Revision });
       if (!live.current || owner !== identityGeneration()) return;
       if (!latest.can_edit) throw new Error('This resource is no longer available for editing.');
       // The explicit new draft uses current authored content and carries only its
@@ -1346,6 +1375,9 @@ function Composer({
 }
 
 function DiscussionPage({ id, context }: { id: string; context: Context }) {
+  return <AuthorizationBoundary scope={"discussion:"+id} sourcePolicy="projections"><DiscussionContent id={id} context={context}/></AuthorizationBoundary>;
+}
+function DiscussionContent({ id, context }: { id: string; context: Context }) {
   const location = useLocation(),
     focus = new URLSearchParams(location.search).get("focus");
   const { data, error, refresh } = useQuery<{
@@ -1355,6 +1387,10 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
   }>("/api/v1/discussions/" + id);
   const [reload, setReload] = useState(0),
     [summaryReload, setSummaryReload] = useState(0);
+  // Retain only the immutable opening identity as a query seed. Every rendered
+  // header, body and traversal response has its own current content lease.
+  const opening=useRef<string>(undefined);
+  if(data)opening.current=data.opening.resource_id;
   if (error)
     return (
       <>
@@ -1362,12 +1398,12 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
         <button onClick={refresh}>Retry discussion</button>
       </>
     );
-  if (!data) return <p role="status">Opening discussion…</p>;
+  if (!data&&!opening.current) return <p role="status">Opening discussion…</p>;
   // Keep the input's UTF-16 length limit without splitting a supplementary character.
-  const summaryTitle = ('Summary: '+data.opening.title).slice(0,160).replace(/[\uD800-\uDBFF]$/, '');
+  const summaryTitle = ('Summary: '+data?.opening.title).slice(0,160).replace(/[\uD800-\uDBFF]$/, '');
   return (
     <>
-      <div className="breadcrumb">
+      {data ? <><div className="breadcrumb">
         <Link to="/loom">Topics</Link>
         <span>›</span>
         <Link to={"/loom/area/" + data.area.id}>{data.area.title}</Link>
@@ -1390,7 +1426,8 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
         context={context} kind="summary.create" path="/api/v1/summaries" slot={'summary.create:'+id}
         fixed={{discussion_id:id}} titleField initialTitle={summaryTitle}
         summaryDiscussion={id} heading="Create discussion summary" onCommitted={() => setSummaryReload(n => n + 1)}/>}
-      {context.self.role === "administrator" && <OrganizationActions id={id} kind="discussion"/>}
+      {context.self.role === "administrator" && <OrganizationActions id={id} kind="discussion"/>}</>:
+        <div className="notice"><p>Earlier discussion details were withdrawn. Available replies are checked separately.</p><button onClick={refresh}>Refresh discussion</button></div>}
       <div className="reading-grid">
         <div>
           <ReadingSelection/>
@@ -1399,7 +1436,7 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
           ) : (
             <>
               <Contribution
-                id={data.opening.resource_id}
+                id={opening.current!}
                 context={context}
                 opening
                 onPosted={() => setReload((n) => n + 1)}
@@ -1411,8 +1448,8 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
                 <span>Oldest first</span>
               </div>
               <Children
-                key={data.opening.resource_id + reload}
-                id={data.opening.resource_id}
+                key={opening.current! + reload}
+                id={opening.current!}
                 discussionId={id}
                 context={context}
                 depth={0}
@@ -1420,7 +1457,7 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
             </>
           )}
         </div>
-        <aside className="right-rail">
+        {data&&<aside className="right-rail">
           <h3>About this discussion</h3>
           <p>{data.area.description}</p>
           <Link to={"/loom/area/" + data.area.id}>
@@ -1431,7 +1468,7 @@ function DiscussionPage({ id, context }: { id: string; context: Context }) {
             Every reply keeps its actual parent. Open a branch to follow a
             deeper conversation.
           </p>
-        </aside>
+        </aside>}
       </div>
     </>
   );
@@ -1641,19 +1678,22 @@ function Children({
   depth: number;
   refreshVersion?: number;
 }) {
-  const [page, setPage] = useState<PageView>(),
+  const authority=useAuthorization();
+  const [projection, setPage] = useState<{value:PageView;generation?:number|undefined}>(),
     [cursor, setCursor] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [expanded, setExpanded] = useState<string[]>([]),
     [branchVersions, setBranchVersions] = useState<Record<string, number>>({}),
     [reload, setReload] = useState(0);
+  const page=projection&&authority.current(projection.generation)?projection.value:undefined;
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
     setBusy(true);
     setError("");
-    void request<PageView>(
+    const read=authority.sourcePolicy==='projections'?authority.readProjection.bind(authority):authority.readAuthorized.bind(authority);
+    void read<PageView>(
       `/api/v1/contributions/${id}/children?limit=6${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}`,
       { signal: controller.signal, schema: Page },
     )
@@ -1683,7 +1723,7 @@ function Children({
         const resource = item as ResourceView;
         return (
           <div className="comment-branch" key={resource.resource_id}>
-            <Contribution
+            {'state' in item?<div className="comment notice" data-resource-id={resource.resource_id}><p>Contribution unavailable</p></div>:<Contribution
               id={resource.resource_id}
               context={context}
               onPosted={() => {
@@ -1696,7 +1736,7 @@ function Children({
                     (value[resource.resource_id] ?? 0) + 1,
                 }));
               }}
-            />
+            />}
             {depth >= 1 ? (
               <Link
                 className="branch-link"
@@ -1759,7 +1799,10 @@ function Children({
     </div>
   );
 }
-function ResourcePage({
+function ResourcePage(props:{id:string;revision:string|undefined;context:Context}){
+  return <AuthorizationBoundary scope={"resource:"+props.id}><ResourceContent {...props}/></AuthorizationBoundary>;
+}
+function ResourceContent({
   id,
   revision,
   context,
@@ -1928,6 +1971,11 @@ function RevisionHistory({ id }: { id: string }) {
   );
 }
 function Overview({ context }: { context: Context }) {
+  // The overview embeds a full artifact and its proposal form; both belong to
+  // the same authorization lifetime, including uses outside the resource route.
+  return <AuthorizationBoundary scope="overview"><OverviewContent context={context}/></AuthorizationBoundary>;
+}
+function OverviewContent({ context }: { context: Context }) {
   const target = context.community.overview;
   if (target.state !== "ready")
     return (
@@ -1944,7 +1992,7 @@ function Overview({ context }: { context: Context }) {
     );
   return (
     <>
-      <ResourcePage
+      <ResourceContent
         id={target.resource_id!}
         revision={undefined}
         context={context}
@@ -1975,7 +2023,7 @@ function Editors({ id, context, kind }: { id: string; context: Context; kind:'ar
       sent=await update(existing=>{uncertain=existing?.state==='uncertain';const body={resource_id:id,expected_version:data!.version,participant_ids:selected};
         return context.store.prepareDispatch(existing??context.store.create(slot,kind+'.editors',path,body),body);});
       if(!sent)return;
-      await request(path,{self:context.self,body:sent.body});
+      await commandRequest(path,{self:context.self,body:sent.body});
       await update(async existing=>{await context.store.complete(sent!);return existing?.key===sent!.key?undefined:existing;});
       if(current()){setEditing(false);refresh();}
     } catch (error) {
@@ -2040,6 +2088,11 @@ function Editors({ id, context, kind }: { id: string; context: Context; kind:'ar
   );
 }
 function Administration({ context }: { context: Context }) {
+  const authority=useAuthorization();
+  const generation=authority.capture();
+  const refreshCommunityIfCurrent=()=>{
+    if(authority.current(generation)&&authority.getSnapshot().state!=='withdrawn')context.refreshCommunity();
+  };
   const chosen = new URLSearchParams(useLocation().search).get("intent");
   const [setupIntent, update] = useIntent(
     () =>
@@ -2112,7 +2165,7 @@ function Administration({ context }: { context: Context }) {
       if (!record || (check && !wasUncertain)) return;
       setError("");
       const result = check
-        ? await request<CommittedView | { operation_state: string }>(
+        ? await commandRequest<CommittedView | { operation_state: string }>(
             "/api/v1/operations/status",
             {
               self: context.self,
@@ -2122,7 +2175,7 @@ function Administration({ context }: { context: Context }) {
               },
             },
           )
-        : await request<CommittedView>(record.path, {
+        : await commandRequest<CommittedView>(record.path, {
             self: context.self,
             body: record.body,
           });
@@ -2131,7 +2184,7 @@ function Administration({ context }: { context: Context }) {
           await context.store.complete(record!);
           return undefined;
         });
-        context.refreshCommunity();
+        refreshCommunityIfCurrent();
       } else setError("Setup is still unconfirmed. Keep this original intent.");
     } catch (failure) {
       if (record && !check && isDefinitiveRejection(failure, wasUncertain)) {
@@ -2161,6 +2214,7 @@ function Administration({ context }: { context: Context }) {
     <>
       <h1>Administration</h1>
       <p className="subtitle">Set up the community and admit participants.</p>
+      {authority.getSnapshot().state==='withdrawn'&&<div role="status" className="notice"><p>Administrator metadata was withdrawn. Your private drafts and exact recovery remain available. Refresh the affected section to check access again.</p><button onClick={context.refreshCommunity}>Refresh administration</button></div>}
       <SearchAdministration context={context}/>
       <ErrorText error={error} />
       <SeparateDraft
@@ -2249,13 +2303,19 @@ function Administration({ context }: { context: Context }) {
           )}
         </section>
       ) : (
-        <Settings context={context} />
+        <Settings context={{...context,refreshCommunity:refreshCommunityIfCurrent}} />
       )}
       <Admission context={context} />
     </>
   );
 }
 function Settings({ context }: { context: Context }) {
+  const community=useQuery<OnboardingView>('/api/v1/community',Onboarding);
+  return <><button onClick={community.refresh}>Refresh configuration</button><ErrorText error={community.error}/>
+    {community.data&&<Configuration key={community.generation} context={{...context,community:community.data}}
+      onSaved={()=>{community.refreshIfCurrent();context.refreshCommunity();}}/>}</>;
+}
+function Configuration({ context, onSaved }: { context: Context; onSaved: () => void }) {
   const [overview, setOverview] = useState(
       context.community.overview.resource_id ?? "",
     ),
@@ -2265,7 +2325,7 @@ function Settings({ context }: { context: Context }) {
     [error, setError] = useState("");
   async function save() {
     try {
-      await request("/api/v1/community/settings", {
+      await commandRequest("/api/v1/community/settings", {
         self: context.self,
         body: {
           idempotency_key: crypto.randomUUID(),
@@ -2275,7 +2335,7 @@ function Settings({ context }: { context: Context }) {
           proposal_area_id: proposal || null,
         },
       });
-      context.refreshCommunity();
+      onSaved();
     } catch (failure) {
       setError((failure as Error).message);
     }
@@ -2297,6 +2357,11 @@ function Settings({ context }: { context: Context }) {
   );
 }
 function Admission({ context }: { context: Context }) {
+  const authority=useAuthorization();
+  // Account selection and one-time display are protected copies. Only a saved
+  // command (or its safe receipt IDs) belongs to private recovery custody.
+  const [selection,setSelection]=useState<{id:string;kind:string;nickname:string;generation:number|undefined}>();
+  const selected=selection&&authority.current(selection.generation)?selection:undefined;
   const chosen = new URLSearchParams(useLocation().search).get("intent");
   const [pending, update] = useIntent(
     () =>
@@ -2313,10 +2378,11 @@ function Admission({ context }: { context: Context }) {
         ? "human"
         : "agent",
     ),
-    [account, setAccount] = useState<string | undefined>(
+    [createdAccount, setAccount] = useState<string | undefined>(
       pending?.body.participant_id as string | undefined,
     ),
     [issued, setIssued] = useState<{
+      generation:number;
       secret: string;
       participant_id: string;
       credential_id: string;
@@ -2325,6 +2391,10 @@ function Admission({ context }: { context: Context }) {
     }>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const account=(pending?.body.participant_id as string|undefined)??createdAccount??selected?.id;
+  const displayNickname=selected?.nickname??nickname;
+  const accountKind=pending?.kind==='credential.issue'
+    ?pending.body.kind==='enrollment'?'human':'agent':selected?.kind??kind;
   const accounts = useQuery<
     {
       id: string;
@@ -2376,7 +2446,7 @@ function Admission({ context }: { context: Context }) {
   ) {
     if (busy || pending?.state === "rejected" || pending?.blocked_by) return;
     let wasUncertain = false;
-    const targetNickname = nickname;
+    const targetNickname = displayNickname, generation=authority.capture();
     const path =
       "/api/v1/identity/" +
       (action === "account.create" ? "accounts" : "credentials");
@@ -2385,8 +2455,8 @@ function Admission({ context }: { context: Context }) {
         ? { nickname, kind, role: "participant" }
         : {
             participant_id: account,
-            kind: kind === "agent" ? "agent" : "enrollment",
-            purpose: kind === "agent" ? null : "enroll",
+            kind: accountKind === "agent" ? "agent" : "enrollment",
+            purpose: accountKind === "agent" ? null : "enroll",
             label: "Synthetic participation",
             replace_credential_id: null,
           };
@@ -2402,7 +2472,7 @@ function Admission({ context }: { context: Context }) {
       });
       if (!record || (check && !wasUncertain)) return;
       setError("");
-      const result = await request<{
+      const result = await commandRequest<{
         operation_state: string;
         participant_id: string;
         credential_id?: string;
@@ -2423,14 +2493,18 @@ function Admission({ context }: { context: Context }) {
             "The credential response could not be bound to its issuing account.",
           );
         setAccount(result.participant_id);
+        // Recovery keeps the credential kind from the immutable command, even
+        // after a protected account selection loses its lease.
+        setKind(record.body.kind === "enrollment" ? "human" : String(record.body.kind));
         await update(async () => {
           await context.store.complete(record!);
           return undefined;
         });
-        accounts.refresh();
+        accounts.refreshIfCurrent();
         if (record.kind === "credential.issue") {
           if (result.secret)
             setIssued({
+              generation,
               secret: result.secret,
               participant_id: result.participant_id,
               credential_id: result.credential_id!,
@@ -2471,7 +2545,10 @@ function Admission({ context }: { context: Context }) {
           }).catch((failure) => setError(failure.message))
         }
       />
-      {issued ? (
+      {issued&&!authority.current(issued.generation)?<div className="notice">
+        <p>The credential display was withdrawn. Check current access before managing the issued credential; its secret cannot be replayed.</p>
+        <button onClick={()=>{setIssued(undefined);setSelection(undefined);}}>Dismiss credential display</button>
+      </div>:issued ? (
         <div className="notice neutral">
           <strong>
             {issued.kind === "agent" ? "Agent credential" : "Enrollment ticket"}{" "}
@@ -2490,6 +2567,7 @@ function Admission({ context }: { context: Context }) {
             onClick={() => {
               setIssued(undefined);
               setAccount(undefined);
+              setSelection(undefined);
               setNickname("");
             }}
           >
@@ -2501,7 +2579,7 @@ function Admission({ context }: { context: Context }) {
           <label>
             Nickname
             <input
-              value={nickname}
+              value={displayNickname}
               disabled={locked || !!account}
               onChange={(e) => {
                 setNickname(e.target.value);
@@ -2512,7 +2590,7 @@ function Admission({ context }: { context: Context }) {
           <label>
             Participant type
             <select
-              value={kind}
+              value={accountKind}
               disabled={locked || !!account}
               onChange={(e) => {
                 setKind(e.target.value);
@@ -2553,7 +2631,7 @@ function Admission({ context }: { context: Context }) {
                 onClick={() => void operate("credential.issue")}
               >
                 Issue{" "}
-                {kind === "agent" ? "agent credential" : "enrollment ticket"}
+                {accountKind === "agent" ? "agent credential" : "enrollment ticket"}
               </button>
             </>
           )}
@@ -2574,6 +2652,8 @@ function Admission({ context }: { context: Context }) {
       )}
       <details className="section">
         <summary>Participant accounts</summary>
+        <button onClick={accounts.refresh}>Refresh accounts</button>
+        <ErrorText error={accounts.error}/>
         {accounts.data?.map((person) => (
           <div className="list-row" key={person.id}>
             <Avatar person={person} />
@@ -2583,9 +2663,8 @@ function Admission({ context }: { context: Context }) {
             <button
               disabled={busy || !!pending || !!issued}
               onClick={() => {
-                setAccount(person.id);
-                setKind(person.kind);
-                setNickname(person.nickname);
+                setAccount(undefined);
+                setSelection({...person,generation:accounts.generation});
               }}
             >
               Manage credentials
@@ -2593,7 +2672,7 @@ function Admission({ context }: { context: Context }) {
             <button
               disabled={person.id === context.self.participant_id}
               onClick={() =>
-                void request("/api/v1/identity/state", {
+                void commandRequest("/api/v1/identity/state", {
                   self: context.self,
                   body: {
                     idempotency_key: crypto.randomUUID(),
@@ -2602,7 +2681,7 @@ function Admission({ context }: { context: Context }) {
                     state: person.state === "active" ? "suspended" : "active",
                   },
                 })
-                  .then(() => accounts.refresh())
+                  .then(accounts.refreshIfCurrent)
                   .catch((failure) => setError(failure.message))
               }
             >
@@ -2622,13 +2701,14 @@ function CredentialList({
   participantId: string;
   context: Context;
 }) {
-  const { data, error, refresh } = useQuery<
+  const { data, error, refresh, refreshIfCurrent } = useQuery<
       { id: string; kind: string; label: string; state: string }[]
     >("/api/v1/identity/credentials?participant_id=" + participantId),
     [failure, setFailure] = useState("");
   return (
     <details className="section">
       <summary>Credentials for this account</summary>
+      <button onClick={refresh}>Refresh credentials</button>
       <ErrorText error={error || failure} />
       {data?.map((credential) => (
         <div className="list-row" key={credential.id}>
@@ -2638,7 +2718,7 @@ function CredentialList({
           <button
             disabled={credential.state !== "active"}
             onClick={() =>
-              void request("/api/v1/identity/revoke", {
+              void commandRequest("/api/v1/identity/revoke", {
                 self: context.self,
                 body: {
                   idempotency_key: crypto.randomUUID(),
@@ -2646,7 +2726,7 @@ function CredentialList({
                   credential_id: credential.id,
                 },
               })
-                .then(refresh)
+                .then(refreshIfCurrent)
                 .catch((failure) => setFailure(failure.message))
             }
           >

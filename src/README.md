@@ -39,6 +39,5 @@ Read [ADR-002](../docs/adr/002-application-runtime.md) and
 The common atomic publication tail is shared by the original internal contract and
 the versioned participation operations. Complete domain, retention and production
 identity policy remain gates; a synthetic journey is not production approval.
-See [ADR-004](../docs/adr/004-identity-admission-prototype.md) and the
-[prototype evidence](../docs/development/identity-prototype.md), then the current
-[participation guide](../docs/development/participation.md) and ADR-011/015/016/017/020.
+See [ADR-004](../docs/adr/004-identity-admission-prototype.md), the release
+[API guide](contracts/guide.ts), and ADR-011/015/016/017/020.

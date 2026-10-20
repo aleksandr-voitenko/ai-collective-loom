@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { DismissControl } from './Attention.js';
+import { AuthorizationBoundary,useAuthorization } from './AuthorizationBoundary.js';
 import { Link, useSearchParams } from 'react-router';
-import { ApiError, identityGeneration, request } from './participation-client.js';
+import { ApiError, identityGeneration } from './participation-client.js';
 import type { Context } from './participation-state.js';
 import { NotificationRecovery, recoveryToken } from './notification-recovery.js';
 import { NotificationPage, type NotificationOptions, type NotificationPageView } from '../contracts/notifications.js';
@@ -8,25 +10,29 @@ import { NotificationPage, type NotificationOptions, type NotificationPageView }
 const labels={main_mention:'Mention in main text',direct_reply:'Direct reply',note_mention:'Mention in revision note'};
 const contextInvalidations=new Set(['visibility_replay_required','notification_view_changed','notification_epoch_changed','unauthenticated','unavailable','forbidden']);
 export function NotificationsPage({context}:{context:Context}){
+  return <AuthorizationBoundary scope="notifications" retryLabel="Retry notification page"><NotificationsContent context={context}/></AuthorizationBoundary>;
+}
+function NotificationsContent({context}:{context:Context}){
   const [params,setParams]=useSearchParams();
   const selected=params.get('reason'),reason=selected==='mention'||selected==='reply'?selected:'all';
   return <NotificationView key={`${context.community.instance_id}:${context.self.participant_id}:${reason}`} context={context} reason={reason}
     choose={value=>setParams(value==='all'?{}:{reason:value})}/>;
 }
 function NotificationView({context,reason,choose}:{context:Context;reason:'all'|'mention'|'reply';choose:(reason:string)=>void}){
+  const authority=useAuthorization();
   const [page,setPage]=useState<NotificationPageView>(),[busy,setBusy]=useState(false),[failure,setFailure]=useState<{code:string;text:string}>();
   const live=useRef(false),generation=useRef(identityGeneration()),sequence=useRef(0),requestSequence=useRef(0),
     attempted=useRef<NotificationOptions>({reason}),heading=useRef<HTMLHeadingElement>(null),controller=useRef<AbortController|undefined>(undefined);
   const recoveryNotice=useRef<HTMLDivElement>(null);
   const [recovery]=useState(()=>new NotificationRecovery(context.community.instance_id,context.self.participant_id));
-  const active=()=>live.current&&generation.current===identityGeneration();
+  const active=()=>live.current&&generation.current===identityGeneration()&&authority.active();
   async function load(options:NotificationOptions,focus=false){
     if(busy)return;
     controller.current?.abort();const abort=new AbortController();controller.current=abort;
     const mine=++requestSequence.current;attempted.current=options;
     if(active()){setBusy(true);setFailure(undefined);}
     try{
-      const value=await request<NotificationPageView>('/api/v1/me/notifications/query',{body:options,self:context.self,schema:NotificationPage,signal:abort.signal});
+      const value=await authority.read<NotificationPageView>('/api/v1/me/notifications/query',{body:options,self:context.self,schema:NotificationPage,signal:abort.signal});
       if(!active()||mine!==requestSequence.current)return;
       attempted.current={reason,cursor:value.page_cursor,limit:value.limit,max_response_bytes:value.max_response_bytes};
       // Save a token for replaying this very page before exposing its successor.
@@ -67,6 +73,7 @@ function NotificationView({context,reason,choose}:{context:Context;reason:'all'|
   return <section className="notifications" aria-busy={busy}>
     <h1 tabIndex={-1} ref={heading}>Mentions/replies</h1>
     <p className="muted">Direct attention addressed to you. This view covers mentions and replies, independently of followed activity.</p>
+    {context.community.attention_contract&&<p>All retained personal signals, including dismissed ones. <Link to="/loom/updates?kind=personal">Open remaining routine direct attention</Link>.</p>}
     <div className="notification-toolbar">
       <label>Attention reasons <select value={reason} onChange={event=>choose(event.target.value)}>
         <option value="all">Mentions and replies</option><option value="mention">Mentions</option><option value="reply">Replies</option>
@@ -96,6 +103,7 @@ function NotificationView({context,reason,choose}:{context:Context;reason:'all'|
         <div className="notification-links"><Link to={item.browser_url}>Exact triggering revision</Link>
           {item.reasons.some(r=>r.kind==='note_mention')&&<Link to={item.browser_url+'#change-note'}>Triggering change note</Link>}
           <Link to={item.context_url}>Current context</Link></div>
+        {context.community.attention_contract&&<details><summary>Attention controls</summary><DismissControl context={context} inputs={[{kind:'personal_delivery',id:item.delivery_id}]}/></details>}
         <details><summary>Publication and availability</summary>
           <p>Published <time dateTime={item.source.created_at}>{new Date(item.source.created_at).toLocaleString()}</time>.
             {' '}Available <time dateTime={item.available_at}>{new Date(item.available_at).toLocaleString()}</time>.</p>

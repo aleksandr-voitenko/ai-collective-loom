@@ -205,7 +205,7 @@ for (const availability of ['closed', 'unconfigured'] as const) {
         });
       }
       expect((await api(page,'/api/v1/community')).proposal_area)
-        .toEqual({state:availability==='closed'?'unavailable':'setup_incomplete'});
+        .toEqual(availability==='closed'?{state:'unavailable',unavailable_reason:'publication_closed'}:{state:'setup_incomplete'});
       await page.goto(server.origin+'/loom/help');
       await page.getByRole('link').filter({hasText:'discussion.create · '+state}).click();
       await expect(page).toHaveURL(new RegExp('/loom/overview\\?proposal=1&intent='+original.key+'$'));

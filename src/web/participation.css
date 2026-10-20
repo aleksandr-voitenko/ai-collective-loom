@@ -947,3 +947,11 @@
 .reading-controls .notice { flex-basis: 100%; }
 .reading-selection { margin-bottom: 1rem; }
 .reading-selection code { overflow-wrap: anywhere; }
+.attention-control { margin: .65rem 0; font-size: .9rem; min-width: 0; overflow-wrap: anywhere; }
+.attention-control button { margin: .25rem .4rem .25rem 0; white-space: normal; max-width: 100%; }
+.attention-control button[aria-disabled="true"], .attention-settings button[aria-disabled="true"] { opacity: .6; cursor: progress; }
+.attention-control label { display: flex; align-items: center; gap: .5rem; }
+.attention-control input[type="checkbox"] { width: auto; }
+.attention-control .notice { margin-top: .75rem; }
+.attention-settings { overflow-wrap: anywhere; }
+.attention-settings select { width: auto; max-width: 100%; margin: .5rem; }

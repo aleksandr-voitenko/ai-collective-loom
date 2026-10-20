@@ -87,4 +87,4 @@ fixture evidence; proposal mappings are not test passes.
 - Imported architecture §§6 and 14; its ADR-004 proposal row is not an implemented decision.
 - [SimpleWebAuthn server documentation](https://simplewebauthn.dev/docs/packages/server): the pinned server verifier is 14.0.3, compatible with repository Node 24.19.0.
 - [WebAuthn specification](https://www.w3.org/TR/webauthn-3/): challenge, RP/origin, user-verification and signature boundaries.
-- [Observed prototype evidence and limits](../development/identity-prototype.md).
+- [Identity protocol tests](../../tests/integration/identity.test.ts); observed results remain in Lore `LC-20261012-9JJH`.

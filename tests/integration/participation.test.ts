@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createServer, type AddressInfo } from "node:net";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { syntheticServer } from "../helpers/participation-server.js";
 import { httpClient } from "../helpers/participation-http.js";
@@ -16,6 +17,110 @@ const content = (text: string) => ({
   text,
   mentions: [],
 });
+
+test("synthetic HTTPS fixture owns its port throughout startup and releases it after close", async (t) => {
+  const contender = createServer();
+  t.after(async () => {
+    if (contender.listening)
+      await new Promise<void>((resolve) => contender.close(() => resolve()));
+  });
+  let reservedOrigin = "";
+  let startupAttempts = 0;
+  const server = await syntheticServer({
+    beforeListen: async (origin) => {
+      startupAttempts++;
+      reservedOrigin = origin;
+      await assert.rejects(
+        new Promise<void>((resolve, reject) => {
+          contender.once("error", reject);
+          contender.listen(
+            { host: "127.0.0.1", port: Number(new URL(origin).port) },
+            resolve,
+          );
+        }),
+        { code: "EADDRINUSE" },
+      );
+    },
+  });
+  t.after(server.close);
+  const port = Number(new URL(reservedOrigin).port);
+  assert.equal(server.origin, reservedOrigin);
+  assert.equal((server.app.server.address() as AddressInfo).port, port);
+  const client = httpClient(
+    server.origin,
+    await readFile(server.directory + "/cert.pem", "utf8"),
+  );
+  const enrolled = await client.enroll(server.ticket);
+  assert.equal(enrolled.participant_id, server.administratorId);
+  await server.restart();
+  assert.equal(startupAttempts, 2);
+  const afterRestart = await client.call("/api/v1/identity/self");
+  assert.equal(afterRestart.status, 200);
+  assert.equal(afterRestart.body.participant_id, server.administratorId);
+  await server.close();
+  await new Promise<void>((resolve, reject) => {
+    contender.once("error", reject);
+    contender.listen({ host: "127.0.0.1", port }, resolve);
+  });
+});
+
+test("synthetic HTTPS fixture releases its reserved listener when startup fails", async (t) => {
+  const failure = new Error("fixture startup stopped before listen");
+  let port = 0;
+  await assert.rejects(
+    syntheticServer({
+      beforeListen: async (origin) => {
+        port = Number(new URL(origin).port);
+        throw failure;
+      },
+    }),
+    (error) => error === failure,
+  );
+  assert.ok(port > 0);
+  const replacement = createServer();
+  t.after(async () => {
+    if (replacement.listening)
+      await new Promise<void>((resolve) => replacement.close(() => resolve()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    replacement.once("error", reject);
+    replacement.listen({ host: "127.0.0.1", port }, resolve);
+  });
+  await assert.rejects(syntheticServer({ port }), { code: "EADDRINUSE" });
+  assert.equal((replacement.address() as AddressInfo).port, port);
+});
+
+test("synthetic HTTPS fixture releases a failed restart and retains its authenticated state", async (t) => {
+  const failure = new Error("fixture restart stopped before listen");
+  let failRestart = false;
+  const server = await syntheticServer({
+    beforeListen: async () => { if (failRestart) throw failure; },
+  });
+  t.after(server.close);
+  const client = httpClient(
+    server.origin,
+    await readFile(server.directory + "/cert.pem", "utf8"),
+  );
+  await client.enroll(server.ticket);
+  failRestart = true;
+  await assert.rejects(server.restart(), (error) => error === failure);
+  const contender = createServer();
+  t.after(async () => {
+    if (contender.listening)
+      await new Promise<void>((resolve) => contender.close(() => resolve()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    contender.once("error", reject);
+    contender.listen({ host: "127.0.0.1", port: Number(new URL(server.origin).port) }, resolve);
+  });
+  await new Promise<void>((resolve) => contender.close(() => resolve()));
+  failRestart = false;
+  await server.restart();
+  const self = await client.call("/api/v1/identity/self");
+  assert.equal(self.status, 200);
+  assert.equal(self.body.participant_id, server.administratorId);
+});
+
 test(
   "synthetic participation over real HTTPS and PostgreSQL",
   { timeout: 180000 },
@@ -510,7 +615,7 @@ test(
         );
         const unavailable = (await human.client.call("/api/v1/community")).body;
         assert.deepEqual(unavailable.overview, { state: "unavailable" });
-        assert.deepEqual(unavailable.proposal_area, { state: "unavailable" });
+        assert.deepEqual(unavailable.proposal_area, { state: "unavailable", unavailable_reason: "publication_closed" });
         assert.equal(
           (
             await human.client.call("/api/v1/discussions", {

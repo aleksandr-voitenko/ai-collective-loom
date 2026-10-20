@@ -1,6 +1,6 @@
 # Current text search
 
-ADR-012 and `docs/development/search.md` define this synthetic-only boundary.
+ADR-012 and `src/contracts/guide.ts` define this synthetic-only boundary.
 Implementation and verification record: `LC-20261015-94TS`.
 `search.ts` supplies participant selection/status and administrator recovery;
 `worker.ts` owns durable work. `server/search-worker.ts` is the same-release native

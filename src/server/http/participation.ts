@@ -9,6 +9,7 @@ import { ParticipationPublications } from "../modules/participation/publications
 import {
   ParticipationRetrieval,
   RetrievalError,
+  RevisionUnavailableError,
   type PageOptions,
 } from "../modules/participation/retrieval.js";
 import { ParticipationAdministration } from "../modules/participation/administration.js";
@@ -17,6 +18,8 @@ import { registerIdentityRoutes } from "./identity.js";
 import { classifyError } from "./errors.js";
 import { participationGuide } from "../../contracts/guide.js";
 import { registerSavedItems } from "./saved-items.js";
+import { registerAttention } from './attention.js';
+import { AttentionError } from '../modules/attention/controls.js';
 import { registerReading } from './reading.js';
 import { ReadingLimitError } from '../modules/participation/reading.js';
 import { SavedItemsError } from "../modules/participation/saved-items.js";
@@ -81,7 +84,7 @@ export function participantError(
     code=error.code;message=error.message;
     status=code==='updates_descriptor_expired'||code.endsWith('_history_gap')||code==='updates_state_unavailable'?410:
       code==='updates_capacity'||code==='updates_work_limit'?429:409;
-    action=code==='updates_descriptor_expired'?'renew_traversal':code==='updates_visibility_replay_required'?'replay_retained_history':
+    action=code==='updates_attention_refresh_required'||code==='updates_attention_preparing'?'refresh_attention_selection':code==='updates_descriptor_expired'?'renew_traversal':code==='updates_visibility_replay_required'?'replay_retained_history':
       code.endsWith('_history_gap')||code==='updates_state_unavailable'?'resynchronize_retained_content':
       code==='updates_epoch_changed'?'deployment_recovery_required':code==='updates_definition_changed'?'start_retained_history':
       code==='updates_capacity'?'review_synthetic_limit':code==='updates_token_invalid'?'correct_request':'retry_same_request';
@@ -110,6 +113,9 @@ export function participantError(
     message = error.message;
     status = code === "organization_limit" ? 429 : 409;
     action = code === "organization_limit" ? "review_synthetic_limit" : "refresh_and_review";
+  } else if (error instanceof AttentionError) {
+    code=error.code;message=error.message;status=code==='attention_selection_expired'?410:code==='attention_collection_changed'?409:429;
+    action=code==='attention_selection_expired'?'reconcile_operation':code==='attention_collection_changed'?'refresh_collection':code==='attention_work_limit'?'retry_same_request':'review_synthetic_limit';
   } else if (error instanceof ReadingLimitError) {
     code=error.code;message=error.message;status=429;action='review_synthetic_limit';
   } else if (error instanceof SavedItemsError) {
@@ -151,6 +157,9 @@ export function participantError(
         request_id: request.id,
         recovery: { action },
         ...(current !== undefined ? { current_revision_id: current } : {}),
+        ...(error instanceof RevisionUnavailableError && request.method === 'GET' &&
+          ['/api/v1/resources/:id','/api/v1/resources/:id/revisions/:revision'].includes(request.routeOptions.url ?? '')
+          ? { unavailable_scope: 'revision' } : {}),
         ...(minimum ? { minimum_response_bytes: minimum } : {}),
         ...(error instanceof SummaryError && error.definitive ? { operation_outcome: "rejected" } : {}),
         ...(status >= 500 && request.method === "POST" && !personalRead
@@ -167,6 +176,7 @@ export async function registerParticipation(
   app.setErrorHandler(participantError);
   registerSavedItems(app, services.database, actor);
   registerReading(app, services.database, actor);
+  registerAttention(app, services.database, actor);
   registerOrganization(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerNotifications(app, services.database, actor);

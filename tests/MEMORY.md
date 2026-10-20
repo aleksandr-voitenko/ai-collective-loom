@@ -1,5 +1,204 @@
 # Browser test diagnostics
 
+Protected-read enforcement is checked at the import/API and production-component
+boundaries. `unit/protected-read-architecture.test.ts` rejects raw transport imports,
+re-exports and direct network calls in components. Closed session/command routes
+and private-read schemas cannot be used to fetch protected content. The imperative
+reference, summary-source and change-discovery readers are exercised directly in
+`web/protected-reads.test.tsx`, with mounted/departed denials and settled/pending
+siblings. Reading tests retain a private command through text withdrawal and retry.
+The existing suppressed-parent Chromium journey now first suppresses the discussion
+and expands nested replies after initial reads settle: the actual children404 must
+withdraw its heading and cached body. Boundary adapter matrices alone did not
+exercise this production call path. Mount shared readers in a real boundary in
+fixtures; a source denial requires host Retry, while a transient503 keeps local retry.
+`contract/response-classification.test.ts` compares all registered JSON operations
+and unavailable success fields with the endpoint catalogue. Schema arguments cannot
+choose error semantics. `web/saved-authorization.test.tsx` covers successful Saved
+denials across eight hosts, private receipt settlement behind a blocked Web Lock,
+Reading receipts, and mixed-response publication without restoring older content.
+The real Saved case pre-saves both mounted targets and requires no404, preventing
+an unknown lookup from masking a missed successful denial. Saved's lease-aware
+collection retains safe Unsave when older metadata is withdrawn. Opaque hosts retain
+the conservative fallback for unavailable optional source projections.
+`web/session-authorization.test.tsx` mounts the production shell in StrictMode:
+ordinary anonymous401 settles without another identity event or probe, including
+failed ceremonies and navigation. All eight host configurations cover discovery,
+community, command, private-read and boundary-receipt authority loss with pending
+and settled siblings. Follow-up anonymous probes cannot revoke again. Unit tests
+reverse overlapping discovery responses and replace the identity; a separate fence
+rejects stale positives without suppressing late same-owner denials. Ceremony and
+identity-record failures keep independent protected content. The existing compiled
+participation journey asserts bounded anonymous probes before actual enrollment.
+JSDOM supplies dialog methods and ignores CSS; production browser checks retain
+Vite styling, native dialogs and real WebAuthn/HTTPS.
+Production administration regressions hold account creation, state, revocation and
+search receipts across withdrawal: no automatic protected reads may follow, but
+explicit refresh must work. Late enrollment keeps its immutable human kind before
+and after settlement. Query traversal tests preserve pagination from a fresh mixed
+response while older sibling bodies and refresh callbacks remain fenced.
+Setup first/status/retry and recovery initiated after withdrawal settle privately
+without shell/query reloads. Configuration tests require consecutive saves to use
+the newly authorized settings version and forbid late completion from reloading.
+The definitive publication-refusal regression now passes, including blocked
+journal settlement, exact uncertain retries and pending responses across all hosts.
+Administrative refusal tests use the production shell and role-protected account
+data as well as the generic host matrix. First dispatch/status/retry preserve the
+owner and exact journal behind a blocked Web Lock while account data disappears.
+Selected-account copies, displayed secrets and late secret/credential responses
+must lose their leases too. The real admission browser case demotes the actual
+administrator, verifies identity/self remains valid, and restores the role before
+exact status recovery. Endpoint coverage alone missed the shared role dependency;
+assert both private settlement and capability-dependent content withdrawal.
+Discussion traversal now gates query results and retained pages by their leases;
+a fresh structural response can survive its own denial without restoring older
+bodies or pending pages. Opaque reads still require a full protected-view retry.
+Proposal closure hints are verified against actual source suppression in the native
+organization case. Saved quota fixtures live in a separate discussion so their
+retention-only unpublished targets do not replace the visible discussion with
+500 structural placeholders. Quota and recovery assertions remain unchanged.
+
+Attention tests (`integration/attention*.test.ts`) exercise exact independent sets,
+populated0016 preservation, version/negative fences, both owner/source/revision/
+credential guard orders, delayed personal delivery, claim continuity, event-time
+moves/unknown history, bounds and native COMMIT death/replacement recovery. Capacity
+counter injections test boundaries, not a claim of 50,000 actual decisions. Expiry
+regressions combine descriptor expiry with changed policy, frozen Following/bounds
+and complete retrieval; explicit refresh renews only within original custody.
+Dismissal selection expiry remains independent. Browser/StrictMode regressions
+cover Undo against a newer dismissal, same-card conflict acknowledgement and
+first-load settings Unmute. Undo must use original result versions even when an
+exact retry reports newer current versions; do not mock automatic rebasing as success.
+The 101-personal-input regression checks absent, partially scanned and old-policy
+projections before member/reason/selection reads; Complete bypasses filtering and
+finished whole-card selection must refuse truncation. StrictMode and Chromium also
+cover same-card cursor changes during preparation, repeat dismissal after successful
+Undo, and cached mute metadata withdrawal on access failure. StrictMode holds older
+lookups across mutation/status/retry refusals and checks immutable recovery custody.
+Deferred mutation/status/retry results and parent list snapshots must also stay
+withdrawn after newer source/access refusals; private version equality is not an
+authorization oracle. Global settings recovery clears previews and fences pending
+lists on credential refusal. Preparing a fresh overlapping group must expose the
+original uncertain command and block replacement before exact retry. StrictMode
+and real HTTPS Chromium cases cover these distinct response paths.
+`web/authorization.test.tsx` exercises mute/dismiss lookup, first dispatch, status
+and retry against source refusal, owner refusal and unavailable success results;
+group preparation, missing mandatory context, late same-owner refusal, older
+identity isolation and blocked journal settlement have separate assertions.
+The eight real hosts are full area/discussion/artifact pages, Community overview,
+Following, Updates, Mentions/replies and settings. Chromium revokes actual credentials on each full
+source host through lookup/mutation/status/retry and preserves exact commands.
+Restore the fixture credential and reload to recheck access: repeatedly creating
+new sessions while restoring older ones correctly reaches the active-session cap.
+Following covers all mutation/recovery outcomes, including a known unavailable
+row with no retained mute state; safe Unfollow must survive that lookup's 404 and
+the temporary recovery control mounting during its dispatch.
+Notification tests hold a personal page across dismissal lookup/mutation/status/
+retry/Undo refusal and assert no metadata or saved-position resurrection. Settings
+global status/retry unavailable results fence every preview. A discarded old list
+must not trigger preview reauthorization; use an explicit fresh lookup afterward.
+Repeated unavailable → available → unavailable transitions cover mute lookup,
+mutation, status and retry, plus dismissal lookup/selection/mutation/status/retry/
+Undo. Hold sibling lookups and lists through each withdrawal; pending decisions may
+settle exact journals without authorizing previews. Both same-turn response orders
+carry their own generation. Following-only reauthorization also closes the exception;
+a negative nested Follow lookup cannot exempt full-source content. The Chromium
+settings case cycles actual parent suppression/restoration through all four mute
+paths in one mounted view, holds real responses and finishes with safe Unmute.
+Following regressions combine initially available rows/mute previews, a negative
+Follow response, sibling/pending responses and temporary recovery mounting. The
+private page must withdraw all metadata while preserving safe removal and its success
+confirmation; `following.spec.ts:20` checks the real unavailable-removal sequence.
+The legacy-adapter response matrix covers collection/lookup/mutation/status/retry against unavailable
+results, source refusals and owner refusals. Opaque full-source hosts retain
+whole-view withdrawal. Repeated restoration in one mounted view, both same-turn read orders,
+pending command completion, conflicts, not-recorded status, off-page recovery and
+blocked journal settlement test independent metadata leases and private versions.
+Same-target overlapping Follow/mute lookups cover both refusal forms and completion
+orders, pending sibling/list responses, repeated transitions, conservative late denials
+and stale positive evidence. Browser route barriers reverse server read order: hold
+the first dispatch, capture the newer available response, suppress the source, then
+deliver the older refusal before releasing the pending success on every applicable
+host. Request freshness must never suppress same-identity revocation, including across recovery.
+The real Following case holds old list/mute responses through all five paths and
+suppresses/restores their common parent. Credential tests hold the intended request
+before revocation so independent discussion reads cannot remove its button first.
+Keep one interception handler across Following/attention and shared-view phases: explicitly
+arm each barrier, assert it was entered, then await its completion. Do not expire
+and reinstall the last route between a lost response and the next held request.
+Updates-level regressions also cover enclosing card/expansion withdrawal with a
+pending read, exact recovery custody, later fresh authorization, and local/cross-tab
+policy changes during delayed pages. Mixed-group recovery continues through refresh
+and a new dismissal of only the remaining input. The Chromium case completes the
+same projection through another client first: a ready refresh preserves the mounted
+card, whereas a multi-step preparation can remount it and conceal stale receipt state.
+Parent Following and settings regressions hold older list responses across child
+source/credential refusals, including safe known-unavailable removal. Source-input
+regressions replace Complete records with the routine personal-only subset on the
+same mounted event, and fence a pending old lookup. Selection-error cases exercise
+all three refresh/preparing/expiry codes while an unseen successor is pending,
+then assert displayed-token/budget recovery and new preparation. Same-owner route
+navigation is separate from sign-out: Chromium holds mutation dispatch before
+COMMIT so the replacement view really loads old policy before the late notification.
+After reload, scope Attention settings navigation to Community navigation: Updates
+also has an in-page link. Updates readiness requires rendered interval/coverage
+details and enabled scope refresh; the initial idle toolbar can precede the first response.
+`web/attention.test.tsx` uses StrictMode and per-target conflict/success ordering;
+`unit/attention-recovery.test.ts` checks corrupt/oversized journal preservation,
+same-key command mismatch, lock-delayed departure and failed write readback rollback.
+`e2e/attention.spec.ts` uses the compiled normal runner, exact durable recovery,
+keyboard Undo/viewport, stale tabs and real Web Lock sign-out. Screenshots are
+explicit opt-in LOOM_ATTENTION_REVIEW_SCREENS=1 synthetic evidence. Updates browser
+regressions now exercise the default v2 projection; expiry fixture AAD must name
+combined-updates-2. Old integration/StrictMode custody still tests v1.
+
+The selected private/protected split adds `unit/protected-content.test.ts`,
+`web/private-controls.test.tsx`, and `integration/attention-{authorization,projections}.test.ts`.
+The real HTTPS reproduction holds dispatch across withdrawal, restoration and a
+second suppression; it must clear restored titles for both legacy producers and
+explicit previews. Private projections are tested with source SQL forbidden while
+lookup/list/status/replay and safe removals succeed. Browser command intercepts use
+private routes; visibility probes use explicit previews. Private receipts do not
+claim source availability. The25-row StrictMode case asserts bounded batches and
+no metadata requests during recovery. Independent coordinator tests preserve pending
+fences through remount, withdraw apparently unrelated same-owner projections and
+isolate replacement identities. Regressions distinguish settled previews, pending
+siblings, opaque host content and private receipts. `web/protected-dependencies.test.tsx`
+exercises all eight boundary configurations and eight denial adapters after departure,
+with both pending and settled apparently unrelated siblings;
+the native HTTPS tests obtain real sibling paths and ancestor refusals in both delivery
+orders. The Following unavailable-removal browser case gates an explicit protected
+preview after initial display; a private lookup does not observe source suppression.
+`web/canonical-boundary.test.tsx` covers UUID case aliases across legacy/private
+lookup, collection, command and recovery adapters after departure, with fully settled
+target/ancestor and disjoint projections. It asserts unchanged stored records and transport bodies,
+shared queued/pending/cached previews and latest-positive ordering across aliases.
+Rendered Follow/mute controls recover older uppercase commands from lowercase URLs
+and withhold replacement choices; the journal also rejects overlapping mute aliases.
+Exact retries retain the saved body bytes and legacy Following slot spelling.
+Dismissal cases cover both shared-event and personal-delivery aliases in both case
+directions, journal overlap, source/group preparation and settings restoration.
+Assert the existing recovery is shown, replacement commands are blocked, status
+preserves uncertainty and retry sends the original body. Equal UUIDs in the two
+input kinds must remain independent; resource-only cases missed this comparison.
+The shared Changes regression holds a successor at its journal lock, delivers a
+source denial, then releases settlement in the same turn. The last displayed
+recovery request must remain unchanged; the withdrawn successor cannot advance it.
+Unit cases cover host remounts, raw refusal hints and opaque-name isolation. Native
+HTTPS cases move a child after its displayed preview, reorder old/new paths before
+and after a denial, then suppress the current parent before an older uppercase
+Follow/mute command reaches the server. They require descendant withdrawal, stale
+response fencing and actual safe Unfollow/Unmute with confirmation.
+`web/query-authorization.test.tsx` drives the actual query hook through all eight
+boundary configurations, with settled and pending siblings, source/history
+denials, classified current/exact misses, invalid history cursors and owner denial.
+Native HTTPS cases verify area withdrawal and guarded classification, including
+suppressed resources/ancestors and missing revisions. The compiled participation
+case preserves exact/current history discovery, then revokes cached history and
+an area heading through ordinary collection failures. The repeated settings
+browser case keeps one interception handler installed and arms/settles each held
+response explicitly; expiring/reinstalling the last route can lose a barrier.
+
 Exact reading uses `integration/reading*.test.ts` for all-prior-table upgrade/digest
 preservation, independent revision sets, atomic lists, deliberate Unread precedence,
 ABA/retry, quota/failure rollback and native HTTPS credential/restart/COMMIT loss.
@@ -83,7 +282,7 @@ The revalidation regression holds the community response until both contribution
 and reading controls are mounted, then waits for the changed community name to
 render. Require one exact body, reading-control set and source-reference region per
 contribution: duplicate sibling React keys can leave extra bodies after rerender.
-CI repair evidence and reproduction limits: `docs/development/ci-browser-reliability.md`.
+CI repair context and reproduction limits remain in the corresponding Lore task records.
 `e2e/following.spec.ts` uses the normal one-worker, zero-retry runner and closed route
 vocabulary. Preserve approved failures before rerunning. Deliberate synthetic visual
 review uses LOOM_FOLLOWING_REVIEW_SCREENS=1, separately from diagnostic uploads.
@@ -107,7 +306,9 @@ sign-out with cleanup blocked on a real Web Lock. Compare DOM presence as a Bool
 passing an HTMLElement into Node's equality assertion can hang error serialization.
 The closed diagnostic vocabulary adds only its spec and fixed notification routes.
 Optional `LOOM_NOTIFICATION_REVIEW_SCREENS=1` deliberately curates synthetic screenshots
-under `docs/development/evidence/notifications/`, separate from approved diagnostics.
+under the system temporary directory `loom-review-evidence/notifications`, separate
+from approved diagnostics. Following, Updates and attention use sibling directories.
+Do not write review evidence into a repository development folder.
 
 Summary tests use the same runner and closed diagnostics (`summaries.spec.ts` and
 summary route templates; no raw IDs/bodies added). `summaries*.test.ts` covers
@@ -133,6 +334,15 @@ when refresh is disabled; hold that response to test this ordering deterministic
 `helpers/browser-fixtures.ts` shares the existing synthetic PostgreSQL/HTTPS server
 and preserves context-before-server disposal (Lore `LC-20261014-WZF5`). Test bodies,
 normal timeouts, worker count and retry policy are unchanged by diagnostics.
+The HTTPS fixture keeps a TCP listener before freezing the identity origin and
+passes that server through Fastify's listen call. Cleanup ownership transfers on
+the HTTPS listening event; closing the original server afterward closes HTTPS too.
+Never release a probe port during initialization. `BoundSocket` alone is insufficient:
+Linux permits another listener to claim that bound-only port. Participation regressions
+use the private before-listen barrier to check contention, failure cleanup and
+authenticated restart at the same origin. Explicit occupied ports fail without retry.
+Initial startup and restart share reservation/handoff code. A failed restart releases
+its listener while preserving the database and identity for a later explicit restart.
 
 The automatic collector tracks every page in a registered context. Persistent
 contexts must use `diagnostics.launchPersistentContext`; explicitly constructed
@@ -141,7 +351,19 @@ do not rely on a reporter running while a page is alive. A completed server-clos
 callback is stronger than an asynchronously queued socket-close counter event.
 Never hold requests, route barriers, Web Locks or sockets for diagnostics.
 
-Only `browser-diagnostics/approved/*.json` may be uploaded. The containing runner
+Only `browser-diagnostics/approved/*.json` may be uploaded as browser diagnostics.
+Combined coverage separately publishes authored source and numeric reports from
+`coverage/approved/`; never upload raw counters, maps, logs or browser profiles.
+`helpers/browser-coverage.ts` samples before navigation/disposal without changing
+test deadlines or holding application requests. `tests/coverage/verify.ts` guards
+real Node/browser branch merging, unmapped cold code and safe disposal. Coverage
+method, gates and artifact constraints: root README Coverage and
+`scripts/lib/coverage/`.
+Published HTML pages use stable non-hidden filenames; copying source paths into
+artifact paths loses `.githooks` pages under the uploader's default hidden filter.
+Keep original source names in the index, JSON and LCOV, and verify downloaded
+artifact links as well as locally generated reports.
+The containing runner
 consumes arbitrary console output and removes Playwright's private raw outputs on
 normal child exit. On hard kill, intermediates may remain unsafe; never promote
 them to artifacts. Use the npm entry point, not a reporter override/direct CLI.
@@ -170,8 +392,8 @@ upload-ready output, with three-day retention and no continue-on-error.
 The manual `verify_failure_upload` input runs the probe configuration after the
 normal browser suite; expect a failed step/run and a successful approved upload.
 It defaults off and never applies to push/PR runs. Contract: `LC-20261014-3D4P`.
-Local bundle validation does not verify hosted upload. See the testing guide and
-`docs/development/browser-diagnostics-evidence.md` for observed results/limits.
+Local bundle validation does not verify hosted upload; inspect the actual CI run
+and artifact when that boundary is part of the task.
 
 Organization scenarios use the same fixtures/runner; the closed vocabulary includes
 organization routes, `organization.spec.ts` and four organization control categories.

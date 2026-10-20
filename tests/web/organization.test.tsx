@@ -1,3 +1,4 @@
+import {AuthorizationBoundary} from '../../src/web/AuthorizationBoundary.js';
 import assert from "node:assert/strict";
 import { afterEach, test, type TestContext } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -13,7 +14,7 @@ import { contractVersion, guideRevision, limits } from "../../src/contracts/part
 
 const locks = navigator.locks;
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://loom.example/" });
-for (const key of ["window", "document", "navigator", "HTMLElement", "MutationObserver", "location", "localStorage"] as const) {
+for (const key of ["window", "document", "navigator", "HTMLElement", "MutationObserver", "location", "localStorage", "Event"] as const) {
   Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true });
 }
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true, configurable: true, writable: true });
@@ -38,6 +39,7 @@ function form(t: TestContext) {
       replay_retention: "retained_without_automatic_expiry; destructive_restore_unsupported", derived_effects: "search_and_personal_direct_attention; other_projections_disabled",
       notification_contract: "personal-attention-1", notifications_url: "/api/v1/me/notifications/query",
       following_contract: "following-1", following_url: "/api/v1/me/following",
+      attention_contract:'attention-controls-1',attention_url:'/api/v1/me/attention/list',routine_updates_contract:'combined-updates-2',routine_updates_url:'/api/v1/me/routine-updates/query',
       reading_contract: 'reading-state-1', reading_url: '/api/v1/me/reading/lookup',
       updates_contract:"combined-updates-1",updates_url:"/api/v1/me/updates/query",shared_changes_contract: "shared-changes-1", shared_changes_url: "/api/v1/shared-changes/query",
     },
@@ -57,7 +59,7 @@ function form(t: TestContext) {
     return Response.json(resource);
   });
   const router = createMemoryRouter([
-    { path: "/loom/organize", element: <OrganizationPage context={context} /> },
+    { path: "/loom/organize", element: <AuthorizationBoundary><OrganizationPage context={context} /></AuthorizationBoundary> },
     { path: "/elsewhere", element: <h1>Another view</h1> },
   ], { initialEntries: ["/loom/organize?action=area.edit&target=" + resource.resource_id] });
   t.after(() => router.dispose());

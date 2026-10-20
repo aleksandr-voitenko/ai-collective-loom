@@ -1,5 +1,6 @@
 import { Value } from "@sinclair/typebox/value";
 import { ErrorResponse, ReadyResponse, RuntimeResponse, type Runtime } from "../contracts/v1.js";
+import {responseContract} from './response-contracts.js';
 
 export class ServiceError extends Error {
   readonly requestId: string | undefined;
@@ -10,6 +11,7 @@ export class ServiceError extends Error {
 }
 
 async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
+  if(responseContract(path,'GET').access!=='public')throw new Error('Protected reads require the authorization boundary.');
   let response: Response;
   try { response = await fetch(path, { signal, credentials: "same-origin", headers: { accept: "application/json" } }); }
   catch (error) {

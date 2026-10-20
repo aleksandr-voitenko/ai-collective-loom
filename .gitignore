@@ -1,6 +1,9 @@
 node_modules/
 dist/
-coverage/
+/coverage/
+# Temporary development notes and review evidence belong outside the repository.
+/docs/development/
+/development/
 .env
 .env.*
 !.env.example

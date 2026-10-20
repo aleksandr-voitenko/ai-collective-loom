@@ -1,6 +1,0 @@
-
-> ai-collective-loom@0.1.0 test:e2e
-> node scripts/browser-tests.mjs tests/e2e/changes.spec.ts --grep v2 to v3 correction
-
-BROWSER passed changes.spec.ts:61 repeat=0
-Browser diagnostics: validated; browser-diagnostics/approved

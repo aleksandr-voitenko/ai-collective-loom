@@ -1,3 +1,4 @@
+import {AuthorizationBoundary} from '../../src/web/AuthorizationBoundary.js';
 import assert from 'node:assert/strict';
 import { afterEach, test, type TestContext } from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -24,7 +25,7 @@ function mount(t:TestContext, editor = false) {
   const calls:{path:string;finish:(response:Response)=>void}[] = [];
   t.mock.method(globalThis, 'fetch', (path:string) => new Promise<Response>(finish => calls.push({path,finish})));
   const router = createMemoryRouter([
-    { path:'/references', element:editor?<Editor/>:<ReferenceResults path="/api/v1/references/incoming?kind=artifact"/> },
+    { path:'/references', element:<AuthorizationBoundary>{editor?<Editor/>:<ReferenceResults path="/api/v1/references/incoming?kind=artifact"/>}</AuthorizationBoundary> },
     { path:'/other', element:<h1>Another view</h1> },
   ], {initialEntries:['/references']});
   t.after(() => router.dispose());
@@ -74,6 +75,13 @@ test('StrictMode target validation recovers from failure, rejects late selection
   });
   await act(async()=>calls[0]!.finish(Response.json({error:{code:'unavailable',message:'Target unavailable'}},{status:404})));
   assert.ok(screen.getByRole('alert'));
+  assert.equal(!!screen.queryByRole('button',{name:'Check target'}),false);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry protected view'})));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Add reference'})));
+  await act(async()=>{
+    fireEvent.change(screen.getByLabelText('Target ID or Loom link'),{target:{value:target.browser_url}});
+    fireEvent.change(screen.getByLabelText('Citation scope'),{target:{value:'revision'}});
+  });
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check target'})));
   await act(async()=>calls[1]!.finish(Response.json(target)));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Use this exact revision'})));

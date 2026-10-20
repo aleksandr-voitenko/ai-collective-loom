@@ -1,0 +1,29 @@
+{
+  "schema": "loom-coverage-baseline-1",
+  "method": "v8-exact-source-ranges-2",
+  "measuredAt": "2026-10-20",
+  "sourceRevision": "197e119e9cba6e0a36ec100c76b3023c191e56b6",
+  "scope": "application",
+  "lines": {
+    "covered": 15097,
+    "total": 15586
+  },
+  "branches": {
+    "covered": 10914,
+    "total": 12531
+  },
+  "minimumChangedLines": 90,
+  "minimumBranches": 85,
+  "node": "24.19.0",
+  "playwright": "1.64.0",
+  "c8": "12.0.0",
+  "notes": "Measured with npm run check, all 16 PostgreSQL suites, and all 128 Chromium scenarios. Compare exact ratios, without rounding allowances. Baseline changes require explicit review; never refresh automatically.",
+  "correction": {
+    "previousBranches": {
+      "covered": 11097,
+      "total": 12530
+    },
+    "reason": "Reprocessed the original captures with exact-location merging inside the Node aggregation too. The c8 final Istanbul merge inferred enclosing hits for unexecuted branches across tsx/tsc. No source or executions changed."
+  },
+  "applicationSourceSha256": "be1eb313b42826a2af93a74185e7d68953850ea59ef17f7c9b538b19325a4cad"
+}

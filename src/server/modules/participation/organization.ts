@@ -224,11 +224,13 @@ export class TopicOrganization {
       if(area.kind!=='area') throw new PublicationError('unavailable');
       const settings=(await tx.query<{version:number;proposal_area_id:string|null}>('SELECT version,proposal_area_id FROM loom.community_settings WHERE id=1',[])).rows[0]!;
       let destination:C.OrganizationResourceView|null=null;
+      let closed=false;
       if(settings.proposal_area_id) {
-        try { const value=await this.projection(tx,actor,settings.proposal_area_id); if(value.publication_open) destination=value; }
+        try { const value=await this.projection(tx,actor,settings.proposal_area_id); if(value.publication_open) destination=value; else closed=true; }
         catch(error) { if(!(error instanceof PublicationError)||error.code!=='unavailable') throw error; }
       }
       return fit({affected_area_id:id,settings_version:settings.version,state:destination?'ready':settings.proposal_area_id?'unavailable':'setup_incomplete',destination,
+        ...(closed?{unavailable_reason:'publication_closed' as const}:{}),
         contacts:(await tx.query<{id:string;nickname:string;kind:string}>("SELECT id,nickname,kind FROM loom.participants WHERE state='active' AND role='administrator' AND kind<>'internal' ORDER BY id LIMIT 25",[])).rows,contacts_url:'/api/v1/contacts'},limits.responseBytes);
     });
   }

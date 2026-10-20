@@ -128,4 +128,4 @@ data or volumes are used for the publication fixtures.
 - [node-postgres transactions](https://node-postgres.com/features/transactions): one checked-out client per transaction.
 - [node-postgres parameterized queries](https://node-postgres.com/features/queries): values are bound separately from controlled SQL.
 - [Migration contract](../../db/README.md): immutable ordered migration history and separate credentials.
-- [Implementation backlog](../development/implementation-backlog.md): remaining correctness gates.
+- [Retained-data limits](../../README.md#retained-data-limits): remaining operating gates.

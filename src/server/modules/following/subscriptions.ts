@@ -1,6 +1,7 @@
 import { createHash,createCipheriv,createDecipheriv,randomBytes,randomUUID } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../../../contracts/following.js';
+import * as P from '../../../contracts/private-controls.js';
 import type { SqlTransaction } from '../../db/postgres.js';
 import { lockAttempt } from '../../application/attempt.js';
 import { identityOf,type ActorContext } from '../publication/actor.js';
@@ -26,34 +27,41 @@ export async function followingDefinitions(tx:SqlTransaction,owner:string){
   if(rows.length>C.followingLimits.active)throw new FollowingError('following_limit_reached');
   return rows.map(definition);
 }
-export class Following {
+type Item<M extends P.Projection>=P.Projected<M,C.FollowItemView,P.FollowItemView>;
+type Result<M extends P.Projection>=P.Projected<M,C.FollowResultView,P.FollowResultView>;
+type Page<M extends P.Projection>=P.Projected<M,C.FollowPageView,P.FollowPageView>;
+export class Following<M extends P.Projection='legacy'> {
   private readonly key=randomBytes(32);
-  constructor(private readonly database:Transactions){}
+  constructor(private readonly database:Transactions,private readonly projection:M='legacy' as M){}
   private find(tx:SqlTransaction,owner:string,target:C.FollowTargetView){return tx.query<Row>(
     'SELECT * FROM loom.following_targets WHERE participant_id=$1 AND target_kind=$2 AND resource_id=$3',[owner,target.kind,target.resource_id]).then(r=>r.rows[0]);}
   private decision(tx:SqlTransaction,owner:string,key:string){return tx.query<Decision>(
     'SELECT * FROM loom.following_operations WHERE participant_id=$1 AND idempotency_key=$2',[owner,key]).then(r=>r.rows[0]);}
-  private async view(tx:SqlTransaction,row:Row):Promise<C.FollowItemView>{
+  private async view(tx:SqlTransaction,row:Row):Promise<Item<M>>{
     const {version,...settings}=definition(row);
+    const current={...settings,version,following:row.following};
+    if(this.projection==='private')return current as Item<M>;
     let source:C.FollowSourceView={state:'unavailable'};
     try{source=await followSource(tx,settings.target);}catch(error){if(!unavailable(error))throw error;}
-    return {...settings,version,following:row.following,source};
+    return {...current,source} as Item<M>;
   }
-  private async result(tx:SqlTransaction,actor:Authority,decision:Decision,replayed:boolean):Promise<C.FollowResultView>{
+  private async result(tx:SqlTransaction,actor:Authority,decision:Decision,replayed:boolean):Promise<Result<M>>{
     const row=(await tx.query<Row>('SELECT * FROM loom.following_targets WHERE participant_id=$1 AND id=$2',[actor.participantId,decision.target_id])).rows[0]!;
-    await lockReferencePlan(tx,[row.resource_id]);
+    if(this.projection==='legacy')await lockReferencePlan(tx,[row.resource_id]);
     return fit({operation_state:decision.decision,operation_id:decision.id,idempotency:replayed?'replayed':'created',
       outcome:{target:definition(row).target,following:decision.desired_following,include_descendants:decision.include_descendants,
-        preferences:decision.preferences,expected_version:decision.expected_version,result_version:decision.result_version},current:await this.view(tx,row)},131072);
+        preferences:decision.preferences,expected_version:decision.expected_version,result_version:decision.result_version},current:await this.view(tx,row)},131072) as Result<M>;
   }
   lookup(context:ActorContext,value:unknown){
     if(!Value.Check(C.FollowTarget,value))throw new PublicationError('invalid_input');
     const target={...value,resource_id:value.resource_id.toLowerCase()};
     return runFollowing(this.database,async tx=>{
       const actor=await lockActor(tx,context);await followingOwner(tx,actor.participantId);
-      await lockReferencePlan(tx,[target.resource_id]);
+      if(this.projection==='legacy')await lockReferencePlan(tx,[target.resource_id]);
       const row=await this.find(tx,actor.participantId,target);
-      return row?this.view(tx,row):{target,following:false,version:0,include_descendants:false,preferences:[...C.eventPreferences],source:await followSource(tx,target)} satisfies C.FollowItemView;
+      if(row)return this.view(tx,row);
+      const current={target,following:false,version:0,include_descendants:false,preferences:[...C.eventPreferences]};
+      return (this.projection==='private'?current:{...current,source:await followSource(tx,target)}) as Item<M>;
     },true);
   }
   update(context:ActorContext,value:unknown){
@@ -68,7 +76,7 @@ export class Following {
       const count=(await tx.query<{n:number}>('SELECT count(*)::int AS n FROM (SELECT 1 FROM loom.following_operations WHERE participant_id=$1 LIMIT 10000) q',[actor.participantId])).rows[0]!.n;
       if(count>=C.followingLimits.operations)throw new FollowingError('following_limit_reached');
       let row=await this.find(tx,actor.participantId,settings.target);
-      await lockReferencePlan(tx,[settings.target.resource_id]);
+      if(this.projection==='legacy'||value.following||!row)await lockReferencePlan(tx,[settings.target.resource_id]);
       if(value.following||!row)await followSource(tx,settings.target);
       if(!row){
         const count=(await tx.query<{n:number}>('SELECT count(*)::int AS n FROM (SELECT 1 FROM loom.following_targets WHERE participant_id=$1 LIMIT 500) q',[actor.participantId])).rows[0]!.n;
@@ -97,7 +105,7 @@ export class Following {
     const decision=await this.decision(tx,actor.participantId,key.toLowerCase());
     return decision?this.result(tx,actor,decision,true):{operation_state:'not_recorded' as const};
   });}
-  list(context:ActorContext,options:PageOptions):Promise<C.FollowPageView>{return runFollowing(this.database,async tx=>{
+  list(context:ActorContext,options:PageOptions):Promise<Page<M>>{return runFollowing(this.database,async tx=>{
     const actor=await lockActor(tx,context);await followingOwner(tx,actor.participantId);
     const version=(await tx.query<{version:number}>('SELECT version FROM loom.following_collections WHERE participant_id=$1 FOR SHARE',[actor.participantId])).rows[0]?.version??0;
     let after:string|null=null;
@@ -112,8 +120,8 @@ export class Following {
     const limit=Number(options.limit??12),budget=responseBudget(options.max_response_bytes);
     if(!Number.isInteger(limit)||limit<1||limit>25)throw new PublicationError('invalid_input');
     const rows=(await tx.query<Row>('SELECT * FROM loom.following_targets WHERE participant_id=$1 AND following AND ($2::uuid IS NULL OR id>$2) ORDER BY id LIMIT $3',[actor.participantId,after,limit+1])).rows;
-    await lockReferencePlan(tx,rows.slice(0,limit).map(r=>r.resource_id));
-    const page:C.FollowPageView={items:[],next_cursor:null,complete:false,collection_version:version,ordering:'stable_target_id',limit,max_response_bytes:budget};
+    if(this.projection==='legacy')await lockReferencePlan(tx,rows.slice(0,limit).map(r=>r.resource_id));
+    const page:Omit<P.FollowPageView,'items'>&{items:Item<M>[]}={items:[],next_cursor:null,complete:false,collection_version:version,ordering:'stable_target_id',limit,max_response_bytes:budget};
     for(const row of rows.slice(0,limit)){
       const item=await this.view(tx,row);
       if(Buffer.byteLength(JSON.stringify({...page,items:[...page.items,item]}))+512>budget){if(!page.items.length)throw new RetrievalError('response_budget_too_small');break;}
@@ -125,6 +133,6 @@ export class Following {
       const bytes=Buffer.concat([cipher.update(JSON.stringify({owner:actor.participantId,version,after:rows[page.items.length-1]!.id})),cipher.final()]);
       page.next_cursor=Buffer.concat([nonce,cipher.getAuthTag(),bytes]).toString('base64url');
     }
-    return fit(page,budget);
+    return fit(page,budget) as Page<M>;
   },true);}
 }

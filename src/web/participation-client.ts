@@ -2,6 +2,10 @@ import { Value } from "@sinclair/typebox/value";
 import { Type, type TSchema } from "@sinclair/typebox";
 import type { CommittedView } from "../contracts/participation.js";
 import { ReferenceDeclaration, ExactChangeTarget, ReferencedContent, UUID, closed } from "../contracts/participation.js";
+import {ApiError,identityGeneration,sessionDiscoveryRevision,establishSession} from './request-context.js';
+export {ApiError,identityGeneration,invalidateIdentity,announceIdentityChange} from './request-context.js';
+import {classifyResponse,responseContract} from './response-contracts.js';
+import {observeRequestFailure,observeSourceDenial} from './authorization-coordinator.js';
 
 // Draft text may be blank or temporarily invalid while being edited. Declaration
 // shapes still fail closed on reload; no unknown semantics are silently discarded.
@@ -18,38 +22,38 @@ export interface Self {
   role: string;
   csrf?: string;
 }
-export class ApiError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly currentRevision?: string,
-    readonly operationOutcome?: "unknown" | "rejected",
-  ) {
-    super(message);
-  }
+export interface RequestOptions {
+  body?: unknown;
+  self?: Self;
+  signal?: AbortSignal;
+  schema?: TSchema;
 }
-let generation = 0;
-export function identityGeneration() {
-  return generation;
+
+// These entry points cannot be used as an alternate protected-read transport.
+// Keep the exact path and body: saved commands are immutable recovery custody.
+export async function sessionRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return independentRequest<T>('session',path,options);
 }
-export function invalidateIdentity() {
-  generation++;
-  window.dispatchEvent(new Event("loom-identity"));
+export async function commandRequest<T>(path: string, options: RequestOptions & {body: unknown}): Promise<T> {
+  if(options.body===undefined)throw new Error('This operation requires the authorization boundary.');
+  return independentRequest<T>('receipt',path,options);
 }
-export function announceIdentityChange() {
-  localStorage.setItem("loom.identity-change", crypto.randomUUID());
-  invalidateIdentity();
+async function independentRequest<T>(access:'session'|'receipt',path:string,options:RequestOptions):Promise<T>{
+  const owner=identityGeneration(),contract=responseContract(path,options.body===undefined?'GET':'POST');
+  if(contract.access!==access)throw new Error('This operation requires the authorization boundary.');
+  const response=await transportRequest<T>(path,options);
+  if(response.observation.denied)observeSourceDenial(owner);
+  // A denial consumes content authority, never the private operation result.
+  return response.value;
 }
-export async function request<T>(
+
+// Internal transport. The architecture check permits its import only by the
+// authorization boundary; components use its read capability or the APIs above.
+export async function transportRequest<T>(
   path: string,
-  options: {
-    body?: unknown;
-    self?: Self;
-    signal?: AbortSignal;
-    schema?: TSchema;
-  } = {},
-): Promise<T> {
-  const owner = generation;
+  options: RequestOptions = {},
+): Promise<{value:T;contract:ReturnType<typeof responseContract>;observation:ReturnType<typeof classifyResponse>}> {
+  const owner = identityGeneration(),discovery=sessionDiscoveryRevision(),contract=responseContract(path,options.body===undefined?'GET':'POST');
   const deadline = AbortSignal.timeout(15000);
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -69,7 +73,7 @@ export async function request<T>(
       : {}),
   });
   const value: unknown = await response.json();
-  if (owner !== generation)
+  if (owner !== identityGeneration())
     throw new DOMException("Identity changed.", "AbortError");
   if (!response.ok) {
     const error = (
@@ -79,22 +83,34 @@ export async function request<T>(
           message?: string;
           current_revision_id?: string;
           operation_outcome?: "unknown" | "rejected";
+          unavailable_scope?: unknown;
         };
       }
     ).error;
-    throw new ApiError(
+    const failure=new ApiError(
       error?.code ?? "unknown",
       error?.message ?? "The request could not be completed.",
       error?.current_revision_id,
       error?.operation_outcome,
+      contract.revisionMiss&&error?.unavailable_scope === 'revision' ? 'revision' : undefined,
     );
+    // Error evidence is consumed once, at the endpoint boundary, regardless of
+    // which view/command initiated it or whether that caller is still mounted.
+    observeRequestFailure(owner,contract,failure);
+    throw failure;
   }
-  if (options.schema && !Value.Check(options.schema, value))
+  if(contract.errors.session==='discovery'&&discovery!==sessionDiscoveryRevision())
+    throw new DOMException('Session discovery changed.','AbortError');
+  const observation=classifyResponse(contract,value);
+  if (options.schema && !Value.Check(options.schema, value)) {
+    if(observation.denied)observeSourceDenial(owner);
     throw new ApiError(
       "unsupported_contract",
       "This response does not match the participation contract.",
     );
-  return value as T;
+  }
+  if(contract.errors.session!=='unrelated')establishSession();
+  return {value:value as T,contract,observation};
 }
 /** A first dispatch can be rejected directly. An uncertain summary request can
  * be corrected only after the server commits its irreversible expiry refusal. */
@@ -475,7 +491,7 @@ function base64(value: ArrayBuffer) {
 export async function passkey(enrollmentTicket?: string) {
   const registering = !!enrollmentTicket,
     base = "/api/v1/identity/" + (registering ? "register" : "signin");
-  const start = await request<{
+  const start = await sessionRequest<{
     challenge_id: string;
     options: Record<string, unknown>;
   }>(base + "/start", {
@@ -544,7 +560,7 @@ export async function passkey(enrollmentTicket?: string) {
             : {}),
         },
   };
-  await request(base + "/finish", {
+  await sessionRequest(base + "/finish", {
     body: { challenge_id: start.challenge_id, response: encoded },
   });
 }

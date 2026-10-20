@@ -1,3 +1,4 @@
+import {AuthorizationBoundary} from '../../src/web/AuthorizationBoundary.js';
 import assert from 'node:assert/strict';
 import { afterEach,test,type TestContext } from 'node:test';
 import { JSDOM } from 'jsdom';
@@ -23,7 +24,7 @@ function mount(t:TestContext){
     if(path==='/api/v1/search/status')return Promise.resolve(Response.json(status));
     return new Promise<Response>(finish=>calls.push({path,finish}));
   });
-  const router=createMemoryRouter([{path:'/loom/search',element:<SearchPageViewComponent context={{} as Context}/>},{path:'/other',element:<h1>Other view</h1>}],{initialEntries:['/loom/search']});
+  const router=createMemoryRouter([{path:'/loom/search',element:<AuthorizationBoundary><SearchPageViewComponent context={{} as Context}/></AuthorizationBoundary>},{path:'/other',element:<h1>Other view</h1>}],{initialEntries:['/loom/search']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   return {calls,router};
 }
