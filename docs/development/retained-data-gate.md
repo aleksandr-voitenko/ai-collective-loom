@@ -26,6 +26,10 @@ Before a retained-data environment is enabled, approve and exercise:
    Exact private reading adds unread/version and deliberate-choice fences, immutable
    original decisions and owner quota counters. Its synthetic caps have no expiry;
    erasure must not reopen version-zero commands or disclose protected source history.
+   Routine attention adds until-unmuted settings, dismissal identity/version fences,
+   immutable applied/conflict decisions and quota counters. These have no automatic
+   eviction; restoration is not physical erasure, and finite caps can prevent a new
+   removal while exact retry remains available. Approve retention before real data.
    Personal notifications add immutable claim/signal/delivery identity, per-recipient
    committed clocks and a retained-history floor. Approve any pruning and preserve
    explicit incomplete resynchronization; a rebuild must never recreate old alerts.
@@ -36,6 +40,9 @@ Before a retained-data environment is enabled, approve and exercise:
    Include private bookmark versions and decisions in the same recovery contract.
    Include exact reading states, deliberate fences and decisions together; ordinary
    reading client/API restarts do not test rollback of committed history.
+   Include attention selection-key custody, states, negative fences and decisions
+   together. Seven-day grouping cleanup must not discard confirmed personal choices.
+   Ordinary restart does not certify multi-API key custody or destructive restore.
    Include notification key custody, recovery epoch, reply-eligibility facts,
    source heads/gaps and personal availability. Ordinary restart continuity and
    rejection of an incompatible notification epoch do not certify destructive restore.

@@ -1,9 +1,10 @@
+import { useAuthorization } from './AuthorizationBoundary.js';
 import { useEffect,useRef,useState } from 'react';
 import { Link,useLocation,useNavigate } from 'react-router';
 import { CoverageDetail,Preparation,SourcePage,MaintenancePage,SummaryLookup,
   type CoverageView,type CoverageDetailView,type CoverageDeclarationValue,type PreparationView,type SourcePageView,
   type SourcePairValue,type MaintenancePageView,type SummaryLookupView } from '../contracts/summaries.js';
-import { request,identityGeneration,ApiError,isDefinitiveRejection,type Intent } from './participation-client.js';
+import { identityGeneration,ApiError,isDefinitiveRejection,type Intent } from './participation-client.js';
 import { useQuery,useIntent,type Context } from './participation-state.js';
 import { TopicDirectory } from './Organization.js';
 
@@ -32,11 +33,12 @@ export function SummarySection({discussion}:{discussion:string}) {
 }
 
 export function SourceResults({path,selected,onSelect,disabled=false}:{path:string;selected?:SourcePairValue[];onSelect?:(value:SourcePairValue[])=>void;disabled?:boolean}) {
+  const authority=useAuthorization();
   const [data,setData]=useState<SourcePageView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[restart,setRestart]=useState(false);
   const live=useRef(false),sequence=useRef(0),attempt=useRef<string|null>(null),heading=useRef<HTMLHeadingElement>(null);
   async function load(cursor:string|null,focus=false) {
     const seq=++sequence.current,owner=identityGeneration();attempt.current=cursor;setBusy(true);setError('');setRestart(false);
-    try {const value=await request<SourcePageView>(path+'?'+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:SourcePage});
+    try {const value=await authority.read<SourcePageView>(path+'?'+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:SourcePage});
       if(live.current&&seq===sequence.current&&owner===identityGeneration()){setData(value);if(focus)heading.current?.focus();}}
     catch(failure){if(live.current&&seq===sequence.current&&owner===identityGeneration()){setError((failure as Error).message);setRestart(failure instanceof ApiError&&failure.code==='summary_changed');}}
     finally{if(live.current&&seq===sequence.current&&owner===identityGeneration())setBusy(false);}
@@ -86,6 +88,7 @@ function PreparedInspection({id}:{id:string}) {
 }
 export function CoverageEditor({context,discussion,resource,base,value,disabled,onChange}:{context:Context;discussion:string;resource?:string|undefined;base?:string|undefined;
   value:CoverageDeclarationValue|undefined;disabled:boolean;onChange:(value:CoverageDeclarationValue)=>Promise<boolean>}) {
+  const authority=useAuthorization();
   const resume=resource?`/loom/resource/${resource}?edit=1`:`/loom/discussion/${discussion}?summary=create`,slot='summary.prepare:'+resume;
   const [record,update]=useIntent(()=>context.store.all().find(r=>r.kind==='summary.prepare'&&r.slot===slot));
   const [scope,setScope]=useState<'full'|'selected'>(record?.body.scope==='selected'?'selected':'full');
@@ -98,7 +101,7 @@ export function CoverageEditor({context,discussion,resource,base,value,disabled,
       sent=await update(async existing=>{uncertain=existing?.state==='uncertain';const body={discussion_id:discussion,scope,...(scope==='selected'?{members}:{})};
         return context.store.prepareDispatch(existing??context.store.create(slot,'summary.prepare','/api/v1/summary-preparations',body),body);});
       if(!sent)return;
-      const prepared=await request<PreparationView>('/api/v1/summary-preparations',{self:context.self,body:sent.body,schema:Preparation});
+      const prepared=await authority.read<PreparationView>('/api/v1/summary-preparations',{self:context.self,body:sent.body,schema:Preparation});
       if(!current())return;
       if(!await onChange({preparation_id:prepared.preparation_id}))throw new Error('The source declaration could not be saved with your draft. Retry the same preparation to recover it.');
       await update(async existing=>{await context.store.complete(sent!);return existing?.key===sent!.key?undefined:existing;});

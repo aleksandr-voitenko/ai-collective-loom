@@ -1,8 +1,9 @@
+import { useAuthorization } from './AuthorizationBoundary.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { OrganizationResource, OrganizationPage as PageSchema, OrganizationCommitted, OrganizationReconciled, MetadataHistory,
+import { OrganizationResource, OrganizationPage as PageSchema, MetadataHistory,
   type OrganizationResourceView, type OrganizationPageView, type OrganizationResult } from '../contracts/organization.js';
-import { identityGeneration, isDefinitiveRejection, request, type Intent } from './participation-client.js';
+import { identityGeneration, isDefinitiveRejection, type Intent } from './participation-client.js';
 import { useQuery, useIntent, SeparateDraft, type Context } from './participation-state.js';
 
 function pathText(area:OrganizationResourceView) { return [...area.ancestors.map(a=>a.title),area.title].join(' › '); }
@@ -62,6 +63,7 @@ export function OrganizationPage({context}:{context:Context}) {
   return <OrganizationForm context={context} initial={initial} kind={kind} target={target} parent={parent} source={target||parent?source.data:undefined} epoch={source.data.hierarchy_version}/>;
 }
 function OrganizationForm({context,initial,kind,target,parent,source,epoch}:{context:Context;initial:Intent|undefined;kind:string;target:string;parent:string;source:OrganizationResourceView|undefined;epoch:number}) {
+  const authority=useAuthorization();
   const navigate=useNavigate(),[record,update]=useIntent(()=>initial);
   const [body,setBody]=useState<Record<string,unknown>>(()=>initial?.body??{
     kind,expected_hierarchy_version:epoch,...(target?{resource_id:target,expected_version:source!.version}:{}),
@@ -75,7 +77,7 @@ function OrganizationForm({context,initial,kind,target,parent,source,epoch}:{con
   useEffect(()=>{
     if(!body.parent_id || !kind.endsWith('.move')) {setDestination(undefined);return;}
     let active=true;
-    void request<OrganizationResourceView>('/api/v1/organization/resources/'+String(body.parent_id),{schema:OrganizationResource})
+    void authority.read<OrganizationResourceView>('/api/v1/organization/resources/'+String(body.parent_id),{schema:OrganizationResource})
       .then(value=>{if(active&&owner.current===identityGeneration())setDestination(value);})
       .catch(()=>{if(active)setDestination(undefined);});
     return ()=>{active=false;};
@@ -88,16 +90,17 @@ function OrganizationForm({context,initial,kind,target,parent,source,epoch}:{con
     try {await update(current=>context.store.saveDraft(current??context.store.create(slot,'organization.change','/api/v1/organization/changes',next),next));if(owned())setError('');}
     catch(e){if(owned())setError((e as Error).message);}
   }
-  async function accepted(value:OrganizationResult,intent:Intent) {
+  async function accepted(value:OrganizationResult,intent:Intent,generation:number|undefined) {
     await update(async current=>{const next=await context.store.settle(intent,{state:'committed'});return current?.key===intent.key?next:current;});
-    if(owned()){setResult(value);setStatus('Organization change confirmed.');}
+    if(owned()){if(authority.current(generation))setResult(value);setStatus('Organization change confirmed.');}
   }
   async function send() {
     if(busy||record?.blocked_by) return;
     setBusy(true);setError('');let intent:Intent|undefined,wasUncertain=false;
     try {
       intent=await update(async current=>{wasUncertain=current?.state==='uncertain';return context.store.prepareDispatch(current??context.store.create(slot,'organization.change','/api/v1/organization/changes',body),body);});
-      if(intent) await accepted(await request<OrganizationResult>('/api/v1/organization/changes',{self:context.self,body:intent.body,schema:OrganizationCommitted}),intent);
+      if(intent){const result=await authority.organizationCommand(intent.body,'changes',context.self);
+        if(result.value.operation_state==='committed')await accepted(result.value,intent,result.generation);}
     }catch(e){
       if(intent&&isDefinitiveRejection(e,wasUncertain)) {try {await update(current=>context.store.settle(intent!,{state:'rejected'}).then(next=>current?.key===intent!.key?next:current));}catch(storage){if(owned())setError((storage as Error).message);}}
       if(owned())setError((e as Error).message);
@@ -105,14 +108,14 @@ function OrganizationForm({context,initial,kind,target,parent,source,epoch}:{con
   }
   async function check() {
     if(!record||busy)return;setBusy(true);setError('');
-    try {const value=await request<OrganizationResult|{operation_state:'not_recorded'}>('/api/v1/organization/status',{self:context.self,body:{kind:record.body.kind,idempotency_key:record.key},schema:OrganizationReconciled});
-      if(value.operation_state==='committed')await accepted(value,record);else if(owned())setStatus('Confirmation is unavailable. Keep this exact request; it may still commit.');
+    try {const {value,generation}=await authority.organizationCommand({kind:record.body.kind,idempotency_key:record.key},'status',context.self);
+      if(value.operation_state==='committed')await accepted(value,record,generation);else if(owned())setStatus('Confirmation is unavailable. Keep this exact request; it may still commit.');
     }catch(e){if(owned())setError((e as Error).message);}finally{if(owned())setBusy(false);}
   }
   async function correct() {
     if(record?.state!=='rejected')return;setBusy(true);
     try {
-      const current=await request<OrganizationResourceView|OrganizationPageView>(target?'/api/v1/organization/resources/'+target:'/api/v1/organization/children?limit=1');
+      const current=await authority.read<OrganizationResourceView|OrganizationPageView>(target?'/api/v1/organization/resources/'+target:'/api/v1/organization/children?limit=1');
       if(!owned())return;
       const next={...body,expected_hierarchy_version:current.hierarchy_version,...('version' in current?{expected_version:current.version}:{})};
       await update(r=>context.store.correct(r!,next));if(owned()){setBody(next);setError('');setStatus('Latest versions loaded. Review source and destination before confirming.');}

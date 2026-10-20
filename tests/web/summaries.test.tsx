@@ -1,3 +1,4 @@
+import {AuthorizationBoundary} from '../../src/web/AuthorizationBoundary.js';
 import assert from 'node:assert/strict';
 import {afterEach,test,type TestContext} from 'node:test';
 import {JSDOM} from 'jsdom';
@@ -13,7 +14,7 @@ Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configur
 const {render,screen,fireEvent,cleanup,act,waitFor}=await import('@testing-library/react');afterEach(()=>cleanup());
 const result=():SourcePageView=>({items:[],unknown:false,next_cursor:null,complete:true,work_budget_reached:false,limit:12,max_response_bytes:131072,omitted_detail:'bodies; unavailable_members',expires_at:'2026-10-16T12:00:00Z'});
 function mount(t:TestContext){const calls:{path:string;finish:(r:Response)=>void}[]=[];t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(finish=>calls.push({path,finish})));
-  const router=createMemoryRouter([{path:'/sources',element:<SourceResults path="/api/v1/discussions/fixture/summary-sources"/>},{path:'/other',element:<h1>Other route</h1>}],{initialEntries:['/sources']});
+  const router=createMemoryRouter([{path:'/sources',element:<AuthorizationBoundary><SourceResults path="/api/v1/discussions/fixture/summary-sources"/></AuthorizationBoundary>},{path:'/other',element:<h1>Other route</h1>}],{initialEntries:['/sources']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);return {calls,router};}
 test('StrictMode source pages settle once, recover the failed cursor and focus deliberate retry',async t=>{
   const {calls}=mount(t);await waitFor(()=>assert.equal(calls.length,2));await act(async()=>calls[1]!.finish(Response.json({...result(),complete:false,next_cursor:'next'})));
@@ -33,20 +34,20 @@ test('partial, unknown and measured gaps coexist without an all-current claim',(
   assert.equal(isDefinitiveRejection(new ApiError('summary_preparation_expired','Expired',undefined,'rejected'),true),true);
 });
 
-test('optional summary distinguishes absence, unavailability and failure with local retry in StrictMode',async t=>{
+test('optional summary distinguishes absence, source withdrawal and transient local retry in StrictMode',async t=>{
   t.mock.method(globalThis,'fetch',async(path:string)=>{
     if(path.includes('/absent/'))return Response.json({state:'absent',can_create:true});
     if(path.includes('/unavailable/'))return Response.json({state:'unavailable'});
     return Response.json({error:{code:'service_unavailable',message:'Temporary failure'}},{status:503});
   });
   const router=createMemoryRouter(['absent','unavailable','failed'].map(state=>({
-    path:'/'+state,element:<SummarySection discussion={state}/>,
+    path:'/'+state,element:<AuthorizationBoundary key={state}><SummarySection discussion={state}/></AuthorizationBoundary>,
   })),{initialEntries:['/absent']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   await screen.findByText('No summary has been published.');
   assert.equal(screen.getByRole('link',{name:'Create first summary'}).getAttribute('href'),'/loom/discussion/absent?summary=create');
   await act(async()=>router.navigate('/unavailable'));
-  await screen.findByText("The summary is unavailable. The discussion's eligible contributions remain readable.");
+  await screen.findByRole('button',{name:'Retry protected view'});
   assert.ok(!screen.queryByRole('link',{name:'Create first summary'}));
   await act(async()=>router.navigate('/failed'));
   await screen.findByRole('alert');

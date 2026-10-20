@@ -12,6 +12,15 @@ settings** selects area subtopics and publication categories. **Following** list
 explicit choices with current paths; parent/child and same-named topics stay separate.
 Closed but readable sources can be followed. A source that becomes unavailable
 shows a safe placeholder and still permits Unfollow, without its cached title/path.
+A Following lookup, list, command or embedded routine mute can discover withdrawal.
+The boundary then clears source titles, paths and previews across the page and
+rejects older responses. Private choices and Unfollow remain available, including
+targets with no mute record. A successful removal keeps its confirmation even when
+its temporary recovery control disappears. Use Refresh following or Retry following
+page to retrieve current metadata. The same authorization boundary withdraws full
+topic, discussion and artifact content, including Community overview's embedded artifact.
+Credential/access failures fence the browser identity and withdraw the private view;
+the shell checks current identity before allowing recovery controls again.
 An empty list offers topic/artifact discovery and the independent Mentions/replies view.
 
 **Open followed changes** uses those definitions. **View changes** on a source opens
@@ -183,7 +192,16 @@ These are disclosed synthetic limits, not production capacity. See the
 [observed evidence](following-evidence.md). W01 implements shared-only portions;
 W02 [combined Updates](updates.md) adds grouping, highlights and paired personal/shared
 checkpoints. [Exact reading progress](reading-progress.md) is independent; following,
-querying Changes and completing an interval do not mark sources read. Mutes and
-dismissal remain open. Files, private notes, full moderation,
+querying Changes and completing an interval do not mark sources read.
+[Attention controls](attention-controls.md) are independent. Files, private notes, full moderation,
 agent execution, real human usability and cross-machine/provider trials remain
 outside this increment. Following is neither permission nor task assignment.
+
+## Guide 12 attention controls
+
+[Routine mutes and exact bounded dismissal](attention-controls.md) have independent
+owner-private versions and recovery. Mute leaves Following and direct mentions/replies
+unchanged; dismissal affects only named shared-event/personal-delivery inputs. Reading
+and Saved remain independent. Combined version 2 applies private routine selection;
+version 1 and standalone all-retained retrieval preserve their existing meaning.
+Complete paths keep every authorized record for the captured scope and interval.

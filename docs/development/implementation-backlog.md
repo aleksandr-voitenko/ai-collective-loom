@@ -95,8 +95,7 @@ and [performed checks](notifications-evidence.md).
 
 Old unmentioned replies without publication-time eligibility facts remain explicit
 historical gaps. W02 supplies combined grouping/highlights below. This does not claim
-complete historical recovery, routine mutes, read state,
-dismissal, file/private-note integration, moderation administration, production
+complete historical recovery, file/private-note integration, moderation administration, production
 operations, comfortable human use or provider/cross-machine validation. These
 remain unfinished requirements rather than optional policy changes.
 
@@ -113,7 +112,7 @@ independent, and current authorization applies on every page/detail. See
 This covers ATT-01–03 and shared-only portions of ATT-06/08/11/13–15 and §12.3.
 Pre-migration area events lack some descendant-impact facts and expose unknown
 coverage. W02 below adds grouped Updates, highlights and combined personal/shared
-checkpoints; mutes/dismissal remain open and exact reading uses ADR-026 below. Broad AC08/09/12/13/20/24–26/33/39–43/46/55/60
+checkpoints; routine attention uses ADR-027 and exact reading uses ADR-026 below. Broad AC08/09/12/13/20/24–26/33/39–43/46/55/60
 are not closed by the synthetic shared-only journeys. No accepted inventory workbook
 was supplied; its statuses were not invented or edited.
 
@@ -139,12 +138,34 @@ equivalent bounded HTTPS reads, failure/recovery schemas and community discovery
 API-05 publication retry identities/old formats are preserved, not redesigned.
 
 These are the grouped-retrieval portions of AC07–10/24–26/33/39–41/46/55–60,
-not composite scenario completion. Routine mutes/dismissal,
+not composite scenario completion. Routine mutes/dismissal use ADR-027 below;
 files/private notes, moderation integration, retained-data operations and measured
 production capacity remain open. Scripted Chromium, JSDOM StrictMode and independent
 local HTTPS processes are different evidence from representative human use,
 provider-agent evaluations or cross-machine trials; those remain pending. No absent
 inventory workbook is invented or updated.
+
+## Routine attention controls
+
+Guide12 / ADR-027 adds owner-private until-unmuted area/discussion/artifact settings
+and exact bounded shared-event/personal-delivery dismissal and restore. Event-time
+matching, independent version fences, atomic retained decisions and private recovery
+preserve later personal arrivals, existing reading, Saved and Following. Separate
+combined-updates-2 routine selection filters before highlights while complete paths
+retain the captured scope and both intervals. Unknown coverage and current source
+visibility remain prior conditions. The browser adds progressive controls, explicit
+Undo, settings, per-target recovery and deliberate same-view attention refresh.
+See the [guide](attention-controls.md) and [executed evidence](attention-controls-evidence.md).
+
+This implements attention-control portions of §12.3, AC43/46, ATT-01–05/08–16,
+MEN-02 and supporting IDN/API/SEC/HUM/OPS scenarios. AC07–09/24–26/40–43/46/54/60
+remain composite scenarios, not fully closed by synthetic assertions. No accepted
+requirements workbook was supplied or invented. Files/attachments/packages, private
+notes, reservations, full moderation management, timed snooze, push/email/webhooks,
+automatic acknowledgement, a universal reviewed flag, recommendation inference and
+production deployment remain deferred. No-eviction quotas, retained-data/erasure
+policy, multi-API key custody, representative human/provider and cross-machine
+acceptance remain operating gates.
 
 ## Subsequent correctness gates
 
@@ -218,7 +239,7 @@ See the [guide](reading-progress.md) and [execution evidence](reading-progress-e
 This implements reading portions of ATT-09/10/16 and §12.3, with supporting privacy,
 bounded API and human interaction portions of SEC-01/03/09, API-02–05/07/08 and HUM-01–05.
 AC07–09/24–26/42–43/54/60 remain compound scenarios, not closed by this slice.
-Files, other attention controls, real-data operations and representative human/agent
+Files, timed snooze, real-data operations and representative human/agent
 workload and cross-machine acceptance remain open.
 
 Browser failure diagnostics now have a closed structured contract, pre-close

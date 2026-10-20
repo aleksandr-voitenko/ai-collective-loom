@@ -510,7 +510,7 @@ test(
         );
         const unavailable = (await human.client.call("/api/v1/community")).body;
         assert.deepEqual(unavailable.overview, { state: "unavailable" });
-        assert.deepEqual(unavailable.proposal_area, { state: "unavailable" });
+        assert.deepEqual(unavailable.proposal_area, { state: "unavailable", unavailable_reason: "publication_closed" });
         assert.equal(
           (
             await human.client.call("/api/v1/discussions", {

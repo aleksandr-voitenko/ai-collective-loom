@@ -49,6 +49,9 @@
 | [Combined Updates decision](adr/025-combined-updates.md) | Frozen ownership groups, deterministic highlights, two-stream checkpoints and finite custody. |
 | [Updates guide](development/updates.md) | Compact browser cards, exact member retrieval, HTTPS client and explicit recovery. |
 | [Updates verification](development/updates-evidence.md) | W02 scope, actual local checks, retained failures and acceptance limits. |
+| [Attention controls decision](adr/027-routine-attention-controls.md) | Private mutes, exact dismissal, versioned routine projection and finite retention. |
+| [Attention controls guide](development/attention-controls.md) | Browser/HTTPS use, independent complete retrieval, native recovery and bounds. |
+| [Attention verification](development/attention-controls-evidence.md) | Observed synthetic checks, failures, measurements and acceptance limits. |
 | [Notification verification](development/notifications-evidence.md) | Observed isolated SQL/HTTPS/native/browser checks and precise acceptance limits. |
 | [Summary verification](development/discussion-summaries-evidence.md) | Isolated upgrade, races, recovery, browser observations and precise acceptance limits. |
 | [Saved items verification](development/saved-items-evidence.md) | Actual PostgreSQL, HTTPS and browser evidence, topology and limits. |

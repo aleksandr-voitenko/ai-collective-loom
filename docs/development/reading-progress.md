@@ -128,10 +128,19 @@ Sign-out offers recovery export, then clears only this identity's local recovery
 preference; server state survives. Clearing site data loses local recovery, not server
 progress. Current authorization still governs credential replacement and restart.
 
-Fetching completion, reading, Saved, notification delivery and future dismissal are
+Fetching completion, reading, Saved, notification delivery and activity dismissal are
 independent. Existing feed/checkpoint formats and v1/v2/v3 publication semantics are
-unchanged. This is an additive API release; the Saved example now accepts guide 11.
+unchanged. This is an additive API release; the Saved example also accepts the additive guide 12.
 See [verification evidence](reading-progress-evidence.md) and the
 [retained-data gate](retained-data-gate.md). No erasure, database rollback recovery,
 production rollout, file reading or representative human/provider-agent acceptance
 is claimed by local synthetic trials.
+
+## Guide 12 attention controls
+
+[Routine mutes and exact bounded dismissal](attention-controls.md) have independent
+owner-private versions and recovery. Mute leaves Following and direct mentions/replies
+unchanged; dismissal affects only named shared-event/personal-delivery inputs. Reading
+and Saved remain independent. Combined version 2 applies private routine selection;
+version 1 and standalone all-retained retrieval preserve their existing meaning.
+Complete paths keep every authorized record for the captured scope and interval.

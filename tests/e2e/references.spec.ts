@@ -41,6 +41,11 @@ test('ordinary human and agent reference publication share targets; exact browsi
   const f=await setup(page,context,server);await draft(page,server,f.area);
   const count=(await server.observer.query('SELECT count(*)::int n FROM loom.shared_activity')).rows[0].n;
   await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(randomUUID());await page.getByRole('button',{name:'Check target',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unavailable');
+  await expect(page.getByLabel('Target ID or Loom link')).toHaveCount(0);
+  await page.getByRole('button',{name:'Retry protected view'}).click();
+  await expect(page.getByLabel('Title',{exact:true})).toHaveValue('Browser synthesis');
+  await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Source authored text <script>inert</script>');
+  await page.getByRole('button',{name:'Add reference',exact:true}).click();
   await page.getByLabel('Target ID or Loom link').fill(server.origin+`/loom/resource/${f.target.resource_id}/${f.target.revision_id}`);await page.getByLabel('Citation scope').selectOption('revision');
   await page.getByRole('button',{name:'Check target',exact:true}).click();await page.getByRole('button',{name:'Use this exact revision',exact:true}).focus();await page.keyboard.press('Enter');
   await page.getByRole('combobox',{name:'Relationship 1',exact:true}).selectOption('contradicts');await page.getByLabel('Rationale 1 (required)',{exact:true}).fill('The synthetic measurement differs.');

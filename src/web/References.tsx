@@ -1,8 +1,9 @@
+import { useAuthorization } from './AuthorizationBoundary.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { ReferenceValue, ReferenceTargetValue } from '../contracts/participation.js';
 import { ResolvedTarget, ReferencePage, type ResolvedTargetView, type ReferencePageView, type ReferenceEntryView } from '../contracts/references.js';
-import { request, identityGeneration, ApiError } from './participation-client.js';
+import {  identityGeneration, ApiError } from './participation-client.js';
 
 const labels = { related_to: 'Related to', builds_on: 'Builds on', contradicts: 'Contradicts' };
 const targetLabel = (target:ReferenceTargetValue) => target.kind === 'discussion' ? 'Discussion container'
@@ -24,6 +25,7 @@ export function targetFromSelection(value:string,kind:ReferenceTargetValue['kind
 }
 
 export function ReferenceEditor({references,onChange,disabled}:{references:ReferenceValue[];onChange:(next:ReferenceValue[])=>void;disabled:boolean}){
+  const authority=useAuthorization();
   const [picker,setPicker]=useState(false),[editing,setEditing]=useState<string>(),[value,setValue]=useState(''),
     [kind,setKind]=useState<ReferenceTargetValue['kind']>('artifact'),[scope,setScope]=useState('resource'),[revision,setRevision]=useState(''),
     [selected,setSelected]=useState<ResolvedTargetView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -37,7 +39,7 @@ export function ReferenceEditor({references,onChange,disabled}:{references:Refer
     const seq=++sequence.current,owner=identityGeneration();setBusy(true);setError('');setSelected(undefined);
     try{
       const target=targetFromSelection(value,kind,scope,revision),query=new URLSearchParams(target);
-      const result=await request<ResolvedTargetView>('/api/v1/references/target?'+query,{schema:ResolvedTarget});
+      const result=await authority.read<ResolvedTargetView>('/api/v1/references/target?'+query,{schema:ResolvedTarget});
       if(live.current&&seq===sequence.current&&owner===identityGeneration())setSelected(result);
     }catch(failure){if(live.current&&seq===sequence.current&&owner===identityGeneration())setError((failure as Error).message);}
     finally{if(live.current&&seq===sequence.current&&owner===identityGeneration())setBusy(false);}
@@ -103,11 +105,12 @@ function ReferenceItem({item}:{item:ReferenceEntryView}){
   </li>;
 }
 export function ReferenceResults({path}:{path:string}){
+  const authority=useAuthorization();
   const [data,setData]=useState<ReferencePageView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[restart,setRestart]=useState(false);
   const live=useRef(false),sequence=useRef(0),attempt=useRef<string|null>(null),heading=useRef<HTMLHeadingElement>(null);
   async function load(cursor:string|null,focus=false){
     const seq=++sequence.current,owner=identityGeneration();attempt.current=cursor;setBusy(true);setError('');setRestart(false);
-    try{const result=await request<ReferencePageView>(path+(path.includes('?')?'&':'?')+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:ReferencePage});
+    try{const result=await authority.read<ReferencePageView>(path+(path.includes('?')?'&':'?')+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:ReferencePage});
       if(live.current&&seq===sequence.current&&owner===identityGeneration()){setData(result);if(focus)heading.current?.focus();}}
     catch(failure){if(live.current&&seq===sequence.current&&owner===identityGeneration()){
       setError((failure as Error).message);setRestart(failure instanceof ApiError&&failure.code==='references_changed');}}

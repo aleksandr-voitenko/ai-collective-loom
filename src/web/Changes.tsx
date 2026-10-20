@@ -1,10 +1,11 @@
+import { useAuthorization } from './AuthorizationBoundary.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { NoteContent, ChangeAccountValue, ExactChangeTargetValue, RevisionView, PageView } from '../contracts/participation.js';
 import { Page, Revision } from '../contracts/participation.js';
 import { NoteDetail, ChangeCoverage, ChangeDiscovery, type NoteDetailView, type ChangeCoverageView, type ChangeDiscoveryView } from '../contracts/changes.js';
 import { ResolvedTarget, type ResolvedTargetView } from '../contracts/references.js';
-import { request, identityGeneration, ApiError } from './participation-client.js';
+import {  identityGeneration, ApiError } from './participation-client.js';
 import { useQuery } from './participation-state.js';
 import { AuthoredText } from './AuthoredText.js';
 import { ReferenceEditor, targetFromSelection } from './References.js';
@@ -50,6 +51,7 @@ function ComparisonAccount({source,base,onKeep}:{source:string;base:string;onKee
 }
 export function ChangeAccountEditor({value,source,base,disabled,onChange}:{value:ChangeAccountValue|null;source?:string|undefined;base?:string|undefined;disabled:boolean;
   onChange:(value:ChangeAccountValue|null,reference?:ExactChangeTargetValue)=>void}) {
+  const authority=useAuthorization();
   const [id,setId]=useState(''),[revision,setRevision]=useState(''),[kind,setKind]=useState<ExactChangeTargetValue['kind']>('artifact'),
     [selected,setSelected]=useState<ResolvedTargetView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[recordReference,setRecordReference]=useState(true);
   const live=useRef(false),sequence=useRef(0),input=useRef<HTMLInputElement>(null);
@@ -60,7 +62,7 @@ export function ChangeAccountEditor({value,source,base,disabled,onChange}:{value
     const seq=++sequence.current,owner=identityGeneration();setBusy(true);setError('');setSelected(undefined);
     try{const target=targetFromSelection(id,kind,'revision',revision);
       if(target.kind==='discussion'||!target.revision_id)throw new Error('Choose an exact contribution, artifact or summary revision.');
-      const result=await request<ResolvedTargetView>('/api/v1/references/target?'+new URLSearchParams(target),{schema:ResolvedTarget});
+      const result=await authority.read<ResolvedTargetView>('/api/v1/references/target?'+new URLSearchParams(target),{schema:ResolvedTarget});
       if(live.current&&sequence.current===seq&&owner===identityGeneration())setSelected(result);
     }catch(failure){if(live.current&&sequence.current===seq&&owner===identityGeneration())setError((failure as Error).message);}
     finally{if(live.current&&sequence.current===seq&&owner===identityGeneration())setBusy(false);}
@@ -103,11 +105,12 @@ function NoteView({path}:{path:string}) {
     <AuthoredText content={note.content} participants={note.mentioned_participants}/></>:<p>No change note on this revision.</p>}</>;
 }
 function CoverageView({path}:{path:string}) {
+  const authority=useAuthorization();
   const [data,setData]=useState<ChangeCoverageView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const live=useRef(false),sequence=useRef(0),attempt=useRef<string|null>(null),heading=useRef<HTMLHeadingElement>(null);
   async function load(cursor:string|null,focus=false){
     const seq=++sequence.current,owner=identityGeneration();attempt.current=cursor;setBusy(true);setError('');
-    try{const result=await request<ChangeCoverageView>(path+'?'+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:ChangeCoverage});
+    try{const result=await authority.read<ChangeCoverageView>(path+'?'+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:ChangeCoverage});
       if(live.current&&seq===sequence.current&&owner===identityGeneration()){setData(result);if(focus)heading.current?.focus();}}
     catch(failure){if(live.current&&seq===sequence.current&&owner===identityGeneration())setError((failure as Error).message);}
     finally{if(live.current&&seq===sequence.current&&owner===identityGeneration())setBusy(false);}
@@ -143,11 +146,12 @@ export function ChangeDiscoveryViewComponent({resource,revision,kind}:{resource:
   </section>;
 }
 function DiscoveryResults({path}:{path:string}) {
+  const authority=useAuthorization();
   const [data,setData]=useState<ChangeDiscoveryView>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[restart,setRestart]=useState(false);
   const live=useRef(false),sequence=useRef(0),attempt=useRef<string|null>(null),heading=useRef<HTMLHeadingElement>(null);
   async function load(cursor:string|null,focus=false){
     const seq=++sequence.current,owner=identityGeneration();attempt.current=cursor;setBusy(true);setError('');setRestart(false);
-    try{const result=await request<ChangeDiscoveryView>(path+'&'+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:ChangeDiscovery});
+    try{const result=await authority.read<ChangeDiscoveryView>(path+'&'+new URLSearchParams({limit:'12',...(cursor?{cursor}:{})}),{schema:ChangeDiscovery});
       if(live.current&&seq===sequence.current&&owner===identityGeneration()){setData(result);if(focus)heading.current?.focus();}}
     catch(failure){if(live.current&&seq===sequence.current&&owner===identityGeneration()){setError((failure as Error).message);setRestart(failure instanceof ApiError&&failure.code==='references_changed');}}
     finally{if(live.current&&seq===sequence.current&&owner===identityGeneration())setBusy(false);}

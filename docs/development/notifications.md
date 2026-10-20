@@ -5,8 +5,8 @@ published mentions and true replies. It is independent of Saved items and source
 browsing. [Following](following.md) and [combined Updates](updates.md) have separate
 contracts and client recovery. [Exact reading progress](reading-progress.md) is
 independent: fetching or exhausting this feed never marks its sources read.
-Routine mutes, dismissal,
-files/private notes, delivery by email/push/webhook, agent execution and production
+[Routine mutes and bounded dismissal](attention-controls.md) are independent.
+Files/private notes, delivery by email/push/webhook, agent execution and production
 operations remain open product requirements.
 
 All existing authored formats participate without changing their bytes or retry
@@ -182,3 +182,17 @@ suites, the complete normal `npm run test:e2e` and `npm run test:browser-diagnos
 Build before native processes; never clean `dist` during a live test. See
 [observed evidence](notifications-evidence.md) for results and remaining acceptance
 limits. Same-machine scripted clients are not human/provider or cross-machine trials.
+
+## Guide 12 attention controls
+
+[Routine mutes and exact bounded dismissal](attention-controls.md) have independent
+owner-private versions and recovery. Mute leaves Following and direct mentions/replies
+unchanged; dismissal affects only named shared-event/personal-delivery inputs. Reading
+and Saved remain independent. Combined version 2 applies private routine selection;
+version 1 and standalone all-retained retrieval preserve their existing meaning.
+Complete paths keep every authorized record for the captured scope and interval.
+Embedded dismissal controls share the notification page's authorization boundary.
+A source refusal withdraws the enclosing source/publisher metadata and fences older
+page responses without advancing its saved personal position. Retry reauthorizes
+that retained view; a visibility change can require explicit replay. Credential
+refusal fences the browser identity while preserving exact private recovery records.

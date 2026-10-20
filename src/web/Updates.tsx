@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import * as C from '../contracts/updates.js';
+import * as R from '../contracts/routine-updates.js';
+import { MuteControl,DismissControl } from './Attention.js';
+import { AuthorizationBoundary,useAuthorization } from './AuthorizationBoundary.js';
+import type { FollowTargetView } from '../contracts/following.js';
+function groupTarget(group:C.UpdateGroupView):FollowTargetView|undefined{
+  if(group.current.state!=='available')return;
+  const match=/^\/loom\/(area|discussion|resource)\/([a-f0-9-]{36})$/.exec(group.current.browser_url);
+  return match?{kind:match[1]==='area'?'area':match[1]==='discussion'?'discussion':'artifact',resource_id:match[2]!}:undefined;
+}
 import { eventPreferences } from '../contracts/following.js';
-import { ApiError, identityGeneration, request } from './participation-client.js';
+import { ApiError, identityGeneration } from './participation-client.js';
 import type { Context } from './participation-state.js';
 import { UpdatesRecovery, displayedRequest, type UpdatesPageRequest } from './updates-recovery.js';
 
@@ -10,12 +19,13 @@ const withdraw=new Set(['updates_visibility_replay_required','updates_view_chang
   'updates_shared_history_gap','updates_personal_history_gap','unauthenticated','invalid_actor','unavailable','forbidden']);
 const reasonLabels={main_mention:'Mention',direct_reply:'Direct reply',note_mention:'Mention in revision note'};
 function MatchingReasons({item,cursor,context,active,onError}:{item:C.UpdateMemberView;cursor:string;context:Context;active:()=>boolean;onError:(error:unknown)=>void}){
+  const authority=useAuthorization();
   const [source,setSource]=useState(item.source),[busy,setBusy]=useState(false),live=useRef(true),requestId=useRef(0);
   useEffect(()=>{live.current=true;setSource(item.source);return()=>{live.current=false;requestId.current++;};},[item.source,cursor]);
   const labels={event_time_area:'Published in the selected topic',direct_target:'Direct target',structural_before_after:'Structural change touched the selected scope',ancestor_impact:'An ancestor of the selected target changed'};
   async function more(){
     if(busy||source.next_reason===null)return;setBusy(true);const mine=++requestId.current;
-    try{const value=await request<typeof source>('/api/v1/me/updates/reasons',{body:{cursor,event_id:source.event_id,reason_offset:source.next_reason},self:context.self,schema:C.UpdatesReasonsPage});
+    try{const value=await authority.read<typeof source>(source.detail_url,{body:{cursor,event_id:source.event_id,reason_offset:source.next_reason},self:context.self,schema:C.UpdatesReasonsPage});
       if(live.current&&active()&&mine===requestId.current)setSource(value);
     }catch(error){if(live.current&&active()&&mine===requestId.current)onError(error);}
     finally{if(live.current&&mine===requestId.current)setBusy(false);}
@@ -25,11 +35,19 @@ function MatchingReasons({item,cursor,context,active,onError}:{item:C.UpdateMemb
   </li>)}</ul>{!source.reasons_complete&&<button aria-disabled={busy} onClick={()=>void more()}>More matching reasons</button>}
     {source.reasons_complete&&<p>Matching reasons complete for this source.</p>}</details>;
 }
+type ExpansionRetry = {scope:string;request:C.UpdatesMembersOptions};
 export function UpdatesPage({context}:{context:Context}){
+  // A pending member position contains no source metadata and survives withdrawal
+  // alongside the persisted displayed overview; retry must not silently lose it.
+  const expansionRetry=useRef<ExpansionRetry|undefined>(undefined);
+  return <AuthorizationBoundary scope="updates" retryLabel="Retry Updates"><UpdatesContent context={context} expansionRetry={expansionRetry}/></AuthorizationBoundary>;
+}
+function UpdatesContent({context,expansionRetry}:{context:Context;expansionRetry:RefObject<ExpansionRetry|undefined>}){
   const [params,setParams]=useSearchParams(),kind=params.get('kind'),id=params.get('id'),reason=params.get('reason');
   const scope:NonNullable<C.UpdatesOptions['scope']>=kind==='personal'?{kind:'personal'}:
     (kind==='area'||kind==='discussion'||kind==='artifact')&&id?{kind:'explicit',definition:{target:{kind,resource_id:id},
       include_descendants:kind==='area'&&params.get('descendants')==='true',preferences:eventPreferences.filter(p=>!params.has('events')||params.get('events')!.split(',').includes(p))}}:{kind:'following'};
+  const routine=context.community.routine_updates_contract===R.routineUpdatesContract&&params.get('contract')!=='legacy';
   const chosenReason=reason==='mention'||reason==='reply'?reason:'all';
   const choose=(field:string,value:string)=>{const p=new URLSearchParams(params);if(value==='all'||value==='following')p.delete(field);else p.set(field,value);setParams(p,{flushSync:true});};
   return <section className="updates notifications"><h1>Updates</h1>
@@ -43,29 +61,50 @@ export function UpdatesPage({context}:{context:Context}){
         <option value="all">Mentions and replies</option><option value="mention">Mentions</option><option value="reply">Replies</option>
       </select></label>
     </div>
-    <p><Link to="/loom/following">Manage Following</Link> · <Link to="/loom/notifications">Standalone Mentions/replies</Link> · <Link to="/loom/changes">Chronological Changes</Link></p>
-    <UpdatesView key={context.community.instance_id+context.self.participant_id+JSON.stringify(scope)+chosenReason}
-      context={context} scope={scope} reason={chosenReason}/>
+    <p><Link to="/loom/attention">Attention settings</Link> · <Link to="/loom/following">Manage Following</Link> · <Link to="/loom/notifications">Standalone Mentions/replies</Link> · <Link to="/loom/changes">Chronological Changes</Link></p>
+    {routine?<p><Link to={'?'+new URLSearchParams({...Object.fromEntries(params),contract:'legacy'})}>Open prior saved Updates views</Link></p>:context.community.routine_updates_contract&&<p className="notice">This prior Updates contract retains its original unfiltered meaning. <Link to={'?'+new URLSearchParams([...params].filter(([key])=>key!=='contract'))}>Open routine Updates with attention controls</Link></p>}
+    <UpdatesView key={context.community.instance_id+context.self.participant_id+JSON.stringify(scope)+chosenReason+routine}
+      context={context} scope={scope} reason={chosenReason} routine={routine} expansionRetry={expansionRetry}/>
   </section>;
 }
-function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C.UpdatesOptions['scope']>;reason:'all'|'mention'|'reply'}){
-  const [page,setPage]=useState<C.UpdatesPageView>(),[expanded,setExpanded]=useState<C.UpdatesMembersPageView>(),[busy,setBusy]=useState(false),
+function UpdatesView({context,scope,reason,routine,expansionRetry}:{context:Context;scope:NonNullable<C.UpdatesOptions['scope']>;reason:'all'|'mention'|'reply';routine:boolean;expansionRetry:RefObject<ExpansionRetry|undefined>}){
+  const authority=useAuthorization();
+  const [page,setPage]=useState<C.UpdatesPageView|R.RoutinePageView>(),[expanded,setExpanded]=useState<C.UpdatesMembersPageView|R.RoutineMembersPageView>(),[busy,setBusy]=useState(false),
     [failure,setFailure]=useState<{code:string;text:string}>(),[size,setSize]=useState(12),[past,setPast]=useState<UpdatesPageRequest[]>([]);
-  const [recovery]=useState(()=>new UpdatesRecovery(context.community.instance_id,context.self.participant_id));
+  const [recovery]=useState(()=>new UpdatesRecovery(context.community.instance_id,context.self.participant_id,localStorage,routine));
+  const [attentionChanged,setAttentionChanged]=useState(false),attentionChanges=useRef(0);
+  const api=routine?'/api/v1/me/routine-updates':'/api/v1/me/updates';
   const key=JSON.stringify([scope,reason]),live=useRef(false),owner=useRef(identityGeneration()),sequence=useRef(0),requestSequence=useRef(0),
     inflight=useRef(false),controller=useRef<AbortController|undefined>(undefined),notice=useRef<HTMLDivElement>(null),
-    anchor=useRef<HTMLDivElement>(null),expansionAnchor=useRef<HTMLElement>(null),attempted=useRef<C.UpdatesOptions>({scope,reason}),
+    anchor=useRef<HTMLDivElement>(null),expansionAnchor=useRef<HTMLElement>(null),attempted=useRef<R.RoutineOptions>({scope,reason}),
     memberAttempt=useRef<C.UpdatesMembersOptions|undefined>(undefined),memberFailure=useRef(false),lastControl=useRef<HTMLButtonElement|null>(null);
-  const active=()=>live.current&&owner.current===identityGeneration();
+  const active=()=>live.current&&owner.current===identityGeneration()&&authority.active();
+  const retryScope=JSON.stringify([context.community.instance_id,context.self.participant_id,scope,reason,routine]);
+  function cancelRead(){requestSequence.current++;controller.current?.abort();inflight.current=false;setBusy(false);}
   const report=(error:unknown)=>{
-    if(error instanceof ApiError&&withdraw.has(error.code)){setPage(undefined);setExpanded(undefined);}
+    if(error instanceof ApiError&&withdraw.has(error.code)){
+      // A child control can learn of withdrawal while an overview/member read
+      // is still pending. Fence that read and its queued recovery save as well.
+      cancelRead();
+      setPage(undefined);setExpanded(undefined);
+    }
     setFailure({code:error instanceof ApiError?error.code:'local_recovery_failed',text:(error as Error).message});
   };
-  async function load(options:C.UpdatesOptions,history:UpdatesPageRequest[]=past,restore?:UpdatesPageRequest,focus=false){
+  const attentionFailure=(error:unknown)=>{
+    if(!active()||!(error instanceof ApiError))return;
+    if(['updates_attention_refresh_required','updates_attention_preparing','updates_descriptor_expired'].includes(error.code)){
+      // The failed selection belongs to the displayed view, not an unseen
+      // successor that may already be in flight. Keep its exact recovery bounds.
+      cancelRead();if(page)attempted.current=displayedRequest(page);
+      memberAttempt.current=expanded?displayedRequest(expanded):undefined;report(error);
+    }
+  };
+  async function load(options:R.RoutineOptions,history:UpdatesPageRequest[]=past,restore?:UpdatesPageRequest,focus=false){
     if(inflight.current)return;inflight.current=true;controller.current?.abort();const abort=new AbortController();controller.current=abort;
-    const mine=++requestSequence.current;attempted.current=options;memberAttempt.current=restore;memberFailure.current=false;setBusy(true);setFailure(undefined);
+    const mine=++requestSequence.current,policyAtStart=attentionChanges.current;attempted.current=options;memberAttempt.current=restore;memberFailure.current=false;setBusy(true);setFailure(undefined);
+    expansionRetry.current=restore?{scope:retryScope,request:restore}:undefined;
     try{
-      const value=await request<C.UpdatesPageView>('/api/v1/me/updates/query',{body:options,self:context.self,schema:C.UpdatesPage,signal:abort.signal});
+      const value=await authority.read<C.UpdatesPageView|R.RoutinePageView>(api+'/query',{body:options,self:context.self,schema:routine?R.RoutinePage:C.UpdatesPage,signal:abort.signal});
       if(!active()||mine!==requestSequence.current)return;
       attempted.current=displayedRequest(value);
       // A retried expansion may be an unseen successor. Keep its last displayed
@@ -73,11 +112,13 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
       const saved=await recovery.save(key,value,sequence.current,()=>active()&&mine===requestSequence.current,history,
         restore?recovery.read(key)?.expansion:undefined);
       if(!active()||mine!==requestSequence.current)return;
-      sequence.current=saved.sequence;setPage(value);setPast(history.slice(-8));setExpanded(undefined);setSize(value.limit);
+      // An older response cannot acknowledge a policy event observed during its
+      // read or recovery save, even when that response is otherwise still current.
+      sequence.current=saved.sequence;setPage(value);setAttentionChanged(policyAtStart!==attentionChanges.current);setPast(history.slice(-8));setExpanded(undefined);setSize(value.limit);
       if(focus)anchor.current?.focus();
       if(restore){
         memberFailure.current=true;
-        const detail=await request<C.UpdatesMembersPageView>('/api/v1/me/updates/members',{body:{...restore,...(options.recovery?.action==='renew'?{renew:true}:{})},self:context.self,schema:C.UpdatesMembersPage,signal:abort.signal});
+        const detail=await authority.read<C.UpdatesMembersPageView|R.RoutineMembersPageView>(api+'/members',{body:{...restore,...(options.recovery?.action==='renew'?{renew:true}:{})},self:context.self,schema:routine?R.RoutineMembersPage:C.UpdatesMembersPage,signal:abort.signal});
         if(!active()||mine!==requestSequence.current)return;
         const next=await recovery.save(key,value,sequence.current,()=>active()&&mine===requestSequence.current,history,displayedRequest(detail));
         if(!active()||mine!==requestSequence.current)return;
@@ -88,36 +129,46 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
   }
   async function members(options:C.UpdatesMembersOptions,control?:HTMLButtonElement){
     if(inflight.current||!page)return;inflight.current=true;setBusy(true);setFailure(undefined);memberAttempt.current=options;memberFailure.current=true;
+    expansionRetry.current={scope:retryScope,request:options};
     if(control)lastControl.current=control;const mine=++requestSequence.current;
     try{
-      const value=await request<C.UpdatesMembersPageView>('/api/v1/me/updates/members',{body:options,self:context.self,schema:C.UpdatesMembersPage});
+      const value=await authority.read<C.UpdatesMembersPageView|R.RoutineMembersPageView>(api+'/members',{body:options,self:context.self,schema:routine?R.RoutineMembersPage:C.UpdatesMembersPage});
       if(!active()||mine!==requestSequence.current)return;
       memberAttempt.current=displayedRequest(value);
       const saved=await recovery.save(key,page,sequence.current,()=>active()&&mine===requestSequence.current,past,displayedRequest(value));
       if(!active()||mine!==requestSequence.current)return;
       sequence.current=saved.sequence;setExpanded(value);
     }catch(error){if(active()&&mine===requestSequence.current)report(error);}
-    finally{inflight.current=false;if(active()&&mine===requestSequence.current)setBusy(false);}
+    finally{if(mine===requestSequence.current){inflight.current=false;if(active())setBusy(false);}}
   }
   async function collapse(){
-    if(inflight.current||!page)return;inflight.current=true;setBusy(true);
-    try{const saved=await recovery.save(key,page,sequence.current,active,past);if(!active())return;sequence.current=saved.sequence;
+    if(inflight.current||!page)return;inflight.current=true;setBusy(true);const mine=++requestSequence.current;
+    try{const saved=await recovery.save(key,page,sequence.current,()=>active()&&mine===requestSequence.current,past);if(!active()||mine!==requestSequence.current)return;sequence.current=saved.sequence;
       setExpanded(undefined);memberAttempt.current=undefined;memberFailure.current=false;
+      expansionRetry.current=undefined;
       (lastControl.current?.isConnected?lastControl.current:
         expanded?.group_id?document.getElementById('updates-group-'+expanded.group_id):anchor.current)?.focus();}
-    catch(error){if(active())report(error);}
-    finally{inflight.current=false;if(active())setBusy(false);}
+    catch(error){if(active()&&mine===requestSequence.current)report(error);}
+    finally{if(mine===requestSequence.current){inflight.current=false;if(active())setBusy(false);}}
   }
   useEffect(()=>{
     live.current=true;owner.current=identityGeneration();inflight.current=false;
-    try{const saved=recovery.read(key);sequence.current=saved?.sequence??0;void load(saved?.request??{scope,reason},saved?.past??[],saved?.expansion);}
+    try{const saved=recovery.read(key);sequence.current=saved?.sequence??0;
+      const pending=expansionRetry.current?.scope===retryScope?expansionRetry.current.request:undefined;
+      void load(saved?.request??{scope,reason},saved?.past??[],pending?{cursor:pending.cursor,limit:pending.limit??12,max_response_bytes:pending.max_response_bytes??131072}:saved?.expansion);}
     catch(error){report(error);}
     return()=>{live.current=false;requestSequence.current++;controller.current?.abort();};
   },[key,recovery]);
+  useEffect(()=>{
+    if(!routine)return;const changed=()=>{if(active()){attentionChanges.current++;setAttentionChanged(true);}};
+    const storage=(event:StorageEvent)=>{if(event.key?.startsWith(`loom.attention:${location.origin}:${context.community.instance_id}:${context.self.participant_id}:`))changed();};
+    window.addEventListener('loom-attention-policy',changed);window.addEventListener('storage',storage);
+    return()=>{window.removeEventListener('loom-attention-policy',changed);window.removeEventListener('storage',storage);};
+  },[routine]);
   useEffect(()=>{if(failure&&withdraw.has(failure.code))notice.current?.focus();},[failure]);
   useEffect(()=>{if(expanded)expansionAnchor.current?.focus();},[expanded]);
   const token=attempted.current.cursor??attempted.current.checkpoint??attempted.current.switch?.token??attempted.current.recovery?.token;
-  const action=failure?.code==='updates_descriptor_expired'?'renew':failure?.code==='updates_visibility_replay_required'?'replay':
+  const action=failure?.code==='updates_attention_refresh_required'||failure?.code==='updates_attention_preparing'?'attention_refresh':failure?.code==='updates_descriptor_expired'?'renew':failure?.code==='updates_visibility_replay_required'?'replay':
     failure?.code.endsWith('_history_gap')||failure?.code==='updates_state_unavailable'?'resynchronize':undefined;
   async function clear(){if(inflight.current)return;try{await recovery.clear(active);sequence.current=0;await load({scope,reason},[],undefined,true);}catch(error){if(active())report(error);}}
   const direct=(item:C.UpdateMemberView)=><><div className="notification-reasons">{item.personal?.reasons.map(r=><span key={r.kind}>{reasonLabels[r.kind as keyof typeof reasonLabels]}</span>)}</div>
@@ -131,12 +182,15 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
     {busy&&<p role="status">Loading Updates…</p>}
     {failure&&<div role="alert" className="notice error" tabIndex={-1} ref={notice}><p>{failure.text}</p>
       {action?<button aria-disabled={busy} onClick={()=>void load({recovery:{action,...(token?{token}:{})},...(!token?{scope,reason}:{}),limit:attempted.current.limit??12,max_response_bytes:attempted.current.max_response_bytes??131072},past,action==='renew'&&memberAttempt.current?{cursor:memberAttempt.current.cursor,limit:memberAttempt.current.limit??12,max_response_bytes:memberAttempt.current.max_response_bytes??131072}:undefined,true)}>
-        {action==='renew'?'Renew fixed Updates view':action==='replay'?'Replay both retained streams':'Establish an incomplete new baseline'}</button>:
+        {action==='attention_refresh'?'Refresh attention selection':action==='renew'?'Renew fixed Updates view':action==='replay'?'Replay both retained streams':'Establish an incomplete new baseline'}</button>:
         failure.code!=='updates_epoch_changed'&&<button aria-disabled={busy} onClick={()=>page&&memberFailure.current&&memberAttempt.current?void members(memberAttempt.current):
           void load(attempted.current,past,memberAttempt.current?{cursor:memberAttempt.current.cursor,limit:memberAttempt.current.limit??12,max_response_bytes:memberAttempt.current.max_response_bytes??131072}:undefined)}>Retry Updates</button>}
+      {routine&&failure.code==='updates_attention_refresh_required'&&token&&<button aria-disabled={busy} onClick={()=>void load({switch:{token,selection:'complete'},limit:size},[],undefined,true)}>Open complete interval despite attention changes</button>}
       {failure.code==='local_recovery_failed'&&<button aria-disabled={busy} onClick={()=>void clear()}>Clear saved Updates views</button>}
     </div>}
     {page&&<>
+      {routine&&attentionChanged&&<div className="notice"><p>Attention choices changed. Displayed cards retain their prior selection until explicit refresh.</p><button aria-disabled={busy} onClick={()=>void load({recovery:{action:'attention_refresh',token:page.page_cursor},limit:page.limit,max_response_bytes:page.max_response_bytes},[],undefined,false)}>Refresh attention selection</button></div>}
+      {'attention' in page&&<p className="fineprint">{page.attention.selection==='remaining_routine_inputs'?'Counts describe remaining routine inputs.':'Complete retrieval includes all represented authorized inputs, including muted and dismissed ones.'}</p>}
       {!page.traversal.settings_current&&<p className="notice">This interval retains earlier Following settings. Refresh scope to adopt current choices.</p>}
       {page.projection.state!=='complete'&&<p className="notice">Notification generation is {page.projection.state}. More direct signals may become available in a later interval.</p>}
       {page.traversal.shared.coverage==='unknown'&&<div className="notice">
@@ -154,7 +208,7 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
           {page.traversal.selection!=='complete'&&<button aria-disabled={busy} onClick={()=>void load({switch:{token:page.page_cursor,selection:'complete'},limit:size},[],undefined,true)}>Show all matching groups in this interval</button>}
           {page.traversal.selection!=='direct'&&<button aria-disabled={busy} onClick={()=>void load({switch:{token:page.page_cursor,selection:'direct'},limit:size},[],undefined,true)}>Show direct attention groups</button>}
         </div>
-        {!page.items.length&&!busy&&!failure&&<p>{page.traversal.shared.coverage==='unknown'?'No known eligible activity in this selection; historical shared coverage is incomplete.':'No eligible activity in this selection.'}</p>}
+        {!page.items.length&&!busy&&!failure&&<p>{page.traversal.shared.coverage==='unknown'?'No known eligible activity in this selection; historical shared coverage is incomplete.':routine&&page.traversal.selection!=='complete'?'Nothing in this routine view. Complete / all retained updates remain available.':'No eligible activity in this selection.'}</p>}
         <ol className="notification-list updates-list">{page.items.map(group=><li key={group.id}>
           <h2><Link to={group.context_url}>{group.current.state==='available'?group.current.title??'Current title unavailable':'Current context unavailable'}</Link></h2>
           {group.current.state==='available'&&<p className="muted">Now: {group.current.path.map(p=>p.title).join(' › ')}</p>}
@@ -174,6 +228,7 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
             onClick={e=>void members({cursor:group.members_cursor,limit:size},e.currentTarget)}>Inspect changes</button>
             {group.direct_cursor&&<button aria-disabled={busy} onClick={e=>void members({cursor:group.direct_cursor!,limit:size},e.currentTarget)}>Inspect direct attention</button>}
             <Link to={group.context_url}>Open current context</Link></div>
+          {routine&&<details><summary>Attention controls</summary><DismissControl context={context} cursor={page.page_cursor} groupId={group.id} onSelectionFailure={attentionFailure}/>{groupTarget(group)&&<MuteControl context={context} target={groupTarget(group)!}/>}</details>}
           <details><summary>Count and detail coverage</summary><p>{group.counts.shared_changes} shared changes and {group.counts.personal_signals} personal signals represent {group.counts.source_records} distinct source records. {group.counts.certainty==='exact'?'Counts are exact for eligible bound inputs.':'These are known source counts, not complete historical totals.'} An older personal source need not be a shared change in this interval.</p>
             <p>Member metadata and full bodies are omitted from this card. Summary coverage was not computed.</p></details>
         </li>)}</ol>
@@ -184,7 +239,8 @@ function UpdatesView({context,scope,reason}:{context:Context;scope:NonNullable<C
           <p>{item.source.kind.replaceAll('.',' ')} · {item.source.actor.nickname} · <time dateTime={item.source.occurred_at}>{new Date(item.source.occurred_at).toLocaleString()}</time></p>
           <p>{item.source.exact_url&&<Link to={item.source.exact_url}>Exact revision {item.source.revision_number}</Link>} · <Link to={item.source.context_url}>Current context</Link></p>
           {item.personal?.parent&&<p>{item.personal.parent.state==='available'?`Reply to ${item.personal.parent.author?.nickname}`:'Parent unavailable; actual reply relationship retained.'}</p>}
-          <p className="muted">{item.shared_in_interval?'Included shared change':'Personal source from outside the shared interval or scope'}{item.personal?'; independently available personal signal':''}.</p>
+          <p className="muted">{item.shared_in_interval?'Included shared change':routine?'No shared input in this selection (outside scope/interval, muted or dismissed)':'Personal source from outside the shared interval or scope'}{item.personal?'; independently available personal signal':''}.</p>
+          {routine&&<details><summary>Dismiss selected source inputs</summary><DismissControl context={context} onSelectionFailure={attentionFailure} inputs={[...(item.shared_in_interval?[{kind:'shared_event' as const,id:item.source.event_id}]:[]),...(item.personal?[{kind:'personal_delivery' as const,id:item.personal.delivery_id}]:[])]}/></details>}
           {item.shared_in_interval&&<MatchingReasons item={item} cursor={expanded.page_cursor} context={context} active={active} onError={report}/>}
         </li>)}</ol>
         {expanded.next_cursor&&<button aria-disabled={busy} onClick={()=>void members({cursor:expanded.next_cursor!,limit:size})}>Next sources</button>}

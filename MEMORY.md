@@ -9,7 +9,7 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`11`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`12`.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard
@@ -37,8 +37,8 @@ owner-private versioned definitions/decisions and direct committed-event queries
 Area relevance uses immutable event-time scopes; new ancestor impacts are retained,
 while missing old structural facts keep coverage unknown. Fixed shared checkpoints
 have independent custody, visibility replay and explicit incomplete resynchronization.
-No worker is required, and no personal checkpoint/delivery is consumed. Mutes/dismissal
-remain open; exact reading is independent (ADR-026). See
+No worker is required, and no personal checkpoint/delivery is consumed. Routine attention
+is separate (ADR-027), as is exact reading (ADR-026). See
 `src/server/modules/following/MEMORY.md` and `docs/development/following.md`.
 Combined Updates (ADR-025, guide10) uses additive migrations0014/0015 and independent
 `combined-updates-1` custody. Bounded preparation freezes ownership membership/order
@@ -50,6 +50,46 @@ group coverage, projection, full bodies and reading remain distinct. No new auth
 format or worker; existing claims/events/tokens/Saved remain independent. See
 `src/server/modules/updates/MEMORY.md` and `docs/development/updates.md` for finite
 custody, recovery, native/browser clients and synthetic acceptance limits.
+Routine attention (ADR-027, guide12) adds migration0017, private until-unmuted
+settings and exact shared-event/personal-delivery dismissal/restore. Stable negative
+fences and applied/conflict decisions survive short-lived grouping custody. Separate
+combined-updates-2 routine endpoints filter before highlights and require explicit
+same-view policy refresh; old combined, standalone and reading contracts stay intact.
+Complete retrieval bypasses private filters; current source/history checks still
+precede selection. Browser attention hosts require
+`web/AuthorizationBoundary.tsx`, backed by the identity-scoped
+`web/protected-content.ts` coordinator. Additive private-controls-1 responses
+separate settings/decisions from bounded protected previews. Safe removal and exact
+recovery do not hydrate sources; old routes/digests/tokens remain compatible.
+Every same-owner source denial revokes older protected projections, even after retry,
+restoration or remount. Cached ancestry cannot prove current dependencies after a
+move or reordered response; client request age cannot order server authorization.
+Positive responses retain freshness fences. Private versions, confirmation and
+command custody stay independent; private receipts cannot authorize content.
+Fresh mixed responses may publish only their own lease-gated fields (previews,
+Saved pages and audited discussion traversal); opaque full hosts still withdraw. The method/endpoint catalogue in
+`web/response-contracts.ts` explicitly classifies every negative success field;
+its contract test checks actual routes/schemas. Saved/Reading receipt denials are
+consumed before private settlement. See ADR-027 for the bounded exception.
+Endpoint error policies distinguish anonymous discovery and separate ceremony
+proofs from authority loss. Anonymous discovery settles quietly; established-owner
+loss revokes once and fences old responses. A separate discovery fence blocks stale
+positive probes. Transport consumes errors once; identity-record misses stay local,
+while ambiguous source failures remain conservative. Session identity and content
+authority are independent endpoint effects: role/editor refusals withdraw older
+protected projections without replacing the owner of exact command journals.
+Ordinary posting closure alone retains independent reads. Administration retains
+private draft/correction/status controls while queries, selected account copies and
+one-time credential display check separate leases. Source/role withdrawal precedes
+journal locks; uncertain bytes stay immutable. See ADR-027 and the verification
+report. Posting closure has a certified response hint; absent hints remain conservative.
+Protected reads, including generic queries and reply expansion, require that
+boundary; session and receipt-only command APIs reject other endpoints before
+dispatch. An architecture test forbids direct component transport imports.
+Guarded revision-only failures preserve
+independently authorized history; unclassified source/history denials revoke.
+No source/delivery clock or worker effects. See
+`src/server/modules/attention/MEMORY.md` and `docs/development/attention-controls.md`.
 Recorded references (ADR-021) use explicit `loom-markdown-v2` declarations from
 openings/comments/text artifacts/summaries; old v1 bytes/digests remain unchanged. Immutable
 memberships/withdrawals commit with the source, keeping exact targets and separate

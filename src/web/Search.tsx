@@ -1,9 +1,10 @@
+import { useAuthorization } from './AuthorizationBoundary.js';
 import { useEffect,useRef,useState } from 'react';
 import { Link,useLocation,useNavigate } from 'react-router';
 import { SearchPage,SearchStatus,SearchHealth,FailedSearchJobs,SearchAuthorsPage,type SearchPageView,type SearchStatusView,type SearchHealthView,type SearchAuthorsView } from '../contracts/search.js';
 import { OrganizationResource,type OrganizationResourceView } from '../contracts/organization.js';
 import { TopicDirectory } from './Organization.js';
-import { identityGeneration,request } from './participation-client.js';
+import { identityGeneration,commandRequest } from './participation-client.js';
 import { useQuery,type Context } from './participation-state.js';
 
 export function IndexingNotice({status}:{status:SearchStatusView}) {
@@ -31,6 +32,7 @@ function AuthorName({id}:{id:string}) {
   return <>{author.data?.items[0]?.nickname??(author.error||author.data?'Author unavailable':'Loading author…')}</>;
 }
 export function SearchPageViewComponent({context:_context}:{context:Context}) {
+  const authority=useAuthorization();
   const location=useLocation(),navigate=useNavigate(),params=new URLSearchParams(location.search);
   const [query,setQuery]=useState(params.get('q')??''),[topic,setTopic]=useState(params.get('topic')??''),
     [descendants,setDescendants]=useState(params.get('descendants')==='true'),[kind,setKind]=useState(params.get('kind')??''),
@@ -48,7 +50,7 @@ export function SearchPageViewComponent({context:_context}:{context:Context}) {
     let active=true;const owner=identityGeneration(),controller=new AbortController();setData(undefined);setError('');
     if(!selected.has('q')){setBusy(false);return;}
     setBusy(true);
-    void request<SearchPageView>('/api/v1/search?'+selected,{schema:SearchPage,signal:controller.signal}).then(value=>{
+    void authority.read<SearchPageView>('/api/v1/search?'+selected,{schema:SearchPage,signal:controller.signal}).then(value=>{
       if(active&&owner===identityGeneration()){setData(value);setBusy(false);heading.current?.focus();}
     },failure=>{if(active&&owner===identityGeneration()&&failure.name!=='AbortError'){setError(failure.message);setBusy(false);}});
     return ()=>{active=false;controller.abort();};
@@ -98,7 +100,7 @@ export function SearchAdministration({context}:{context:Context}) {
   const owner=useRef(identityGeneration()),live=useRef(true);
   useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
   const owned=()=>live.current&&owner.current===identityGeneration();
-  async function action(path:string,body:unknown){setBusy(true);setError('');setNotice('');try{await request(path,{body,self:context.self});if(owned()){setNotice('Search maintenance request accepted. Refresh health to inspect progress.');health.refresh();failed.refresh();setVersion(n=>n+1);}}catch(e){if(owned())setError((e as Error).message);}finally{if(owned())setBusy(false);}}
+  async function action(path:string,body:unknown){setBusy(true);setError('');setNotice('');try{await commandRequest(path,{body,self:context.self});if(owned()){setNotice('Search maintenance request accepted. Refresh health to inspect progress.');health.refreshIfCurrent();failed.refreshIfCurrent();setVersion(n=>n+1);}}catch(e){if(owned())setError((e as Error).message);}finally{if(owned())setBusy(false);}}
   return <details className="card search-admin"><summary>Search indexing administration</summary>
     {health.error&&<p role="alert">{health.error}</p>}{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
     {health.data&&<><p>Generation {health.data.generation} · Worker {health.data.worker_available?'available':'unavailable'} · Initial scan {health.data.scan_complete?'finished':'in progress'}</p>

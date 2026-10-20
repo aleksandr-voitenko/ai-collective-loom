@@ -22,7 +22,8 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
   const children:string[]=[];for(const parent of [f.area,other]){const state=(await f.admin.call('/api/v1/organization/resources/'+parent)).body;
     const r=await f.admin.call('/api/v1/organization/changes',{kind:'area.create',parent_id:parent,title:'Same leaf',description:'Independent scope',expected_hierarchy_version:state.hierarchy_version,idempotency_key:randomUUID()});expect(r.status).toBe(200);children.push(r.body.outcome.resource_id);}
   await page.goto(server.origin+'/loom/following');await expect(page.getByRole('heading',{name:'No explicit follows'})).toBeVisible();
-  await page.goto(server.origin+'/loom/area/'+f.area);const parent=control(page,'area',f.area);
+  const areaAlias=f.area.toUpperCase();
+  await page.goto(server.origin+'/loom/area/'+areaAlias);const parent=control(page,'area',f.area);
   await expect(parent.getByRole('button',{name:'Follow',exact:true})).toBeEnabled();await parent.getByRole('button',{name:'Follow',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(parent.getByRole('button',{name:'Unfollow',exact:true})).toBeEnabled();await parent.getByText('Follow settings',{exact:true}).click();await parent.getByLabel('Include subtopics').check();
   await parent.getByLabel('Opening edits').uncheck();await parent.getByRole('button',{name:'Save follow settings'}).click();await expect(parent.getByRole('button',{name:'Unfollow',exact:true})).toBeEnabled();
@@ -35,16 +36,18 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
   const closed=(await f.admin.call('/api/v1/organization/resources/'+f.area)).body;
   expect((await f.admin.call('/api/v1/organization/changes',{kind:'area.close',resource_id:f.area,expected_version:closed.version,expected_hierarchy_version:closed.hierarchy_version,idempotency_key:randomUUID()})).status).toBe(200);
   await page.goto(server.origin+'/loom/area/'+f.area);await control(page,'area',f.area).getByRole('button',{name:'Follow',exact:true}).click();await expect(control(page,'area',f.area).getByRole('button',{name:'Unfollow',exact:true})).toBeVisible();
+  await page.goto(server.origin+'/loom/following');await expect(page.getByText('Proposals › Same leaf',{exact:true})).toBeVisible();
   const lookupEntered=barrier(),lookupRelease=barrier();
-  await page.route('**/api/v1/me/following/lookup',async route=>{
-    if(route.request().postDataJSON().resource_id===children[1]!){lookupEntered.release();await lookupRelease.promise;}
+  await page.route('**/api/v1/me/attention/previews',async route=>{
+    if(route.request().postDataJSON().targets.some((target:any)=>target.resource_id===children[1]!)){lookupEntered.release();await lookupRelease.promise;}
     await route.continue();
   });
   try{
-    await page.goto(server.origin+'/loom/following');await lookupEntered.promise;
+    await control(page,'area',children[1]!).getByText('Routine attention',{exact:true}).click();
+    await control(page,'area',children[1]!).getByRole('button',{name:'Refresh mute state'}).click();await lookupEntered.promise;
     await expect(page.getByText('Proposals › Same leaf',{exact:true})).toBeVisible();
     await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[children[1]!]);lookupRelease.release();
-    await expect(page.getByRole('heading',{name:'Followed target unavailable'})).toBeVisible();await expect(page.getByText('Proposals › Same leaf',{exact:true})).toHaveCount(0);
+    await expect(page.locator('.following-row').filter({has:control(page,'area',children[1]!)}).getByRole('heading',{name:'Followed target unavailable'})).toBeVisible();await expect(page.getByText('Proposals › Same leaf',{exact:true})).toHaveCount(0);
   }finally{lookupRelease.release();await page.unrouteAll({behavior:'wait'});}
   await control(page,'area',children[1]!).getByRole('button',{name:'Unfollow',exact:true}).click();await expect(control(page,'area',children[1]!).getByRole('status')).toContainText('Explicit follow removed');await page.getByRole('button',{name:'Refresh following'}).click();await expect(page.locator('.following-row')).toHaveCount(2);
   expect((await server.observer.query('SELECT count(*)::int n FROM loom.saved_items')).rows[0].n).toBe(0);
@@ -52,7 +55,7 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
 
 test('failed Following intent writes dispatch nothing; lost committed responses survive reload and stale tabs',async({page,context,server})=>{
   const f=await setup(page,context,server);await page.goto(server.origin+'/loom/resource/'+f.target.resource_id);const follow=control(page,'artifact',f.target.resource_id);await expect(follow.getByRole('button',{name:'Follow',exact:true})).toBeEnabled();
-  let sent=0,lose=true;await page.route('**/api/v1/me/following/state',async route=>{sent++;if(lose){lose=false;await route.fetch();await route.abort('failed');}else await route.continue();});
+  let sent=0,lose=true;await page.route('**/api/v1/me/following/private/state',async route=>{sent++;if(lose){lose=false;await route.fetch();await route.abort('failed');}else await route.continue();});
   await page.evaluate(()=>{const original=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key.startsWith('loom.intent.v1:')){Storage.prototype.setItem=original;throw new DOMException('Following intent not saved','QuotaExceededError');}original.call(this,key,value);};});
   await follow.getByRole('button',{name:'Follow',exact:true}).click();await expect(follow.getByRole('alert')).toContainText('Following intent not saved');expect(sent).toBe(0);
   await follow.getByRole('button',{name:'Refresh follow state'}).click();await follow.getByRole('button',{name:'Follow',exact:true}).click();await expect(follow.getByRole('button',{name:'Check follow status'})).toBeVisible();const original=await journal(page,'following.set');expect(original.state).toBe('uncertain');

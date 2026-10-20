@@ -9,11 +9,11 @@ import { mentioned } from '../helpers/notifications.js';
 import { NativeSearchWorker } from '../../scripts/lib/native-search-worker.js';
 import { syntheticServer } from '../helpers/participation-server.js';
 import { editUpdatesToken } from '../helpers/updates-token.js';
-const records=(page:Page)=>page.evaluate(()=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.updates-pages:')).map(([key,value])=>({key,records:JSON.parse(value)})));
+const records=(page:Page)=>page.evaluate(()=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.routine-updates-pages:')).map(([key,value])=>({key,records:JSON.parse(value)})));
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return {promise,release};}
 function observeUpdates(page:Page){
   let latest:Response;
-  page.on('response',response=>{if(response.url().endsWith('/api/v1/me/updates/query')&&response.ok())latest=response;});
+  page.on('response',response=>{if(response.url().endsWith('/api/v1/me/routine-updates/query')&&response.ok())latest=response;});
   return ()=>latest.json();
 }
 async function ready(page:Page){
@@ -42,7 +42,7 @@ for(const kind of ['personal','artifact'] as const)test(`tokenless ${kind} histo
   else await server.observer.query('UPDATE loom.shared_retrieval_state SET retained_after=1');
   await page.goto(`${server.origin}/loom/updates?kind=${kind}&id=${f.target.resource_id}&events=artifact_revisions&reason=${reason}`);
   await expect(page.getByRole('alert')).toContainText('history is unavailable');expect(await records(page)).toEqual([]);
-  const request=page.waitForRequest(r=>r.url().endsWith('/api/v1/me/updates/query')&&r.postDataJSON().recovery?.action==='resynchronize');
+  const request=page.waitForRequest(r=>r.url().endsWith('/api/v1/me/routine-updates/query')&&r.postDataJSON().recovery?.action==='resynchronize');
   await page.getByRole('button',{name:'Establish an incomplete new baseline'}).click();
   expect((await request).postDataJSON()).toEqual({scope,reason,recovery:{action:'resynchronize'},limit:12,max_response_bytes:131072});
   await ready(page);
@@ -88,7 +88,7 @@ upgradeTest('pre-0013 unknown history offers an incomplete baseline with retaine
   await expect(page.getByText('Historical shared coverage is unknown. No complete combined checkpoint is issued.')).toBeVisible();
   await expect(page.getByRole('button',{name:'Check newer activity'})).toHaveCount(0);
   const clocks=(await server.observer.query('SELECT shared_position FROM loom.community_clocks')).rows;
-  const request=page.waitForRequest(r=>r.url().endsWith('/api/v1/me/updates/query')&&r.postDataJSON().recovery?.action==='resynchronize');
+  const request=page.waitForRequest(r=>r.url().endsWith('/api/v1/me/routine-updates/query')&&r.postDataJSON().recovery?.action==='resynchronize');
   await page.getByRole('button',{name:'Establish an incomplete new baseline'}).click();
   expect((await request).postDataJSON()).toEqual({recovery:{action:'resynchronize',token:unknown.page_cursor},limit:12,max_response_bytes:131072});
   await ready(page);const baseline=await view();
@@ -126,7 +126,7 @@ test('AC07 compact discussion, exact direct source, attributed note, bounded exp
   const inspect=page.getByRole('button',{name:'Inspect changes',exact:true});await inspect.focus();await page.keyboard.press('Enter');await expect(page.getByRole('complementary',{name:'Expanded changes'})).toBeFocused();await expect(page.locator('#updates-expansion ol > li')).toHaveCount(12);
   const saved=await records(page);expect(Object.values(saved[0]!.records)[0]).toHaveProperty('expansion');await page.reload();await ready(page);await expect(page.locator('#updates-expansion ol > li')).toHaveCount(12);
   const encryptionKey=(await server.observer.query('SELECT cursor_key FROM loom.updates_state')).rows[0].cursor_key,expired=await records(page);
-  for(const entry of expired)for(const record of Object.values(entry.records) as any[]){record.request.cursor=editUpdatesToken(record.request.cursor,encryptionKey,b=>b.expires=0);if(record.expansion)record.expansion.cursor=editUpdatesToken(record.expansion.cursor,encryptionKey,b=>b.expires=0);}
+  for(const entry of expired)for(const record of Object.values(entry.records) as any[]){record.request.cursor=editUpdatesToken(record.request.cursor,encryptionKey,b=>b.expires=0,'combined-updates-2');if(record.expansion)record.expansion.cursor=editUpdatesToken(record.expansion.cursor,encryptionKey,b=>b.expires=0,'combined-updates-2');}
   await page.evaluate(entries=>{for(const entry of entries)localStorage.setItem(entry.key,JSON.stringify(entry.records));},expired);
   await page.reload();await page.getByRole('button',{name:'Renew fixed Updates view'}).click();await ready(page);await expect(page.locator('#updates-expansion ol > li')).toHaveCount(12);
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844]] as const){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -143,7 +143,7 @@ test('AC07 compact discussion, exact direct source, attributed note, bounded exp
 test('highlights retain interval on complete switch; failed saves, back and reload preserve exact displayed pages',async({page,context,server})=>{
   await routine(page,context,server);const selected=await records(page);expect(Object.values(selected[0]!.records)[0]).toHaveProperty('checkpoint',null);
   await page.getByLabel('Next page size').selectOption('5');await page.getByRole('button',{name:'Show all matching groups in this interval'}).click();await ready(page);await expect(page.locator('.updates-list > li')).toHaveCount(5);
-  const titles=await page.locator('.updates-list h2').allTextContents(),saved=await records(page);await page.evaluate(()=>{const set=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key.startsWith('loom.updates-pages:')){Storage.prototype.setItem=set;throw new DOMException('Synthetic Updates save failure','QuotaExceededError');}set.call(this,key,value);};});
+  const titles=await page.locator('.updates-list h2').allTextContents(),saved=await records(page);await page.evaluate(()=>{const set=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key.startsWith('loom.routine-updates-pages:')){Storage.prototype.setItem=set;throw new DOMException('Synthetic Updates save failure','QuotaExceededError');}set.call(this,key,value);};});
   const next=page.getByRole('button',{name:'Continue this interval'});await next.focus();await page.keyboard.press('Enter');await expect(page.getByRole('alert')).toContainText('could not be saved');await expect(next).toBeFocused();expect(await records(page)).toEqual(saved);expect(await page.locator('.updates-list h2').allTextContents()).toEqual(titles);
   await page.reload();await ready(page);expect(await page.locator('.updates-list h2').allTextContents()).toEqual(titles);await page.getByRole('button',{name:'Continue this interval'}).click();await ready(page);await expect(page.locator('.updates-list > li')).toHaveCount(2);
   await page.getByRole('button',{name:'Previous Updates page'}).click();await ready(page);expect(await page.locator('.updates-list h2').allTextContents()).toEqual(titles);
@@ -155,7 +155,7 @@ test('highlights retain interval on complete switch; failed saves, back and relo
 
 test('late scope and route responses are fenced and visibility withdrawal removes protected group counts',async({page,context,server})=>{
   const f=await routine(page,context,server),entered=barrier(),release=barrier();let held=false;
-  await page.route('**/api/v1/me/updates/query',async route=>{if(!held){held=true;const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});}else await route.continue();});
+  await page.route('**/api/v1/me/routine-updates/query',async route=>{if(!held){held=true;const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});}else await route.continue();});
   try{await page.getByRole('button',{name:'Refresh scope from retained history'}).click();await entered.promise;await page.getByLabel('Updates scope').selectOption('personal');await ready(page);release.release();await expect(page.locator('.updates-list > li')).toHaveCount(0);}
   finally{release.release();await page.unrouteAll({behavior:'wait'});}
   await page.getByLabel('Updates scope').selectOption('following');await ready(page);await expect(page.locator('.updates-list > li')).toHaveCount(3);
@@ -167,7 +167,7 @@ test('late scope and route responses are fenced and visibility withdrawal remove
 test('sign-out withdraws Updates before blocked cleanup and late responses cannot refill its journal',async({page,context,server})=>{
   await routine(page,context,server);const saved=await records(page),lock=saved[0]!.key;
   await page.evaluate(async name=>{await new Promise<void>(entered=>{void navigator.locks.request(name,()=>new Promise<void>(release=>{(window as any).releaseUpdatesCleanup=release;entered();}));});},lock);
-  const entered=barrier(),release=barrier();await page.route('**/api/v1/me/updates/query',async route=>{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});});
+  const entered=barrier(),release=barrier();await page.route('**/api/v1/me/routine-updates/query',async route=>{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});});
   try{await page.getByRole('button',{name:'Show all matching groups in this interval'}).click();await entered.promise;await page.getByRole('button',{name:'Sign out',exact:true}).click();const confirm=page.getByRole('button',{name:'Clear local drafts and sign out'});if(await confirm.isVisible())await confirm.click();
     await expect.poll(()=>page.evaluate(async name=>(await navigator.locks.query()).pending?.some(l=>l.name===name),lock)).toBe(true);release.release();await expect(page.getByRole('button',{name:'Sign in with passkey'})).toBeVisible();await expect(page.locator('.updates-list > li')).toHaveCount(0);expect(await records(page)).toEqual(saved);
   }finally{release.release();await page.evaluate(()=>(window as any).releaseUpdatesCleanup());await page.unrouteAll({behavior:'wait'});}
@@ -183,7 +183,7 @@ test('retry after an expansion race restores the fixed overview and unseen succe
   const sourceIds=()=>page.locator('#updates-expansion').getByRole('link',{name:'Exact revision 1',exact:true}).evaluateAll(links=>links.map(a=>new URL((a as HTMLAnchorElement).href).pathname.split('/')[3]));
   const first=await sourceIds(),saved=await records(page),shown=(Object.values(saved[0]!.records)[0] as any).expansion;
   const entered=barrier(),release=barrier();let firstRequest=true;
-  await page.route('**/api/v1/me/updates/members',async route=>{
+  await page.route('**/api/v1/me/routine-updates/members',async route=>{
     if(firstRequest){firstRequest=false;await route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:{code:'updates_view_changed',message:'Authority or source state changed during retrieval. Reauthorize the same page.'}})});return;}
     const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});
   });

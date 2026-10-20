@@ -81,6 +81,11 @@ assert.equal(new Set(controlNames).size,controlLabels.length);
 assert.equal(sourceFile('/private/synthetic/reading.spec.ts'),'reading.spec.ts');
 for(const path of ['/loom/reading','/api/v1/me/reading/lookup','/api/v1/me/reading/state','/api/v1/me/reading/status'])
   assert.equal(routeTemplate('https://example.test'+path+'?revision_id='+canary+'&idempotency_key='+canary,'https://example.test'),path);
+assert.equal(sourceFile('/private/synthetic/attention.spec.ts'),'attention.spec.ts');
+for(const path of ['/loom/attention','/api/v1/me/attention/mutes/lookup','/api/v1/me/attention/mutes/state',
+  '/api/v1/me/attention/dismissals/lookup','/api/v1/me/attention/dismissals/state','/api/v1/me/attention/status','/api/v1/me/attention/list',
+  '/api/v1/me/routine-updates/query','/api/v1/me/routine-updates/members','/api/v1/me/routine-updates/reasons','/api/v1/me/routine-updates/selection'])
+  assert.equal(routeTemplate('https://example.test'+path+'?selection='+canary+'&idempotency_key='+canary,'https://example.test'),path);
 
 const large = structuredClone(missing.capture);
 large.events = Array.from({ length: limits.events }, () => ({ ...large.events[0], ms: 86_400_000,

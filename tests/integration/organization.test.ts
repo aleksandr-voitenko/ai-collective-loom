@@ -233,7 +233,14 @@ test('organization over actual HTTPS, current identities and isolated PostgreSQL
     await apply(await fresh(a,'area.move',{parent_id:c}));
     assert.equal((await agent.client.call('/api/v1/resources/'+published.body.resource_id)).body.affected_area_id,a);
     await apply(await fresh(feedback,'area.close'));
-    assert.equal((await agent.client.call('/api/v1/areas/'+a+'/proposal-route')).body.state,'unavailable');
+    const closedRoute=(await agent.client.call('/api/v1/areas/'+a+'/proposal-route')).body;
+    assert.equal(closedRoute.state,'unavailable');assert.equal(closedRoute.unavailable_reason,'publication_closed');
+    assert.deepEqual((await agent.client.call('/api/v1/community')).body.proposal_area,{state:'unavailable',unavailable_reason:'publication_closed'});
+    await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[feedback]);
+    const hiddenRoute=(await agent.client.call('/api/v1/areas/'+a+'/proposal-route')).body;
+    assert.equal(hiddenRoute.state,'unavailable');assert.equal(hiddenRoute.unavailable_reason,undefined);
+    assert.deepEqual((await agent.client.call('/api/v1/community')).body.proposal_area,{state:'unavailable'});
+    await server.observer.query("UPDATE loom.resources SET state='active' WHERE id=$1",[feedback]);
     assert.equal((await agent.client.call('/api/v1/discussions',{...proposal,idempotency_key:randomUUID()})).status,403);
     const settings=(await admin.call('/api/v1/community')).body;
     assert.equal((await admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:settings.settings_version,community_name:settings.community_name,overview_id:settings.overview.resource_id,proposal_area_id:c})).status,200);

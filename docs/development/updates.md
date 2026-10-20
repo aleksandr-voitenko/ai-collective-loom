@@ -173,6 +173,21 @@ journal. Never remove an active `.lock.sqlite` sidecar.
 [Exact reading progress](reading-progress.md) has separate operations and recovery.
 Cards, expanded metadata, notes and complete-feed exhaustion do not mark sources
 read or remove read entries. Existing grouping and checkpoint formats are unchanged.
-Mutes/dismissal, files/private notes, moderation administration,
+[Mutes and bounded dismissal](attention-controls.md) use the separate guide12
+routine projection. Files/private notes, moderation administration,
 production retention/restore operations and representative human/provider/cross-machine
 acceptance remain open. Composite product scenarios are not closed by this subset.
+
+## Guide 12 attention controls
+
+[Routine mutes and exact bounded dismissal](attention-controls.md) have independent
+owner-private versions and recovery. Mute leaves Following and direct mentions/replies
+unchanged; dismissal affects only named shared-event/personal-delivery inputs. Reading
+and Saved remain independent. Combined version 2 applies private routine selection;
+version 1 and standalone all-retained retrieval preserve their existing meaning.
+Complete paths keep every authorized record for the captured scope and interval.
+The shared browser authorization boundary withdraws cards and expansions on source
+refusal and rejects older reads or queued page saves. Retry reauthorizes the saved
+overview and retains the exact pending expansion cursor and budgets. Credential
+refusal fences the browser identity; immutable attention commands remain recoverable
+after current identity is established again.

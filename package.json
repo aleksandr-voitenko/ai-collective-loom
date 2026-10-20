@@ -50,6 +50,7 @@
     "test:notifications:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/notifications*.test.ts",
     "test:following:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/following*.test.ts",
     "test:updates:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/updates*.test.ts",
+    "test:attention:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/attention*.test.ts",
     "test:reading:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/reading*.test.ts"
   },
   "dependencies": {

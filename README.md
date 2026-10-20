@@ -63,7 +63,15 @@ posts, comments, artifacts and summaries, plus bounded discussion selection.
 An opt-in browser prototype marks fully presented text; manual Unread holds for the
 current opening episode. Reading never consumes activity or Saved items. See the
 [reading and recovery guide](docs/development/reading-progress.md).
-Mutes and dismissal remain unfinished.
+Routine Updates now supports private until-unmuted scopes and exact bounded dismissal
+with Undo. Direct mentions/replies remain independent, and complete retrieval keeps
+all authorized records. An attention access refusal withdraws protected content
+until access is checked again; saved commands remain recoverable. Known unavailable
+settings still permit safe removal. Following keeps private choices and removal
+confirmation while withdrawing source titles, paths and previews. Administrator
+permission loss similarly withdraws protected account details while retaining
+private drafts and exact recovery. See the
+[attention controls guide](docs/development/attention-controls.md).
 
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. See the
@@ -121,6 +129,7 @@ npm run test:changes:postgres # revision notes, exact change accounts, upgrade, 
 npm run test:notifications:postgres # ordered personal delivery, native fencing, durable recovery and authorization
 npm run test:following:postgres # private definitions, shared intervals, moves, current authority and restart recovery
 npm run test:updates:postgres # combined grouping, paired recovery, guard races, bounds and populated upgrade
+npm run test:attention:postgres # private mute/dismissal, frozen sets, complete retrieval and recovery
 npm run test:reading:postgres # exact private state, unread precedence, atomic batches and durable recovery
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities

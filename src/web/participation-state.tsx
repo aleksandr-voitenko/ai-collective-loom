@@ -1,40 +1,71 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { identityGeneration, request, type Intent, type IntentStore, type Self } from "./participation-client.js";
+import { identityGeneration, type Intent, type IntentStore, type Self } from "./participation-client.js";
 import type { OnboardingView } from "../contracts/participation.js";
+import { useAuthorization,type AuthorizedValue } from './AuthorizationBoundary.js';
 
 export function useQuery<T>(
   path: string,
   schema?: import("@sinclair/typebox").TSchema,
 ) {
-  const [data, setData] = useState<T>(),
+  const authority = useAuthorization();
+  const generation = authority.capture();
+  const requestGeneration = useRef<number | undefined>(
+    authority.getSnapshot().state === 'withdrawn' ? undefined : generation,
+  );
+  const [result, setData] = useState<AuthorizedValue<T>>(),
     [error, setError] = useState(""),
     [reload, setReload] = useState(0);
   useEffect(() => {
     let active = true;
     const controller = new AbortController(),
-      owner = identityGeneration();
+      owner = identityGeneration(), authorization = authority.capture();
     setData(undefined);
     setError("");
-    void request<T>(path, {
+    // Recovery may mount a query after withdrawal. Neither that mount nor an
+    // older command's refresh callback can authorize another metadata request.
+    if (!authority.current(requestGeneration.current)) return;
+    const options={
       signal: controller.signal,
       ...(schema ? { schema } : {}),
-    }).then(
+    };
+    // The boundary classifies refusal evidence independently of hook liveness.
+    const request=authority.sourcePolicy==='projections'?authority.readProjection<T>(path,options):authority.readAuthorized<T>(path,options);
+    void request.then(
       (value) => {
-        if (active && owner === identityGeneration()) setData(value);
+        if (active && owner === identityGeneration() && authority.current(value.generation)) {
+          // A fresh mixed projection may advance its own lease. Its next page
+          // remains usable without authorizing another query's old callback.
+          requestGeneration.current = value.generation;
+          setData(value);
+        }
       },
       (failure) => {
-        if (active && failure.name !== "AbortError") setError(failure.message);
+        if (active && failure.name !== "AbortError" && authority.current(authorization)) {
+          setError(failure.message);
+        }
       },
     );
     return () => {
       active = false;
       controller.abort();
     };
-  }, [path, reload, schema]);
-  return { data, error, refresh: () => setReload((value) => value + 1) };
+  }, [path, reload, schema, authority]);
+  const automaticGeneration = requestGeneration.current;
+  const refresh = () => {
+      if (authority.current(generation)) {
+        requestGeneration.current = generation;
+        setReload(value => value + 1);
+      }
+    };
+  return { data:result&&authority.current(result.generation)?result.value:undefined,
+    generation:result?.generation,error,refresh,
+    // Private success may refresh an already authorized query, but cannot turn
+    // a recovery action issued after withdrawal into metadata authorization.
+    refreshIfCurrent: () => { if (authority.current(automaticGeneration)) refresh(); } };
 }
 export interface Context {
+  controlsProjection?:'private-controls-1';
   self: Self;
   community: OnboardingView;
   store: IntentStore;

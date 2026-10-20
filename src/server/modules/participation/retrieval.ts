@@ -30,6 +30,11 @@ export class RetrievalError extends Error {
     super(code);
   }
 }
+// Resource/owner guards must succeed before this narrower refusal is raised.
+// It permits independent history discovery without implying a revision exists.
+export class RevisionUnavailableError extends PublicationError {
+  constructor() { super('unavailable'); }
+}
 export type PageOptions = {
   cursor?: string;
   limit?: string;
@@ -109,8 +114,12 @@ export class ParticipationRetrieval {
     const chain = await lockContext(tx, id, "resolution");
     const resource = chain[0]!,
       selected = revisionId ?? resource.current_revision_id;
-    if (!selected) throw new PublicationError("unavailable");
-    await requireRevision(tx, id, selected);
+    if (!selected) throw new RevisionUnavailableError();
+    try { await requireRevision(tx, id, selected); }
+    catch (error) {
+      if (error instanceof PublicationError && error.code === 'unavailable') throw new RevisionUnavailableError();
+      throw error;
+    }
     // An eligible historical body does not authorize disclosing the pointer to a
     // newer suppressed revision, or advertising an edit against that hidden base.
     const currentAvailable =
@@ -200,7 +209,7 @@ export class ParticipationRetrieval {
     ).rows[0]!;
     // Legacy internal test envelopes are not participant documents.
     if (!["loom-markdown-v1", "loom-markdown-v2", "loom-markdown-v3"].includes(body.content_format))
-      throw new PublicationError("unavailable");
+      throw new RevisionUnavailableError();
     const fields = await hasChangeSchema(tx);
     const mentions = (
       await tx.query<{
@@ -365,7 +374,7 @@ export class ParticipationRetrieval {
           const chain = await lockContext(tx, id, "resolution", [kind]);
           if (kind === "area") {
             if (!chain.every((r) => r.publication_open))
-              return { state: "unavailable" as const };
+              return { state: "unavailable" as const, unavailable_reason: 'publication_closed' as const };
             return { state: "ready" as const, resource_id: id };
           }
           const resource = await this.resource(tx, authority, id);
@@ -403,6 +412,10 @@ export class ParticipationRetrieval {
           "retained_without_automatic_expiry; destructive_restore_unsupported" as const,
         derived_effects: "search_and_personal_direct_attention; other_projections_disabled" as const,
         updates_contract: "combined-updates-1" as const,
+        attention_contract: 'attention-controls-1' as const,
+        attention_url: '/api/v1/me/attention/list' as const,
+        routine_updates_contract: 'combined-updates-2' as const,
+        routine_updates_url: '/api/v1/me/routine-updates/query' as const,
         reading_contract: 'reading-state-1' as const,
         reading_url: '/api/v1/me/reading/lookup' as const,
         updates_url: "/api/v1/me/updates/query" as const,

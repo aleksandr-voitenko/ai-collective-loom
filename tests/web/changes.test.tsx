@@ -1,3 +1,4 @@
+import {AuthorizationBoundary} from '../../src/web/AuthorizationBoundary.js';
 import assert from 'node:assert/strict';
 import {afterEach,test,type TestContext} from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -27,7 +28,7 @@ function Editor(){const [account,setAccount]=useState<ChangeAccountValue|null>(n
   return <><ChangeAccountEditor value={account} disabled={false} onChange={setAccount}/><ChangeNoteEditor value={note} disabled={false} onChange={setNote}/><output>{JSON.stringify({account,note})}</output></>;}
 function mount(t:TestContext,editor=true){const calls:{path:string;finish:(response:Response)=>void}[]=[];
   t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(finish=>calls.push({path,finish})));
-  const router=createMemoryRouter([{path:'/changes',element:editor?<Editor/>:<ChangeDiscoveryViewComponent kind="artifact" resource={randomUUID()} revision={randomUUID()}/>},{path:'/other',element:<h1>Other context</h1>}],{initialEntries:['/changes']});
+  const router=createMemoryRouter([{path:'/changes',element:<AuthorizationBoundary>{editor?<Editor/>:<ChangeDiscoveryViewComponent kind="artifact" resource={randomUUID()} revision={randomUUID()}/>}</AuthorizationBoundary>},{path:'/other',element:<h1>Other context</h1>}],{initialEntries:['/changes']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);return {calls,router};}
 function result():ChangeDiscoveryView{return {items:[],scope:'exact_revision',history:'current',form:null,order:'source_revision_uuid_then_field_then_described_revision_uuid',omitted_detail:'bodies; full_account_sets; unavailable_sources_or_targets; other_target_resources',next_cursor:null,complete:true,work_budget_reached:false,limit:12,max_response_bytes:131072,expires_at:'2026-10-16T12:00:00Z'};}
 test('StrictMode exact account selection rejects late edits and route/account completions',async t=>{
@@ -39,17 +40,23 @@ test('StrictMode exact account selection rejects late edits and route/account co
   assert.ok(!screen.queryByRole('button',{name:'Describe this exact revision'}));
   await act(async()=>fireEvent.change(screen.getByLabelText('Described resource ID or exact Loom link'),{target:{value:target.browser_url}}));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check described revision'})));
-  await act(async()=>{invalidateIdentity();calls[1]!.finish(Response.json(target));});assert.ok(!screen.queryByRole('button',{name:'Describe this exact revision'}));
-  // Changing selection resets the discarded request's busy state.
-  await act(async()=>fireEvent.change(screen.getByLabelText('Described resource ID or exact Loom link'),{target:{value:resolved().browser_url}}));
+  await act(async()=>router.navigate('/other'));await act(async()=>calls[1]!.finish(Response.json(target)));assert.ok(screen.getByRole('heading',{name:'Other context'}));
+  await act(async()=>router.navigate('/changes'));
+  await act(async()=>fireEvent.click(screen.getByLabelText('Explain a declared set of changes in this post')));
+  await act(async()=>fireEvent.change(screen.getByLabelText('Described resource ID or exact Loom link'),{target:{value:target.browser_url}}));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check described revision'})));
-  await act(async()=>router.navigate('/other'));await act(async()=>calls[2]!.finish(Response.json(target)));assert.ok(screen.getByRole('heading',{name:'Other context'}));
+  await act(async()=>{invalidateIdentity();calls[2]!.finish(Response.json(target));});assert.ok(!screen.queryByRole('button',{name:'Describe this exact revision'}));
+  assert.equal(!!screen.queryByLabelText('Described resource ID or exact Loom link'),false);
 });
 test('StrictMode account retry confirms an exact set and note preview keeps HTML inert',async t=>{
   const {calls}=mount(t),target=resolved();await act(async()=>fireEvent.click(screen.getByLabelText('Explain a declared set of changes in this post')));
   await act(async()=>fireEvent.change(screen.getByLabelText('Described resource ID or exact Loom link'),{target:{value:target.browser_url}}));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check described revision'})));
   await act(async()=>calls[0]!.finish(Response.json({error:{code:'unavailable',message:'Unavailable'}},{status:404})));assert.ok(screen.getByRole('alert'));
+  assert.equal(!!screen.queryByRole('button',{name:'Check described revision'}),false);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry protected view'})));
+  await act(async()=>fireEvent.click(screen.getByLabelText('Explain a declared set of changes in this post')));
+  await act(async()=>fireEvent.change(screen.getByLabelText('Described resource ID or exact Loom link'),{target:{value:target.browser_url}}));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check described revision'})));await act(async()=>calls[1]!.finish(Response.json(target)));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Describe this exact revision'})));
   assert.equal(document.activeElement,screen.getByLabelText('Described resource ID or exact Loom link'));assert.deepEqual(JSON.parse(screen.getByRole('status').textContent!).account,{revisions:[target.target]});

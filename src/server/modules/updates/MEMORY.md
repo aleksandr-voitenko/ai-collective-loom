@@ -95,3 +95,38 @@ Build before compiled API/browser checks. Use the normal browser runner; retain
 approved failed diagnostics before reruns. Evidence/limits live in
 `docs/development/updates-evidence.md`; synthetic trials do not close composite
 product scenarios or human/provider/cross-machine and retained-data gates.
+
+Guide12 / ADR-027 adds an explicitly separate combined-updates-2 mode and HTTP
+`routine-updates` endpoints. It reuses frozen base groups but retains private
+selection in migration0017 attention_views/members/groups under the attention owner
+guard after Following and before custody/source guards. Selection scans100 existing
+members/request, retaining independent shared/personal flags. It ranks surviving
+routine groups before the three-highlight limit; direct members remain paged.
+Filtered member/reason/selection reads require ready attention custody at the bound
+policy version, under the base-view then selection guards. Missing, partial or old
+projections return updates_attention_preparing; continue overview preparation or
+explicitly attention_refresh the same interval. Complete reads remain available.
+Policy mismatch requires attention_refresh over the same view/scope/definitions/
+reason/intervals/order. Explicit attention refresh renews an expired descriptor
+within the original custody deadline; requiring separate renewal deadlocks when
+policy changed too. Selection-envelope expiry remains independent. Complete
+selection and record/member paths bypass private filters; source/epoch/history
+checks still precede them. Unknown coverage is inherited, never inferred away.
+Version1 performs no attention-table queries, including pre0017 fixtures. Separate
+AAD/contract literals prevent token reinterpretation. Browser default v2 has its own
+routine-updates-pages prefix; explicit legacy mode keeps old saved views usable.
+The mandatory host authorization boundary withdraws the whole visible overview/
+expansion on source refusal or unavailable attention results and fences pending
+reads/recovery saves. Owner refusals enter the shell identity fence. The separate
+attention journal remains recoverable. A bounded attempted expansion request and
+its budgets remain outside the withdrawn subtree, scoped to the same owner/filter,
+so explicit retry reauthorizes the saved overview before that expansion. Page loads
+capture the attention-event
+generation: a response cannot clear a newer local/cross-tab policy-change notice.
+Selection preparation forwards changed-policy, preparing and descriptor-expiry
+errors to explicit refresh/renew recovery, retaining displayed overview/expansion
+budgets and fencing an unseen successor. Expanded source controls invalidate their
+pending/unconfirmed choice when the shared/personal input set changes, even with
+the same event ID and no group cursor. Same-identity late attention completion still
+notifies newly mounted views; sign-out/identity changes suppress that notification.
+See sibling attention memory for command retention and selection envelopes.

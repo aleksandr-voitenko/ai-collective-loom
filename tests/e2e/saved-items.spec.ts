@@ -43,7 +43,12 @@ async function recoveryRecords(page: Page): Promise<Intent[]> {
   return page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('loom.intent.'))
     .map(key => JSON.parse(localStorage.getItem(key)!)).sort((a, b) => a.key.localeCompare(b.key)));
 }
-async function fillSavedTargetLimit(server: Awaited<ReturnType<typeof syntheticServer>>, discussion: string, opening: string) {
+async function fillSavedTargetLimit(server: Awaited<ReturnType<typeof syntheticServer>>, page: Page, area: string) {
+  // Retention-only fixtures must not inject 500 unpublished structural markers
+  // into the discussion whose ordinary reply and recovery UI this test exercises.
+  const created=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:area,title:'Retained quota fixtures',content:content('Separate fixture scope')});
+  const opening=created.resource_id as string;
+  const discussion=(await api(page,'/api/v1/resources/'+opening)).discussion_id as string;
   // Real retained tombstones reach the unchanged server quota; no HTTP refusal is mocked.
   await server.database.transaction(tx => tx.query(`WITH resources AS (
     INSERT INTO loom.resources(id,kind,owner_resource_id,original_author_id)
@@ -182,7 +187,27 @@ test('a collection response from before another tab Unsave cannot claim current 
 });
 
 test('unavailable sources keep safe entries with working Unsave and no copied metadata',async({page,context,server})=>{
-  const d=await setup(page,context,server);await page.goto(server.origin+`/loom/resource/${d.resource}/${d.revision}`);
+  const d=await setup(page,context,server);
+  // Known targets return successful unavailable projections. An unknown target's
+  // 404 would mask a client that only consumes HTTP errors as denial evidence.
+  for(const target of [{kind:'discussion',resource_id:d.discussion},{kind:'contribution',resource_id:d.resource}])
+    await api(page,saved+'/state',{idempotency_key:randomUUID(),target,saved:true,expected_version:0});
+  await page.goto(server.origin+'/loom/discussion/'+d.discussion);
+  await expect(page.getByText('Opening for private bookmarks',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Unsave discussion',exact:true})).toBeEnabled();await page.waitForLoadState('networkidle');
+  const missing:string[]=[];const observe=(response:import('@playwright/test').Response)=>{if(response.status()===404)missing.push(new URL(response.url()).pathname);};
+  page.on('response',observe);
+  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[d.discussion]);
+  const receipt=page.waitForResponse(response=>new URL(response.url()).pathname===saved+'/state'&&response.status()===200);
+  await page.getByRole('button',{name:'Unsave discussion',exact:true}).click();
+  expect((await (await receipt).json()).current.source.state).toBe('unavailable');
+  await expect(page.getByText('Opening for private bookmarks',{exact:true})).not.toBeVisible();
+  await expect(page.getByRole('heading',{name:'Saved discussion',exact:true})).not.toBeVisible();
+  await expect.poll(async()=>(await recoveryRecords(page)).filter(r=>r.kind==='saved.set').length).toBe(0);
+  expect(missing).toEqual([]);page.off('response',observe);
+  await server.observer.query("UPDATE loom.resources SET state='active' WHERE id=$1",[d.discussion]);
+  await api(page,saved+'/state',{idempotency_key:randomUUID(),target:{kind:'contribution',resource_id:d.resource},saved:false,expected_version:1});
+  await page.goto(server.origin+`/loom/resource/${d.resource}/${d.revision}`);
   await page.getByRole('button',{name:'Save this revision',exact:true}).click();await expect(page.getByRole('button',{name:'Unsave',exact:true})).toBeEnabled();
   await server.observer.query("UPDATE loom.revisions SET availability='suppressed' WHERE id=$1",[d.revision]);
   await page.getByRole('link',{name:'Saved items',exact:true}).click();
@@ -250,7 +275,7 @@ test('bounded collection retries failed next page and isolates navigation and ac
 
 test('first Saved quota refusal survives reload as rejected and dismisses only its own record', async ({ page, context, server }) => {
   const d = await setup(page, context, server);
-  await fillSavedTargetLimit(server, d.discussion, d.resource);
+  await fillSavedTargetLimit(server, page, d.area);
   await page.goto(server.origin + '/loom/discussion/' + d.discussion);
   await expect(page.getByRole('button', { name: 'Save discussion', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Reply', exact: true }).click();
@@ -288,7 +313,7 @@ test('first Saved quota refusal survives reload as rejected and dismisses only i
 
 test('lost Saved quota response stays uncertain after reload, absent status and refused exact retry', async ({ page, context, server }) => {
   const d = await setup(page, context, server);
-  await fillSavedTargetLimit(server, d.discussion, d.resource);
+  await fillSavedTargetLimit(server, page, d.area);
   await page.goto(server.origin + '/loom/discussion/' + d.discussion);
   const lost = barrier();
   await page.route('**' + saved + '/state', async route => {
@@ -324,7 +349,7 @@ test('lost Saved quota response stays uncertain after reload, absent status and 
 
 test('a competing Saved retry prevents a late first quota refusal from releasing uncertainty', async ({ page, context, server }) => {
   const d = await setup(page, context, server);
-  await fillSavedTargetLimit(server, d.discussion, d.resource);
+  await fillSavedTargetLimit(server, page, d.area);
   const url = server.origin + '/loom/discussion/' + d.discussion;
   await page.goto(url);
   const other = await context.newPage(); await other.goto(url);

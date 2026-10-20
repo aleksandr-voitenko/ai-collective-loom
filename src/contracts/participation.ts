@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "11";
+export const guideRevision = "12";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -274,6 +274,7 @@ const Designation = Type.Object(
     ]),
     resource_id: Type.Optional(UUID),
     revision_id: Type.Optional(UUID),
+    unavailable_reason: Type.Optional(Type.Literal('publication_closed')),
   },
   closed,
 );
@@ -304,6 +305,10 @@ export const Onboarding = Type.Object(
     ),
     derived_effects: Type.Literal("search_and_personal_direct_attention; other_projections_disabled"),
     updates_contract: Type.Literal("combined-updates-1"),
+    attention_contract: Type.Literal('attention-controls-1'),
+    attention_url: Type.Literal('/api/v1/me/attention/list'),
+    routine_updates_contract: Type.Literal('combined-updates-2'),
+    routine_updates_url: Type.Literal('/api/v1/me/routine-updates/query'),
     reading_contract: Type.Literal('reading-state-1'),
     reading_url: Type.Literal('/api/v1/me/reading/lookup'),
     updates_url: Type.Literal("/api/v1/me/updates/query"),
@@ -324,6 +329,7 @@ export const ParticipationError = Type.Object(
         message: Type.String(),
         request_id: UUID,
         current_revision_id: Type.Optional(NullableId),
+        unavailable_scope: Type.Optional(Type.Literal('revision')),
         minimum_response_bytes: Type.Optional(Type.Integer()),
         operation_outcome: Type.Optional(Type.Union([Type.Literal("unknown"),Type.Literal("rejected")])),
         recovery: Type.Object({ action: Type.String() }, closed),

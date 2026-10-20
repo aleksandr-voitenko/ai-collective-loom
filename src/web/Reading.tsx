@@ -1,20 +1,22 @@
+import { useAuthorization } from './AuthorizationBoundary.js';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ReadingPage, ReadingResult, ReadingStatus, readingLimits, type ReadingItemView, type ReadingTargetView,
   type ReadingUpdateInput, type ReadingStatusView, type ReadingPageView } from '../contracts/reading.js';
 import type { AuthoredContent } from '../contracts/participation.js';
 import type { Context } from './participation-state.js';
-import { ApiError, identityGeneration, request } from './participation-client.js';
+import { ApiError, identityGeneration, commandRequest } from './participation-client.js';
 import { ReadingRecovery, exportReadingRecovery, type ReadingIntent } from './reading-recovery.js';
 import { PresentedBands, PresentationEpisode, presentationPolicy, viewportPresentation } from './reading-presentation.js';
 import { AuthoredText } from './AuthoredText.js';
 
-type Entry={target:ReadingTargetView;label:string;count:number};
+type Authority=ReturnType<typeof useAuthorization>;
+type Entry={target:ReadingTargetView;label:string;authorities:Map<Authority,number>};
 type State={item?:ReadingItemView;error?:string};
 interface Session {
   states:Map<string,State>;entries:Map<string,Entry>;selected:Set<string>;records:ReadingIntent[];enabled:boolean;error:string;
   fences:PresentationEpisode;episode:string;active:()=>boolean;
-  register:(target:ReadingTargetView,label:string)=>()=>void;refresh:()=>void;
+  register:(target:ReadingTargetView,label:string,authority:Authority)=>()=>void;refresh:()=>void;
   select:(id:string,selected:boolean)=>void;
   mark:(targets:ReadingUpdateInput['targets'],basis:'manual'|'presentation')=>Promise<void>;
   recover:(record:ReadingIntent,retry:boolean)=>Promise<void>;dismiss:(record:ReadingIntent)=>Promise<void>;
@@ -34,10 +36,14 @@ export function ReadingProvider({context,children}:{context:Context;children:Rea
     if(timer.current)clearTimeout(timer.current);
     timer.current=setTimeout(()=>{
       if(!active())return;
-      const list=[...entries.current.values()].map(e=>e.target);
-      for(let i=0;i<list.length;i+=readingLimits.batch){
+      // The provider owns private recovery, but each text host owns its reads.
+      // Do not give the persistent provider an independent metadata lease.
+      const groups=new Map<Authority,ReadingTargetView[]>();
+      for(const entry of entries.current.values())for(const authority of entry.authorities.keys())
+        groups.set(authority,[...(groups.get(authority)??[]),entry.target]);
+      for(const [authority,list] of groups)for(let i=0;i<list.length;i+=readingLimits.batch){
         const targets=list.slice(i,i+readingLimits.batch);
-        void request<ReadingPageView>('/api/v1/me/reading/lookup',{body:{targets},self:latestContext.current.self,schema:ReadingPage}).then(page=>{
+        void authority.read<ReadingPageView>('/api/v1/me/reading/lookup',{body:{targets},self:latestContext.current.self,schema:ReadingPage}).then(page=>{
           if(!active()||seq!==sequence.current)return;
           setStates(previous=>{
             const next=new Map(previous);
@@ -57,12 +63,16 @@ export function ReadingProvider({context,children}:{context:Context;children:Rea
       }
     },0);
   },[active]);
-  const register=useCallback((target:ReadingTargetView,label:string)=>{
+  const register=useCallback((target:ReadingTargetView,label:string,authority:Authority)=>{
     const old=entries.current.get(target.revision_id);
-    entries.current.set(target.revision_id,{target,label,count:(old?.count??0)+1});redraw(n=>n+1);refresh();
+    const authorities=old?.authorities??new Map<Authority,number>();
+    authorities.set(authority,(authorities.get(authority)??0)+1);
+    entries.current.set(target.revision_id,{target,label,authorities});redraw(n=>n+1);refresh();
     return ()=>{
       const entry=entries.current.get(target.revision_id);
-      if(entry&&entry.count>1)entry.count--;else{
+      const count=entry?.authorities.get(authority)??0;
+      if(count>1)entry!.authorities.set(authority,count-1);else entry?.authorities.delete(authority);
+      if(!entry?.authorities.size){
         entries.current.delete(target.revision_id);
         setStates(previous=>{const next=new Map(previous);next.delete(target.revision_id);return next;});
       }
@@ -88,7 +98,7 @@ export function ReadingProvider({context,children}:{context:Context;children:Rea
     let dispatched:ReadingIntent|undefined;
     try{
       if(retry)dispatched=await journal.begin(record);
-      const result=await request<ReadingStatusView>('/api/v1/me/reading/'+(retry?'state':'status'),{
+      const result=await commandRequest<ReadingStatusView>('/api/v1/me/reading/'+(retry?'state':'status'),{
         body:retry?record.body:{idempotency_key:record.body.idempotency_key},self:context.self,schema:retry?ReadingResult:ReadingStatus});
       if(result.operation_state==='not_recorded'){
         if(active())setError('This change is not recorded yet. It may still commit; retry the same change to resolve it.');
@@ -130,10 +140,11 @@ export function ReadingProvider({context,children}:{context:Context;children:Rea
 
 export function ReadingText({target,number,content,participants,selectable=false}:{target:ReadingTargetView;number:string;
   content:AuthoredContent;participants:{id:string;nickname:string}[];selectable?:boolean}){
+  const authority=useAuthorization();
   const session=useContext(ReadingContext),node=useRef<HTMLDivElement>(null),observed=useRef<{version:number;bands:PresentedBands}|undefined>(undefined);
   const latest=useRef(session);latest.current=session;
   const register=session?.register;
-  useEffect(()=>register?.(target,'Revision '+number),[register,target.resource_id,target.revision_id,number]);
+  useEffect(()=>register?.(target,'Revision '+number,authority),[register,target.resource_id,target.revision_id,number,authority]);
   const state=session?.states.get(target.revision_id),item=state?.item;
   useEffect(()=>{
     const tick=()=>{

@@ -69,18 +69,34 @@ no subscriptions and baseline establishment. Inventory is bounded source browsin
 not search; it may change during paging and cannot reconstruct expired history.
 
 Browser `Following.tsx` uses existing sequenced intent storage plus short per-target
-Web Locks, never across network work. Unfollow uses retained settings independently
+Web Locks, never across network work. Resource UUID comparison keys ignore case;
+pending recovery matches frozen targets rather than legacy slot spelling, leaving
+saved slots and command bodies unchanged. Unfollow uses retained settings independently
 of incomplete preference edits. `SharedChanges.tsx` keeps controls stable while keying
 results by owner/scope to fence late requests and StrictMode remounts. `shared-recovery.ts`
 saves displayed token/budgets before exposing successor; renewal preserves those
 item/byte budgets. Previous_request remains
 recoverable on failed writes. One page/eight back requests,16 views/32 KiB each/512 KiB
 total/100 recent IDs, with no silent eviction. Sign-out fences identity before cleanup.
-Following row metadata follows its control's newer lookup/decision: an unavailable
-source must withdraw the cached row title/path even before membership is refreshed.
-An explicit collection refresh also adopts editor settings/version and fences older
-lookups without remounting controls. A control's own reported policy placeholder is
-feedback, not a successful refresh that can clear its authentication error.
+FollowControl and its embedded mute require the host authorization context.
+`AuthorizationBoundary.tsx` adapts the identity-scoped protected-content coordinator.
+The browser uses additive `/me/following/private` projections for owner settings and
+receipts and explicit bounded `/me/attention/previews` for metadata. Legacy routes,
+digests, journals and token meanings remain intact. Safe Unfollow and exact outcomes
+do not hydrate source metadata. New Follow and unknown removals still reauthorize.
+Private versions merge independently of source leases; retiring temporary recovery
+controls preserves confirmation. Preview metadata lives in the coordinator, not
+private rows. Every same-owner source denial revokes all protected regions across
+restoration/retry/remount regardless of request start generation. Old positive responses cannot restore withdrawn content.
+Private refreshes cannot implicitly refill withdrawn previews. Full-source hosts
+withdraw as a whole; Following preserves safe settings and removal feedback.
+Cached paths never exempt a region from withdrawal: current containment can change
+after a preview, and reordered responses can replace newer paths. Pending requests
+retain their generation fence through settlement. Private receipts never certify
+source scope.
+Owner refusal fences the identity even after same-owner navigation; older identities
+cannot revoke replacements. Repeated transitions, sibling and pending responses,
+blocked journal settlement and real server evaluation order are regression cases.
 The native shared-changes-client fsyncs a separate0600 journal; next uses its exact
 saved successor even when resized. Build before native API/browser tests.
 
@@ -89,7 +105,8 @@ saved successor even when resized. Build before native API/browser tests.
 See task evidence for observed commands/failures. Sibling `updates/` reuses exported
 candidate classification/matching and exact item projection inside its own complete
 transaction/guard plan (ADR-025); standalone token semantics remain unchanged.
-Mutes/dismissal remain future work. Exact private reading is separate in
+Sibling `attention/` reuses event-time matching for mutes (ADR-027); it never changes
+subscriptions or this complete shared retrieval. Exact private reading is separate in
 `../participation/reading.ts` (ADR-026); Following and Changes never mark sources read.
 No production, human usability,
 provider-agent or cross-machine acceptance is implied.

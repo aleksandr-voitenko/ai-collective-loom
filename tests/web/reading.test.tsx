@@ -1,3 +1,4 @@
+import {AuthorizationBoundary} from '../../src/web/AuthorizationBoundary.js';
 import assert from 'node:assert/strict';
 import { test,afterEach,type TestContext } from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -24,7 +25,7 @@ function mount(t:TestContext,automatic=false,targets=[target]){
   if(automatic)localStorage.setItem(recovery.preference,'true');
   const calls:{path:string;body:any;finish:(r:Response)=>void}[]=[];
   t.mock.method(globalThis,'fetch',(path:string,options:any)=>new Promise<Response>(finish=>calls.push({path,body:JSON.parse(options.body),finish})));
-  const router=createMemoryRouter([{path:'/read',element:<ReadingProvider context={context}>{targets.map((target,index)=><ReadingText key={target.revision_id} target={target} number={String(index+1)} content={{format:'loom-markdown-v1',text:'Exact readable text',mentions:[]}} participants={[]}/>)}<ReadingPageViewComponent/></ReadingProvider>},{path:'/other',element:<h1>Other</h1>}],{initialEntries:['/read']});
+  const router=createMemoryRouter([{path:'/read',element:<ReadingProvider context={context}><AuthorizationBoundary>{targets.map((target,index)=><ReadingText key={target.revision_id} target={target} number={String(index+1)} content={{format:'loom-markdown-v1',text:'Exact readable text',mentions:[]}} participants={[]}/>)}<ReadingPageViewComponent/></AuthorizationBoundary></ReadingProvider>},{path:'/other',element:<h1>Other</h1>}],{initialEntries:['/read']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   return {context,recovery,calls,router};
 }
@@ -34,6 +35,27 @@ async function settle(calls:ReturnType<typeof mount>['calls'],read=false,version
   await act(async()=>{for(const c of calls.filter(c=>c.path.endsWith('/lookup')))c.finish(Response.json(page(read,version)));});
   await waitFor(()=>assert.equal((screen.getByRole('button',{name:'Mark unread'}) as HTMLButtonElement).disabled,false));
 }
+test('reading lookup withdrawal clears its text host while a pending private command settles and a fresh read recovers',async t=>{
+  const f=mount(t);await settle(f.calls);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Mark unread'})));
+  await waitFor(()=>assert.ok(f.calls.some(c=>c.path.endsWith('/state'))));
+  const command=f.calls.find(c=>c.path.endsWith('/state'))!,frozen=JSON.stringify(f.recovery.all()[0]!.body),before=f.calls.length;
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh reading status'})));
+  await waitFor(()=>assert.ok(f.calls.length>before));
+  await act(async()=>f.calls.at(-1)!.finish(Response.json({error:{code:'unavailable',message:'Source denied'}},{status:404})));
+  assert.equal(!!screen.queryByText('Exact readable text'),false);
+  assert.equal(JSON.stringify(f.recovery.all()[0]!.body),frozen);
+  await act(async()=>command.finish(Response.json({operation_state:'applied',operation_id:randomUUID(),idempotency:'created',
+    outcome:{basis:'manual',episode_id:null,targets:[{...command.body.targets[0],result_version:1}]},current:page(false,1).items})));
+  await waitFor(()=>assert.equal(f.recovery.all().length,0));
+  assert.equal(!!screen.queryByText('Exact readable text'),false);
+  const deniedCount=f.calls.length;
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry protected view'})));
+  await waitFor(()=>assert.ok(f.calls.length>deniedCount));
+  await act(async()=>f.calls.at(-1)!.finish(Response.json(page(false,1))));
+  await waitFor(()=>assert.equal((screen.getByRole('button',{name:'Mark unread'}) as HTMLButtonElement).disabled,false));
+  assert.ok(screen.getByText('Exact readable text'));
+});
 test('StrictMode saves exact manual unread before dispatch; old status cannot replace a newer state',async t=>{
   const f=mount(t);await settle(f.calls);const button=screen.getByRole('button',{name:'Mark unread'});button.focus();
   await act(async()=>fireEvent.click(button));await waitFor(()=>assert.ok(f.calls.some(c=>c.path.endsWith('/state'))));

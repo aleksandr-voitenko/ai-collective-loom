@@ -4,8 +4,77 @@ import { JSDOM } from "jsdom";
 import {
   IntentStore,
   invalidateIdentity,
-  request,
+  sessionRequest,
+  commandRequest,
+  identityGeneration,
 } from "../../src/web/participation-client.js";
+
+test('anonymous identity probes settle without announcing another identity change',async t=>{
+  let announcements=0;
+  Object.defineProperty(globalThis,'window',{value:{dispatchEvent:()=>{announcements++;return true;}},configurable:true});
+  t.mock.method(globalThis,'fetch',async()=>Response.json({error:{code:'unauthenticated',message:'Sign in required.'}},{status:401}));
+  const before=identityGeneration();
+  for(let attempt=0;attempt<3;attempt++)await assert.rejects(sessionRequest('/api/v1/identity/self'),{code:'unauthenticated'});
+  assert.equal(announcements,0,'An anonymous probe is a settled session state, not a new revocation event.');
+  assert.equal(identityGeneration(),before);
+});
+
+test('ceremony failures and missing identity records do not revoke established source authority',async t=>{
+  Object.defineProperty(globalThis,'window',{value:{dispatchEvent:()=>true},configurable:true});
+  t.mock.method(globalThis,'fetch',async()=>Response.json({participant_id:'reader'}));
+  await sessionRequest('/api/v1/identity/self');
+  const before=identityGeneration();
+  for(const ceremony of ['register','signin'])for(const step of ['start','finish'])for(const code of ['unauthenticated','invalid_proof','unavailable']){
+    t.mock.method(globalThis,'fetch',async()=>Response.json({error:{code,message:'Ceremony refused.'}},{status:401}));
+    await assert.rejects(sessionRequest(`/api/v1/identity/${ceremony}/${step}`,{body:{}}),{code});
+    assert.equal(identityGeneration(),before);
+  }
+  t.mock.method(globalThis,'fetch',async()=>Response.json({error:{code:'unavailable',message:'Identity record absent.'}},{status:404}));
+  await assert.rejects(commandRequest('/api/v1/identity/revoke',{body:{}}),{code:'unavailable'});
+  assert.equal(identityGeneration(),before);
+  invalidateIdentity();
+});
+
+test('an anonymous discovery fences older positive probes without announcing revocation',async t=>{
+  Object.defineProperty(globalThis,'window',{value:{dispatchEvent:()=>true},configurable:true});invalidateIdentity();
+  const calls:((r:Response)=>void)[]=[];t.mock.method(globalThis,'fetch',()=>new Promise<Response>(resolve=>calls.push(resolve)));
+  const old=sessionRequest('/api/v1/identity/self'),oldRejected=assert.rejects(old,{name:'AbortError'});
+  const current=sessionRequest('/api/v1/identity/self'),currentRejected=assert.rejects(current,{code:'unauthenticated'});
+  const before=identityGeneration();calls[1]!(Response.json({error:{code:'unauthenticated',message:'Anonymous.'}},{status:401}));await currentRejected;
+  assert.equal(identityGeneration(),before);
+  calls[0]!(Response.json({participant_id:'older owner'}));await oldRejected;
+  assert.equal(identityGeneration(),before);
+});
+
+test('late discovery refusal revokes a same-owner success but cannot revoke a replacement identity',async t=>{
+  let events=0;Object.defineProperty(globalThis,'window',{value:{dispatchEvent:()=>{events++;return true;}},configurable:true});invalidateIdentity();
+  const calls:((r:Response)=>void)[]=[];t.mock.method(globalThis,'fetch',()=>new Promise<Response>(resolve=>calls.push(resolve)));
+  const old=sessionRequest('/api/v1/identity/self'),oldRejected=assert.rejects(old,{code:'unauthenticated'});
+  const newer=sessionRequest('/api/v1/identity/self');calls[1]!(Response.json({participant_id:'reader'}));await newer;
+  const before=events;calls[0]!(Response.json({error:{code:'unauthenticated',message:'Expired.'}},{status:401}));await oldRejected;
+  assert.equal(events,before+1);
+  const departing=sessionRequest('/api/v1/identity/self'),departed=assert.rejects(departing,{name:'AbortError'});
+  invalidateIdentity();const replacement=sessionRequest('/api/v1/identity/self');calls[3]!(Response.json({participant_id:'replacement'}));await replacement;
+  const replacementOwner=identityGeneration();calls[2]!(Response.json({error:{code:'unauthenticated',message:'Old owner.'}},{status:401}));await departed;
+  assert.equal(identityGeneration(),replacementOwner);invalidateIdentity();
+});
+
+test('a definitive publication refusal preserves the authenticated owner and settles its exact journal',async t=>{
+  Object.defineProperty(globalThis,'window',{value:{dispatchEvent:()=>true},configurable:true});invalidateIdentity();t.after(()=>invalidateIdentity());
+  t.mock.method(globalThis,'fetch',async()=>Response.json({participant_id:'reader'}));
+  await sessionRequest('/api/v1/identity/self');
+  const storage=new JSDOM('',{url:'https://loom.example'}).window.localStorage;
+  const store=new IntentStore('instance','reader',storage,'https://loom.example');
+  const body={discussion_id:crypto.randomUUID(),parent_id:crypto.randomUUID(),content:{format:'loom-markdown-v1',text:'Preserved reply',mentions:[]}};
+  const exact=await store.prepareDispatch(store.create('reply:parent','reply.create','/api/v1/replies',body),body);
+  const before=identityGeneration();
+  // Closing publication leaves the session and readable source valid. This is
+  // the real protocol exercised by participation.spec.ts's revoked-rights case.
+  t.mock.method(globalThis,'fetch',async()=>Response.json({error:{code:'forbidden',message:'Publication is closed.'}},{status:403}));
+  await assert.rejects(commandRequest('/api/v1/replies',{body:exact.body}),{code:'forbidden'});
+  const rejected=await store.settle(exact,{state:'rejected'});
+  assert.equal(identityGeneration(),before);assert.equal(rejected.state,'rejected');assert.deepEqual(rejected.body,exact.body);
+});
 
 test('v3 journal round-trips explicit change fields and refuses malformed or silently stripped semantics',async()=>{
   const storage=new JSDOM('',{url:'https://loom.example'}).window.localStorage;
@@ -98,10 +167,30 @@ test("even an uncancellable successful HTTP response is discarded after identity
     release = resolve;
   });
   t.mock.method(globalThis, "fetch", () => held);
-  const pending = request("/api/v1/resources/example");
+  const pending = sessionRequest("/api/v1/identity/self");
   invalidateIdentity();
   release(new Response(JSON.stringify({ private: "old owner result" })));
   await assert.rejects(pending, { name: "AbortError" });
+});
+
+test('session and command APIs reject protected reads before dispatch and preserve command bytes',async t=>{
+  const calls:{path:string;body:unknown}[]=[];
+  t.mock.method(globalThis,'fetch',async(path:string,options?:RequestInit)=>{
+    calls.push({path,body:options?.body});return Response.json({operation_state:'not_recorded'});
+  });
+  for(const path of ['/api/v1/resources/example','/api/v1/contributions/example/children',
+    '/api/v1/me/reading/lookup','/api/v1/me/saved-items/lookup','/api/v1/me/following/private',
+    '/api/v1/shared-changes/query','/api/v1/me/attention/previews','/api/v1/new-protected-read']){
+    await assert.rejects(sessionRequest(path),/authorization boundary/);
+    await assert.rejects(sessionRequest(path,{body:{}}),/authorization boundary/);
+    await assert.rejects(commandRequest(path,{body:{}}),/authorization boundary/);
+  }
+  await assert.rejects(commandRequest('/api/v1/artifacts',{body:undefined}),/authorization boundary/);
+  assert.equal(calls.length,0);
+  const body={idempotency_key:'ABCDEFAB-1234-1234-1234-ABCDEFABCDEF',content:{format:'loom-markdown-v1',text:'Frozen\r\nbytes',mentions:[]}};
+  await commandRequest('/api/v1/replies',{body});
+  await commandRequest('/api/v1/replies',{body});
+  assert.deepEqual(calls,[{path:'/api/v1/replies',body:JSON.stringify(body)},{path:'/api/v1/replies',body:JSON.stringify(body)}]);
 });
 
 test("only definitive first-dispatch rejection permits a corrected identity", async () => {

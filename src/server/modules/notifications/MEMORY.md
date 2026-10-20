@@ -77,8 +77,7 @@ not consume each other's deliveries. Native supervisor supports notifications
 stop/start separately from search. Build before tests that launch compiled files.
 
 See `tests/MEMORY.md` and notification evidence for real PostgreSQL/HTTPS/native
-barriers, upgrade, recovery, StrictMode and browser coverage. Mutes,
-dismissal, file/private-note integration, moderation
+barriers, upgrade, recovery, StrictMode and browser coverage. File/private-note integration, moderation
 administration, production and human/provider/cross-machine validation remain open.
 Exact private reading lives in `../participation/reading.ts` (ADR-026); fetching
 personal deliveries never marks a source read or consumes its independent state.
@@ -91,3 +90,13 @@ Sibling `updates/` (ADR-025) reuses internal reason/item and projection policy u
 its own complete actor/owner/source guard plan. Its personal availability interval
 stays independent of shared boundaries, including repaired older publications.
 Migration0014 and combined reads do not mutate worker/claim/delivery/standalone state.
+
+Guide12 attention controls never mutate this module's claims, signals or deliveries.
+Standalone notifications remain all-retained, including dismissed IDs. Only the
+explicit combined-updates-2 routine projection filters named personal deliveries;
+a mute alone never removes personal input. See `../attention/MEMORY.md`.
+Browser dismissal controls share the mandatory authorization boundary with the
+whole Mentions/replies page. Source refusal withdraws cached delivery metadata and
+fences pending pages/saves without advancing the saved personal request. Owner
+refusal enters the shell identity fence; exact attention commands stay recoverable.
+Fresh retry retains the existing visibility replay and all-retained semantics.

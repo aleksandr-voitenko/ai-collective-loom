@@ -7,6 +7,8 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { UpdatesPage } from '../../src/web/Updates.js';
 import { UpdatesRecovery } from '../../src/web/updates-recovery.js';
+import { AttentionRecovery,type AttentionCommandView } from '../../src/web/attention-recovery.js';
+import type { RoutinePageView } from '../../src/contracts/routine-updates.js';
 import { IntentStore,invalidateIdentity } from '../../src/web/participation-client.js';
 import type { Context } from '../../src/web/participation-state.js';
 import type { UpdatesPageView,UpdatesMembersPageView } from '../../src/contracts/updates.js';
@@ -26,14 +28,130 @@ function result(cursor='shown'):UpdatesPageView{return {
   page_cursor:cursor,next_cursor:'next',checkpoint:null,complete_cursor:'complete',direct_cursor:'direct',records_cursor:'records',page_exhausted:false,selection_exhausted:false,grouped_interval_complete:false,member_metadata_complete:false,full_contents_fetched:false,
   projection:{state:'complete',coverage:'currently_eligible_supported_sources'},work_budget_reached:false,recovery:'none',baseline_established:false,inventory:[],limit:12,max_response_bytes:131072};}
 const expansion=(cursor='members-shown'):UpdatesMembersPageView=>({contract_version:'combined-updates-1',traversal_id:traversal,group_id:group,direct_only:false,items:[],page_cursor:cursor,next_cursor:'members-next',complete:false,full_contents_fetched:false,limit:5,max_response_bytes:8192});
-function mount(t:TestContext,entry='/loom/updates'){
+function mount(t:TestContext,entry='/loom/updates',routine=false){
   const calls:{path:string;body:any;finish:(r:Response)=>void}[]=[];t.mock.method(globalThis,'fetch',(path:string,options:any)=>new Promise<Response>(finish=>calls.push({path,body:options.body?JSON.parse(options.body):undefined,finish})));
-  const instance=randomUUID(),participant=randomUUID(),store=new IntentStore(instance,participant),context={community:{instance_id:instance},self:{participant_id:participant,csrf:'fixture'},store} as Context;
+  const instance=randomUUID(),participant=randomUUID(),store=new IntentStore(instance,participant),context={community:{instance_id:instance,...(routine?{routine_updates_contract:'combined-updates-2'}:{})},self:{participant_id:participant,csrf:'fixture'},store} as Context;
   const router=createMemoryRouter([{path:'/loom/updates',element:<UpdatesPage context={context}/>},{path:'/other',element:<h1>Other view</h1>}],{initialEntries:[entry]});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);return {calls,router,context};
 }
 const records=()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('loom.updates-pages:'))!)!);
 const record=()=>Object.values(records())[0] as any;
+function routineResult(cursor='shown',policy=0,count=1):RoutinePageView{
+  const page=result(cursor);page.items[0]!.counts={...page.items[0]!.counts,source_records:count,shared_changes:count,artifact_changes:count};
+  return {...page,contract_version:'combined-updates-2',attention:{policy_version:policy,selection:'remaining_routine_inputs',
+    counts:'source_records; shared_events; personal_signals_are_distinct_units',refresh:'explicit_same_scope_and_intervals'}};
+}
+const muteItem=(version=0,muted=false)=>({target:{kind:'artifact',resource_id:group},include_descendants:false,muted,version,
+  source:{state:'available',title:'Visible mute preview',path:[],browser_url:'/loom/resource/'+group},other_current_scope_mutes:[]});
+const attentionInput=()=>({kind:'shared_event' as const,id:randomUUID(),version:0,dismissed:false,availability:'available'});
+const selected=(inputs:ReturnType<typeof attentionInput>[])=>({selection:'exact-selection',inputs,policy_version:0,shared_events:inputs.length,personal_signals:0,
+  membership:'exact_represented_inputs_including_unexpanded_direct_sources',expires_at:'2030-01-01T00:00:00Z'});
+const dismissed=(body:any)=>({kind:'dismissal',operation_state:'applied',idempotency:'replayed',operation_id:randomUUID(),policy_version:1,
+  outcome:{inputs:body.inputs.map((v:any)=>({...v,result_version:1}))},current:body.inputs.map(({kind,id,dismissed}:any)=>({kind,id,dismissed,version:1,availability:'available'}))});
+async function settleRoutine(f:ReturnType<typeof mount>,page=routineResult()){
+  await act(async()=>{for(const c of f.calls.filter(c=>c.path.endsWith('/query')))c.finish(Response.json(page));});
+  await act(async()=>{for(const c of f.calls.filter(c=>c.path.endsWith('/mutes/lookup')))c.finish(Response.json(muteItem()));});
+  for(const detail of document.querySelectorAll('details'))detail.open=true;
+}
+for(const action of ['mute lookup','mute change','dismiss prepare','dismiss change'] as const)
+test(`attention ${action} withdrawal clears the enclosing overview and expansion and fences a pending page`,async t=>{
+  const f=mount(t,'/loom/updates',true),input=attentionInput();await settleRoutine(f);
+  const journal=new AttentionRecovery(f.context.community.instance_id,f.context.self.participant_id);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect changes'})));
+  await act(async()=>f.calls.at(-1)!.finish(Response.json({...expansion(),contract_version:'combined-updates-2',attention:routineResult().attention})));
+  if(action==='dismiss change'){
+    await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss this update'})));
+    await act(async()=>f.calls.at(-1)!.finish(Response.json(selected([input]))));
+  }
+  const savedPages=localStorage.getItem(new UpdatesRecovery(f.context.community.instance_id,f.context.self.participant_id,localStorage,true).prefix);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Continue this interval'})));const pending=f.calls.at(-1)!;
+  const name=action==='mute lookup'?'Refresh mute state':action==='mute change'?'Mute routine updates':action==='dismiss prepare'?'Dismiss this update':'Confirm dismissal';
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name})));const failed=f.calls.at(-1)!;
+  await act(async()=>failed.finish(Response.json(action==='mute lookup'?{...muteItem(1,true),source:{state:'unavailable'}}:
+    {error:{code:'unavailable',message:'Source unavailable'}},action==='mute lookup'?{}:{status:404})));
+  assert.equal(!!screen.queryByRole('heading',{name:'Visible source'}),false);assert.equal(!!screen.queryByRole('complementary'),false);
+  assert.equal(!!screen.queryByText(/Visible mute preview/),false);assert.equal(document.activeElement,screen.getByRole('alert'));
+  const savedCommand=action.endsWith('change')?journal.all()[0]!.command:undefined;
+  if(savedCommand){assert.deepEqual(savedCommand.body,failed.body);assert.equal(journal.all()[0]!.state,'rejected');}
+  await act(async()=>pending.finish(Response.json(routineResult('late-page'))));
+  assert.equal(!!screen.queryByRole('heading',{name:'Visible source'}),false);
+  assert.equal(localStorage.getItem(new UpdatesRecovery(f.context.community.instance_id,f.context.self.participant_id,localStorage,true).prefix),savedPages);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry Updates'})));
+  await act(async()=>f.calls.at(-1)!.finish(Response.json(routineResult('reauthorized'))));
+  assert.ok(screen.getByRole('heading',{name:'Visible source'}),'only a new authorized page can restore the preview');
+  if(savedCommand)assert.deepEqual(journal.all()[0]!.command,savedCommand);
+});
+
+test('recovering an old subset leaves remaining mixed-group inputs dismissible after explicit selection refresh',async t=>{
+  const f=mount(t,'/loom/updates',true),a=attentionInput(),b=attentionInput(),journal=new AttentionRecovery(f.context.community.instance_id,f.context.self.participant_id);
+  const command:AttentionCommandView={kind:'dismissal',group_id:randomUUID(),body:{idempotency_key:randomUUID(),selection:'old-selection',inputs:[{kind:a.kind,id:a.id,dismissed:true,expected_version:0}]}};
+  await act(async()=>{const saved=await journal.save(command,()=>true);await journal.begin(saved);});await settleRoutine(f,routineResult('mixed',0,2));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss this update'})));
+  await act(async()=>f.calls.at(-1)!.finish(Response.json(selected([a,b]))));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry same attention change'})));const retry=f.calls.at(-1)!;
+  assert.deepEqual(retry.body,command.body);await act(async()=>retry.finish(Response.json(dismissed(retry.body))));
+  assert.equal(journal.all().length,0);assert.equal(!!screen.queryByRole('button',{name:'Dismiss this update'}),false);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh attention selection'})));
+  assert.deepEqual(f.calls.at(-1)!.body,{recovery:{action:'attention_refresh',token:'mixed'},limit:12,max_response_bytes:131072});
+  await act(async()=>f.calls.at(-1)!.finish(Response.json(routineResult('remaining',1))));
+  assert.ok(screen.getByText('1 artifact change'));assert.ok(screen.getByRole('button',{name:'Undo dismissal / restore these inputs'}));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss this update'})));
+  await act(async()=>f.calls.at(-1)!.finish(Response.json({...selected([b]),selection:'remaining-selection',policy_version:1})));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Confirm dismissal'})));const fresh=f.calls.at(-1)!;
+  assert.notEqual(fresh.body.idempotency_key,command.body.idempotency_key);assert.equal(fresh.body.selection,'remaining-selection');
+  assert.deepEqual(fresh.body.inputs,[{kind:b.kind,id:b.id,dismissed:true,expected_version:0}]);
+  await act(async()=>fresh.finish(Response.json(dismissed(fresh.body))));assert.equal(journal.all().length,0);
+});
+
+test('a withdrawn member response cannot release the busy guard owned by fresh reauthorization',async t=>{
+  const f=mount(t,'/loom/updates',true);await settleRoutine(f);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect changes'})));const oldMember=f.calls.at(-1)!;
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Mute routine updates'})));
+  await act(async()=>f.calls.at(-1)!.finish(Response.json({error:{code:'unavailable',message:'Source unavailable'}},{status:404})));
+  assert.equal(!!screen.queryByRole('heading',{name:'Visible source'}),false);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry Updates'})));const freshPage=f.calls.at(-1)!,count=f.calls.length;
+  await act(async()=>oldMember.finish(Response.json({...expansion('withdrawn-member'),contract_version:'combined-updates-2',attention:routineResult().attention})));
+  const refresh=screen.getByRole('button',{name:'Refresh scope from retained history'});assert.equal(refresh.getAttribute('aria-disabled'),'true');
+  await act(async()=>fireEvent.click(refresh));assert.equal(f.calls.length,count,'the older finally must not release a newer request');
+  assert.equal(!!screen.queryByRole('complementary'),false);
+  await act(async()=>freshPage.finish(Response.json(routineResult('fresh-page'))));
+  const freshMember=f.calls.filter(c=>c.path.endsWith('/members')).at(-1)!;assert.notEqual(freshMember,oldMember);
+  await act(async()=>freshMember.finish(Response.json({...expansion('fresh-member'),contract_version:'combined-updates-2',attention:routineResult().attention})));
+  assert.ok(screen.getByRole('complementary'));assert.equal(refresh.getAttribute('aria-disabled'),'false');
+  const pages=JSON.parse(localStorage.getItem(new UpdatesRecovery(f.context.community.instance_id,f.context.self.participant_id,localStorage,true).prefix)!);
+  assert.equal((Object.values(pages)[0] as any).expansion.cursor,'fresh-member');
+});
+
+for(const event of ['local completion','other tab'] as const)test(`an old-policy page cannot clear a newer attention change from ${event}`,async t=>{
+  const f=mount(t,'/loom/updates',true);await settleRoutine(f);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Continue this interval'})));const pending=f.calls.at(-1)!;
+  if(event==='local completion'){
+    await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Mute routine updates'})));const mutation=f.calls.at(-1)!,{idempotency_key,...outcome}=mutation.body;
+    await act(async()=>mutation.finish(Response.json({kind:'mute',operation_state:'applied',idempotency:'created',operation_id:randomUUID(),policy_version:1,
+      outcome:{...outcome,result_version:1},current:muteItem(1,true)})));
+  }else await act(async()=>window.dispatchEvent(new StorageEvent('storage',{key:new AttentionRecovery(f.context.community.instance_id,f.context.self.participant_id).prefix+'intent:'+randomUUID()})));
+  assert.ok(screen.getByText(/Attention choices changed/));
+  await act(async()=>pending.finish(Response.json(routineResult('old-policy-page'))));
+  assert.ok(screen.getByText(/Attention choices changed/),'an earlier read cannot acknowledge the later policy change');
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh attention selection'})));
+  assert.deepEqual(f.calls.at(-1)!.body,{recovery:{action:'attention_refresh',token:'old-policy-page'},limit:12,max_response_bytes:131072});
+  await act(async()=>f.calls.at(-1)!.finish(Response.json(routineResult('current-policy-page',1))));
+  assert.equal(!!screen.queryByText(/Attention choices changed/),false,'a fresh deliberate refresh can acknowledge current policy');
+});
+
+test('incomplete attention membership offers same-interval preparation instead of retrying partial members',async t=>{
+  const {calls}=mount(t,'/loom/updates',true);await waitFor(()=>assert.equal(calls.length,2));
+  const page={...result('fixed-overview'),contract_version:'combined-updates-2',attention:{policy_version:0,selection:'remaining_routine_inputs',
+    counts:'source_records; shared_events; personal_signals_are_distinct_units',refresh:'explicit_same_scope_and_intervals'}};
+  await act(async()=>calls[1]!.finish(Response.json(page)));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect changes'})));
+  const member=calls.find(c=>c.path.endsWith('/members'))!;
+  await act(async()=>member.finish(Response.json({error:{code:'updates_attention_preparing',message:'Continue preparing the fixed selection'}},{status:409})));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh attention selection'})));
+  assert.equal(calls.at(-1)!.path,'/api/v1/me/routine-updates/query');
+  assert.deepEqual(calls.at(-1)!.body,{recovery:{action:'attention_refresh',token:'fixed-overview'},limit:12,max_response_bytes:131072});
+  assert.equal(calls.filter(c=>c.path.endsWith('/members')).length,1,'recovery must advance preparation before another member read');
+});
 for(const kind of ['personal','artifact'] as const)test(`tokenless ${kind} history-gap recovery preserves the selected scope and reason`,async t=>{
   const reason=kind==='personal'?'mention':'reply',scope=kind==='personal'?{kind}:{kind:'explicit',definition:{target:{kind,resource_id:group},include_descendants:false,preferences:['artifact_revisions']}};
   const entry=`/loom/updates?kind=${kind}&id=${group}&events=artifact_revisions&reason=${reason}`;
@@ -154,4 +272,48 @@ test('expired reload renews the saved overview and expansion with their independ
   await waitFor(()=>assert.equal(calls.length,6));assert.deepEqual(calls[5]!.body,{cursor:'expired-members',limit:12,max_response_bytes:8192,renew:true});
   await act(async()=>calls[5]!.finish(Response.json({...expansion('renewed-members'),limit:12})));
   await waitFor(()=>assert.equal(record().expansion.cursor,'renewed-members'));assert.equal(record().request.cursor,'renewed-overview');
+});
+
+for(const [code,name] of [['updates_attention_refresh_required','Refresh attention selection'],['updates_attention_preparing','Refresh attention selection'],['updates_descriptor_expired','Renew fixed Updates view']] as const)test('selection preparation provides recovery for '+code,async t=>{
+ const f=mount(t,'/loom/updates',true);await settleRoutine(f);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Continue this interval'})));const pending=f.calls.at(-1)!;
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss this update'})));
+ assert.ok(f.calls.at(-1)!.path.endsWith('/selection'));
+ await act(async()=>f.calls.at(-1)!.finish(Response.json({error:{code,message:'Selection needs recovery'}},{status:code==='updates_descriptor_expired'?410:409})));
+ assert.ok(screen.queryByRole('button',{name}), 'missing '+name+' after '+code);
+ await act(async()=>pending.finish(Response.json(routineResult('unseen-successor'))));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name})));
+ assert.deepEqual(f.calls.at(-1)!.body,{recovery:{action:code==='updates_descriptor_expired'?'renew':'attention_refresh',token:'shown'},limit:12,max_response_bytes:131072});
+ await act(async()=>f.calls.at(-1)!.finish(Response.json(routineResult('recovered'))));
+ for(const detail of document.querySelectorAll('details'))detail.open=true;
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss this update'})));
+ assert.equal(f.calls.at(-1)!.body.cursor,'recovered');
+});
+test('same-owner navigation retains policy notice for later committed mutation',async t=>{
+ const f=mount(t,'/loom/updates',true);await settleRoutine(f);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Mute routine updates'})));
+ const pending=f.calls.at(-1)!;assert.ok(pending.path.endsWith('/mutes/state'));
+ await act(async()=>f.router.navigate('/other'));await act(async()=>f.router.navigate('/loom/updates'));await settleRoutine(f,routineResult('new-view',0));
+ const {idempotency_key,...outcome}=pending.body;
+ await act(async()=>pending.finish(Response.json({kind:'mute',operation_state:'applied',idempotency:'created',operation_id:randomUUID(),policy_version:1,outcome:{...outcome,result_version:1},current:muteItem(1,true)})));
+ assert.equal(new AttentionRecovery(f.context.community.instance_id,f.context.self.participant_id).all().length,0);
+ assert.ok(screen.queryByText(/Attention choices changed/),'later decision must notify the same-owner new view');
+});
+test('switching expanded Complete records to a routine source invalidates old dismissal inputs',async t=>{
+ const f=mount(t,'/loom/updates',true);await settleRoutine(f);
+ const eventId=randomUUID(),deliveryId=randomUUID(),revision=randomUUID(),author={id:randomUUID(),nickname:'Synthetic author',kind:'human'},time='2026-10-17T00:00:00Z',url='/loom/resource/'+group;
+ const source={event_id:eventId,kind:'revision.published',resource_id:group,discussion_id:null,revision_id:revision,revision_number:'1',actor:author,occurred_at:time,current:{state:'available',title:'Visible source',path:[],browser_url:url},exact_url:url,context_url:url,full_content_url:'/api/source',change_note_url:null,reasons:[],reasons_complete:true,detail_url:'/api/v1/me/routine-updates/reasons',next_reason:null};
+ const personal={delivery_id:deliveryId,signal_id:randomUUID(),available_at:time,source_event_id:eventId,source:{resource_id:group,kind:'artifact',title:'Visible source',revision_id:revision,revision_number:'1',author,publisher:author,created_at:time,area_id:randomUUID(),area_title:'Topic',discussion_id:null,parent_id:null,can_edit:false,publication_open:true,full_content_url:'/api/source'},context_title:'Visible source',context_url:url,browser_url:url,detail_url:'/api/personal',reasons:[{kind:'main_mention',source_field:'main',revision_id:revision,full_content_url:'/api/source'}],current:{state:'available',revision_id:revision,main_mention:'present'},parent:null};
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect all source records'})));
+ await act(async()=>f.calls.at(-1)!.finish(Response.json({...expansion('complete-member'),contract_version:'combined-updates-2',attention:{...routineResult().attention,selection:'all_represented_inputs'},group_id:null,items:[{source,shared_in_interval:true,personal}]})));
+ for(const detail of document.querySelectorAll('details'))detail.open=true;
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss these source inputs'})));
+ assert.deepEqual(f.calls.at(-1)!.body.inputs,[{kind:'shared_event',id:eventId},{kind:'personal_delivery',id:deliveryId}]);
+ await act(async()=>f.calls.at(-1)!.finish(Response.json({items:f.calls.at(-1)!.body.inputs.map((v:any)=>({...v,version:0,dismissed:false,availability:'available'})),policy_version:0})));
+ const control=screen.getByRole('button',{name:'Confirm dismissal'}).parentElement;
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect changes'})));
+ await act(async()=>f.calls.at(-1)!.finish(Response.json({...expansion('routine-member'),contract_version:'combined-updates-2',attention:routineResult().attention,items:[{source,shared_in_interval:false,personal}]})));
+ assert.ok(screen.getByText(/No shared input in this selection/));
+ assert.ok(control!.isConnected,'the source control stays mounted across expansion replacement');
+ assert.equal(!!screen.queryByRole('button',{name:'Confirm dismissal'}),false,'the old shared+personal selection must not survive the now personal-only member');
 });
