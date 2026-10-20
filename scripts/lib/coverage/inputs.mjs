@@ -27,9 +27,11 @@ export function manifest(repo) {
   return { sources, hashes, head: git(repo, ['rev-parse', 'HEAD']).trim() };
 }
 export function verifyManifest(repo, before) {
-  assert.deepEqual(sourceFiles(repo), before.sources, 'Source denominator changed during collection');
+  const after = manifest(repo);
+  assert.deepEqual(after.sources, before.sources, 'Source denominator changed during collection');
+  assert.deepEqual(Object.keys(after.hashes).sort(), Object.keys(before.hashes).sort(), 'Input file set changed during collection');
   for (const [path, hash] of Object.entries(before.hashes)) {
-    assert.equal(digest(readFileSync(join(repo, path))), hash, 'Input changed during collection: ' + path);
+    assert.equal(after.hashes[path], hash, 'Input changed during collection: ' + path);
   }
 }
 export async function nodeCoverage(repo, sources, rawDirectories, normalized, all) {

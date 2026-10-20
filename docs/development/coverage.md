@@ -70,7 +70,10 @@ Each test must have a matching complete capture and a passed result. HTTP-only
 scenarios may have no pages; the combined run must still observe every application
 bundle. A missing capture is always an error.
 
-Source maps and bundle hashes must match the measured inputs. Original source
+Source maps and bundle hashes must match the measured inputs. Tracked and
+non-ignored untracked repository files must stay unchanged through report
+publication, including newly added tests/configuration. Ignored generated reports
+are excluded. Original source
 lines without a generated mapping receive **no browser hits**: otherwise the
 converter's defaults would count tree-shaken code as covered. Counters for the same
 bundle bytes merge before remapping. Different compilers' remapped counters, including tsx versus compiled Node, merge

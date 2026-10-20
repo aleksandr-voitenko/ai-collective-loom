@@ -53,6 +53,19 @@ test('changed lines include unstaged, new and renamed sources, but exclude remov
   assert.throws(() => sourceFiles(repo), /regular file/);
 });
 
+for(const name of ['tests/late.test.ts','config/late.json'])test(`collection refuses a new ${name} even when the source denominator is unchanged`, t => {
+  const repo=scratch(t);mkdirSync(join(repo,'src/web'),{recursive:true});
+  git(repo,['init','-q']);git(repo,['config','user.email','test@example.invalid']);git(repo,['config','user.name','Coverage test']);
+  writeFileSync(join(repo,'src/web/main.ts'),'export const value=1;\n');
+  writeFileSync(join(repo,'.gitignore'),'/coverage/\n');git(repo,['add','.']);git(repo,['commit','-qm','fixture']);
+  const before=manifest(repo);
+  mkdirSync(join(repo,'coverage'));writeFileSync(join(repo,'coverage/counters.json'),'{}');
+  verifyManifest(repo,before); // Generated ignored reports are not repository inputs.
+  mkdirSync(join(repo,name.split('/')[0]));writeFileSync(join(repo,name),'{}\n');
+  assert.deepEqual(sourceFiles(repo),before.sources);
+  assert.throws(()=>verifyManifest(repo,before),/Input file set changed/);
+});
+
 function coverageFile(branches, all = false) {
   const loc = (start,end) => ({ start:{ line:1,column:start },end:{ line:1,column:end } });
   return { path:'/source.ts', ...(all ? { all:true } : {}), statementMap:{ 0:loc(0,20) }, s:{ 0:all?0:1 },
