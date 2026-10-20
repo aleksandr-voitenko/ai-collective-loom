@@ -237,7 +237,14 @@ test('shared visibility failures withdraw cached rows, focus recovery and restor
 
 test('late explicit-filter and route responses cannot restore a replaced shared view',async({page,context,server})=>{
   const f=await material(page,context,server,0),entered=barrier(),release=barrier();let held=false;
-  await page.route('**/api/v1/shared-changes/query',async route=>{if(!held){held=true;const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});}else await route.continue();});
+  const firstDone=barrier(),routeEntered=barrier(),routeRelease=barrier();let leaving=false;
+  // Keep interception enabled between phases. Removing the last handler and
+  // immediately reinstalling it let CI requests escape the intended barrier.
+  await page.route('**/api/v1/shared-changes/query',async route=>{
+    if(leaving){const response=await route.fetch();routeEntered.release();await routeRelease.promise;await route.fulfill({response}).catch(()=>{});}
+    else if(!held){held=true;try{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});}finally{firstDone.release();}}
+    else await route.continue();
+  });
   try{
     await page.goto(server.origin+'/loom/changes?kind=area&id='+f.area);
     await entered.promise;
@@ -247,11 +254,14 @@ test('late explicit-filter and route responses cannot restore a replaced shared 
     await expect(page.locator('.notification-list > li')).toHaveCount(0);
     release.release();
     await expect(page.getByLabel('Artifact publications',{exact:true})).not.toBeChecked();
+    await firstDone.promise;
+    const refresh=page.getByRole('button',{name:'Refresh scope from retained history'});
+    await expect(refresh).toHaveAttribute('aria-disabled','false');
+    leaving=true;await refresh.click();await routeEntered.promise;
+    await page.getByRole('link',{name:'Topics',exact:true}).first().click();routeRelease.release();
+    await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await expect(page.locator('.notification-list > li')).toHaveCount(0);
   }
-  finally{release.release();await page.unrouteAll({behavior:'wait'});}
-  const routeEntered=barrier(),routeRelease=barrier();await page.route('**/api/v1/shared-changes/query',async route=>{const response=await route.fetch();routeEntered.release();await routeRelease.promise;await route.fulfill({response}).catch(()=>{});});
-  try{await page.getByRole('button',{name:'Refresh scope from retained history'}).click();await routeEntered.promise;await page.getByRole('link',{name:'Topics',exact:true}).first().click();routeRelease.release();await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await expect(page.locator('.notification-list > li')).toHaveCount(0);}
-  finally{routeRelease.release();await page.unrouteAll({behavior:'wait'});}
+  finally{release.release();routeRelease.release();await page.unrouteAll({behavior:'wait'});}
 });
 
 test('sign-out fences shared responses immediately while cleanup waits for its Web Lock',async({page,context,server})=>{

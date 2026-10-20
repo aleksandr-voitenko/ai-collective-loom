@@ -209,6 +209,26 @@ test('Following withdraws enclosing source metadata after a newer mute lookup an
   await follow(page,sibling.resource_id);
   const first=page.locator('.following-row').filter({has:page.locator(`[data-follow-target="artifact:${f.target.resource_id}"]`)});
   const second=page.locator('.following-row').filter({has:page.locator(`[data-follow-target="artifact:${sibling.resource_id}"]`)});
+  const phase=(path:string)=>({path,heldMute:barrier(),heldList:barrier(),release:barrier(),muteDone:barrier(),listDone:barrier(),muteHeld:false,listHeld:false});
+  let pending:ReturnType<typeof phase>|undefined,loseMutation=false;
+  // One handler spans response loss and all five hold/release phases. A one-shot
+  // route followed by immediate reinstallation previously missed requests in CI.
+  await page.route('**/api/v1/**',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    if(loseMutation&&path==='/api/v1/me/following/private/state'){
+      loseMutation=false;await route.fetch();await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Committed response lost'}})});return;
+    }
+    const held=pending;
+    if(held&&path===previews&&!held.muteHeld&&route.request().postDataJSON().targets.some((v:any)=>v.resource_id===sibling.resource_id)){
+      held.muteHeld=true;try{const response=await route.fetch();held.heldMute.release();await held.release.promise;await route.fulfill({response});}finally{held.muteDone.release();}return;
+    }
+    if(held&&held.path!=='collection'&&path==='/api/v1/me/following/private'&&!held.listHeld){
+      held.listHeld=true;try{const response=await route.fetch();held.heldList.release();await held.release.promise;await route.fulfill({response});}finally{held.listDone.release();}return;
+    }
+    if(held&&['mutation','status','retry'].includes(held.path)&&path==='/api/v1/me/following/private/lookup')await held.release.promise;
+    await route.continue();
+  });
+  try{
   for(const path of ['collection','lookup','mutation','status','retry'] as const){
     await server.database.transaction(tx=>tx.query("UPDATE loom.resources SET state='active' WHERE id=$1",[f.area]));
     const current=await api(page,'/api/v1/me/following/private/lookup',{kind:'artifact',resource_id:f.target.resource_id});
@@ -222,19 +242,13 @@ test('Following withdraws enclosing source metadata after a newer mute lookup an
     await expect(first.getByText('Routine artifact updates · Target R1',{exact:true})).toBeVisible();
     await expect(second.getByText('Routine artifact updates · Following sibling source',{exact:true})).toBeVisible();
     if(path==='status'||path==='retry'){
-      await page.route('**/api/v1/me/following/private/state',async route=>{await route.fetch();await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Committed response lost'}})});},{times:1});
+      loseMutation=true;
       await first.getByRole('button',{name:'Unfollow',exact:true}).click();await expect(first.getByRole('button',{name:'Check follow status'})).toBeVisible();
     }
-    const heldMute=barrier(),heldList=barrier(),release=barrier();let muteHeld=false;
-    await page.route('**'+previews,async route=>{
-      if(!muteHeld&&route.request().postDataJSON().targets.some((v:any)=>v.resource_id===sibling.resource_id)){muteHeld=true;const response=await route.fetch();heldMute.release();await release.promise;await route.fulfill({response});}
-      else await route.continue();
-    });
-    if(path!=='collection')await page.route('**/api/v1/me/following/private?*',async route=>{const response=await route.fetch();heldList.release();await release.promise;await route.fulfill({response});},{times:1});
-    if(path==='mutation'||path==='status'||path==='retry')await page.route('**/api/v1/me/following/private/lookup',async route=>{await release.promise;await route.continue();});
+    const held=phase(path);pending=held;
     try{
-      await second.getByRole('button',{name:'Refresh mute state'}).click();await heldMute.promise;
-      if(path!=='collection'){await page.getByRole('button',{name:'Refresh following',exact:true}).click();await heldList.promise;}
+      await second.getByRole('button',{name:'Refresh mute state'}).click();await held.heldMute.promise;
+      if(path!=='collection'){await page.getByRole('button',{name:'Refresh following',exact:true}).click();await held.heldList.promise;}
       await server.database.transaction(tx=>tx.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[f.area]));
       if(path==='collection')await page.getByRole('button',{name:'Refresh following',exact:true}).click();
       else if(path==='lookup')await page.evaluate(prefix=>window.dispatchEvent(new CustomEvent('loom-following-change',{detail:prefix})),prefix);
@@ -247,14 +261,15 @@ test('Following withdraws enclosing source metadata after a newer mute lookup an
       }
       await expect(page.getByText('Routine artifact updates · Target R1',{exact:true})).toHaveCount(0);
       await expect(page.getByText('Routine artifact updates · Following sibling source',{exact:true})).toHaveCount(0);
-      release.release();await page.unrouteAll({behavior:'wait'});
+      held.release.release();await held.muteDone.promise;if(path!=='collection')await held.listDone.promise;
       await expect(first.getByRole('heading',{name:'Target R1'})).toHaveCount(0);await expect(second.getByRole('heading',{name:'Following sibling source'})).toHaveCount(0);
       if(path==='mutation'||path==='status'||path==='retry'){
         await expect.poll(()=>journal(page,'following.set')).toBeUndefined();await expect(first.getByRole('status')).toContainText('Explicit follow removed');
       }
       await expect(second.getByRole('button',{name:'Unfollow',exact:true})).toBeEnabled();
-    }finally{release.release();await page.unrouteAll({behavior:'wait'});}
+    }finally{held.release.release();pending=undefined;}
   }
+  }finally{pending?.release.release();await page.unrouteAll({behavior:'wait'});}
   await second.getByRole('button',{name:'Unfollow',exact:true}).click();await expect(second.getByRole('status')).toContainText('Explicit follow removed');
   await expect.poll(()=>journal(page,'following.set')).toBeUndefined();
 });

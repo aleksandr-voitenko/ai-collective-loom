@@ -123,7 +123,7 @@ host. Request freshness must never suppress same-identity revocation, including 
 The real Following case holds old list/mute responses through all five paths and
 suppresses/restores their common parent. Credential tests hold the intended request
 before revocation so independent discussion reads cannot remove its button first.
-Keep one Following interception handler across lookup/state/status/retry: explicitly
+Keep one interception handler across Following/attention and shared-view phases: explicitly
 arm each barrier, assert it was entered, then await its completion. Do not expire
 and reinstall the last route between a lost response and the next held request.
 Updates-level regressions also cover enclosing card/expansion withdrawal with a
@@ -143,6 +143,8 @@ COMMIT so the replacement view really loads old policy before the late notificat
 After reload, scope Attention settings navigation to Community navigation: Updates
 also has an in-page link. Wait for scope refresh to become enabled after navigation.
 `web/attention.test.tsx` uses StrictMode and per-target conflict/success ordering;
+`unit/attention-recovery.test.ts` checks corrupt/oversized journal preservation,
+same-key command mismatch, lock-delayed departure and failed write readback rollback.
 `e2e/attention.spec.ts` uses the compiled normal runner, exact durable recovery,
 keyboard Undo/viewport, stale tabs and real Web Lock sign-out. Screenshots are
 explicit opt-in LOOM_ATTENTION_REVIEW_SCREENS=1 synthetic evidence. Updates browser
