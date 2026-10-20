@@ -92,8 +92,8 @@ protocol. Legacy `.lock` files have unknown ownership and are explicitly refused
 
 Tests: `integration/updates*.test.ts`, `web/updates.test.tsx`, `e2e/updates.spec.ts`.
 Build before compiled API/browser checks. Use the normal browser runner; retain
-approved failed diagnostics before reruns. Evidence/limits live in
-`docs/development/updates-evidence.md`; synthetic trials do not close composite
+approved failed diagnostics before reruns. Record results in Lore task records
+and inspect CI evidence; synthetic trials do not close composite
 product scenarios or human/provider/cross-machine and retained-data gates.
 
 Guide12 / ADR-027 adds an explicitly separate combined-updates-2 mode and HTTP

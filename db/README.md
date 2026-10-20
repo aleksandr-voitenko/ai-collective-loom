@@ -23,7 +23,7 @@ singleton. It seeds configuration identity only, not a community or administrato
 An authorized setup operation publishes the overview through the shared tail.
 The new migration was exercised on isolated fresh databases; application startup
 does not apply it to existing development data. Read the
-[retained-data gate](../docs/development/retained-data-gate.md) before an upgrade.
+[retained-data limits](../README.md#retained-data-limits) before an upgrade.
 
 Additive `0005_saved_items.sql` adds owner-private target states, collection versions
 and immutable operation decisions. Unsaved tombstones preserve ordering; composite

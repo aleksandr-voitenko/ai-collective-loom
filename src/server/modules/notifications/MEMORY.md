@@ -1,6 +1,6 @@
 # Personal direct attention
 
-ADR-023 and `docs/development/notifications.md` define the synthetic scope.
+ADR-023 and `src/contracts/guide.ts` define the synthetic scope.
 Implementation decision record: Lore-ID `LC-20261016-V1H5`.
 Migration 0012 is additive; persisted v1/v2/v3 authored fields, publication digests,
 events, immutable intents and search progress are inputs, never rewritten.
@@ -76,7 +76,7 @@ the previous page's membership. Independent journals do
 not consume each other's deliveries. Native supervisor supports notifications
 stop/start separately from search. Build before tests that launch compiled files.
 
-See `tests/MEMORY.md` and notification evidence for real PostgreSQL/HTTPS/native
+See `tests/MEMORY.md` for real PostgreSQL/HTTPS/native
 barriers, upgrade, recovery, StrictMode and browser coverage. File/private-note integration, moderation
 administration, production and human/provider/cross-machine validation remain open.
 Exact private reading lives in `../participation/reading.ts` (ADR-026); fetching

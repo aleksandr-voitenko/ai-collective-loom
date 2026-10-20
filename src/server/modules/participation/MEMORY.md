@@ -24,7 +24,7 @@ Source/reference-only revisions count; bookkeeping, linked targets and summary
 revisions do not. Saved summaries are explicitly unsupported. `web/Summaries.tsx`
 uses the existing journal, current-view callbacks and identity guards; correction
 requires an explicit declaration and keeps the v1→v2 comparison guard. See the
-summary guide and `test:summaries:postgres`/`e2e/summaries.spec.ts`.
+release guide and `test:summaries:postgres`/`e2e/summaries.spec.ts`.
 After confirmed summary revision, the composer explicitly fetches the current
 authorized revision and saves a newly keyed draft before retiring the old record.
 It carries that base's entire declaration without selecting later source material.
@@ -139,7 +139,7 @@ The shared fixture and persistent-context wrapper also capture bounded diagnosti
 before close; see `tests/MEMORY.md`. Use the npm browser command so raw reporter
 output/attachments stay out of the approved artifact directory.
 No logged/screenshot credential secret, reset, deployment or physical-device trial
-is implied. See `docs/development/participation-evidence.md` for actual results.
+is implied. Lore task records and CI runs retain actual verification results.
 
 Saved items (ADR-013): HTTP `/api/v1/me/saved-items` derives every owner from the
 principal. `saved-state-v1` hashes target, desired boolean and expected target version;
@@ -237,7 +237,7 @@ boundary; edits/moves/restoration/restart invalidate. No counts or graph scan.
 guards picker/page responses by live view, request sequence and identity generation.
 Known IDs/links work without indexing. Rationale is not searched; all three formats'
 source title/body remain worker/rebuild eligible. Tests: `test:references:postgres`,
-`web/references.test.tsx`, `e2e/references.spec.ts` and the reference evidence guide.
+`web/references.test.tsx` and `e2e/references.spec.ts`.
 
 Authored changes (ADR-022): `change-context.ts` prepares exact account members;
 `publication/change-storage.ts` inserts note/account rows before the common tail;

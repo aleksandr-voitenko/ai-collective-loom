@@ -88,8 +88,8 @@ view preserves drafts. This is not a complete activity-feed interval contract.
 
 These choices implement architecture §§5.3, 12, 14 and the first backlog milestone.
 Reconsider indexes, limits and ordering with representative workload measurements;
-do not call the synthetic values approved capacity. See the
-[verification evidence](../development/participation-evidence.md).
+do not call the synthetic values approved capacity. Actual results are recorded
+in Lore `LC-20261014-9EU9` and later task/CI records.
 
 ## Reference expansion
 

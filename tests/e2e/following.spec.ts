@@ -1,6 +1,7 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomUUID,randomBytes,createCipheriv,createDecipheriv } from 'node:crypto';
 import { mkdir,copyFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { test,expect } from '../helpers/browser-fixtures.js';
 import { setup,api,journal } from '../helpers/change-browser.js';
 import type { Page,BrowserContext } from '@playwright/test';
@@ -31,7 +32,7 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
   await page.getByRole('link',{name:'Following',exact:true}).click();await expect(page.locator('.following-row')).toHaveCount(3);
   await expect(page.getByText('General › Same leaf',{exact:true})).toBeVisible();await expect(page.getByText('Proposals › Same leaf',{exact:true})).toBeVisible();await expect(page.getByText(/Including subtopics · New discussions/)).toBeVisible();
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844]] as const){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=fileURLToPath(new URL('../../docs/development/evidence/following/',import.meta.url));await mkdir(destination,{recursive:true});const path=info.outputPath('following-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,destination+'following-'+name+'.png');}}
+    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=join(tmpdir(),'loom-review-evidence','following');await mkdir(destination,{recursive:true});const path=info.outputPath('following-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,join(destination,'following-'+name+'.png'));}}
   await control(page,'area',f.area).getByRole('button',{name:'Unfollow',exact:true}).click();await expect(control(page,'area',f.area).getByRole('status')).toContainText('Explicit follow removed');await page.getByRole('button',{name:'Refresh following'}).click();await expect(page.locator('.following-row')).toHaveCount(2);
   const closed=(await f.admin.call('/api/v1/organization/resources/'+f.area)).body;
   expect((await f.admin.call('/api/v1/organization/changes',{kind:'area.close',resource_id:f.area,expected_version:closed.version,expected_hierarchy_version:closed.hierarchy_version,idempotency_key:randomUUID()})).status).toBe(200);
@@ -97,7 +98,7 @@ test('chronological Changes freezes displayed pages, replays reload/back, resize
   await page.getByLabel('Next page size').selectOption('5');await page.getByRole('button',{name:'Continue shared interval'}).focus();await page.keyboard.press('Enter');await expect(page.locator('.notification-list > li')).toHaveCount(2);await expect(page.getByText(/This view uses older saved Following settings/)).toBeVisible();await expect(page.getByRole('heading',{name:'Changes',exact:true})).toBeFocused();
   await page.getByRole('button',{name:'Previous shared page'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(12);expect(await page.locator('.notification-list h2').allTextContents()).toEqual(first);
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844]] as const){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=fileURLToPath(new URL('../../docs/development/evidence/following/',import.meta.url));await mkdir(destination,{recursive:true});const path=info.outputPath('changes-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,destination+'changes-'+name+'.png');}}
+    if(process.env.LOOM_FOLLOWING_REVIEW_SCREENS==='1'){const destination=join(tmpdir(),'loom-review-evidence','following');await mkdir(destination,{recursive:true});const path=info.outputPath('changes-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,join(destination,'changes-'+name+'.png'));}}
   await page.getByRole('button',{name:'Continue shared interval'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(2);await page.getByRole('button',{name:'Check newer shared changes'}).click();await expect(page.getByRole('alert')).toContainText('Following settings changed');await page.getByRole('button',{name:'Adopt current settings from retained history'}).click();await expect(page.locator('.notification-list > li')).toHaveCount(0);
   expect((await server.observer.query('SELECT count(*)::int n FROM loom.personal_deliveries')).rows[0].n).toBe(0);
 });

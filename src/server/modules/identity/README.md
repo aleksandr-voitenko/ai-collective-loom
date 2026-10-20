@@ -41,5 +41,5 @@ absent even from the private HTTP adapter. Their audit identifies the deployment
 capability class; an individual operator proof/custody ceremony remains unimplemented.
 
 Run `npm run test:identity:postgres` with local Docker. It creates/removes only its
-UUID-named tmpfs PostgreSQL container and uses no existing development data. See
-the [prototype evidence and limits](../../../../docs/development/identity-prototype.md).
+UUID-named tmpfs PostgreSQL container and uses no existing development data.
+Synthetic checks do not approve real enrollment or operator recovery policy.

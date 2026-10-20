@@ -121,8 +121,8 @@ trusted deployment code, absent even from private HTTP fixtures.
 
 Identity outcomes/audits/reservations have no production cleanup or approved
 retention in this prototype. Private controlled races, post-COMMIT reply loss,
-rollback, credential replacement and revoked authority are observed in the
-[identity evidence](../development/identity-prototype.md). Real-user recovery proof,
+rollback, credential replacement and revoked authority are exercised by the
+[identity tests](../../tests/integration/identity.test.ts). Real-user recovery proof,
 operator custody/rotation and policy approval remain gates before real exposure.
 
 ## Text participation extension
@@ -161,7 +161,7 @@ The browser stores intent before dispatch; the standalone external client fsyncs
 its journal before sending. Both scope it to origin, instance and participant.
 Actual tests discard a committed response and restart client processes before
 recovering the original IDs. See [ADR-017](017-browser-participation-recovery.md)
-and the [slice evidence](../development/participation-evidence.md). Automatic expiry,
+and the [participation tests](../../tests/integration/participation.test.ts). Automatic expiry,
 erasure and recovery after rollback of committed history remain closed gates.
 
 ## Private Saved items extension

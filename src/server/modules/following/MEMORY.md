@@ -1,6 +1,6 @@
 # Following and shared retrieval
 
-ADR-024, `docs/development/following.md` and `contracts/following.ts` define the
+ADR-024, `contracts/guide.ts` and `contracts/following.ts` define the
 synthetic W01 increment. Migration 0013 is additive; no old source/event/scope,
 publication digest or personal custody data is rewritten. `http/following.ts`
 registers strict owner-derived operations only in the synthetic profile.

@@ -1,6 +1,7 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { mkdir,copyFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import type { Page,BrowserContext,Response } from '@playwright/test';
 import { test,expect } from '../helpers/browser-fixtures.js';
 import { setup,api } from '../helpers/change-browser.js';
@@ -133,7 +134,7 @@ test('AC07 compact discussion, exact direct source, attributed note, bounded exp
   await page.evaluate(entries=>{for(const entry of entries)localStorage.setItem(entry.key,JSON.stringify(entry.records));},expired);
   await page.reload();await page.getByRole('button',{name:'Renew fixed Updates view'}).click();await ready(page);await expect(page.locator('#updates-expansion ol > li')).toHaveCount(12);
   for(const [name,width,height] of [['desktop',1440,1000],['mobile',390,844]] as const){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    if(process.env.LOOM_UPDATES_REVIEW_SCREENS==='1'){const destination=fileURLToPath(new URL('../../docs/development/evidence/updates/',import.meta.url));await mkdir(destination,{recursive:true});const path=info.outputPath('updates-'+name+'.png');await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path,fullPage:true});await copyFile(path,destination+'updates-'+name+'.png');}}
+    if(process.env.LOOM_UPDATES_REVIEW_SCREENS==='1'){const destination=join(tmpdir(),'loom-review-evidence','updates');await mkdir(destination,{recursive:true});const path=info.outputPath('updates-'+name+'.png');await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path,fullPage:true});await copyFile(path,join(destination,'updates-'+name+'.png'));}}
   await page.getByRole('button',{name:'Next sources'}).click();await expect(page.locator('#updates-expansion ol > li')).toHaveCount(9);await page.getByRole('button',{name:'Close changes'}).click();await expect(page.getByRole('complementary')).toHaveCount(0);await expect(page.getByRole('button',{name:'Inspect changes',exact:true})).toBeFocused();
   await page.getByRole('button',{name:'Refresh scope from retained history'}).click();await ready(page);await page.getByLabel('Next page size').selectOption('25');await page.getByRole('button',{name:'Inspect changes',exact:true}).click();await expect(page.locator('#updates-expansion ol > li')).toHaveCount(22);
   const historical=page.locator('#updates-expansion li').filter({has:page.locator(`a[href="/loom/resource/${summary.resource_id}/${summary.revision_id}"]`)});

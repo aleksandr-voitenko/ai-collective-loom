@@ -120,15 +120,15 @@ PostgreSQL bookmarks. Browser recovery is separately bounded and cleared as desc
 in [ADR-017](017-browser-participation-recovery.md). Logical suppression/removal is
 tested. Physical erasure, FK/tombstone handling, destructive restore, recovery epochs,
 multi-process cursor-key custody and retained-data migration remain subject to the
-[operating gate](../development/retained-data-gate.md). Existing restrictive source
+[retained-data limits](../../README.md#retained-data-limits). Existing restrictive source
 retention must be reconciled with an approved erasure procedure before real data.
 
 Reconsider owner serialization, quotas, cursor invalidation and storage retention when
 measured workload or approved multi-process/real-participant requirements demand it;
 any replacement must retain owner isolation, stale-command rejection and distinct
 original/current outcomes. Production limits are not approved by synthetic tests.
-See [the executable guide and trial](../development/saved-items.md) and
-[verification evidence](../development/saved-items-evidence.md).
+See the [release guide](../../src/contracts/guide.ts),
+[executable client](../../scripts/saved-items-client.mjs) and Lore `LC-20261014-OIAD`.
 
 Guide11 adds [exact private reading](026-private-reading-progress.md) in separate
 tables, version fences and browser recovery. It reuses original/current outcome

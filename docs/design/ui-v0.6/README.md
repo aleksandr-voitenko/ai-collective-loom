@@ -29,6 +29,5 @@ is unknown; no page-length-derived total or invented count is displayed.
 
 Preserve this import when refining the application. Add current decisions to ADRs
 and implementation docs, leaving the supplied sources and product/architecture
-baselines untouched. Actual application browser evidence is recorded in
-[participation evidence](../../development/participation-evidence.md).
-Saved items has separate [verification evidence](../../development/saved-items-evidence.md).
+baselines untouched. Actual application checks live in [browser tests](../../../tests/e2e/);
+observed verification results belong in Lore task records and CI runs.

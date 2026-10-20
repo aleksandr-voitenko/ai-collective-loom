@@ -1,6 +1,7 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { mkdir,copyFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { test,expect } from '../helpers/browser-fixtures.js';
 import { setup,api } from '../helpers/change-browser.js';
 import { mentioned } from '../helpers/notifications.js';
@@ -37,7 +38,7 @@ test('personal attention discovery, coalesced exact links, incomplete generation
     const path=info.outputPath('attention-'+name+'.png');await page.screenshot({path,fullPage:true});
     // Deliberate synthetic visual review only; never part of approved diagnostics.
     if(process.env.LOOM_NOTIFICATION_REVIEW_SCREENS==='1'){
-      const destination=fileURLToPath(new URL('../../docs/development/evidence/notifications/',import.meta.url));await mkdir(destination,{recursive:true});await copyFile(path,destination+'attention-'+name+'.png');
+      const destination=join(tmpdir(),'loom-review-evidence','notifications');await mkdir(destination,{recursive:true});await copyFile(path,join(destination,'attention-'+name+'.png'));
     }
   }
   await page.getByRole('button',{name:'Continue this interval'}).focus();await page.keyboard.press('Enter');await expect(page.locator('.notification-list > li')).toHaveCount(2);

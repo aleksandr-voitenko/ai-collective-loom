@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {mkdir,copyFile} from 'node:fs/promises';
 import type {Page,Route} from '@playwright/test';
@@ -411,7 +413,7 @@ test('exact dismissal and keyboard Undo preserve focus, viewport, mute independe
   expect(Math.abs(await page.evaluate(()=>scrollY)-restoreScroll)).toBeLessThan(3);
   for(const [name,width,height] of [['desktop',1440,1000],['narrow',390,844]] as const){
     await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    if(process.env.LOOM_ATTENTION_REVIEW_SCREENS==='1'){await mkdir('docs/development/evidence/attention',{recursive:true});const path=info.outputPath('attention-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,'docs/development/evidence/attention/attention-'+name+'.png');}
+    if(process.env.LOOM_ATTENTION_REVIEW_SCREENS==='1'){const destination=join(tmpdir(),'loom-review-evidence','attention');await mkdir(destination,{recursive:true});const path=info.outputPath('attention-'+name+'.png');await page.screenshot({path,fullPage:true});await copyFile(path,join(destination,'attention-'+name+'.png'));}
   }
   await page.getByRole('button',{name:'Refresh attention selection',exact:true}).click();await ready(page);await expect(page.getByText(/Nothing in this routine view/)).toBeVisible();
   await page.getByRole('button',{name:'Show all matching groups in this interval'}).click();await ready(page);await expect(page.locator('.updates-list > li')).toHaveCount(1);

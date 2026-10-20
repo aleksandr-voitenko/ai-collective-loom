@@ -282,7 +282,7 @@ The revalidation regression holds the community response until both contribution
 and reading controls are mounted, then waits for the changed community name to
 render. Require one exact body, reading-control set and source-reference region per
 contribution: duplicate sibling React keys can leave extra bodies after rerender.
-CI repair evidence and reproduction limits: `docs/development/ci-browser-reliability.md`.
+CI repair context and reproduction limits remain in the corresponding Lore task records.
 `e2e/following.spec.ts` uses the normal one-worker, zero-retry runner and closed route
 vocabulary. Preserve approved failures before rerunning. Deliberate synthetic visual
 review uses LOOM_FOLLOWING_REVIEW_SCREENS=1, separately from diagnostic uploads.
@@ -306,7 +306,9 @@ sign-out with cleanup blocked on a real Web Lock. Compare DOM presence as a Bool
 passing an HTMLElement into Node's equality assertion can hang error serialization.
 The closed diagnostic vocabulary adds only its spec and fixed notification routes.
 Optional `LOOM_NOTIFICATION_REVIEW_SCREENS=1` deliberately curates synthetic screenshots
-under `docs/development/evidence/notifications/`, separate from approved diagnostics.
+under the system temporary directory `loom-review-evidence/notifications`, separate
+from approved diagnostics. Following, Updates and attention use sibling directories.
+Do not write review evidence into a repository development folder.
 
 Summary tests use the same runner and closed diagnostics (`summaries.spec.ts` and
 summary route templates; no raw IDs/bodies added). `summaries*.test.ts` covers
@@ -346,7 +348,8 @@ Combined coverage separately publishes authored source and numeric reports from
 `helpers/browser-coverage.ts` samples before navigation/disposal without changing
 test deadlines or holding application requests. `tests/coverage/verify.ts` guards
 real Node/browser branch merging, unmapped cold code and safe disposal. Coverage
-method, gates and artifact constraints: `docs/development/coverage.md`.
+method, gates and artifact constraints: root README Coverage and
+`scripts/lib/coverage/`.
 The containing runner
 consumes arbitrary console output and removes Playwright's private raw outputs on
 normal child exit. On hard kill, intermediates may remain unsafe; never promote
@@ -376,8 +379,8 @@ upload-ready output, with three-day retention and no continue-on-error.
 The manual `verify_failure_upload` input runs the probe configuration after the
 normal browser suite; expect a failed step/run and a successful approved upload.
 It defaults off and never applies to push/PR runs. Contract: `LC-20261014-3D4P`.
-Local bundle validation does not verify hosted upload. See the testing guide and
-`docs/development/browser-diagnostics-evidence.md` for observed results/limits.
+Local bundle validation does not verify hosted upload; inspect the actual CI run
+and artifact when that boundary is part of the task.
 
 Organization scenarios use the same fixtures/runner; the closed vocabulary includes
 organization routes, `organization.spec.ts` and four organization control categories.
