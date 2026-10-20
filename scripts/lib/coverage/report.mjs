@@ -93,7 +93,10 @@ export function writeReports(repo, output, files, summary) {
     lcov += `LF:${file.summary.lines.total}\nLH:${file.summary.lines.covered}\n`;
     file.branches.forEach((b,i) => { lcov += `BRDA:${b.loc.start.line},${i},0,${b.hits}\n`; });
     lcov += `BRF:${file.summary.branches.total}\nBRH:${file.summary.branches.covered}\nend_of_record\n`;
-    const target = join(output, 'files', name + '.html'); mkdirSync(dirname(target), { recursive: true });
+    // Artifact uploads omit hidden paths such as .githooks. Keep source names in
+    // the report, while publishing every page under a stable, non-hidden filename.
+    const reportPath = 'files/' + digest(name) + '.html';
+    const target = join(output, reportPath); mkdirSync(dirname(target), { recursive: true });
     const rows = readFileSync(join(repo,name), 'utf8').split('\n').map((text,index) => {
       const hits = file.lines[index+1], css = hits === undefined ? '' : hits ? 'hit' : 'miss';
       return `<tr id="L${index+1}" class="${css}"><td>${index+1}</td><td>${hits??'—'}</td><td><pre>${escape(text)}</pre></td></tr>`;
@@ -101,7 +104,7 @@ export function writeReports(repo, output, files, summary) {
     const branchRows = file.branches.map(b => `<tr><td>${b.loc.start.line}:${b.loc.start.column}–${b.loc.end.line}:${b.loc.end.column}</td><td>${b.hits}</td></tr>`).join('');
     const back = '../'.repeat(relative(output, target).split('/').length-1) + 'index.html';
     writeFileSync(target, html(name, `<p><a href="${back}">Combined report</a></p><h1>${escape(name)}</h1><p>Lines: ${metric(file.summary.lines)} · Branches: ${metric(file.summary.branches)}</p><div class="scroll"><table class="source">${rows}</table></div><h2>Branch ranges</h2><table><tr><th>Source range</th><th>Hits</th></tr>${branchRows}</table>`));
-    fileRows += `<tr><th><a href="files/${escape(name)}.html">${escape(name)}</a></th><td>${metric(file.summary.lines)}</td><td>${metric(file.summary.branches)}</td></tr>`;
+    fileRows += `<tr><th><a href="${reportPath}">${escape(name)}</a></th><td>${metric(file.summary.lines)}</td><td>${metric(file.summary.branches)}</td></tr>`;
   }
   writeFileSync(join(output, 'lcov.info'), lcov);
   const rows = Object.entries(summary.groups).map(([name,g]) => `<tr><th>${name} (${g.files} files)</th><td>${metric(g.lines)}</td><td>${metric(g.branches)}</td></tr>`).join('');

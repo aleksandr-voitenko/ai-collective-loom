@@ -350,6 +350,10 @@ test deadlines or holding application requests. `tests/coverage/verify.ts` guard
 real Node/browser branch merging, unmapped cold code and safe disposal. Coverage
 method, gates and artifact constraints: root README Coverage and
 `scripts/lib/coverage/`.
+Published HTML pages use stable non-hidden filenames; copying source paths into
+artifact paths loses `.githooks` pages under the uploader's default hidden filter.
+Keep original source names in the index, JSON and LCOV, and verify downloaded
+artifact links as well as locally generated reports.
 The containing runner
 consumes arbitrary console output and removes Playwright's private raw outputs on
 normal child exit. On hard kill, intermediates may remain unsafe; never promote

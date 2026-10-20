@@ -120,9 +120,30 @@ test('published coverage has escaped authored source and line/branch-only LCOV',
   writeFileSync(join(repo,'src/example.ts'),'<script>privateMarkup()</script>');
   const summary={ total:1,covered:1,pct:100 },file={ lines:{ 1:2 },branches:[{ loc:{ start:{ line:1,column:0 },end:{ line:1,column:1 } },hits:1 }],summary:{ lines:summary,branches:summary } };
   writeReports(repo,output,{ 'src/example.ts':file },{ groups:{ application:{ files:1,...file.summary } },status:'passed',browser:{ tests:1 },gates:[],limits:[] });
-  const html=readFileSync(join(output,'files/src/example.ts.html'),'utf8');
+  const link=readFileSync(join(output,'index.html'),'utf8').match(/<th><a href="([^"]+)">/)[1];
+  const html=readFileSync(join(output,link),'utf8');
   assert.ok(html.includes('&lt;script&gt;')); assert.ok(!html.includes('<script>'));
   const lcov=readFileSync(join(output,'lcov.info'),'utf8'); assert.ok(lcov.includes('BRDA:1,0,0,1\n')); assert.ok(lcov.includes('DA:1,2\n')); assert.ok(!lcov.includes('FN:'));
+});
+
+test('published source pages survive artifact uploads that exclude hidden paths', t => {
+  const repo=scratch(t),output=join(repo,'report');
+  const names=['.githooks/tool.mjs','scripts/.nested/tool.mjs','scripts/tool.mjs','src/tool.ts'];
+  const summary={total:1,covered:1,pct:100};
+  const file={lines:{1:1},branches:[],summary:{lines:summary,branches:{total:0,covered:0,pct:100}}};
+  for(const name of names){mkdirSync(join(repo,name.slice(0,name.lastIndexOf('/'))),{recursive:true});writeFileSync(join(repo,name),'// '+name);}
+  writeReports(repo,output,Object.fromEntries(names.map(name=>[name,file])),{groups:{},status:'passed',browser:{tests:1},gates:[],limits:[]});
+  const links=[...readFileSync(join(output,'index.html'),'utf8').matchAll(/<th><a href="([^"]+)">/g)].map(match=>match[1]);
+  assert.equal(new Set(links).size,names.length,'Every source needs its own report, including duplicate basenames');
+  // The hosted artifact uploader omits any path with a hidden component by default.
+  const uploaded=links.filter(link=>!link.split('/').some(part=>part.startsWith('.')));
+  assert.deepEqual(uploaded,links,'Every linked source page must survive the upload filter');
+  for(const [index,link] of links.entries()){
+    const page=readFileSync(join(output,link),'utf8');
+    assert.ok(page.includes(names[index]));
+    const back=page.match(/href="([^"]+)">Combined report/)[1];
+    assert.equal(readFileSync(join(output,link,'..',back),'utf8'),readFileSync(join(output,'index.html'),'utf8'));
+  }
 });
 
 // A successful report must not silently omit a source when c8 conversion fails.
