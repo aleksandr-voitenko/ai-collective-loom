@@ -18,6 +18,9 @@ function observeUpdates(page:Page){
 }
 async function ready(page:Page){
   await expect(page.getByRole('heading',{name:'Updates',exact:true})).toBeVisible();
+  // The idle toolbar can paint before the initial load effect. Require a
+  // rendered response before reading recovery, response bodies or group titles.
+  await expect(page.getByText('Interval, coverage and recovery',{exact:true})).toBeVisible();
   for(let n=0;n<10;n++){
     await expect(page.getByRole('button',{name:'Refresh scope from retained history'})).toHaveAttribute('aria-disabled','false');
     const more=page.getByRole('button',{name:'Continue preparing Updates'});if(!await more.isVisible())return;await more.click();

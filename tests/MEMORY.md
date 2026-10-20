@@ -141,7 +141,8 @@ then assert displayed-token/budget recovery and new preparation. Same-owner rout
 navigation is separate from sign-out: Chromium holds mutation dispatch before
 COMMIT so the replacement view really loads old policy before the late notification.
 After reload, scope Attention settings navigation to Community navigation: Updates
-also has an in-page link. Wait for scope refresh to become enabled after navigation.
+also has an in-page link. Updates readiness requires rendered interval/coverage
+details and enabled scope refresh; the initial idle toolbar can precede the first response.
 `web/attention.test.tsx` uses StrictMode and per-target conflict/success ordering;
 `unit/attention-recovery.test.ts` checks corrupt/oversized journal preservation,
 same-key command mismatch, lock-delayed departure and failed write readback rollback.
