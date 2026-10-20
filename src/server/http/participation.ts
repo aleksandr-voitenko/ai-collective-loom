@@ -24,6 +24,8 @@ import { registerReading } from './reading.js';
 import { ReadingLimitError } from '../modules/participation/reading.js';
 import { SavedItemsError } from "../modules/participation/saved-items.js";
 import { registerOrganization } from "./organization.js";
+import { registerModeration } from './moderation.js';
+import { ModerationError } from '../modules/participation/moderation.js';
 import { OrganizationError } from "../modules/participation/organization-context.js";
 import { registerSearch } from './search.js';
 import { registerNotifications } from './notifications.js';
@@ -108,6 +110,10 @@ export function participantError(
     code=error.code; message=error.message;
     status=code==='search_changed'?409:code==='search_work_limit'?429:400;
     action=code==='search_changed'?'replay_view':code==='search_work_limit'?'review_synthetic_limit':'correct_request';
+  } else if (error instanceof ModerationError) {
+    code=error.code;message=error.message;
+    status=code==='moderation_limit'?429:code==='moderation_conflict'?409:400;
+    action=code==='moderation_conflict'?'refresh_and_review':code==='moderation_limit'?'review_synthetic_limit':'correct_request';
   } else if (error instanceof OrganizationError) {
     code = error.code;
     message = error.message;
@@ -178,6 +184,7 @@ export async function registerParticipation(
   registerReading(app, services.database, actor);
   registerAttention(app, services.database, actor);
   registerOrganization(app, services.database, actor);
+  registerModeration(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerNotifications(app, services.database, actor);
   registerFollowing(app, services.database, actor);

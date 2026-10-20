@@ -77,8 +77,10 @@ not consume each other's deliveries. Native supervisor supports notifications
 stop/start separately from search. Build before tests that launch compiled files.
 
 See `tests/MEMORY.md` for real PostgreSQL/HTTPS/native
-barriers, upgrade, recovery, StrictMode and browser coverage. File/private-note integration, moderation
-administration, production and human/provider/cross-machine validation remain open.
+barriers, upgrade, recovery, StrictMode and browser coverage. Administrator lifecycle
+controls (ADR-028) reuse these visibility triggers and replay without new deliveries
+or shared events. File/private-note integration, broader moderation policy, production
+and human/provider/cross-machine validation remain open.
 Exact private reading lives in `../participation/reading.ts` (ADR-026); fetching
 personal deliveries never marks a source read or consumes its independent state.
 

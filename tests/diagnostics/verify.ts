@@ -102,6 +102,15 @@ assert.ok(Buffer.byteLength(checked(large, validCapture)) <= limits.bytes - 8192
 const maximalBundle = { ...missing, capture: large, result: { ...missing.result,
   steps: Array.from({length:limits.steps},()=>({...missing.result.steps[0],ms:86_400_000,duration_ms:86_400_000})) } };
 assert.ok(Buffer.byteLength(checked(maximalBundle, validBundle)) <= limits.bytes);
+const maximalRun = JSON.parse(readFileSync(join(approved, 'run.json'), 'utf8'));
+maximalRun.planned = maximalRun.ended = limits.tests;
+maximalRun.tests = Array.from({length: limits.tests}, () => maximalRun.tests[0]);
+assert.ok(validRun(maximalRun));
+assert.ok(Buffer.byteLength(checked(maximalRun, validRun))
+  + limits.tests * Buffer.byteLength(checked(maximalBundle, validBundle)) < limits.runBytes,
+  'The complete expanded suite must still fit the unchanged candidate envelope');
+maximalRun.tests.push(maximalRun.tests[0]);
+assert.equal(validRun(maximalRun), false, 'The finite test-count boundary still rejects overflow');
 
 // Validate complete candidates, not a hand-picked JSON. Refuse unknown files,
 // metadata/attachment injection, oversized data and symlinks without copying any.

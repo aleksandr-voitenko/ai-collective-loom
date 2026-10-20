@@ -5,6 +5,7 @@ import * as F from '../contracts/following.js';
 import * as P from '../contracts/private-controls.js';
 import * as O from '../contracts/organization.js';
 import * as S from '../contracts/saved-items.js';
+import * as M from '../contracts/moderation.js';
 import { contentKey,type ContentRequest,type ContentRegion } from './protected-content.js';
 import {identityContent} from './authorization-coordinator.js';
 import {responseContract} from './response-contracts.js';
@@ -113,6 +114,16 @@ class ViewAuthorization {
       if(value.operation_state==='not_recorded')return value;
       // A command receipt cannot refresh a title or certify source access.
       return {...value,current:{...value.current,source:{state:'unavailable'}}};
+    }finally{this.region.coordinator.finish(ticket);}
+  }
+  async moderationCommand(body:unknown,action:'state'|'status',self:Self):Promise<M.ModerationStatusView>{
+    if(!this.active())throw stale();
+    const ticket=this.region.coordinator.beginPrivate(this.region);
+    try {
+      // Every recorded lifecycle receipt fences older content before custody
+      // settlement, including a restoration or an exact late replay.
+      return await this.receipt<M.ModerationStatusView>(ticket,'/api/v1/admin/moderation/'+action,
+        {body,self,schema:M.ModerationStatus});
     }finally{this.region.coordinator.finish(ticket);}
   }
   private async receipt<T>(ticket:ContentRequest,path:string,options:RequestOptions):Promise<T>{

@@ -1,5 +1,18 @@
 # Browser test diagnostics
 
+`test:moderation:postgres` discovers `integration/moderation*.test.ts`: actual HTTPS
+four-scope lifecycle operations, current authority, canonical replay, no-op fences,
+atomic rollback, populated pre-0018 upgrade and direct-client process loss.
+The races hold real PostgreSQL guards and observe the competing lock wait for both
+publication/revision/editor/move/read and identity orderings. Projections stop both
+workers after population, then suppress/restore through the supported API, compare
+private/source snapshots and explicitly replay filtered shared/personal/v1/v2
+checkpoints. Bounds include a full unsupported candidate page and capacity recovery.
+`e2e/moderation.spec.ts` uses native dialogs and the compiled authorization boundary
+for suppression, selective restoration, narrow screens, exact lost-response retry,
+stale tabs, late navigation receipts, blocked journal settlement and role withdrawal.
+Its fixed file/route vocabulary is included in the existing approved diagnostics.
+
 Protected-read enforcement is checked at the import/API and production-component
 boundaries. `unit/protected-read-architecture.test.ts` rejects raw transport imports,
 re-exports and direct network calls in components. Closed session/command routes
@@ -376,7 +389,9 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 128 collected tests and <17 MiB/candidate. Omissions and incomplete
+128 KiB/document, 134 collected tests and <17 MiB/candidate. The test count includes
+the six moderation scenarios so combined coverage captures the complete suite;
+the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
 

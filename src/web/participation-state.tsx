@@ -76,6 +76,7 @@ export function intentUrl(record: Intent) {
   if (record.kind === "summary.prepare") return record.slot.slice("summary.prepare:".length);
   if (record.kind === "summary.editors" || record.kind === 'artifact.editors') return `/loom/resource/${record.body.resource_id}`;
   if (record.kind === "saved.set") return "/loom/saved";
+  if (record.kind === 'moderation.set') return '/loom/moderation?intent='+encodeURIComponent(record.key);
   if (record.kind === 'following.set') return '/loom/following';
   if (record.kind === "organization.change") return "/loom/organize?intent=" + encodeURIComponent(record.key);
   const intent = "intent=" + encodeURIComponent(record.key),

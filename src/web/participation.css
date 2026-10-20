@@ -955,3 +955,7 @@
 .attention-control .notice { margin-top: .75rem; }
 .attention-settings { overflow-wrap: anywhere; }
 .attention-settings select { width: auto; max-width: 100%; margin: .5rem; }
+/* Stable IDs wrap within narrow moderation controls without hiding recovery. */
+.moderation-target { overflow-wrap: anywhere; }
+.moderation-page > button, .moderation-page > a { margin: .5rem .5rem .5rem 0; }
+.moderation-page dialog { max-width: min(34rem, calc(100vw - 2rem)); }

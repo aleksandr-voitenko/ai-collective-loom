@@ -15,7 +15,7 @@ test('0015 preserves populated grouping custody and grants only the required ser
     await tx.query("INSERT INTO loom.updates_groups(view_id,id,kind,group_key,ordinal,direct,highlighted) VALUES($1,$2,'artifact',$3,1,false,true)",[view,group,source.resource_id]);
   });
   const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' ORDER BY tablename")).rows.map(r=>r.tablename);
-  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
+  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT ${table==='resources'?"'{\"lifecycle_version\":1}'::jsonb || " : ''}to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const table of tables)before.set(table,await digest(table));
   await f.migrate();for(const [table,value] of before)assert.equal(await digest(table),value,table+' changed during guard upgrade');
   await f.restart();
@@ -37,7 +37,7 @@ test('populated 0013 upgrade preserves every existing table, standalone tokens, 
   assert.equal((await reader.client.call('/api/v1/me/saved-items/state',{target:{kind:'artifact',resource_id:sources[0]!.resource_id},saved:true,expected_version:0,idempotency_key:randomUUID()})).status,200);
   const shared=await f.changes(reader.client),personal=await f.page(reader.client);
   const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' ORDER BY tablename")).rows.map(r=>r.tablename);
-  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
+  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT ${table==='resources'?"'{\"lifecycle_version\":1}'::jsonb || " : ''}to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const table of tables)before.set(table,await digest(table));
   await f.migrate();for(const [table,value] of before)assert.equal(await digest(table),value,table+' changed during upgrade');
   await f.restart();

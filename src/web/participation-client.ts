@@ -133,6 +133,9 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       "saved_limit_reached",
       "following_limit_reached",
       "organization_conflict",
+      "moderation_conflict",
+      "moderation_limit",
+      "moderation_target_unsupported",
       "organization_limit",
       "organization_cycle",
       "proposal_route_changed",
@@ -295,11 +298,21 @@ export class IntentStore {
       );
     const key = this.prefix + record.key,
       value = JSON.stringify(record);
-    this.storage.setItem(key, value);
-    if (this.storage.getItem(key) !== value)
-      throw new Error(
+    const prior = this.storage.getItem(key);
+    try {
+      this.storage.setItem(key, value);
+      if (this.storage.getItem(key) !== value) throw new Error(
         "The recovery record could not be saved. Keep the original submission; a dispatched request may already have committed.",
       );
+    } catch (error) {
+      // A receipt may already be committed remotely. Failed local settlement
+      // must preserve the earlier exact command, never replace its custody.
+      try {
+        if (prior === null) this.storage.removeItem(key);
+        else this.storage.setItem(key, prior);
+      } catch { /* Storage is unavailable; retain the caller's exact record. */ }
+      throw error;
+    }
     return record;
   }
   save(record: Intent): Promise<Intent> {
@@ -359,6 +372,18 @@ export class IntentStore {
         record.state === "draft"
           ? { ...visibleBody, idempotency_key: record.key }
           : record.body,
+    });
+  }
+  prepareModeration(body:Record<string,unknown>,active:()=>boolean):Promise<Intent> {
+    return this.locked(()=>{
+      if(!active())throw new DOMException("View changed.","AbortError");
+      const target=body.target as {resource_id:string};
+      // Comparison identity is canonical; stored transport spelling stays exact.
+      if(this.all().some(r=>r.kind==='moderation.set'&&r.state==='uncertain'&&
+        String((r.body.target as {resource_id?:string})?.resource_id).toLowerCase()===target.resource_id.toLowerCase()))
+        throw new Error('Resolve the existing moderation command for this target before another choice.');
+      const record=this.create('moderation:'+target.resource_id.toLowerCase(),'moderation.set','/api/v1/admin/moderation/state',body);
+      return this.write({...record,state:'uncertain',sequence:1});
     });
   }
   settle(

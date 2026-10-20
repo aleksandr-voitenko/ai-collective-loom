@@ -10,7 +10,7 @@ import SwaggerParser from '@apidevtools/swagger-parser';
 
 test('closed release discovery, private routes, retention ceilings and full Unicode JSON remain bounded',{timeout:90000},async t=>{
   const f=await fixture(t),r=await f.participant('attention_limits'),a=await f.artifact(f.admin,'文🌿'.repeat(50)),b=await f.artifact();
-  const community=(await r.client.call('/api/v1/community')).body;assert.equal(community.guide_revision,'12');assert.equal(community.attention_contract,'attention-controls-1');assert.equal(community.updates_contract,'combined-updates-1');assert.equal(community.routine_updates_contract,'combined-updates-2');
+  const community=(await r.client.call('/api/v1/community')).body;assert.equal(community.guide_revision,'13');assert.equal(community.attention_contract,'attention-controls-1');assert.equal(community.updates_contract,'combined-updates-1');assert.equal(community.routine_updates_contract,'combined-updates-2');
   const schema=(await f.admin.call('/api/v1/openapi.json')).body;await SwaggerParser.validate(structuredClone(schema));
   for(const path of ['/attention/mutes/lookup','/attention/mutes/state','/attention/dismissals/lookup','/attention/dismissals/state','/attention/status','/attention/list','/routine-updates/query','/routine-updates/members','/routine-updates/reasons','/routine-updates/selection'])assert.ok(schema.paths['/api/v1/me'+path]?.post);
   const accepted=await f.mute(r.client,'artifact',a.resource_id),base={target:{kind:'artifact',resource_id:b.resource_id},include_descendants:false,muted:true,expected_version:0};

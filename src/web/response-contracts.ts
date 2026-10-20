@@ -13,6 +13,7 @@ import * as V from '../contracts/routine-updates.js';
 import * as Ref from '../contracts/references.js';
 import * as Sum from '../contracts/summaries.js';
 import * as Search from '../contracts/search.js';
+import * as M from '../contracts/moderation.js';
 import {ApiError} from './request-context.js';
 
 type Access='public'|'session'|'read'|'private-read'|'receipt'|'boundary-receipt';
@@ -32,11 +33,11 @@ const sourceErrors:ErrorPolicy={session:'authenticated',forbidden:'withdraw',una
 // cached representations guarded by that same capability.
 const postingErrors:ErrorPolicy={session:'authenticated',forbidden:'retain',unavailable:'withdraw'};
 type Rule={kind:'affirmed';reason:string}|{kind:'classified';schema:TSchema;source:readonly string[];local:Readonly<Record<string,string>>};
-export type ResponseContract={access:Access;errors:ErrorPolicy;rule:Rule;revisionMiss:boolean;preview?:Preview;publicationClosure?:'proposal_area.state'|'state'};
+export type ResponseContract={access:Access;errors:ErrorPolicy;rule:Rule;revisionMiss:boolean;preview?:Preview;publicationClosure?:'proposal_area.state'|'state';lifecycleReceipt?:boolean};
 export const responseContracts=new Map<string,ResponseContract>();
 const affirmed=(reason:string):Rule=>({kind:'affirmed',reason});
 const classified=(schema:TSchema,source:readonly string[],local:Record<string,string>={}):Rule=>({kind:'classified',schema,source,local});
-function add(routes:readonly string[],access:Access,errors:ErrorPolicy,rule:Rule,options:{revisionMiss?:boolean;preview?:Preview;publicationClosure?:'proposal_area.state'|'state'}={}){
+function add(routes:readonly string[],access:Access,errors:ErrorPolicy,rule:Rule,options:{revisionMiss?:boolean;preview?:Preview;publicationClosure?:'proposal_area.state'|'state';lifecycleReceipt?:boolean}={}){
   for(const route of routes){if(responseContracts.has(route))throw new Error('Duplicate response classification: '+route);
     responseContracts.set(route,{access,errors,rule,revisionMiss:options.revisionMiss??false,...options});}
 }
@@ -89,6 +90,10 @@ add(['POST /api/v1/me/saved-items/state','POST /api/v1/me/saved-items/status'],'
 add(['POST /api/v1/me/reading/lookup'],'read',sourceErrors,classified(R.ReadingPage,['items[].availability']));
 add(['POST /api/v1/me/reading/state','POST /api/v1/me/reading/status'],'receipt',sourceErrors,classified(R.ReadingStatus,['current[].availability']));
 add(['POST /api/v1/organization/changes','POST /api/v1/organization/status'],'boundary-receipt',sourceErrors,affirmed('Private outcome plus current authorized location; metadata retains a separate content lease.'));
+add(['GET /api/v1/admin/moderation/resources/{id}','GET /api/v1/admin/moderation/targets','GET /api/v1/admin/moderation/audit'],
+ 'read',identityErrors,affirmed('Administrator-only lifecycle metadata; ordinary_read_available is a control fact, never content-read authority.'));
+add(['POST /api/v1/admin/moderation/state','POST /api/v1/admin/moderation/status'],
+ 'boundary-receipt',identityErrors,classified(M.ModerationStatus,[]),{lifecycleReceipt:true});
 
 add(['GET /api/v1/me/following/private','POST /api/v1/me/following/private/lookup',
  'POST /api/v1/me/attention/private/mutes/lookup','POST /api/v1/me/attention/private/dismissals/lookup','POST /api/v1/me/attention/private/list'],
@@ -158,7 +163,8 @@ function values(value:unknown,path:string):unknown[]{
 export function classifyResponse(contract:ResponseContract,value:unknown){
   const rule=contract.rule;
   if(rule.kind==='classified'&&!Value.Check(rule.schema,value))throw new ApiError('unsupported_contract','This response does not match its endpoint contract.');
-  const denied=rule.kind==='classified'&&rule.source.some(path=>values(value,path).includes('unavailable')&&
+  const denied=!!(contract.lifecycleReceipt&&value&&typeof value==='object'&&'operation_state' in value&&value.operation_state==='recorded')||
+    rule.kind==='classified'&&rule.source.some(path=>values(value,path).includes('unavailable')&&
     // The server supplies this hint only after checking source ownership/read
     // access. Missing hints retain the conservative legacy interpretation.
     !(path===contract.publicationClosure&&values(value,path.replace(/state$/,'unavailable_reason')).includes('publication_closed')));

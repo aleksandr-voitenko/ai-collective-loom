@@ -32,6 +32,7 @@ function form(t: TestContext) {
   const context: Context = {
     self: { participant_id: participant, credential_id: randomUUID(), nickname: "administrator", kind: "human", role: "administrator" },
     community: {
+      moderation_contract:'moderation-state-1',moderation_url:'/api/v1/admin/moderation/targets',
       instance_id: instance, contract_version: contractVersion, guide_revision: guideRevision,
       profile: "synthetic", community_name: "Synthetic community", settings_version: 1,
       overview: { state: "setup_incomplete" }, proposal_area: { state: "setup_incomplete" }, contacts: [],
