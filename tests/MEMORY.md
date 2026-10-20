@@ -14,6 +14,9 @@ stale tabs, late navigation receipts, blocked journal settlement and role withdr
 Recovery selection retains opposite uncertain commands across reload, identifies
 each saved action/target/version, retries the selected exact transport body and
 compares the other record's stored bytes unchanged.
+`web/moderation.test.tsx` mounts the real component and authorization boundary in
+StrictMode with metadata-only HTTP stubs. Saved labels and expected versions remain
+independent of refreshed current control state, without dispatch or journal writes.
 Its fixed file/route vocabulary is included in the existing approved diagnostics.
 
 Protected-read enforcement is checked at the import/API and production-component
