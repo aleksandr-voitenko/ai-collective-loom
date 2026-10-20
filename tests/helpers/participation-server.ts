@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { createServer } from "node:net";
+import { BoundSocket } from "node:net";
 import { isolatedPublicationPostgres } from "./publication-postgres.js";
 import { IdentityAdministration } from "../../src/server/modules/identity/administration.js";
 import { IdentityAuthentication } from "../../src/server/modules/identity/authentication.js";
@@ -18,26 +18,23 @@ export async function syntheticServer(
     port?: number;
     throughMigration?: number;
     transactionWrapper?: (database: Transactions) => Transactions;
+    beforeListen?: (origin: string) => Promise<void>;
   } = {},
 ) {
   const fixture = await isolatedPublicationPostgres(options.throughMigration === undefined ? {} : { throughMigration: options.throughMigration }),
     directory = await mkdtemp(join(tmpdir(), "loom-participation-"));
   let application: Awaited<ReturnType<typeof createApplication>> | undefined;
+  let reserved: BoundSocket | undefined;
   const close = async () => {
     await application?.close();
     await fixture.close();
     await rm(directory, { recursive: true, force: true });
   };
   try {
-    let port = options.port;
-    if (!port) {
-      const reserved = createServer();
-      await new Promise<void>((resolve) =>
-        reserved.listen(0, "127.0.0.1", resolve),
-      );
-      port = (reserved.address() as { port: number }).port;
-      await new Promise<void>((resolve) => reserved.close(() => resolve()));
-    }
+    // Identity policy needs the exact origin before initialization. Keep the socket
+    // bound until HTTPS adopts it; probing and releasing a port leaves a race.
+    reserved = new BoundSocket({ host: "127.0.0.1", port: options.port ?? 0 });
+    const port = reserved.address().port;
     const origin = `https://localhost:${port}`,
       policy = syntheticIdentityPolicy(origin),
       database =
@@ -106,7 +103,9 @@ export async function syntheticServer(
       participation: { database, authentication, administration },
     });
     application = await openApplication();
-    await application.listen({ host: "127.0.0.1", port });
+    await options.beforeListen?.(origin);
+    const listenOptions = { host: "127.0.0.1", handle: reserved };
+    await application.listen(listenOptions);
     return {
       ...fixture,
       app: application,
@@ -127,5 +126,8 @@ export async function syntheticServer(
   } catch (error) {
     await close();
     throw error;
+  } finally {
+    // After adoption the application owns the socket; otherwise release it here.
+    reserved?.[Symbol.dispose]();
   }
 }

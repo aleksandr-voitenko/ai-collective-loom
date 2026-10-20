@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createServer, type AddressInfo } from "node:net";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { syntheticServer } from "../helpers/participation-server.js";
 import { httpClient } from "../helpers/participation-http.js";
@@ -16,6 +17,76 @@ const content = (text: string) => ({
   text,
   mentions: [],
 });
+
+test("synthetic HTTPS fixture owns its port throughout startup and releases it after close", async (t) => {
+  const contender = createServer();
+  t.after(async () => {
+    if (contender.listening)
+      await new Promise<void>((resolve) => contender.close(() => resolve()));
+  });
+  let reservedOrigin = "";
+  const server = await syntheticServer({
+    beforeListen: async (origin) => {
+      reservedOrigin = origin;
+      await assert.rejects(
+        new Promise<void>((resolve, reject) => {
+          contender.once("error", reject);
+          contender.listen(
+            { host: "127.0.0.1", port: Number(new URL(origin).port) },
+            resolve,
+          );
+        }),
+        { code: "EADDRINUSE" },
+      );
+    },
+  });
+  t.after(server.close);
+  const port = Number(new URL(reservedOrigin).port);
+  assert.equal(server.origin, reservedOrigin);
+  assert.equal((server.app.server.address() as AddressInfo).port, port);
+  const client = httpClient(
+    server.origin,
+    await readFile(server.directory + "/cert.pem", "utf8"),
+  );
+  const enrolled = await client.enroll(server.ticket);
+  assert.equal(enrolled.participant_id, server.administratorId);
+  await server.restart();
+  const afterRestart = await client.call("/api/v1/identity/self");
+  assert.equal(afterRestart.status, 200);
+  assert.equal(afterRestart.body.participant_id, server.administratorId);
+  await server.close();
+  await new Promise<void>((resolve, reject) => {
+    contender.once("error", reject);
+    contender.listen({ host: "127.0.0.1", port }, resolve);
+  });
+});
+
+test("synthetic HTTPS fixture releases an unadopted port when startup fails", async (t) => {
+  const failure = new Error("fixture startup stopped before listen");
+  let port = 0;
+  await assert.rejects(
+    syntheticServer({
+      beforeListen: async (origin) => {
+        port = Number(new URL(origin).port);
+        throw failure;
+      },
+    }),
+    (error) => error === failure,
+  );
+  assert.ok(port > 0);
+  const replacement = createServer();
+  t.after(async () => {
+    if (replacement.listening)
+      await new Promise<void>((resolve) => replacement.close(() => resolve()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    replacement.once("error", reject);
+    replacement.listen({ host: "127.0.0.1", port }, resolve);
+  });
+  await assert.rejects(syntheticServer({ port }), { code: "EADDRINUSE" });
+  assert.equal((replacement.address() as AddressInfo).port, port);
+});
+
 test(
   "synthetic participation over real HTTPS and PostgreSQL",
   { timeout: 180000 },
