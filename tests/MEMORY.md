@@ -372,6 +372,12 @@ test deadlines or holding application requests. `tests/coverage/verify.ts` guard
 real Node/browser branch merging, unmapped cold code and safe disposal. Coverage
 method, gates and artifact constraints: root README Coverage and
 `scripts/lib/coverage/`.
+`integration/participation.test.ts` checks credential metadata and logout through
+the production identity routes over actual HTTPS. It verifies administrator-only
+disclosure, rejection without revocation, exact cookie clearing and durable
+revocation of only the signed-out session. The older `helpers/identity-http.ts`
+owns copied prototype routes; its protocol assertions do not cover those production
+handlers. Keep direct route coverage independent of browser-worker counters.
 Published HTML pages use stable non-hidden filenames; copying source paths into
 artifact paths loses `.githooks` pages under the uploader's default hidden filter.
 Keep original source names in the index, JSON and LCOV, and verify downloaded
