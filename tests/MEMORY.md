@@ -334,12 +334,15 @@ when refresh is disabled; hold that response to test this ordering deterministic
 `helpers/browser-fixtures.ts` shares the existing synthetic PostgreSQL/HTTPS server
 and preserves context-before-server disposal (Lore `LC-20261014-WZF5`). Test bodies,
 normal timeouts, worker count and retry policy are unchanged by diagnostics.
-The HTTPS fixture binds its port before freezing the identity origin and transfers
-that socket into Fastify with Node 24.19's `BoundSocket`. Never release a probe port
-before initialization: another socket can claim it. Unadopted handles are disposed
-on failure; the application owns adopted handles. Participation regressions use the
-private before-listen barrier to verify contention, failure cleanup and authenticated
-restart at the same origin. Explicit occupied ports fail without choosing another.
+The HTTPS fixture keeps a TCP listener before freezing the identity origin and
+passes that server through Fastify's listen call. Cleanup ownership transfers on
+the HTTPS listening event; closing the original server afterward closes HTTPS too.
+Never release a probe port during initialization. `BoundSocket` alone is insufficient:
+Linux permits another listener to claim that bound-only port. Participation regressions
+use the private before-listen barrier to check contention, failure cleanup and
+authenticated restart at the same origin. Explicit occupied ports fail without retry.
+Initial startup and restart share reservation/handoff code. A failed restart releases
+its listener while preserving the database and identity for a later explicit restart.
 
 The automatic collector tracks every page in a registered context. Persistent
 contexts must use `diagnostics.launchPersistentContext`; explicitly constructed

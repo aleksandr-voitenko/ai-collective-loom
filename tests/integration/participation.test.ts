@@ -25,8 +25,10 @@ test("synthetic HTTPS fixture owns its port throughout startup and releases it a
       await new Promise<void>((resolve) => contender.close(() => resolve()));
   });
   let reservedOrigin = "";
+  let startupAttempts = 0;
   const server = await syntheticServer({
     beforeListen: async (origin) => {
+      startupAttempts++;
       reservedOrigin = origin;
       await assert.rejects(
         new Promise<void>((resolve, reject) => {
@@ -51,6 +53,7 @@ test("synthetic HTTPS fixture owns its port throughout startup and releases it a
   const enrolled = await client.enroll(server.ticket);
   assert.equal(enrolled.participant_id, server.administratorId);
   await server.restart();
+  assert.equal(startupAttempts, 2);
   const afterRestart = await client.call("/api/v1/identity/self");
   assert.equal(afterRestart.status, 200);
   assert.equal(afterRestart.body.participant_id, server.administratorId);
@@ -61,7 +64,7 @@ test("synthetic HTTPS fixture owns its port throughout startup and releases it a
   });
 });
 
-test("synthetic HTTPS fixture releases an unadopted port when startup fails", async (t) => {
+test("synthetic HTTPS fixture releases its reserved listener when startup fails", async (t) => {
   const failure = new Error("fixture startup stopped before listen");
   let port = 0;
   await assert.rejects(
@@ -85,6 +88,37 @@ test("synthetic HTTPS fixture releases an unadopted port when startup fails", as
   });
   await assert.rejects(syntheticServer({ port }), { code: "EADDRINUSE" });
   assert.equal((replacement.address() as AddressInfo).port, port);
+});
+
+test("synthetic HTTPS fixture releases a failed restart and retains its authenticated state", async (t) => {
+  const failure = new Error("fixture restart stopped before listen");
+  let failRestart = false;
+  const server = await syntheticServer({
+    beforeListen: async () => { if (failRestart) throw failure; },
+  });
+  t.after(server.close);
+  const client = httpClient(
+    server.origin,
+    await readFile(server.directory + "/cert.pem", "utf8"),
+  );
+  await client.enroll(server.ticket);
+  failRestart = true;
+  await assert.rejects(server.restart(), (error) => error === failure);
+  const contender = createServer();
+  t.after(async () => {
+    if (contender.listening)
+      await new Promise<void>((resolve) => contender.close(() => resolve()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    contender.once("error", reject);
+    contender.listen({ host: "127.0.0.1", port: Number(new URL(server.origin).port) }, resolve);
+  });
+  await new Promise<void>((resolve) => contender.close(() => resolve()));
+  failRestart = false;
+  await server.restart();
+  const self = await client.call("/api/v1/identity/self");
+  assert.equal(self.status, 200);
+  assert.equal(self.body.participant_id, server.administratorId);
 });
 
 test(
