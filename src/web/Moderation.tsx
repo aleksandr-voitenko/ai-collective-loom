@@ -96,14 +96,19 @@ export function ModerationPage({context}:{context:Context}) {
       <button disabled={!list.data.next_cursor||busy} onClick={()=>setCursor(list.data!.next_cursor!)}>Next moderation page</button>
     </section>}
     <section aria-label="Moderation recovery"><h2>Saved moderation commands</h2>
-      {records.map(record=><div key={record.key} className="notice">
+      {records.map(record=>{
+        // Recovery describes the saved choice, independent of current control state.
+        const command=record.body as C.ModerationCommand;
+        return <div key={record.key} className="notice" role="group" aria-labelledby={'moderation-command-'+record.key+' moderation-target-'+record.key}>
+        <h3 id={'moderation-command-'+record.key}>{command.suppressed?'Suppress':'Restore'} {command.target.kind}</h3>
+        <p id={'moderation-target-'+record.key} className="destination-id">{command.target.resource_id}</p>
         <p>{selected===record.key?'Selected command · ':''}{record.state==='uncertain'?'Awaiting confirmation':record.state==='committed'?'Recorded decision':'Rejected command'}</p>
-        <details><summary>Recovery details</summary><p className="destination-id">Operation {record.key}</p></details>
+        <details><summary>Recovery details</summary><p>Expected lifecycle version {command.expected_version}</p><p className="destination-id">Operation {record.key}</p></details>
         {record.state==='uncertain'?<>
           <button disabled={busy} onClick={()=>void execute(record,'status')}>Check moderation outcome</button>
           <button disabled={busy} onClick={()=>void execute(record,'state')}>Retry exact moderation command</button>
         </>:<button disabled={busy} onClick={()=>void context.store.remove(record).then(()=>changed(n=>n+1)).catch(f=>setError(f.message))}>Dismiss resolved command</button>}
-      </div>)}
+      </div>;})}
       {!records.length&&<p>No saved moderation commands.</p>}
     </section>
     <dialog ref={dialog} onCancel={event=>{event.preventDefault();close();}} aria-labelledby="moderation-confirm-title">

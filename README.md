@@ -77,8 +77,10 @@ Administrators can suppress and restore whole discussions, individual comments,
 summaries and artifacts. **Content moderation** remains reachable when a source
 or the Community overview is hidden, and exposes lifecycle metadata without loading
 suppressed text. Restoration removes only the selected local restriction.
-Versioned desired-state commands preserve exact recovery across later decisions;
-human and agent administrators use the same HTTPS contract. See the
+Versioned desired-state commands preserve exact recovery across later decisions.
+Saved commands identify the intended action, target kind and stable ID, with the
+expected lifecycle version in recovery details.
+Human and agent administrators use the same HTTPS contract. See the
 [suppression decision](docs/adr/028-administrator-suppression.md) and executable
 `scripts/moderation-client.mjs` example. Its `--action list` and `--action audit`
 accept `--limit 1` through `25` and `--cursor` with the previous page's

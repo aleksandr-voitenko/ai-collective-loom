@@ -11,6 +11,9 @@ checkpoints. Bounds include a full unsupported candidate page and capacity recov
 `e2e/moderation.spec.ts` uses native dialogs and the compiled authorization boundary
 for suppression, selective restoration, narrow screens, exact lost-response retry,
 stale tabs, late navigation receipts, blocked journal settlement and role withdrawal.
+Recovery selection retains opposite uncertain commands across reload, identifies
+each saved action/target/version, retries the selected exact transport body and
+compares the other record's stored bytes unchanged.
 Its fixed file/route vocabulary is included in the existing approved diagnostics.
 
 Protected-read enforcement is checked at the import/API and production-component
@@ -395,8 +398,8 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 134 collected tests and <17 MiB/candidate. The test count includes
-the six moderation scenarios so combined coverage captures the complete suite;
+128 KiB/document, 135 collected tests and <17 MiB/candidate. The test count includes
+the seven moderation scenarios so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.

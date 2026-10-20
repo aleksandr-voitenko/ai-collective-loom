@@ -90,6 +90,68 @@ test('lost response, reload and stale tab preserve immutable exact retry and new
   await page.getByRole('button',{name:'Dismiss resolved command'}).click();await expect.poll(()=>records(page)).toHaveLength(0);await other.close();
 });
 
+test('reloaded recovery identifies opposite saved commands and retries only the selected exact request',async({page,context,server})=>{
+  const d=await setup(page,context,server);
+  await change(page,d.discussion,true);
+  const original:string[]=[];
+  // Neither first send reaches the server, so Retry will make the actual choice.
+  await page.route('**'+base+'/state',async route=>{
+    original.push(route.request().postData()!);await route.abort('connectionfailed');
+  });
+  await page.goto(server.origin+'/loom/moderation?target='+d.artifact.resource_id);
+  await row(page,d.artifact.resource_id).getByRole('button',{name:'Suppress artifact',exact:true}).click();
+  await page.getByRole('button',{name:'Confirm suppression'}).click();await expect(page.getByRole('alert')).toBeVisible();
+  await page.goto(server.origin+'/loom/moderation?target='+d.discussion);
+  await row(page,d.discussion).getByRole('button',{name:'Restore discussion',exact:true}).click();
+  await page.getByRole('button',{name:'Confirm restoration'}).click();await expect(page.getByRole('alert')).toBeVisible();
+  expect(original).toHaveLength(2);
+  const saved=await records(page);
+  expect(saved).toHaveLength(2);expect(saved.every((r:any)=>r.state==='uncertain')).toBe(true);
+  const suppress=saved.find((r:any)=>r.body.suppressed),restore=saved.find((r:any)=>!r.body.suppressed);
+  expect(suppress.body).toEqual(JSON.parse(original[0]!));expect(restore.body).toEqual(JSON.parse(original[1]!));
+  const untouched=await page.evaluate(key=>localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('loom.intent.')&&k.endsWith(key))!),suppress.key);
+  expect(untouched).not.toBeNull();
+  await page.unrouteAll({behavior:'wait'});
+  await page.goto(server.origin+'/loom/moderation');await page.reload();
+  const recovery=page.getByRole('region',{name:'Moderation recovery'});
+  const suppression=recovery.getByRole('group',{name:'Suppress artifact '+d.artifact.resource_id,exact:true});
+  const restoration=recovery.getByRole('group',{name:'Restore discussion '+d.discussion,exact:true});
+  await expect(suppression).toBeVisible();await expect(restoration).toBeVisible();
+  for(const [entry,record,label] of [[suppression,suppress,'Suppress artifact'],[restoration,restore,'Restore discussion']] as const){
+    await expect(entry.getByRole('heading',{name:label,exact:true})).toBeVisible();
+    await expect(entry.getByText(record.body.target.resource_id,{exact:true})).toBeVisible();
+    await expect(entry.getByText('Awaiting confirmation',{exact:true})).toBeVisible();
+    await entry.getByText('Recovery details',{exact:true}).click();
+    await expect(entry.getByText('Expected lifecycle version '+record.body.expected_version,{exact:true})).toBeVisible();
+    await expect(entry.getByText('Operation '+record.key,{exact:true})).toBeVisible();
+  }
+  await expect(page.getByText('Moderation discussion',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('Opening to preserve',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('Moderation artifact',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('Artifact text',{exact:true})).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  if(process.env.LOOM_MODERATION_REVIEW_SCREENS==='1'){
+    await mkdir('/tmp/loom-moderation-review',{recursive:true});
+    await page.screenshot({path:'/tmp/loom-moderation-review/recovery-mobile.png',fullPage:true});
+  }
+  // The intent-specific route must retain the same identifying context too.
+  await page.goto(server.origin+'/loom/moderation?intent='+restore.key);
+  await expect(restoration.getByText('Selected command · Awaiting confirmation',{exact:true})).toBeVisible();
+  const retried:string[]=[];
+  page.on('request',request=>{if(request.url().endsWith(base+'/state'))retried.push(request.postData()!);});
+  await restoration.getByRole('button',{name:'Retry exact moderation command'}).click();
+  await expect(page.getByText('Moderation decision recorded.',{exact:false})).toBeVisible();
+  expect(retried).toEqual([original[1]]);
+  const after=await records(page);
+  expect(after).toHaveLength(2);
+  expect(after.find((r:any)=>r.key===restore.key)).toMatchObject({state:'committed',body:restore.body});
+  expect(await page.evaluate(key=>localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('loom.intent.')&&k.endsWith(key))!),suppress.key)).toBe(untouched);
+  await expect(suppression.getByText('Awaiting confirmation',{exact:true})).toBeVisible();
+  expect((await api(page,base+'/resources/'+d.discussion)).local_state).toBe('active');
+  expect((await api(page,base+'/resources/'+d.artifact.resource_id)).local_state).toBe('active');
+});
+
 test('late receipt withdraws source after navigation before a blocked journal can settle',async({page,context,server})=>{
   const d=await setup(page,context,server);await page.goto(server.origin+'/loom/moderation?target='+d.artifact.resource_id);
   const entered=barrier(),release=barrier(),finished=barrier();
