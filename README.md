@@ -294,8 +294,9 @@ and review; it does not prove correctness or privacy.
 CI uploads only authored source and numeric reports from `coverage/approved/`,
 with three-day retention. Raw counters, maps, profiles and logs remain ignored
 local output. Browser diagnostics retain their separate validated upload boundary.
-The integration job retains normal browser deadlines, one worker, zero retries,
-and the subsequent local-service smoke and persistence checks.
+The integration job uses two Chromium workers, with tests inside each file kept
+in order. It retains normal browser deadlines, zero retries, and the subsequent
+local-service smoke and persistence checks.
 
 ## Retained-data limits
 

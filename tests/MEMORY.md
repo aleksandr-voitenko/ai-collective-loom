@@ -283,7 +283,7 @@ and reading controls are mounted, then waits for the changed community name to
 render. Require one exact body, reading-control set and source-reference region per
 contribution: duplicate sibling React keys can leave extra bodies after rerender.
 CI repair context and reproduction limits remain in the corresponding Lore task records.
-`e2e/following.spec.ts` uses the normal one-worker, zero-retry runner and closed route
+`e2e/following.spec.ts` uses the normal two-worker, zero-retry runner and closed route
 vocabulary. Preserve approved failures before rerunning. Deliberate synthetic visual
 review uses LOOM_FOLLOWING_REVIEW_SCREENS=1, separately from diagnostic uploads.
 
@@ -332,8 +332,11 @@ when refresh is disabled; hold that response to test this ordering deterministic
 `npm run test:e2e` uses `scripts/browser-tests.mjs`, the closed validator in
 `scripts/lib/browser-diagnostics.mjs`, and `helpers/browser-reporter.ts`.
 `helpers/browser-fixtures.ts` shares the existing synthetic PostgreSQL/HTTPS server
-and preserves context-before-server disposal (Lore `LC-20261014-WZF5`). Test bodies,
-normal timeouts, worker count and retry policy are unchanged by diagnostics.
+and preserves context-before-server disposal (Lore `LC-20261014-WZF5`). The normal
+run permits two files at once (`workers: 2`, `fullyParallel: false`), retaining
+ordered tests within each file and a separate database/HTTPS fixture per test.
+Diagnostics do not alter test bodies, normal timeouts or the zero-retry policy.
+Controlled diagnostic probes retain their separate single-worker configuration.
 The HTTPS fixture keeps a TCP listener before freezing the identity origin and
 passes that server through Fastify's listen call. Cleanup ownership transfers on
 the HTTPS listening event; closing the original server afterward closes HTTPS too.
