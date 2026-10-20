@@ -2,10 +2,13 @@ import type { QueryResultRow } from "pg";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createServer, type AddressInfo } from "node:net";
+import { createServer as createHttpsServer } from "node:https";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { syntheticServer } from "../helpers/participation-server.js";
 import { httpClient } from "../helpers/participation-http.js";
@@ -17,6 +20,82 @@ const content = (text: string) => ({
   text,
   mentions: [],
 });
+
+test(
+  "synthetic HTTP client reconnects after immediate HTTPS restart without replaying a write",
+  { timeout: 15000 },
+  async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "loom-http-restart-"));
+    let server: ReturnType<typeof createHttpsServer> | undefined;
+    t.after(async () => {
+      if (server?.listening)
+        await new Promise<void>((resolve) => server!.close(() => resolve()));
+      await rm(directory, { recursive: true, force: true });
+    });
+    await promisify(execFile)("openssl", [
+      "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+      "-keyout", join(directory, "key.pem"),
+      "-out", join(directory, "cert.pem"), "-days", "1",
+      "-subj", "/CN=localhost",
+      "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+    ]);
+    const key = await readFile(join(directory, "key.pem"));
+    const cert = await readFile(join(directory, "cert.pem"), "utf8");
+    const received: {
+      path: string | undefined;
+      authorization: string | undefined;
+      cookie: string | null;
+      body: string;
+    }[] = [];
+    let connections = 0;
+    const start = async (port = 0) => {
+      server = createHttpsServer({ key, cert }, (request, response) => {
+        const chunks: Buffer[] = [];
+        request.on("data", (chunk) => chunks.push(chunk));
+        request.on("end", () => {
+          received.push({
+            path: request.url,
+            authorization: request.headers.authorization,
+            cookie: request.headers.cookie ?? null,
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+          response.setHeader("content-type", "application/json");
+          response.setHeader(
+            "set-cookie", "fixture_session=retained; Path=/; Secure; HttpOnly",
+          );
+          response.end('{"recorded":true}');
+        });
+      });
+      server.on("secureConnection", () => connections++);
+      await new Promise<void>((resolve, reject) => {
+        server!.once("error", reject);
+        server!.listen({ host: "127.0.0.1", port }, resolve);
+      });
+      return (server.address() as AddressInfo).port;
+    };
+    const port = await start();
+    const client = httpClient(
+      "https://127.0.0.1:" + port, cert, "synthetic-credential",
+    );
+    const first = { idempotency_key: randomUUID(), choice: "first" };
+    const next = { idempotency_key: randomUUID(), choice: "second" };
+    assert.equal((await client.call("/first", first)).status, 200);
+    await new Promise<void>((resolve) => server!.close(() => resolve()));
+    await start(port);
+    assert.equal((await client.call("/second", next)).status, 200);
+    assert.equal(connections, 2, "Restart recovery must use a new TLS connection");
+    assert.deepEqual(received, [
+      {
+        path: "/first", authorization: "Bearer synthetic-credential",
+        cookie: null, body: JSON.stringify(first),
+      },
+      {
+        path: "/second", authorization: "Bearer synthetic-credential",
+        cookie: "fixture_session=retained", body: JSON.stringify(next),
+      },
+    ], "Credentials and exact bodies survive restart, with one server evaluation per request");
+  },
+);
 
 test("synthetic HTTPS fixture owns its port throughout startup and releases it after close", async (t) => {
   const contender = createServer();

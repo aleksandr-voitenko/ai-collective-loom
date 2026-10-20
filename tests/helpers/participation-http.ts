@@ -48,6 +48,9 @@ export function httpClient(
         new URL(path, origin),
         {
           ca: cert,
+          // Fixtures restart at the same origin; a pooled socket can still be closing.
+          // Each call owns its connection so writes need no transport retry.
+          agent: false,
           method: overrides.method ?? (encoded ? "POST" : "GET"),
           headers,
         },

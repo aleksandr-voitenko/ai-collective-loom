@@ -362,6 +362,10 @@ use the private before-listen barrier to check contention, failure cleanup and
 authenticated restart at the same origin. Explicit occupied ports fail without retry.
 Initial startup and restart share reservation/handoff code. A failed restart releases
 its listener while preserving the database and identity for a later explicit restart.
+The synthetic `participation-http` client gives each call its own TLS connection:
+Node's global keep-alive pool can reuse a closing socket after same-origin restart.
+It never retries a write automatically. The real HTTPS restart regression checks
+one evaluation per request and preserved bearer, cookie and exact command bytes.
 
 The automatic collector tracks every page in a registered context. Persistent
 contexts must use `diagnostics.launchPersistentContext`; explicitly constructed
