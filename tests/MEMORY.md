@@ -347,6 +347,10 @@ establish that the asynchronous comparison fetch has failed.
 Keyboard source refresh waits for the control to become enabled and confirms its
 focus before pressing Enter. The source heading is visible during initial loading,
 when refresh is disabled; hold that response to test this ordering deterministically.
+Preparation recovery similarly exposes its retry label while the first send is still
+pending. Hold that request to assert the disabled state, then await the injected
+failure and enabled retry before adding later sources, removing interception or
+reloading. Publication retry must also be enabled before advancing its expiry fixture.
 
 `npm run test:e2e` uses `scripts/browser-tests.mjs`, the closed validator in
 `scripts/lib/browser-diagnostics.mjs`, and `helpers/browser-reporter.ts`.
