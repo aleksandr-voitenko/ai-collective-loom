@@ -12,6 +12,10 @@ embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundar
 reading and reference siblings use distinct revision keys (LC-20261018-QWNB).
 
 `ParticipationComposer.tsx` coordinates authored drafts, correction and exact retry.
+`composer-draft.ts` derives routes/targets/capabilities from its six-kind caller
+operation union and owns pure draft construction/comparison/correction transitions.
+Named draft patches preserve undefined-as-unchanged and explicit null/empty values;
+loaded journal bodies remain opaque; uncertain dispatch sends the retained body unchanged.
 Keep its journal sequencing in `participation-state.tsx`/`participation-client.ts`;
 delayed coverage/account selections use latest-draft callbacks. Explicit correction
 of a rejected v1 draft may adopt the exact comparison revision's references;

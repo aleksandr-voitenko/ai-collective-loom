@@ -65,9 +65,9 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
       <ReferenceViews key={id} target={{kind:"discussion",resource_id:id}}/>
       <SummarySection key={summaryReload} discussion={id}/>
       {new URLSearchParams(location.search).get('summary') === 'create' && <Composer
-        context={context} kind="summary.create" path="/api/v1/summaries" slot={'summary.create:'+id}
-        fixed={{discussion_id:id}} titleField initialTitle={summaryTitle}
-        summaryDiscussion={id} heading="Create discussion summary" onCommitted={() => setSummaryReload(n => n + 1)}/>}
+        context={context} operation={{ kind: 'summary.create', discussionId: id }} slot={'summary.create:'+id}
+        initialTitle={summaryTitle}
+        heading="Create discussion summary" onCommitted={() => setSummaryReload(n => n + 1)}/>}
       {context.self.role === "administrator" && <OrganizationActions id={id} kind="discussion"/>}</>:
         <div className="notice"><p>Earlier discussion details were withdrawn. Available replies are checked separately.</p><button onClick={refresh}>Refresh discussion</button></div>}
       <div className="reading-grid">
@@ -302,10 +302,8 @@ function ContributionBody({
       {reply && (
         <Composer
           context={context}
-          kind="reply.create"
-          path="/api/v1/replies"
+          operation={{ kind: 'reply.create', discussionId: data.discussion_id!, parentId: id }}
           slot={"reply:" + id}
-          fixed={{ discussion_id: data.discussion_id, parent_id: id }}
           heading={"Reply to " + data.author.nickname}
           onCommitted={() => onPosted?.()}
         />

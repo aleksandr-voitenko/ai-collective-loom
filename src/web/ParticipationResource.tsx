@@ -141,15 +141,11 @@ export function ResourceContent({
       {edit && (
         <Composer
           context={context}
-          kind={data.kind === 'summary' ? 'summary.revise' : 'revision.publish'}
-          path={data.kind === 'summary' ? '/api/v1/summary-revisions' : '/api/v1/revisions'}
+          operation={data.kind === 'summary'
+            ? { kind: 'summary.revise', resourceId: id, revisionId: data.revision_id, title: data.title, discussionId: data.discussion_id! }
+            : { kind: 'revision.publish', resourceId: id, revisionId: data.revision_id, title: data.title,
+                resourceKind: data.kind === 'artifact' ? 'artifact' : 'contribution' }}
           slot={"edit:" + id}
-          fixed={{
-            resource_id: id,
-            expected_revision_id: data.revision_id,
-            title: data.title,
-          }}
-          titleField={data.title !== null}
           initialTitle={data.title ?? ""}
           initialText={data.content.text}
           initialMentions={data.content.mentions}
@@ -157,8 +153,6 @@ export function ResourceContent({
           initialReferences={data.content.format !== "loom-markdown-v1" ? data.content.references : []}
           initialChangeAccount={data.change_account?.state === "declared" ? {carry_forward_revision_id:data.revision_id} : null}
           initialFileSet={data.file_set?{version:data.file_set.version,files:data.file_set.files}:undefined}
-          resourceKind={data.kind}
-          summaryDiscussion={data.kind === 'summary' ? data.discussion_id! : undefined}
           initialCoverage={data.kind === 'summary' ? {carry_forward_revision_id:data.revision_id} : undefined}
           heading="Edit text"
         />

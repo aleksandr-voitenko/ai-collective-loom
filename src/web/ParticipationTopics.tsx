@@ -108,11 +108,8 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
         <Composer
           key={tab}
           context={context}
-          kind={tab === "discussions" ? "discussion.create" : "artifact.create"}
-          path={"/api/v1/" + tab}
+          operation={{ kind: tab === "discussions" ? "discussion.create" : "artifact.create", areaId: id }}
           slot={tab + ":" + id}
-          fixed={{ area_id: id }}
-          titleField
           heading={
             tab === "discussions" ? "Start a discussion" : "New text artifact"
           }
@@ -144,6 +141,11 @@ function Proposal({ context, areaId }: { context: Context; areaId?: string }) {
   const route = useQuery<ProposalRouteView>(affected ? `/api/v1/areas/${affected}/proposal-route` : "/api/v1/community", affected ? ProposalRoute : Onboarding);
   const ready = affected && route.data?.state === "ready";
   const contacts = route.data?.contacts ?? context.community.contacts;
+  // A retained proposal supplies its original destination/settings even while
+  // current routing is unavailable. This is a caller type boundary, not a rewrite
+  // of the saved request or a fresh authority claim.
+  const proposalArea = (destination ?? existing?.body.area_id) as string | undefined;
+  const proposalVersion = version ?? (existing?.body.proposal_context as { expected_settings_version: number } | undefined)?.expected_settings_version;
   return <>
     <p>For organization help, contact {contacts.map(p => p.nickname).join(", ") || "an administrator"}. <a href="/api/v1/contacts">Administrator contacts</a></p>
     {route.error && <p role="alert">{route.error}</p>}
@@ -154,10 +156,10 @@ function Proposal({ context, areaId }: { context: Context; areaId?: string }) {
     }}>Suggest an organizational change →</button>
     <button className="text-button" onClick={route.refresh}>Refresh proposal route</button>
     {/* A retained attempt keeps its original target even when fresh routing is unavailable. */}
-    {open && (existing || ready) && (destination ?? existing?.body.area_id) && <Composer
-      context={context} kind="discussion.create" path="/api/v1/discussions" slot={"proposal:" + (areaId ?? "community")}
-      fixed={{ area_id: destination ?? existing?.body.area_id, proposal_context: { ...(areaId ? {affected_area_id:areaId} : {}), expected_settings_version: version ?? (existing?.body.proposal_context as { expected_settings_version: number } | undefined)?.expected_settings_version } }}
-      titleField initialText={areaId ? `Proposal concerning [this topic](${location.origin}/loom/area/${areaId})\n\n` : ''} heading="Suggest an organizational change" />}
+    {open && (existing || ready) && proposalArea && <Composer
+      context={context} slot={"proposal:" + (areaId ?? "community")}
+      operation={{ kind: 'discussion.create', areaId: proposalArea, proposal: { ...(areaId ? {affected_area_id:areaId} : {}), expected_settings_version: proposalVersion } }}
+      initialText={areaId ? `Proposal concerning [this topic](${location.origin}/loom/area/${areaId})\n\n` : ''} heading="Suggest an organizational change" />}
   </>;
 }
 

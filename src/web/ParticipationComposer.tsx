@@ -14,14 +14,12 @@ import { useAuthorization } from './AuthorizationBoundary.js';
 import { CoverageEditor } from './Summaries.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
 import { Collection, ErrorText } from "./participation-ui.js";
+import { composerOperation, buildDraftBody, draftCorrection, correctDraft, type ComposerOperation, type DraftFields, type DraftPatch } from "./composer-draft.js";
 
 export function Composer({
   context,
-  kind,
-  path,
+  operation,
   slot,
-  fixed,
-  titleField = false,
   initialText = "",
   initialTitle = "",
   initialMentions = [],
@@ -29,18 +27,13 @@ export function Composer({
   initialReferences = [],
   initialChangeAccount = null,
   initialFileSet,
-  resourceKind,
-  summaryDiscussion,
   initialCoverage,
   heading,
   onCommitted,
 }: {
   context: Context;
-  kind: string;
-  path: string;
+  operation: ComposerOperation;
   slot: string;
-  fixed: Record<string, unknown>;
-  titleField?: boolean;
   initialText?: string;
   initialTitle?: string;
   initialMentions?: AuthoredContent["mentions"];
@@ -48,12 +41,12 @@ export function Composer({
   initialReferences?: ReferenceValue[];
   initialChangeAccount?: ChangeAccountValue | null;
   initialFileSet?:FileSetValue|undefined;
-  resourceKind?: string;
-  summaryDiscussion?: string | undefined;
   initialCoverage?: CoverageDeclarationValue | undefined;
   heading: string;
   onCommitted?: (value: CommittedView) => void;
 }) {
+  const { kind } = operation;
+  const { path, fixed, titleField, canFiles, canNote, summaryDiscussion } = composerOperation(operation);
   const authority=useAuthorization();
   const location = useLocation();
   const chosen = new URLSearchParams(location.search).get("intent");
@@ -65,7 +58,7 @@ export function Composer({
           ? value.key === chosen &&
             value.kind === kind &&
             value.path === path &&
-            ["area_id", "resource_id", "discussion_id", "parent_id"].every(
+            (["area_id", "resource_id", "discussion_id", "parent_id"] as const).every(
               (key) => !(key in fixed) || value.body[key] === fixed[key],
             )
           : value.slot === slot,
@@ -83,9 +76,7 @@ export function Composer({
   const [account,setAccount] = useState<ChangeAccountValue|null>(record ? (record.body.change_account as ChangeAccountValue|null|undefined) ?? null : initialChangeAccount);
   const [fileSet,setFileSet]=useState<FileSetValue|undefined>(record?record.body.file_set as FileSetValue|undefined:initialFileSet);
   const [filesPending,setFilesPending]=useState(false);
-  const canFiles=kind==='artifact.create'||resourceKind==='artifact';
-  const canNote = kind === 'artifact.create' || !!summaryDiscussion || resourceKind === 'artifact';
-  const [base, setBase] = useState(
+  const [base, setBase] = useState<unknown>(
     record?.body.expected_revision_id ?? fixed.expected_revision_id,
   );
   const [coverage, setCoverage] = useState<CoverageDeclarationValue | undefined>(record ? record.body.coverage as CoverageDeclarationValue | undefined : initialCoverage);
@@ -106,20 +97,9 @@ export function Composer({
   }, []);
   const locked =
     busy || (!!record && (record.state !== "draft" || !!record.blocked_by));
-  const legacyFileCorrection=record?.state==='rejected'&&resourceKind==='artifact'&&!record.body.file_set;
-  const legacyCorrection = record?.state === "rejected" &&
-    (kind === "revision.publish" || kind === 'summary.revise') && original?.format !== "loom-markdown-v3";
-  // A format refusal has no conflict ID: its retained expected revision is still
-  // the exact comparison base. Never use a newer fetched current source instead.
-  const comparisonRevision = record?.conflict_revision_id ??
-    ((legacyCorrection||legacyFileCorrection) && typeof record.body.expected_revision_id === "string"
-      ? record.body.expected_revision_id : undefined);
-  const comparisonReady = !!compare && compare.revision_id === comparisonRevision;
-  // Only v1 cannot represent references. A v2→v3 correction already carries
-  // attempted reference edits, including additions and deliberate withdrawals.
-  const adoptsBaseReferences = legacyCorrection && comparisonReady && original?.format === 'loom-markdown-v1' &&
-    compare?.content.format !== 'loom-markdown-v1';
-  const requiresComparison = legacyCorrection || legacyFileCorrection || (!!summaryDiscussion && !!comparisonRevision);
+  const fields: DraftFields = { text, title, mentions, format, references, base, coverage, note, account, fileSet };
+  const { comparisonRevision, comparisonReady, adoptsBaseReferences, requiresComparison } =
+    draftCorrection({ operation, record, comparison: compare });
   useEffect(() => {
     setCompare(undefined);
     setComparisonError("");
@@ -142,45 +122,12 @@ export function Composer({
       controller.abort();
     };
   }, [record?.state, record?.key, comparisonRevision, fixed.resource_id, comparisonAttempt]);
-  function draftBody(
-    nextText = text,
-    nextTitle = title,
-    nextMentions = mentions,
-    nextReferences = references,
-    nextCoverage = coverage,
-    nextNote = note,
-    nextAccount = account,
-    nextFiles = fileSet,
-  ) {
-    return {
-      ...fixed,
-      ...(base ? { expected_revision_id: base } : {}),
-      ...(titleField ? { title: nextTitle } : {}),
-      ...(nextCoverage ? { coverage: nextCoverage } : {}),
-      ...(nextFiles?{file_set:nextFiles}:{}),
-      ...((format === 'loom-markdown-v3' || nextNote || nextAccount || nextFiles) ? {change_note:nextNote,change_account:nextAccount} : {}),
-      content: {
-        ...(format === 'loom-markdown-v3' || nextNote || nextAccount || nextFiles ? {format:'loom-markdown-v3',references:nextReferences}
-          : format === "loom-markdown-v2" || nextReferences.length
-          ? { format: "loom-markdown-v2", references: nextReferences }
-          : { format: "loom-markdown-v1" }),
-        text: nextText,
-        mentions: nextMentions,
-      },
-    };
+  function draftBody(patch: DraftPatch = {}) {
+    return buildDraftBody({ operation, fields, patch });
   }
-  async function persist(
-    nextText = text,
-    nextTitle = title,
-    nextMentions = mentions,
-    nextReferences = references,
-    nextCoverage = coverage,
-    nextNote = note,
-    nextAccount = account,
-    nextFiles = fileSet,
-  ) {
+  async function persist(patch: DraftPatch = {}) {
     try {
-      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences, nextCoverage, nextNote, nextAccount, nextFiles);
+      const body = draftBody(patch);
       const next = await update((current) =>
         context.store.saveDraft(
           current ?? context.store.create(slot, kind, path, body),
@@ -307,32 +254,14 @@ export function Composer({
     const owner = identityGeneration();
     setBusy(true);
     try {
-      const revision = comparisonRevision, body = draftBody();
-      // A correction never enlarges the source claim. A carry-forward from an
-      // older base must be chosen again after inspecting the conflict revision.
-      if (summaryDiscussion) delete body.coverage;
-      // Only this explicit new-draft transition may adopt the base's newer contract.
-      // Adopt reference declarations only when absent from the old format, even empty.
-      const adopted = adoptsBaseReferences && compare?.content.format !== "loom-markdown-v1"
-        ? compare?.content.references : undefined;
-      const adoptedAccount = legacyCorrection && compare?.content.format === 'loom-markdown-v3'
-        ? (compare.change_account?.state === 'declared' ? {carry_forward_revision_id:compare.revision_id} : null) : account;
-      const adoptedFiles=legacyFileCorrection&&compare?.file_set?{version:compare.file_set.version,files:compare.file_set.files}:fileSet;
-      const nextFormat = adoptedFiles ? "loom-markdown-v3" : compare?.content.format === 'loom-markdown-v3' || format === 'loom-markdown-v3' ? 'loom-markdown-v3' : adopted ? 'loom-markdown-v2' : format;
-      await update((current) =>
-        context.store.correct(current!, {
-          ...body,
-          ...(adoptedFiles?{file_set:adoptedFiles}:{}),
-          ...(revision ? { expected_revision_id: revision } : {}),
-          ...(adopted || nextFormat === 'loom-markdown-v3' ? { content: { ...body.content, format: nextFormat, references: adopted ?? references } } : {}),
-          ...(nextFormat === 'loom-markdown-v3' ? {change_note:note,change_account:adoptedAccount} : {}),
-        }),
-      );
+      const corrected = correctDraft({ operation, fields, record, comparison: compare });
+      if (!corrected) return;
+      await update((current) => context.store.correct(current!, corrected.body));
       if (live.current && owner === identityGeneration()) {
-        if (revision) setBase(revision);
+        if (comparisonRevision) setBase(corrected.fields.base);
         if (summaryDiscussion) setCoverage(undefined);
-        setFormat(nextFormat); setAccount(adoptedAccount);setFileSet(adoptedFiles);
-        if (adopted) setReferences(adopted);
+        setFormat(corrected.fields.format); setAccount(corrected.fields.account);setFileSet(corrected.fields.fileSet);
+        if (adoptsBaseReferences) setReferences(corrected.fields.references);
         setCompare(undefined);
         setError("");
       }
@@ -371,18 +300,18 @@ export function Composer({
   function editText(value: string) {
     setText(value);
     if (!locked && record?.state !== "rejected")
-      persist(value, title, mentions);
+      persist({ text: value });
   }
   const declareCoverage=useRef<(next:CoverageDeclarationValue)=>Promise<boolean>>(async()=>false);
   // Attach a delayed preparation only to the latest draft, not the click's text.
-  declareCoverage.current=async next=>{const saved=await persist(text,title,mentions,references,next);if(saved&&live.current)setCoverage(next);return !!saved;};
+  declareCoverage.current=async next=>{const saved=await persist({ coverage: next });if(saved&&live.current)setCoverage(next);return !!saved;};
   const changeActions=useRef<(nextNote:NoteContent|null,nextAccount:ChangeAccountValue|null,target?:ExactChangeTargetValue)=>void>(()=>{});
   changeActions.current=(nextNote,nextAccount,target)=>{
     if(locked||!live.current)return;
     const nextReferences=target&&!references.some(r=>r.target.resource_id===target.resource_id&&r.target.revision_id===target.revision_id)
       ? [...references,{reference_id:crypto.randomUUID(),target,relationship:null,rationale:null}] : references;
     setFormat('loom-markdown-v3');setNote(nextNote);setAccount(nextAccount);setReferences(nextReferences);
-    void persist(text,title,mentions,nextReferences,coverage,nextNote,nextAccount);
+    void persist({ references: nextReferences, note: nextNote, account: nextAccount });
   };
   return (
     <section className="composer card" aria-label={heading}>
@@ -415,7 +344,8 @@ export function Composer({
           {!summaryDiscussion && kind !== "revision.publish" && <button
             onClick={() =>
               void update((current) =>
-                context.store.replace(current!, draftBody("", "", [], [], undefined, null, null, canFiles?{version:"artifact-files-v1",files:[]}:undefined)),
+                context.store.replace(current!, draftBody({ text: "", title: "", mentions: [], references: [], note: null, account: null,
+                  ...(canFiles ? { fileSet: {version:"artifact-files-v1",files:[]} } : {}) })),
               ).catch((failure) => setError(failure.message))
             }
           >
@@ -457,7 +387,7 @@ export function Composer({
                 onChange={(event) => {
                   setTitle(event.target.value);
                   if (record?.state !== "rejected")
-                    persist(text, event.target.value, mentions);
+                    persist({ title: event.target.value });
                 }}
               />
             </label>
@@ -492,7 +422,7 @@ export function Composer({
                       setMentions(next);
                       setText(value);
                       if (record?.state !== "rejected")
-                        persist(value, title, next);
+                        persist({ text: value, mentions: next });
                     }}
                   >
                     Remove mention {mention.token}
@@ -533,7 +463,7 @@ export function Composer({
                             value = text + ` [[mention:${token}]]`;
                           setMentions(next);
                           setText(value);
-                          persist(value, title, next);
+                          persist({ text: value, mentions: next });
                           setPicker(false);
                           textArea.current?.focus();
                         }}
@@ -546,10 +476,10 @@ export function Composer({
               )}
             </>
           )}
-          {canFiles&&<FileEditor context={context} target={{kind:kind==='artifact.create'?'area':'artifact',resource_id:String(fixed.resource_id??fixed.area_id)}} value={fileSet} disabled={locked} onPending={setFilesPending} onChange={async next=>{const saved=await persist(text,title,mentions,references,coverage,note,account,next);if(saved&&live.current)setFileSet(next);return !!saved;}}/>}
+          {canFiles&&<FileEditor context={context} target={{kind:kind==='artifact.create'?'area':'artifact',resource_id:String(fixed.resource_id??fixed.area_id)}} value={fileSet} disabled={locked} onPending={setFilesPending} onChange={async next=>{const saved=await persist({ fileSet: next });if(saved&&live.current)setFileSet(next);return !!saved;}}/>}
           <ReferenceEditor references={references} disabled={locked} onChange={next => {
             setReferences(next); if(format !== "loom-markdown-v3") setFormat("loom-markdown-v2");
-            void persist(text, title, mentions, next);
+            void persist({ references: next });
           }}/>
           {canNote ? <ChangeNoteEditor value={note} disabled={locked} onChange={next=>changeActions.current(next,account)}/>
             : <ChangeAccountEditor value={account} source={typeof fixed.resource_id === "string" ? fixed.resource_id : undefined} base={typeof base === "string" ? base : undefined} disabled={locked} onChange={(next,target)=>changeActions.current(note,next,target)}/>}
