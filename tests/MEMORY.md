@@ -338,6 +338,10 @@ every prior column remains compared. Reverse publisher preparation with independ
 discussion creates: artifact creates also serialize existing editor-set invalidation.
 `web/following.test.tsx` uses development StrictMode. Keep explicit-scope controls
 outside keyed result remounts; changing a checkbox must preserve open controls/focus.
+`web/shared-changes.test.tsx` exercises multiple reason pages against the displayed
+cursor without advancing its durable checkpoint. Detail retries, invalidation and
+late ownership changes remain separate from main-page recovery. Baseline inventory
+links appear only after journal save; held locks and failed writes preserve the old page.
 URL-backed controlled checkboxes commit with router flushSync; the deferred transition
 otherwise restores the old checked value during native interaction. Rebuild before
 compiled-browser verification; this harness does not build automatically.
