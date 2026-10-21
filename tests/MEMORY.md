@@ -238,6 +238,9 @@ HTTPS cases move a child after its displayed preview, reorder old/new paths befo
 and after a denial, then suppress the current parent before an older uppercase
 Follow/mute command reaches the server. They require descendant withdrawal, stale
 response fencing and actual safe Unfollow/Unmute with confirmation.
+The uppercase navigation matrix awaits actual native request promises and drains
+their React effect waves before DOM assertions. Intentional race barriers stay
+outside that settlement set; a short DOM poll is not a native HTTPS deadline.
 `web/query-authorization.test.tsx` drives the actual query hook through all eight
 boundary configurations, with settled and pending siblings, source/history
 denials, classified current/exact misses, invalid history cursors and owner denial.

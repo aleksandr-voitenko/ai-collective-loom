@@ -149,14 +149,22 @@ test(`real HTTPS uppercase ${producer} refusal withdraws Following after navigat
   follow={...command,following:true,preferences:['artifact_revisions' as const]},mute={kind:'mute' as const,body:{...command,muted:true}},
   bytes=JSON.stringify(producer==='Follow'?follow:mute.body);
  const entered=barrier(),release=barrier(),done=barrier(),previewEntered=barrier(),previewRelease=barrier(),previewDone=barrier();
- let outstanding=0,refused:any,transport:string|undefined,holdPreview=false;const paths:string[][]=[];
+ let refused:any,transport:string|undefined,holdPreview=false;const paths:string[][]=[];
+ const requests=new Set<ReturnType<typeof participant.client.call>>();
+ // Native HTTPS completion is not bounded by waitFor's DOM polling deadline.
+ // Flush each response's React effects too: mounted controls can start another wave.
+ // Deliberately held race requests/responses remain outside this settlement set.
+ const settleRequests=async()=>{
+  do{await act(async()=>{await Promise.all(requests);});}while(requests.size);
+ };
  const commandPath=producer==='Follow'?'/api/v1/me/following/private/state':'/api/v1/me/attention/private/mutes/state';
  t.mock.method(globalThis,'fetch',async(path:string,options:any)=>{
   const held=path===commandPath;
   if(held){transport=options.body;entered.release();await release.promise;}
-  outstanding++;
+  const request=participant.client.call(path,options.body?JSON.parse(options.body):undefined);
+  requests.add(request);
   let response;
-  try{response=await participant.client.call(path,options.body?JSON.parse(options.body):undefined);}finally{outstanding--;}
+  try{response=await request;}finally{requests.delete(request);}
   if(held){refused=response;done.release();}
   if(path.endsWith('/previews')){
    const item=response.body.items.find((v:any)=>v.target.resource_id===a.resource_id);
@@ -177,7 +185,8 @@ test(`real HTTPS uppercase ${producer} refusal withdraws Following after navigat
  try{
   assert.equal(transport,bytes);
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Navigate to Following'})));
-  await waitFor(()=>{assert.ok(screen.queryByRole('heading',{name:'Case protected descendant'}));assert.equal(outstanding,0);});
+  await settleRequests();
+  await waitFor(()=>{assert.ok(screen.queryByRole('heading',{name:'Case protected descendant'}));assert.equal(requests.size,0);});
   for(const detail of document.querySelectorAll('details'))detail.open=true;
   const reordered=placement.startsWith('old preview');
   const refresh=async()=>act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh mute state'})));
@@ -185,7 +194,7 @@ test(`real HTTPS uppercase ${producer} refusal withdraws Following after navigat
   if(reordered){holdPreview=true;await refresh();await previewEntered.promise;}
   if(placement!=='already below')await f.move(a.resource_id,f.other);
   if(reordered){
-   await refresh();await waitFor(()=>{assert.ok(paths.at(-1)?.includes(f.other));assert.equal(outstanding,0);});
+   await refresh();await settleRequests();await waitFor(()=>{assert.ok(paths.at(-1)?.includes(f.other));assert.equal(requests.size,0);});
    if(placement==='old preview first')await act(async()=>{previewRelease.release();await previewDone.promise;});
   }
   // Independent oracle: the new parent now suppresses its moved child even
@@ -201,8 +210,10 @@ test(`real HTTPS uppercase ${producer} refusal withdraws Following after navigat
   assert.equal(screen.getByRole('button',{name:'Unmute routine updates'}).getAttribute('aria-disabled'),'false');
   assert.equal(JSON.stringify(producer==='Follow'?follow:mute.body),bytes);
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Unmute routine updates'})));
+  await settleRequests();
   await waitFor(()=>assert.ok(screen.queryByText('Choice saved. Refresh an existing routine selection to apply it; older history remains available.')));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Unfollow'})));
+  await settleRequests();
   await waitFor(()=>assert.ok(screen.queryByText(/Explicit follow removed/)));
   assert.equal(!!screen.queryByText('Case protected descendant'),false,'private confirmations cannot reauthorize metadata');
  }finally{release.release();previewRelease.release();await done.promise;}
