@@ -70,41 +70,54 @@ for(const producer of ['Follow','mute','private preview'] as const)test(`real HT
   const oldEntered=barrier(),releaseOld=barrier(),oldDone=barrier();
   const path=producer==='private preview'?'/api/v1/me/attention/previews':producer==='Follow'?'/api/v1/me/following/lookup':'/api/v1/me/attention/mutes/lookup';
   let holdNext=false,pending=0,held=false,oldResponse:any;
+  const requests=new Set<ReturnType<typeof participant.client.call>>();
+  // A completed native call can mount controls that start another request wave.
+  // The deliberately held dispatch is not part of this ordinary settlement set.
+  const settleRequests=async()=>{
+    do{await act(async()=>{await Promise.all(requests);});}while(requests.size);
+  };
   t.mock.method(globalThis,'fetch',async(url:string,options:any)=>{
     const body=options.body?JSON.parse(options.body):undefined;
     const isOld=holdNext&&url===path&&(body.resource_id===a.resource_id||body.targets?.some((v:any)=>v.resource_id===a.resource_id));
     if(isOld){holdNext=false;held=true;oldEntered.release();await releaseOld.promise;}
     pending++;
+    // A real HTTPS request is dispatched only after its barrier opens. Its
+    // source authorization therefore happens after the second suppression.
+    const request=participant.client.call(url,body);requests.add(request);
     try{
-      // A real HTTPS request is dispatched only after its barrier opens. Its
-      // source authorization therefore happens after the second suppression.
-      const response=await participant.client.call(url,body);
+      const response=await request;
       if(isOld)oldResponse=response;
       return Response.json(response.body,{status:response.status});
-    }finally{pending--;if(isOld)oldDone.release();}
+    }finally{requests.delete(request);pending--;if(isOld)oldDone.release();}
   });
   const router=createMemoryRouter([{path:'/loom/following',element:React.createElement(FollowingPage,{context})}],{initialEntries:['/loom/following']});
   t.after(()=>router.dispose());
   render(React.createElement(StrictMode,null,React.createElement(RouterProvider,{router})));
   const exposure=()=>screen.queryAllByText(/Review protected [AB]/).length;
   const control=()=>within(document.querySelector(`[data-mute-target="artifact:${a.resource_id}"]`) as HTMLElement);
-  const lookup=async()=>act(async()=>{
+  const lookup=async(entered?:Promise<void>)=>act(async()=>{
     if(producer==='Follow')window.dispatchEvent(new CustomEvent('loom-following-change',{detail:store.prefix}));
     else fireEvent.click(control().getByRole('button',{name:'Refresh mute state'}));
+    // A private lookup updates state before entering the held protected preview.
+    // Await entry here, never the held response's eventual release.
+    if(entered)await entered;
   });
   const suppress=async(state:'active'|'suppressed')=>f.database.transaction(tx=>tx.query('UPDATE loom.resources SET state=$2 WHERE id=$1',[a.resource_id,state]));
+  await settleRequests();
   await waitFor(()=>{assert.ok(exposure()>0);assert.equal(pending,0);assert.equal(control().getByRole('button',{name:'Unmute routine updates'}).getAttribute('aria-disabled'),'false');});
   for(const detail of document.querySelectorAll('details'))detail.open=true;
   try{
-    holdNext=true;await lookup();await oldEntered.promise;assert.equal(held,true);
-    await suppress('suppressed');await lookup();
+    holdNext=true;await lookup(oldEntered.promise);assert.equal(held,true);
+    await suppress('suppressed');await lookup();await settleRequests();
     await waitFor(()=>{assert.equal(exposure(),0);assert.equal(pending,0);});
     await suppress('active');
     await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry following page'})));
+    await settleRequests();
     await waitFor(()=>{assert.ok(screen.getByRole('heading',{name:'Review protected A'}));assert.ok(exposure()>=2);assert.equal(pending,0);});
     const restoredExposure=exposure();
     await suppress('suppressed');
     await act(async()=>{releaseOld.release();await oldDone.promise;});
+    await settleRequests();
     assert.equal(oldResponse.status,200);
     assert.equal((producer==='private preview'?oldResponse.body.items.find((v:any)=>v.target.resource_id===a.resource_id):oldResponse.body).source.state,'unavailable','the server checks the held lookup only after access is lost again');
     t.diagnostic(JSON.stringify({producer,refusal:'unavailable',restoredExposure,remainingExposure:exposure()}));
@@ -189,9 +202,12 @@ test(`real HTTPS uppercase ${producer} refusal withdraws Following after navigat
   await waitFor(()=>{assert.ok(screen.queryByRole('heading',{name:'Case protected descendant'}));assert.equal(requests.size,0);});
   for(const detail of document.querySelectorAll('details'))detail.open=true;
   const reordered=placement.startsWith('old preview');
-  const refresh=async()=>act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh mute state'})));
+  const refresh=async(entered?:Promise<void>)=>act(async()=>{
+   fireEvent.click(screen.getByRole('button',{name:'Refresh mute state'}));
+   if(entered)await entered;
+  });
   if(placement!=='already below')assert.ok(paths.every(path=>!path.includes(f.other)));
-  if(reordered){holdPreview=true;await refresh();await previewEntered.promise;}
+  if(reordered){holdPreview=true;await refresh(previewEntered.promise);}
   if(placement!=='already below')await f.move(a.resource_id,f.other);
   if(reordered){
    await refresh();await settleRequests();await waitFor(()=>{assert.ok(paths.at(-1)?.includes(f.other));assert.equal(requests.size,0);});
