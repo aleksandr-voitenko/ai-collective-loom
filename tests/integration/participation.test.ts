@@ -2,10 +2,13 @@ import type { QueryResultRow } from "pg";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createServer, type AddressInfo } from "node:net";
+import { createServer as createHttpsServer } from "node:https";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { syntheticServer } from "../helpers/participation-server.js";
 import { httpClient } from "../helpers/participation-http.js";
@@ -17,6 +20,82 @@ const content = (text: string) => ({
   text,
   mentions: [],
 });
+
+test(
+  "synthetic HTTP client reconnects after immediate HTTPS restart without replaying a write",
+  { timeout: 15000 },
+  async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "loom-http-restart-"));
+    let server: ReturnType<typeof createHttpsServer> | undefined;
+    t.after(async () => {
+      if (server?.listening)
+        await new Promise<void>((resolve) => server!.close(() => resolve()));
+      await rm(directory, { recursive: true, force: true });
+    });
+    await promisify(execFile)("openssl", [
+      "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+      "-keyout", join(directory, "key.pem"),
+      "-out", join(directory, "cert.pem"), "-days", "1",
+      "-subj", "/CN=localhost",
+      "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+    ]);
+    const key = await readFile(join(directory, "key.pem"));
+    const cert = await readFile(join(directory, "cert.pem"), "utf8");
+    const received: {
+      path: string | undefined;
+      authorization: string | undefined;
+      cookie: string | null;
+      body: string;
+    }[] = [];
+    let connections = 0;
+    const start = async (port = 0) => {
+      server = createHttpsServer({ key, cert }, (request, response) => {
+        const chunks: Buffer[] = [];
+        request.on("data", (chunk) => chunks.push(chunk));
+        request.on("end", () => {
+          received.push({
+            path: request.url,
+            authorization: request.headers.authorization,
+            cookie: request.headers.cookie ?? null,
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+          response.setHeader("content-type", "application/json");
+          response.setHeader(
+            "set-cookie", "fixture_session=retained; Path=/; Secure; HttpOnly",
+          );
+          response.end('{"recorded":true}');
+        });
+      });
+      server.on("secureConnection", () => connections++);
+      await new Promise<void>((resolve, reject) => {
+        server!.once("error", reject);
+        server!.listen({ host: "127.0.0.1", port }, resolve);
+      });
+      return (server.address() as AddressInfo).port;
+    };
+    const port = await start();
+    const client = httpClient(
+      "https://127.0.0.1:" + port, cert, "synthetic-credential",
+    );
+    const first = { idempotency_key: randomUUID(), choice: "first" };
+    const next = { idempotency_key: randomUUID(), choice: "second" };
+    assert.equal((await client.call("/first", first)).status, 200);
+    await new Promise<void>((resolve) => server!.close(() => resolve()));
+    await start(port);
+    assert.equal((await client.call("/second", next)).status, 200);
+    assert.equal(connections, 2, "Restart recovery must use a new TLS connection");
+    assert.deepEqual(received, [
+      {
+        path: "/first", authorization: "Bearer synthetic-credential",
+        cookie: null, body: JSON.stringify(first),
+      },
+      {
+        path: "/second", authorization: "Bearer synthetic-credential",
+        cookie: "fixture_session=retained", body: JSON.stringify(next),
+      },
+    ], "Credentials and exact bodies survive restart, with one server evaluation per request");
+  },
+);
 
 test("synthetic HTTPS fixture owns its port throughout startup and releases it after close", async (t) => {
   const contender = createServer();
@@ -119,6 +198,66 @@ test("synthetic HTTPS fixture releases a failed restart and retains its authenti
   const self = await client.call("/api/v1/identity/self");
   assert.equal(self.status, 200);
   assert.equal(self.body.participant_id, server.administratorId);
+});
+
+test("production identity HTTPS routes protect credential metadata and revoke only the signed-out session", async (t) => {
+  const server = await syntheticServer();
+  t.after(server.close);
+  const cert = await readFile(server.directory + "/cert.pem", "utf8"),
+    admin = httpClient(server.origin, cert);
+  const self = await admin.enroll(server.ticket);
+  const account = await admin.call("/api/v1/identity/accounts", {
+    idempotency_key: randomUUID(), nickname: "credential_metadata_agent",
+    kind: "agent", role: "participant",
+  });
+  assert.equal(account.status, 200);
+  const issued = await admin.call("/api/v1/identity/credentials", {
+    idempotency_key: randomUUID(), participant_id: account.body.participant_id,
+    kind: "agent", purpose: null, label: "Metadata regression", replace_credential_id: null,
+  });
+  assert.equal(issued.status, 200);
+  const agent = httpClient(server.origin, cert, issued.body.secret);
+  const path = "/api/v1/identity/credentials?participant_id=" + account.body.participant_id;
+  const listed = await admin.call(path);
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.length, 1);
+  const { created_at, expires_at } = listed.body[0];
+  assert.ok(Number.isFinite(Date.parse(created_at)));
+  assert.ok(Date.parse(expires_at) > Date.parse(created_at));
+  assert.deepEqual(listed.body, [{
+    id: issued.body.credential_id, kind: "agent", label: "Metadata regression",
+    state: "active", created_at, expires_at, parent_credential_id: null,
+  }]);
+  const denied = await agent.call(path);
+  assert.equal(denied.status, 403);
+  assert.equal(denied.body.error.code, "forbidden");
+
+  // A rejected logout must not revoke a bearer credential or the cookie session.
+  const agentLogout = await agent.call("/api/v1/identity/logout", {});
+  assert.equal(agentLogout.status, 400);
+  assert.equal(agentLogout.body.error.code, "invalid_request");
+  const badCsrf = await admin.call("/api/v1/identity/logout", {}, {
+    headers: { "x-loom-csrf": "invalid" },
+  });
+  assert.equal(badCsrf.status, 401);
+  assert.equal(badCsrf.body.error.code, "invalid_proof");
+  assert.equal((await admin.call("/api/v1/identity/self")).status, 200);
+  const before = (await server.observer.query(
+    "SELECT * FROM loom.participant_credentials ORDER BY id",
+  )).rows;
+  const logout = await admin.call("/api/v1/identity/logout", {});
+  assert.equal(logout.status, 200);
+  assert.deepEqual(logout.body, { session_state: "revoked" });
+  assert.deepEqual(logout.headers["set-cookie"], [
+    "__Host-loom-session=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0",
+  ]);
+  assert.deepEqual((await server.observer.query(
+    "SELECT * FROM loom.participant_credentials ORDER BY id",
+  )).rows, before.map(row => row.id === self.credential_id
+    ? { ...row, state: "revoked" } : row));
+  assert.equal((await admin.call("/api/v1/identity/self")).status, 401);
+  assert.equal((await admin.call(path)).status, 401);
+  assert.equal((await agent.call("/api/v1/identity/self")).status, 200);
 });
 
 test(

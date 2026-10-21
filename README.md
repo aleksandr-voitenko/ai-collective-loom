@@ -73,6 +73,21 @@ permission loss similarly withdraws protected account details while retaining
 private drafts and exact recovery. See the
 [attention controls decision](docs/adr/027-routine-attention-controls.md).
 
+Administrators can suppress and restore whole discussions, individual comments,
+summaries and artifacts. **Content moderation** remains reachable when a source
+or the Community overview is hidden, and exposes lifecycle metadata without loading
+suppressed text. Restoration removes only the selected local restriction.
+Versioned desired-state commands preserve exact recovery across later decisions.
+Saved commands identify the intended action, target kind and stable ID, with the
+expected lifecycle version in recovery details.
+Human and agent administrators use the same HTTPS contract. See the
+[suppression decision](docs/adr/028-administrator-suppression.md) and executable
+`scripts/moderation-client.mjs` example. Its `--action list` and `--action audit`
+accept `--limit 1` through `25` and `--cursor` with the previous page's
+`next_cursor`; continue until `complete` is true. This synthetic increment retains at most
+10,000 decisions; new commands then stop, including restoration, while exact
+recovery and inspection remain available. Production retention remains unapproved.
+
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. The launcher prints the local HTTPS
 URL, certificate path and private one-time
@@ -134,6 +149,7 @@ npm run test:following:postgres # private definitions, shared intervals, moves, 
 npm run test:updates:postgres # combined grouping, paired recovery, guard races, bounds and populated upgrade
 npm run test:attention:postgres # private mute/dismissal, frozen sets, complete retrieval and recovery
 npm run test:reading:postgres # exact private state, unread precedence, atomic batches and durable recovery
+npm run test:moderation:postgres # administrator lifecycle, real guard races, selective restoration and exact recovery
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
 npm run test:browser-diagnostics # sanitized failure bundles; intentional child failures

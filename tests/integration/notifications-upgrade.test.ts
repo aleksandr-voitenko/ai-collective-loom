@@ -26,6 +26,8 @@ test('populated v1/v2/v3 upgrade preserves bytes, digests, old uncertain retries
   const tables=['resources','revisions','revision_mentions','revision_change_notes','revision_references','shared_activity','outbox_intents','idempotency_records','search_jobs','search_documents','search_state'];
   const snapshot=async()=>{const out:Record<string,unknown>={};for(const name of tables)out[name]=(await f.observer.query(`SELECT * FROM loom.${name} ORDER BY 1`)).rows;return out;};
   const before=await snapshot();
+  // Migration 0018 adds the initial lifecycle fence; every prior column is still compared.
+  for(const row of before.resources as Record<string,unknown>[])Object.assign(row,{lifecycle_version:1});
   // Migration 0013 adds only an unknown impact marker to old events.
   for(const row of before.shared_activity as Record<string,unknown>[])Object.assign(row,{affected_target_ids:null});
 await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);

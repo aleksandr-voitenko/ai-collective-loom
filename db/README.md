@@ -115,3 +115,12 @@ old retry identities, existing reference provenance or summary coverage. Existin
 entities are explicitly main-field; old search documents have empty note fields.
 Only isolated synthetic upgrades have been exercised; retained-data/production
 rollout remains gated. See [ADR-022](../docs/adr/022-authored-change-notes.md).
+
+Migration `0018_moderation.sql` adds an independent lifecycle version to existing
+resources, immutable administrator decisions/audit and a bounded community counter.
+The resource state remains the sole local restriction. Populated active and
+suppressed resources begin at version 1 without invented historical decisions.
+Existing visibility triggers handle suppression/restoration; no shared activity
+or content revision is added. The `test:moderation:postgres` upgrade case preserves
+populated pre-0018 content, restrictions, private choices and retained decisions.
+See [ADR-028](../docs/adr/028-administrator-suppression.md).

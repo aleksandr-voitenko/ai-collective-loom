@@ -1,5 +1,24 @@
 # Browser test diagnostics
 
+`test:moderation:postgres` discovers `integration/moderation*.test.ts`: actual HTTPS
+four-scope lifecycle operations, current authority, canonical replay, no-op fences,
+atomic rollback, populated pre-0018 upgrade and direct-client process loss.
+The races hold real PostgreSQL guards and observe the competing lock wait for both
+publication/revision/editor/move/read and identity orderings. Projections stop both
+workers after population, then suppress/restore through the supported API, compare
+private/source snapshots and explicitly replay filtered shared/personal/v1/v2
+checkpoints. Bounds include a full unsupported candidate page and capacity recovery.
+`e2e/moderation.spec.ts` uses native dialogs and the compiled authorization boundary
+for suppression, selective restoration, narrow screens, exact lost-response retry,
+stale tabs, late navigation receipts, blocked journal settlement and role withdrawal.
+Recovery selection retains opposite uncertain commands across reload, identifies
+each saved action/target/version, retries the selected exact transport body and
+compares the other record's stored bytes unchanged.
+`web/moderation.test.tsx` mounts the real component and authorization boundary in
+StrictMode with metadata-only HTTP stubs. Saved labels and expected versions remain
+independent of refreshed current control state, without dispatch or journal writes.
+Its fixed file/route vocabulary is included in the existing approved diagnostics.
+
 Protected-read enforcement is checked at the import/API and production-component
 boundaries. `unit/protected-read-architecture.test.ts` rejects raw transport imports,
 re-exports and direct network calls in components. Closed session/command routes
@@ -328,6 +347,10 @@ establish that the asynchronous comparison fetch has failed.
 Keyboard source refresh waits for the control to become enabled and confirms its
 focus before pressing Enter. The source heading is visible during initial loading,
 when refresh is disabled; hold that response to test this ordering deterministically.
+Preparation recovery similarly exposes its retry label while the first send is still
+pending. Hold that request to assert the disabled state, then await the injected
+failure and enabled retry before adding later sources, removing interception or
+reloading. Publication retry must also be enabled before advancing its expiry fixture.
 
 `npm run test:e2e` uses `scripts/browser-tests.mjs`, the closed validator in
 `scripts/lib/browser-diagnostics.mjs`, and `helpers/browser-reporter.ts`.
@@ -343,6 +366,10 @@ use the private before-listen barrier to check contention, failure cleanup and
 authenticated restart at the same origin. Explicit occupied ports fail without retry.
 Initial startup and restart share reservation/handoff code. A failed restart releases
 its listener while preserving the database and identity for a later explicit restart.
+The synthetic `participation-http` client gives each call its own TLS connection:
+Node's global keep-alive pool can reuse a closing socket after same-origin restart.
+It never retries a write automatically. The real HTTPS restart regression checks
+one evaluation per request and preserved bearer, cookie and exact command bytes.
 
 The automatic collector tracks every page in a registered context. Persistent
 contexts must use `diagnostics.launchPersistentContext`; explicitly constructed
@@ -359,6 +386,12 @@ test deadlines or holding application requests. `tests/coverage/verify.ts` guard
 real Node/browser branch merging, unmapped cold code and safe disposal. Coverage
 method, gates and artifact constraints: root README Coverage and
 `scripts/lib/coverage/`.
+`integration/participation.test.ts` checks credential metadata and logout through
+the production identity routes over actual HTTPS. It verifies administrator-only
+disclosure, rejection without revocation, exact cookie clearing and durable
+revocation of only the signed-out session. The older `helpers/identity-http.ts`
+owns copied prototype routes; its protocol assertions do not cover those production
+handlers. Keep direct route coverage independent of browser-worker counters.
 Published HTML pages use stable non-hidden filenames; copying source paths into
 artifact paths loses `.githooks` pages under the uploader's default hidden filter.
 Keep original source names in the index, JSON and LCOV, and verify downloaded
@@ -376,7 +409,9 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 128 collected tests and <17 MiB/candidate. Omissions and incomplete
+128 KiB/document, 135 collected tests and <17 MiB/candidate. The test count includes
+the seven moderation scenarios so combined coverage captures the complete suite;
+the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
 

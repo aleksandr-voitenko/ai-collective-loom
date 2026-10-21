@@ -13,7 +13,14 @@ Current implementation includes an opt-in **synthetic text participation** slice
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`12`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`13`.
+Administrator suppression (ADR-028, migration0018) uses the existing resource state
+plus independent lifecycle fences and immutable decisions/audit. Only whole
+discussions, non-opening comments, summaries and artifacts are supported. Safe
+metadata management remains available without ordinary source reads; restoration
+removes only local suppression. Both credentials require current administrator
+authority. Existing visibility generations drive replay; no shared lifecycle event,
+content revision or private choice is fabricated. See participation memory.
 Administrator topic organization adds an implicit root, bounded nested areas,
 attributed metadata history, versioned subtree/content moves and inherited closure.
 Resource ownership remains authoritative; the existing exclusive structure guard

@@ -96,8 +96,21 @@ test('lost summary acknowledgement and competing tabs retain exact coverage thro
 
 test('failed preparation and uncertain expired publication recover explicitly without losing text',async({page,context,server})=>{
   const f=await setup(page,context,server);await draft(page,server.origin,f.discussion);
-  await page.route('**/api/v1/summary-preparations',async route=>{await route.fetch();await route.abort('failed');});await page.getByRole('button',{name:'Prepare declared sources',exact:true}).click();await expect(page.getByRole('button',{name:'Retry same source preparation'})).toBeVisible();await f.reply();await page.unroute('**/api/v1/summary-preparations');await page.reload();await page.getByRole('button',{name:'Retry same source preparation'}).click();await expect(page.getByText(/Full discussion snapshot · 1 currently eligible/)).toBeVisible();
-  await page.route('**/api/v1/summaries',route=>route.abort('failed'));await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Retry same publication'})).toBeVisible();
+  const entered=barrier(),release=barrier(),settled=barrier();
+  await page.route('**/api/v1/summary-preparations',async route=>{
+    entered.release();await release.promise;
+    try{await route.fetch();await route.abort('failed');}finally{settled.release();}
+  });
+  await page.getByRole('button',{name:'Prepare declared sources',exact:true}).click();await entered.promise;
+  const retryPreparation=page.getByRole('button',{name:'Retry same source preparation'});
+  // The retry label appears before dispatch settles; it cannot establish the snapshot boundary.
+  try{
+    await expect(retryPreparation).toBeVisible();await expect(retryPreparation).toBeDisabled();
+  }finally{release.release();}
+  await settled.promise;await expect(retryPreparation).toBeEnabled();
+  expect((await f.reply()).status).toBe(201);
+  await page.unroute('**/api/v1/summary-preparations');await page.reload();await retryPreparation.click();await expect(page.getByText(/Full discussion snapshot · 1 currently eligible/)).toBeVisible();
+  await page.route('**/api/v1/summaries',route=>route.abort('failed'));await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Retry same publication'})).toBeEnabled();
   await server.observer.query("UPDATE loom.summary_preparations SET expires_at=clock_timestamp()-interval '1 second'");await page.unroute('**/api/v1/summaries');await page.getByRole('button',{name:'Retry same publication'}).click();await expect(page.getByRole('button',{name:'Prepare corrected submission'})).toBeVisible();
   await page.getByRole('button',{name:'Prepare corrected submission'}).click();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Authored independent summary');await expect(page.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();await page.getByRole('button',{name:'Prepare declared sources',exact:true}).click();await expect(page.getByText(/Full discussion snapshot · 2 currently eligible/)).toBeVisible();
   await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();

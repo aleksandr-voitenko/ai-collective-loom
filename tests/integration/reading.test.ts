@@ -153,7 +153,7 @@ test('populated 0015 upgrade retains every prior table and Updates/standalone to
   await reader.client.call('/api/v1/me/saved-items/state',{idempotency_key:randomUUID(),target:{kind:'artifact',resource_id:a.resource_id},saved:true,expected_version:0});
   const shared=await f.changes(reader.client),personal=await f.page(reader.client),combined=await f.ready(reader.client,{selection:'complete'});
   const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' ORDER BY tablename")).rows.map(r=>r.tablename as string);
-  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT to_jsonb(t) row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
+  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT ${table==='resources'?"'{\"lifecycle_version\":1}'::jsonb || " : ''}to_jsonb(t) row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const table of tables)before.set(table,await digest(table));
   await f.migrate();for(const table of tables)assert.equal(await digest(table),before.get(table),table+' changed on upgrade');
   for(const table of ['reading_states','reading_operations','reading_owners'])assert.equal((await f.observer.query(`SELECT count(*)::int n FROM loom.${table}`)).rows[0].n,0);

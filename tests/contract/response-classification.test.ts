@@ -119,3 +119,24 @@ test('shared role and editor capabilities withdraw content independently of sess
  for(const contract of responseContracts.values())if(contract.errors.session==='authenticated')for(const code of ['unauthenticated','invalid_actor'])
   assert.deepEqual(classifyError(contract,new ApiError(code,'Identity removed.')),{session:'revoke',content:'withdraw'});
 });
+
+test('moderation control metadata never grants source access; every recorded lifecycle receipt fences older content',()=>{
+ const target={kind:'artifact',resource_id:'12345678-abcd-1234-abcd-123456789abc'};
+ const current={target,local_state:'active',version:2,owner_id:null,ordinary_read_available:true};
+ for(const path of ['state','status']){
+  const contract=responseContract('/api/v1/admin/moderation/'+path,'POST');
+  assert.equal(contract.access,'boundary-receipt');
+  for(const suppressed of [true,false])for(const ordinary_read_available of [true,false]){
+   assert.equal(classifyResponse(contract,{operation_state:'recorded',operation_id:target.resource_id,idempotency:'created',
+    outcome:{target,suppressed,version:2},current:{...current,ordinary_read_available}}).denied,true);
+  }
+  assert.equal(classifyResponse(contract,{operation_state:'not_recorded'}).denied,false);
+  assert.deepEqual(classifyError(contract,new ApiError('forbidden','Administrator role removed.')),{session:'retain',content:'withdraw'});
+ }
+ for(const path of ['resources/ABC','targets','audit']){
+  const contract=responseContract('/api/v1/admin/moderation/'+path,'GET');
+  assert.equal(classifyResponse(contract,path==='targets'?{items:[current],next_cursor:null,complete:true}:
+    path==='audit'?{items:[],next_cursor:null,complete:true}:current).denied,false);
+  assert.deepEqual(classifyError(contract,new ApiError('forbidden','Administrator role removed.')),{session:'retain',content:'withdraw'});
+ }
+});

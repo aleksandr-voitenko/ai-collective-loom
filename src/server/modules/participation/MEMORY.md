@@ -1,5 +1,31 @@
 # Text participation boundary
 
+Administrator suppression uses `moderation.ts`, contracts/moderation.ts and
+ADR-028. `resources.state` is authoritative; `lifecycle_version` advances on every
+accepted desired-state choice, including no-ops. Original outcome and authorized
+current metadata are separate, and replay never re-applies an older decision.
+The four scopes exclude areas, openings, revisions and files. Child restoration
+preserves inherited and narrower restrictions. Metadata-only inspection can lock
+hidden targets without bypassing ordinary content guards.
+Lock order: attempt, current actor/credential, structure (exclusive for new
+decisions), complete sorted resource plan, current revisions, visibility triggers,
+decision/audit. Current revision guards precede trigger invalidation; no clock tail
+or new shared event is used. Status/replay resolves retained decisions before
+version/capacity checks. Quota is 10,000 retained community decisions with no expiry;
+at capacity even new restoration stops, but inspection/recovery remains available.
+Requests are 4 KiB, responses 32 KiB, pages default 12/max 25, candidate scans 100,
+with existing 32-owner/3840-guard and SQL deadlines. Encrypted cursors bind actor,
+collection and lifecycle/visibility/hierarchy, expire in five minutes and on restart.
+The browser's existing IntentStore owns immutable exact commands under Web Locks;
+canonical comparison prevents case-alias overlap while preserving transport bytes.
+Failed journal writes/readbacks attempt to restore the prior bytes before reporting
+failure; they never permit dispatch before verified custody.
+Moderation metadata uses leased settings queries. Every recorded lifecycle receipt
+withdraws older content before local settlement, including restoration and replay;
+only a fresh authorized read may display a body. Role withdrawal retains custody.
+`scripts/moderation-client.mjs` demonstrates a separately fsynced HTTPS journal;
+list/audit accept bounded `--limit`/`--cursor` traversal without changing that journal.
+
 Summaries (ADR-010): migration 0010 adds one typed canonical resource per discussion,
 revision-owned coverage and participant-owned preparation headers/members. The
 `summaries.ts` read model is separate from `summary-preparation.ts`; fixed coverage
@@ -167,7 +193,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–11. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–13. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;

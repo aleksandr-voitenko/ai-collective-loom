@@ -413,6 +413,8 @@ export class ParticipationRetrieval {
         derived_effects: "search_and_personal_direct_attention; other_projections_disabled" as const,
         updates_contract: "combined-updates-1" as const,
         attention_contract: 'attention-controls-1' as const,
+        moderation_contract: 'moderation-state-1' as const,
+        moderation_url: '/api/v1/admin/moderation/targets' as const,
         attention_url: '/api/v1/me/attention/list' as const,
         routine_updates_contract: 'combined-updates-2' as const,
         routine_updates_url: '/api/v1/me/routine-updates/query' as const,

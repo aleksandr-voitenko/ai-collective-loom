@@ -20,6 +20,8 @@ test('populated upgrade, durable discovery and atomically fenced search outputs'
   const first=await publications.publish(admin.actor,'artifact.create',{idempotency_key:randomUUID(),area_id:area,title:'Worker artifact',content:content('First searchable revision')});
   const snapshot=async()=>{const result:Record<string,unknown>={};for(const name of ['resources','revisions','shared_activity','outbox_intents','idempotency_records','resource_editors','saved_items','organization_operations'])result[name]=(await f.observer.query(`SELECT * FROM loom.${name} ORDER BY 1`)).rows;return result;};
   const initial=await snapshot();
+  // Migration 0018 adds the initial lifecycle fence; every prior column is still compared.
+  for(const row of initial.resources as Record<string,unknown>[])Object.assign(row,{lifecycle_version:1});
   // New structural impacts remain explicitly unknown for every old event.
   for(const row of initial.shared_activity as Record<string,unknown>[])Object.assign(row,{affected_target_ids:null});
   await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),initial);

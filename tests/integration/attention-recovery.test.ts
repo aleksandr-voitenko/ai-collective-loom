@@ -16,7 +16,7 @@ test('populated 0016 upgrade preserves every prior table, exact retry and shared
   assert.equal((await r.client.call('/api/v1/me/reading/state',read)).status,200);
   const personal=await f.page(r.client),shared=await f.changes(r.client),combined=await f.ready(r.client,{selection:'complete'});
   const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' ORDER BY tablename")).rows.map(v=>v.tablename as string);
-  const digest=async(name:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT to_jsonb(t) row FROM loom.${name} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
+  const digest=async(name:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT ${name==='resources'?"'{\"lifecycle_version\":1}'::jsonb || " : ''}to_jsonb(t) row FROM loom.${name} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const name of tables)before.set(name,await digest(name));
   await f.migrate();for(const name of tables)assert.equal(await digest(name),before.get(name),name+' changed on upgrade');
   for(const name of ['attention_mutes','attention_dismissals','attention_owners','attention_operations','attention_views','attention_members','attention_groups'])assert.equal((await f.observer.query(`SELECT count(*)::int n FROM loom.${name}`)).rows[0].n,0);

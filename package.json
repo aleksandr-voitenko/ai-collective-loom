@@ -52,6 +52,7 @@
     "test:updates:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/updates*.test.ts",
     "test:attention:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/attention*.test.ts",
     "test:reading:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/reading*.test.ts",
+    "test:moderation:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/moderation*.test.ts",
     "coverage": "node scripts/coverage.mjs",
     "test:coverage": "node scripts/check-runtime.mjs && node --import tsx tests/coverage/verify.ts"
   },

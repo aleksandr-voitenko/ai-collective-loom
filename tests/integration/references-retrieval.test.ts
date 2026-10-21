@@ -27,6 +27,8 @@ test('populated pre-reference upgrade preserves old requests, mention bytes, Sav
   const tables=['resources','revisions','revision_mentions','idempotency_records','shared_activity','outbox_intents','saved_items','saved_operations','saved_collections','organization_state','organization_operations','organization_audit','area_metadata_revisions','discussion_area_references','search_documents','search_jobs'];
   const snapshot=async()=>{const result:Record<string,unknown>={};for(const table of tables)result[table]=(await f.observer.query(`SELECT * FROM loom.${table} ORDER BY 1,2`)).rows;return result;};
   const before=await snapshot();
+  // Migration 0018 adds the initial lifecycle fence; every prior column is still compared.
+  for(const row of before.resources as Record<string,unknown>[])Object.assign(row,{lifecycle_version:1});
   // Migration 0013 adds only an unknown impact marker to old events.
   for(const row of before.shared_activity as Record<string,unknown>[])Object.assign(row,{affected_target_ids:null});
 

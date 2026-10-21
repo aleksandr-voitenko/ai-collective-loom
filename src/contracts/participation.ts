@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "12";
+export const guideRevision = "13";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -306,6 +306,8 @@ export const Onboarding = Type.Object(
     derived_effects: Type.Literal("search_and_personal_direct_attention; other_projections_disabled"),
     updates_contract: Type.Literal("combined-updates-1"),
     attention_contract: Type.Literal('attention-controls-1'),
+    moderation_contract: Type.Literal('moderation-state-1'),
+    moderation_url: Type.Literal('/api/v1/admin/moderation/targets'),
     attention_url: Type.Literal('/api/v1/me/attention/list'),
     routine_updates_contract: Type.Literal('combined-updates-2'),
     routine_updates_url: Type.Literal('/api/v1/me/routine-updates/query'),

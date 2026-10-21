@@ -55,6 +55,7 @@ import { UpdatesRecovery } from './updates-recovery.js';
 import { SharedRecovery } from './shared-recovery.js';
 import { ReadingProvider, ReadingText, ReadingSelection, ReadingPageViewComponent } from './Reading.js';
 import { ReadingRecovery, exportReadingRecovery } from './reading-recovery.js';
+import { ModerationPage, SuppressLink } from './Moderation.js';
 import { SearchPageViewComponent, SearchAdministration } from './Search.js';
 import { SummarySection, SummaryMaintenance, CoverageDetails, CoverageEditor } from './Summaries.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
@@ -270,10 +271,10 @@ export function ParticipationApp() {
         <NavLink to="/loom/search"><Icon name="search" />Search</NavLink>
         <NavLink to="/loom/summaries"><Icon name="discussion" />Summary maintenance</NavLink>
         {self?.role === "administrator" && (
-          <NavLink to="/loom/admin">
+          <><NavLink to="/loom/admin">
             <Icon name="topic" />
             Administration
-          </NavLink>
+          </NavLink><NavLink to="/loom/moderation"><Icon name="topic" />Content moderation</NavLink></>
         )}
       </nav>
       <div className="side-spacer" />
@@ -483,7 +484,7 @@ function ActiveView({ context }: { context: Context }) {
   const location=useLocation(),kind=location.pathname.split('/')[2];
   // Attention pages already own their full-view or private-settings boundary.
   // The remaining routes must also provide a protected read capability.
-  if(kind==='admin')return <AuthorizationBoundary scope="administration" sourcePolicy="settings"><RouteView context={context}/></AuthorizationBoundary>;
+  if(kind==='admin'||kind==='moderation')return <AuthorizationBoundary scope={kind==='admin'?'administration':'moderation'} sourcePolicy="settings"><RouteView context={context}/></AuthorizationBoundary>;
   if(['attention','notifications','following','updates','area','discussion','resource','overview','saved'].includes(kind??''))
     return <RouteView context={context}/>;
   return <AuthorizationBoundary scope={'route:'+location.pathname}><RouteView context={context}/></AuthorizationBoundary>;
@@ -496,6 +497,7 @@ function RouteView({ context }: { context: Context }) {
   if (!kind) return <Topics context={context} />;
   if (kind === 'attention') return <AttentionPage context={context}/>;
   if (kind === 'reading') return <ReadingPageViewComponent/>;
+  if (kind === 'moderation') return <ModerationPage key={location.search} context={context}/>;
   if (kind === "organize") return <OrganizationPage context={context} />;
   if (kind === "saved") return <SavedItemsPage context={context} />;
   if (kind === 'notifications') return <NotificationsPage context={context} />;
@@ -1410,6 +1412,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
       </div>
       <div className="header-line">
         <h1>{data.opening.title}</h1>
+        <SuppressLink context={context} id={id} kind="discussion"/>
         <SaveControl context={context} target={{ kind: "discussion", resource_id: id }} label="discussion" />
         <FollowControl key={'discussion:'+id} context={context} target={{kind:'discussion',resource_id:id}}/>
         <Link
@@ -1636,6 +1639,7 @@ function ContributionBody({
       <ChangeDetails revision={data}/>
       <ReferenceViews key={'references:'+data.revision_id} sourceId={id} sourceRevision={data.revision_id} target={{kind:"contribution",resource_id:id}}/>
       <div className="post-footer">
+        {!opening&&data.parent_id&&<SuppressLink context={context} id={id} kind="comment"/>}
         <SaveControl context={context} target={{ kind: "contribution", resource_id: id }} label="contribution" />
         <button
           className="text-button"
@@ -1856,6 +1860,8 @@ function ResourceContent({
       <div className="header-line">
         <div>
           <h1>{data.title ?? "Reply"}</h1>
+          {!revision&&(data.kind==='artifact'||data.kind==='summary'||data.parent_id)&&
+            <SuppressLink context={context} id={id} kind={data.kind==='artifact'?'artifact':data.kind==='summary'?'summary':'comment'}/>}
           <p className="subtitle">
             {revision ? "Exact revision" : "Current revision"}{" "}
             {data.revision_number} · published by {data.publisher.nickname}
