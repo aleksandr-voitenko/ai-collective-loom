@@ -1,8 +1,8 @@
-import { randomBytes } from "node:crypto";
-import { IdentityAuthentication } from "./modules/identity/authentication.js";
-import { IdentityAdministration } from "./modules/identity/administration.js";
-import { verifyPolicy, type Transactions } from "./modules/identity/policy.js";
-import { ConfigurationError } from "./config.js";
+import { randomBytes } from 'node:crypto';
+import { IdentityAuthentication } from './modules/identity/authentication.js';
+import { IdentityAdministration } from './modules/identity/administration.js';
+import { verifyPolicy, type Transactions } from './modules/identity/policy.js';
+import { ConfigurationError } from './config.js';
 
 export function syntheticIdentityPolicy(origin: string) {
   const policy = {
@@ -20,20 +20,17 @@ export function syntheticIdentityPolicy(origin: string) {
   verifyPolicy(policy);
   return policy;
 }
-export function participationProfile(
-  database: Transactions,
-  env: NodeJS.ProcessEnv = process.env,
-) {
+export function participationProfile(database: Transactions, env: NodeJS.ProcessEnv = process.env) {
   if (!env.LOOM_PARTICIPATION_PROFILE) return undefined;
-  if (env.LOOM_PARTICIPATION_PROFILE !== "synthetic" || !env.LOOM_ORIGIN)
+  if (env.LOOM_PARTICIPATION_PROFILE !== 'synthetic' || !env.LOOM_ORIGIN)
     throw new ConfigurationError(
-      "Only the explicit synthetic participation profile is available; LOOM_ORIGIN is required.",
+      'Only the explicit synthetic participation profile is available; LOOM_ORIGIN is required.',
     );
   let policy;
   try {
     policy = syntheticIdentityPolicy(env.LOOM_ORIGIN);
   } catch {
-    throw new ConfigurationError("LOOM_ORIGIN must be an exact HTTPS origin.");
+    throw new ConfigurationError('LOOM_ORIGIN must be an exact HTTPS origin.');
   }
   // Server has no bootstrap/recovery HTTP capability. Offline trusted tooling
   // supplies its own verifiers; fresh unreachable proofs disable these here.
@@ -41,8 +38,8 @@ export function participationProfile(
     database,
     authentication: new IdentityAuthentication(database, policy),
     administration: new IdentityAdministration(database, policy, {
-      bootstrap: randomBytes(32).toString("hex"),
-      recovery: randomBytes(32).toString("hex"),
+      bootstrap: randomBytes(32).toString('hex'),
+      recovery: randomBytes(32).toString('hex'),
     }),
   };
 }

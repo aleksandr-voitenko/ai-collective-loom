@@ -155,7 +155,8 @@ add('mutation', [
   'POST /api/v1/summary-revisions',
 ]);
 
-export const participationRecoveryPolicies: ReadonlyMap<string, ParticipationRecoveryPolicy> = policies;
+export const participationRecoveryPolicies: ReadonlyMap<string, ParticipationRecoveryPolicy> =
+  policies;
 
 export function participationRecoveryPolicy(method: string, template: string | undefined) {
   // Fastify automatically registers HEAD siblings for GET routes.

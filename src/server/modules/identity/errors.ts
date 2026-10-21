@@ -17,11 +17,15 @@ export type IdentityErrorCode = keyof typeof failures;
 export class IdentityError extends Error {
   readonly status: number;
   constructor(readonly code: IdentityErrorCode) {
-    super(failures[code][1]); this.name = 'IdentityError'; this.status = failures[code][0];
+    super(failures[code][1]);
+    this.name = 'IdentityError';
+    this.status = failures[code][0];
   }
 }
 export function identityFailure(error: unknown): IdentityError {
   if (error instanceof IdentityError) return error;
   const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
-  return new IdentityError(['40P01', '40001', '55P03'].includes(String(code)) ? 'retryable' : 'service_unavailable');
+  return new IdentityError(
+    ['40P01', '40001', '55P03'].includes(String(code)) ? 'retryable' : 'service_unavailable',
+  );
 }

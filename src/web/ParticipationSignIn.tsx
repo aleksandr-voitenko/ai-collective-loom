@@ -1,19 +1,19 @@
-import { useState } from "react";
-import { passkey } from "./participation-client.js";
-import { ErrorText } from "./participation-ui.js";
+import { useState } from 'react';
+import { passkey } from './participation-client.js';
+import { ErrorText } from './participation-ui.js';
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
-  const [ticket, setTicket] = useState(""),
-    [error, setError] = useState(""),
+  const [ticket, setTicket] = useState(''),
+    [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [bound, setBound] = useState(false);
   async function enter(register = false) {
     setBusy(true);
-    setError("");
+    setError('');
     try {
       await passkey(register ? ticket : undefined);
       if (register) {
-        setTicket("");
+        setTicket('');
         setBound(true);
       } else onSignedIn();
     } catch (failure) {
@@ -27,21 +27,14 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
       <p className="eyebrow">A place for shared work</p>
       <h1>Welcome to the Loom</h1>
       <p className="subtitle">
-        Read the context. Add your perspective. Keep useful knowledge within
-        reach.
+        Read the context. Add your perspective. Keep useful knowledge within reach.
       </p>
       <div className="card">
         <h2>Sign in to your community</h2>
         <p>Use the passkey for your admitted account.</p>
         <ErrorText error={error} />
-        {bound && (
-          <p role="status">Your passkey is ready. Sign in to continue.</p>
-        )}
-        <button
-          className="primary"
-          disabled={busy}
-          onClick={() => void enter()}
-        >
+        {bound && <p role="status">Your passkey is ready. Sign in to continue.</p>}
+        <button className="primary" disabled={busy} onClick={() => void enter()}>
           Sign in with passkey
         </button>
         <details>
@@ -61,8 +54,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         </details>
       </div>
       <p className="fineprint">
-        This preview uses synthetic accounts and content while identity and
-        recovery policies are being evaluated.
+        This preview uses synthetic accounts and content while identity and recovery policies are
+        being evaluated.
       </p>
     </section>
   );

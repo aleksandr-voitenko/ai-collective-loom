@@ -1,34 +1,34 @@
-import {registerFiles} from "./files.js";
-import {FileError,type FileStorage} from "../modules/participation/file-storage.js";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { Type, type TSchema } from "@sinclair/typebox";
-import * as C from "../../contracts/participation.js";
-import { PublicationError } from "../modules/publication/errors.js";
-import { IdentityError } from "../modules/identity/errors.js";
-import type { IdentityAuthentication } from "../modules/identity/authentication.js";
-import type { IdentityAdministration } from "../modules/identity/administration.js";
-import { ParticipationPublications } from "../modules/participation/publications.js";
+import { registerFiles } from './files.js';
+import { FileError, type FileStorage } from '../modules/participation/file-storage.js';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { Type, type TSchema } from '@sinclair/typebox';
+import * as C from '../../contracts/participation.js';
+import { PublicationError } from '../modules/publication/errors.js';
+import { IdentityError } from '../modules/identity/errors.js';
+import type { IdentityAuthentication } from '../modules/identity/authentication.js';
+import type { IdentityAdministration } from '../modules/identity/administration.js';
+import { ParticipationPublications } from '../modules/participation/publications.js';
 import {
   ParticipationRetrieval,
   RetrievalError,
   RevisionUnavailableError,
   type PageOptions,
-} from "../modules/participation/retrieval.js";
-import { ParticipationAdministration } from "../modules/participation/administration.js";
+} from '../modules/participation/retrieval.js';
+import { ParticipationAdministration } from '../modules/participation/administration.js';
 import type { Transactions } from '../db/postgres.js';
-import { registerIdentityRoutes } from "./identity.js";
-import { classifyError } from "./errors.js";
-import { participationGuide } from "../../contracts/guide.js";
-import { registerSavedItems } from "./saved-items.js";
+import { registerIdentityRoutes } from './identity.js';
+import { classifyError } from './errors.js';
+import { participationGuide } from '../../contracts/guide.js';
+import { registerSavedItems } from './saved-items.js';
 import { registerAttention } from './attention.js';
 import { AttentionError } from '../modules/attention/controls.js';
 import { registerReading } from './reading.js';
 import { ReadingLimitError } from '../modules/participation/reading.js';
-import { SavedItemsError } from "../modules/participation/saved-items.js";
-import { registerOrganization } from "./organization.js";
+import { SavedItemsError } from '../modules/participation/saved-items.js';
+import { registerOrganization } from './organization.js';
 import { registerModeration } from './moderation.js';
 import { ModerationError } from '../modules/participation/moderation.js';
-import { OrganizationError } from "../modules/participation/organization-context.js";
+import { OrganizationError } from '../modules/participation/organization-context.js';
 import { registerSearch } from './search.js';
 import { registerNotifications } from './notifications.js';
 import { NotificationError } from '../modules/notifications/retrieval.js';
@@ -46,19 +46,15 @@ import { participationRecoveryPolicy } from './recovery-policy.js';
 
 export interface ParticipationServices {
   database: Transactions;
-  fileStorage?:FileStorage;
+  fileStorage?: FileStorage;
   authentication: IdentityAuthentication;
   administration: IdentityAdministration;
 }
-export function participantError(
-  error: unknown,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
+export function participantError(error: unknown, request: FastifyRequest, reply: FastifyReply) {
   let code: string,
     message: string,
     status: number,
-    action = "correct_request",
+    action = 'correct_request',
     current: string | null | undefined,
     minimum: number | undefined;
   if (error instanceof PublicationError) {
@@ -69,7 +65,7 @@ export function participantError(
       invalid_input: 400,
       reference_format_required: 409,
       change_format_required: 409,
-      file_format_required:409,
+      file_format_required: 409,
       invalid_actor: 401,
       unavailable: 404,
       forbidden: 403,
@@ -77,72 +73,169 @@ export function participantError(
       idempotency_conflict: 409,
       retryable: 503,
       service_unavailable: 503,
-    }[code as PublicationError["code"]];
-  } else if(error instanceof FileError){
-    code=error.code;message=error.message;status=code==='file_storage_unavailable'?503:code==='file_capacity'?429:409;
-    action=code==='file_expired'?'retain_draft_and_reconcile':code==='file_mismatch'?'reselect_original_bytes':'retry_same_request';
+    }[code as PublicationError['code']];
+  } else if (error instanceof FileError) {
+    code = error.code;
+    message = error.message;
+    status = code === 'file_storage_unavailable' ? 503 : code === 'file_capacity' ? 429 : 409;
+    action =
+      code === 'file_expired'
+        ? 'retain_draft_and_reconcile'
+        : code === 'file_mismatch'
+          ? 'reselect_original_bytes'
+          : 'retry_same_request';
   } else if (error instanceof IdentityError) {
     code = error.code;
     message = error.message;
     status = error.status;
   } else if (error instanceof SummaryError) {
-    code=error.code;message=error.message;
-    status=code==='summary_source_limit'||code==='summary_preparation_limit'?429:409;
-    action=code==='summary_changed'?'replay_view':code==='summary_already_exists'?'inspect_discussion_summary':
-      code==='summary_preparation_expired'?'retain_draft_and_reconcile':'review_declaration';
+    code = error.code;
+    message = error.message;
+    status = code === 'summary_source_limit' || code === 'summary_preparation_limit' ? 429 : 409;
+    action =
+      code === 'summary_changed'
+        ? 'replay_view'
+        : code === 'summary_already_exists'
+          ? 'inspect_discussion_summary'
+          : code === 'summary_preparation_expired'
+            ? 'retain_draft_and_reconcile'
+            : 'review_declaration';
   } else if (error instanceof UpdatesError) {
-    code=error.code;message=error.message;
-    status=code==='updates_descriptor_expired'||code.endsWith('_history_gap')||code==='updates_state_unavailable'?410:
-      code==='updates_capacity'||code==='updates_work_limit'?429:409;
-    action=code==='updates_attention_refresh_required'||code==='updates_attention_preparing'?'refresh_attention_selection':code==='updates_descriptor_expired'?'renew_traversal':code==='updates_visibility_replay_required'?'replay_retained_history':
-      code.endsWith('_history_gap')||code==='updates_state_unavailable'?'resynchronize_retained_content':
-      code==='updates_epoch_changed'?'deployment_recovery_required':code==='updates_definition_changed'?'start_retained_history':
-      code==='updates_capacity'?'review_synthetic_limit':code==='updates_token_invalid'?'correct_request':'retry_same_request';
+    code = error.code;
+    message = error.message;
+    status =
+      code === 'updates_descriptor_expired' ||
+      code.endsWith('_history_gap') ||
+      code === 'updates_state_unavailable'
+        ? 410
+        : code === 'updates_capacity' || code === 'updates_work_limit'
+          ? 429
+          : 409;
+    action =
+      code === 'updates_attention_refresh_required' || code === 'updates_attention_preparing'
+        ? 'refresh_attention_selection'
+        : code === 'updates_descriptor_expired'
+          ? 'renew_traversal'
+          : code === 'updates_visibility_replay_required'
+            ? 'replay_retained_history'
+            : code.endsWith('_history_gap') || code === 'updates_state_unavailable'
+              ? 'resynchronize_retained_content'
+              : code === 'updates_epoch_changed'
+                ? 'deployment_recovery_required'
+                : code === 'updates_definition_changed'
+                  ? 'start_retained_history'
+                  : code === 'updates_capacity'
+                    ? 'review_synthetic_limit'
+                    : code === 'updates_token_invalid'
+                      ? 'correct_request'
+                      : 'retry_same_request';
   } else if (error instanceof FollowingError) {
-    code=error.code;message=error.message;
-    status=code==='shared_descriptor_expired'||code==='shared_history_gap'?410:code==='shared_work_limit'||code==='following_limit_reached'?429:409;
-    action=code==='shared_descriptor_expired'?'renew_traversal':code==='shared_visibility_replay_required'?'replay_retained_history':
-      code==='shared_history_gap'?'resynchronize_retained_content':code==='shared_epoch_changed'?'deployment_recovery_required':
-      code==='shared_definition_changed'?'start_retained_history':code==='following_collection_changed'?'replay_view':'retry_same_request';
+    code = error.code;
+    message = error.message;
+    status =
+      code === 'shared_descriptor_expired' || code === 'shared_history_gap'
+        ? 410
+        : code === 'shared_work_limit' || code === 'following_limit_reached'
+          ? 429
+          : 409;
+    action =
+      code === 'shared_descriptor_expired'
+        ? 'renew_traversal'
+        : code === 'shared_visibility_replay_required'
+          ? 'replay_retained_history'
+          : code === 'shared_history_gap'
+            ? 'resynchronize_retained_content'
+            : code === 'shared_epoch_changed'
+              ? 'deployment_recovery_required'
+              : code === 'shared_definition_changed'
+                ? 'start_retained_history'
+                : code === 'following_collection_changed'
+                  ? 'replay_view'
+                  : 'retry_same_request';
   } else if (error instanceof NotificationError) {
-    code=error.code;message=error.message;
-    status=code==='notification_descriptor_expired'||code==='notification_history_gap'?410:code==='notification_work_limit'?429:409;
-    action=code==='notification_descriptor_expired'?'renew_traversal':code==='visibility_replay_required'?'replay_retained_history':
-      code==='notification_history_gap'?'resynchronize_retained_history':code==='notification_epoch_changed'?'deployment_recovery_required':
-      code==='notification_view_changed'||code==='notification_work_limit'?'retry_same_request':'correct_request';
+    code = error.code;
+    message = error.message;
+    status =
+      code === 'notification_descriptor_expired' || code === 'notification_history_gap'
+        ? 410
+        : code === 'notification_work_limit'
+          ? 429
+          : 409;
+    action =
+      code === 'notification_descriptor_expired'
+        ? 'renew_traversal'
+        : code === 'visibility_replay_required'
+          ? 'replay_retained_history'
+          : code === 'notification_history_gap'
+            ? 'resynchronize_retained_history'
+            : code === 'notification_epoch_changed'
+              ? 'deployment_recovery_required'
+              : code === 'notification_view_changed' || code === 'notification_work_limit'
+                ? 'retry_same_request'
+                : 'correct_request';
   } else if (error instanceof ReferenceError) {
-    code=error.code; message=error.message;
-    status=code==='references_changed'?409:429;
-    action=code==='references_changed'?'replay_view':'review_synthetic_limit';
+    code = error.code;
+    message = error.message;
+    status = code === 'references_changed' ? 409 : 429;
+    action = code === 'references_changed' ? 'replay_view' : 'review_synthetic_limit';
   } else if (error instanceof SearchError) {
-    code=error.code; message=error.message;
-    status=code==='search_changed'?409:code==='search_work_limit'?429:400;
-    action=code==='search_changed'?'replay_view':code==='search_work_limit'?'review_synthetic_limit':'correct_request';
+    code = error.code;
+    message = error.message;
+    status = code === 'search_changed' ? 409 : code === 'search_work_limit' ? 429 : 400;
+    action =
+      code === 'search_changed'
+        ? 'replay_view'
+        : code === 'search_work_limit'
+          ? 'review_synthetic_limit'
+          : 'correct_request';
   } else if (error instanceof ModerationError) {
-    code=error.code;message=error.message;
-    status=code==='moderation_limit'?429:code==='moderation_conflict'?409:400;
-    action=code==='moderation_conflict'?'refresh_and_review':code==='moderation_limit'?'review_synthetic_limit':'correct_request';
+    code = error.code;
+    message = error.message;
+    status = code === 'moderation_limit' ? 429 : code === 'moderation_conflict' ? 409 : 400;
+    action =
+      code === 'moderation_conflict'
+        ? 'refresh_and_review'
+        : code === 'moderation_limit'
+          ? 'review_synthetic_limit'
+          : 'correct_request';
   } else if (error instanceof OrganizationError) {
     code = error.code;
     message = error.message;
-    status = code === "organization_limit" ? 429 : 409;
-    action = code === "organization_limit" ? "review_synthetic_limit" : "refresh_and_review";
+    status = code === 'organization_limit' ? 429 : 409;
+    action = code === 'organization_limit' ? 'review_synthetic_limit' : 'refresh_and_review';
   } else if (error instanceof AttentionError) {
-    code=error.code;message=error.message;status=code==='attention_selection_expired'?410:code==='attention_collection_changed'?409:429;
-    action=code==='attention_selection_expired'?'reconcile_operation':code==='attention_collection_changed'?'refresh_collection':code==='attention_work_limit'?'retry_same_request':'review_synthetic_limit';
+    code = error.code;
+    message = error.message;
+    status =
+      code === 'attention_selection_expired'
+        ? 410
+        : code === 'attention_collection_changed'
+          ? 409
+          : 429;
+    action =
+      code === 'attention_selection_expired'
+        ? 'reconcile_operation'
+        : code === 'attention_collection_changed'
+          ? 'refresh_collection'
+          : code === 'attention_work_limit'
+            ? 'retry_same_request'
+            : 'review_synthetic_limit';
   } else if (error instanceof ReadingLimitError) {
-    code=error.code;message=error.message;status=429;action='review_synthetic_limit';
+    code = error.code;
+    message = error.message;
+    status = 429;
+    action = 'review_synthetic_limit';
   } else if (error instanceof SavedItemsError) {
     code = error.code;
     message = error.message;
-    status = code === "saved_collection_changed" ? 409 : 429;
-    action = code === "saved_collection_changed" ? "replay_view" : "review_synthetic_limit";
+    status = code === 'saved_collection_changed' ? 409 : 429;
+    action = code === 'saved_collection_changed' ? 'replay_view' : 'review_synthetic_limit';
   } else if (error instanceof RetrievalError) {
     code = error.code;
     message =
-      code === "invalid_cursor"
-        ? "This continuation is unavailable. Start this view again."
-        : "The requested response budget cannot hold this representation.";
+      code === 'invalid_cursor'
+        ? 'This continuation is unavailable. Start this view again.'
+        : 'The requested response budget cannot hold this representation.';
     status = 400;
     minimum = error.minimum_response_bytes;
   } else {
@@ -151,41 +244,39 @@ export function participantError(
     message = failure.body.error.message;
     status = failure.status;
   }
-  if (status === 401 || status === 403)
-    action = "reauthenticate_or_request_authority";
-  if (code === "revision_conflict") action = "compare_and_resubmit";
-  if (code === "invalid_cursor") action = "replay_view";
-  if (code === "idempotency_conflict" || status >= 500)
-    action = "reconcile_operation";
+  if (status === 401 || status === 403) action = 'reauthenticate_or_request_authority';
+  if (code === 'revision_conflict') action = 'compare_and_resubmit';
+  if (code === 'invalid_cursor') action = 'replay_view';
+  if (code === 'idempotency_conflict' || status >= 500) action = 'reconcile_operation';
   const policy = participationRecoveryPolicy(request.method, request.routeOptions.url);
   const retrieval = policy === 'retrieval' || policy === 'revision-retrieval';
   if (retrieval && status >= 500) action = 'retry_same_request';
-  return reply
-    .code(status)
-    .send({
-      error: {
-        code,
-        message,
-        request_id: request.id,
-        recovery: { action },
-        ...(current !== undefined ? { current_revision_id: current } : {}),
-        ...(error instanceof RevisionUnavailableError && request.method === 'GET' && policy === 'revision-retrieval'
-          ? { unavailable_scope: 'revision' } : {}),
-        ...(minimum ? { minimum_response_bytes: minimum } : {}),
-        ...((error instanceof SummaryError || error instanceof FileError) && error.definitive ? { operation_outcome: "rejected" } : {}),
-        ...(status >= 500 && request.method === "POST" && !retrieval
-          ? { operation_outcome: "unknown" }
-          : {}),
-      },
-    });
+  return reply.code(status).send({
+    error: {
+      code,
+      message,
+      request_id: request.id,
+      recovery: { action },
+      ...(current !== undefined ? { current_revision_id: current } : {}),
+      ...(error instanceof RevisionUnavailableError &&
+      request.method === 'GET' &&
+      policy === 'revision-retrieval'
+        ? { unavailable_scope: 'revision' }
+        : {}),
+      ...(minimum ? { minimum_response_bytes: minimum } : {}),
+      ...((error instanceof SummaryError || error instanceof FileError) && error.definitive
+        ? { operation_outcome: 'rejected' }
+        : {}),
+      ...(status >= 500 && request.method === 'POST' && !retrieval
+        ? { operation_outcome: 'unknown' }
+        : {}),
+    },
+  });
 }
-export async function registerParticipation(
-  app: FastifyInstance,
-  services: ParticipationServices,
-) {
+export async function registerParticipation(app: FastifyInstance, services: ParticipationServices) {
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
-  registerFiles(app,services.database,actor,services.fileStorage);
+  registerFiles(app, services.database, actor, services.fileStorage);
   registerSavedItems(app, services.database, actor);
   registerReading(app, services.database, actor);
   registerAttention(app, services.database, actor);
@@ -204,43 +295,36 @@ export async function registerParticipation(
   const empty = Type.Object({}, C.closed),
     params = Type.Object({ id: C.UUID }, C.closed);
   const errors = Object.fromEntries(
-    [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((code) => [
-      code,
-      C.ParticipationError,
-    ]),
+    [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((code) => [code, C.ParticipationError]),
   );
   function command(path: string, kind: string, schema: TSchema) {
     app.post(
-      "/api/v1/" + path,
+      '/api/v1/' + path,
       {
         bodyLimit: C.limits.requestBytes,
         schema: {
-          operationId: kind.replaceAll(".", "_"),
+          operationId: kind.replaceAll('.', '_'),
           body: schema,
           querystring: empty,
           response: { ...errors, 201: C.Committed },
         },
       },
       async (request, reply) => {
-        const result = await publications.publish(
-          await actor(request),
-          kind,
-          request.body,
-        );
+        const result = await publications.publish(await actor(request), kind, request.body);
         return reply.code(201).send(result);
       },
     );
   }
-  command("discussions", "discussion.create", C.DiscussionInput);
-  command("replies", "reply.create", C.ReplyInput);
-  command("artifacts", "artifact.create", C.ArtifactInput);
-  command("revisions", "revision.publish", C.RevisionInput);
-  command("community/setup", "community.setup", C.SetupInput);
+  command('discussions', 'discussion.create', C.DiscussionInput);
+  command('replies', 'reply.create', C.ReplyInput);
+  command('artifacts', 'artifact.create', C.ArtifactInput);
+  command('revisions', 'revision.publish', C.RevisionInput);
+  command('community/setup', 'community.setup', C.SetupInput);
   app.post(
-    "/api/v1/operations/status",
+    '/api/v1/operations/status',
     {
       schema: {
-        operationId: "reconcilePublication",
+        operationId: 'reconcilePublication',
         body: C.StatusInput,
         querystring: empty,
         response: { ...errors, 200: C.Reconciled },
@@ -259,10 +343,10 @@ export async function registerParticipation(
     },
   );
   app.get(
-    "/api/v1/community",
+    '/api/v1/community',
     {
       schema: {
-        operationId: "getCommunity",
+        operationId: 'getCommunity',
         querystring: empty,
         response: { ...errors, 200: C.Onboarding },
       },
@@ -270,10 +354,10 @@ export async function registerParticipation(
     async (request) => reads.onboarding(await actor(request)),
   );
   app.get(
-    "/api/v1/guide",
+    '/api/v1/guide',
     {
       schema: {
-        operationId: "getParticipationGuide",
+        operationId: 'getParticipationGuide',
         querystring: empty,
         response: {
           ...errors,
@@ -294,42 +378,36 @@ export async function registerParticipation(
     },
   );
   app.get(
-    "/api/v1/discussions/:id",
+    '/api/v1/discussions/:id',
     {
       schema: {
-        operationId: "getDiscussion",
+        operationId: 'getDiscussion',
         params,
         querystring: empty,
         response: { ...errors, 200: C.Discussion },
       },
     },
     async (request) =>
-      reads.discussion(
-        await actor(request),
-        (request.params as { id: string }).id.toLowerCase(),
-      ),
+      reads.discussion(await actor(request), (request.params as { id: string }).id.toLowerCase()),
   );
   app.get(
-    "/api/v1/areas/:id",
+    '/api/v1/areas/:id',
     {
       schema: {
-        operationId: "getArea",
+        operationId: 'getArea',
         params,
         querystring: empty,
         response: { ...errors, 200: C.Area },
       },
     },
     async (request) =>
-      reads.area(
-        await actor(request),
-        (request.params as { id: string }).id.toLowerCase(),
-      ),
+      reads.area(await actor(request), (request.params as { id: string }).id.toLowerCase()),
   );
   app.get(
-    "/api/v1/contributions/:id/context",
+    '/api/v1/contributions/:id/context',
     {
       schema: {
-        operationId: "getContributionContext",
+        operationId: 'getContributionContext',
         params,
         querystring: C.BudgetInput,
         response: { ...errors, 200: C.ContributionContext },
@@ -344,13 +422,11 @@ export async function registerParticipation(
   );
   for (const exact of [false, true])
     app.get(
-      "/api/v1/resources/:id" + (exact ? "/revisions/:revision" : ""),
+      '/api/v1/resources/:id' + (exact ? '/revisions/:revision' : ''),
       {
         schema: {
-          operationId: exact ? "getExactRevision" : "getCurrentRevision",
-          params: exact
-            ? Type.Object({ id: C.UUID, revision: C.UUID }, C.closed)
-            : params,
+          operationId: exact ? 'getExactRevision' : 'getCurrentRevision',
+          params: exact ? Type.Object({ id: C.UUID, revision: C.UUID }, C.closed) : params,
           querystring: C.BudgetInput,
           response: { ...errors, 200: C.Revision },
         },
@@ -366,22 +442,22 @@ export async function registerParticipation(
       },
     );
   for (const [path, kind] of [
-    ["areas", "areas"],
-    ["artifacts", "artifacts"],
-    ["participants", "participants"],
-    ["contacts", "contacts"],
-    ["areas/:id/discussions", "discussions"],
-    ["areas/:id/artifacts", "artifacts"],
-    ["contributions/:id/children", "children"],
-    ["contributions/:id/ancestors", "ancestors"],
-    ["resources/:id/history", "revisions"],
+    ['areas', 'areas'],
+    ['artifacts', 'artifacts'],
+    ['participants', 'participants'],
+    ['contacts', 'contacts'],
+    ['areas/:id/discussions', 'discussions'],
+    ['areas/:id/artifacts', 'artifacts'],
+    ['contributions/:id/children', 'children'],
+    ['contributions/:id/ancestors', 'ancestors'],
+    ['resources/:id/history', 'revisions'],
   ] as const) {
     app.get(
-      "/api/v1/" + path,
+      '/api/v1/' + path,
       {
         schema: {
-          operationId: "list_" + path.replaceAll(/[/:]/g, "_"),
-          params: path.includes(":id") ? params : empty,
+          operationId: 'list_' + path.replaceAll(/[/:]/g, '_'),
+          params: path.includes(':id') ? params : empty,
           querystring: C.PageInput,
           response: { ...errors, 200: C.Page },
         },
@@ -390,28 +466,28 @@ export async function registerParticipation(
         reads.list(
           await actor(request),
           kind,
-          (request.params as { id?: string }).id?.toLowerCase() ?? "all",
+          (request.params as { id?: string }).id?.toLowerCase() ?? 'all',
           request.query as PageOptions,
         ),
     );
   }
   const adminResult = Type.Object(
     {
-      operation_state: Type.Literal("committed"),
+      operation_state: Type.Literal('committed'),
       operation_id: C.UUID,
       version: Type.Integer(),
     },
     C.closed,
   );
   for (const [path, kind, schema] of [
-    ["community/settings", "community.settings", C.SettingsInput],
-    ["editors", "artifact.editors", C.EditorsInput],
+    ['community/settings', 'community.settings', C.SettingsInput],
+    ['editors', 'artifact.editors', C.EditorsInput],
   ] as const)
     app.post(
-      "/api/v1/" + path,
+      '/api/v1/' + path,
       {
         schema: {
-          operationId: kind.replaceAll(".", "_"),
+          operationId: kind.replaceAll('.', '_'),
           body: schema,
           querystring: empty,
           response: { ...errors, 200: adminResult },
@@ -420,10 +496,10 @@ export async function registerParticipation(
       async (request) => admin.change(await actor(request), kind, request.body),
     );
   app.get(
-    "/api/v1/resources/:id/editors",
+    '/api/v1/resources/:id/editors',
     {
       schema: {
-        operationId: "getEditors",
+        operationId: 'getEditors',
         params,
         querystring: empty,
         response: {
@@ -441,9 +517,6 @@ export async function registerParticipation(
       },
     },
     async (request) =>
-      reads.editors(
-        await actor(request),
-        (request.params as { id: string }).id.toLowerCase(),
-      ),
+      reads.editors(await actor(request), (request.params as { id: string }).id.toLowerCase()),
   );
 }

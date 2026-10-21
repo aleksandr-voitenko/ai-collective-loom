@@ -1,4 +1,10 @@
-import type { AuthoredContent, ChangeAccountValue, NoteContent, ReferenceValue, RevisionView } from '../contracts/participation.js';
+import type {
+  AuthoredContent,
+  ChangeAccountValue,
+  NoteContent,
+  ReferenceValue,
+  RevisionView,
+} from '../contracts/participation.js';
 import type { FileSetValue } from '../contracts/files.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
 import type { Intent } from './participation-client.js';
@@ -34,27 +40,70 @@ type OperationDetails = {
 export function composerOperation(operation: ComposerOperation): OperationDetails {
   switch (operation.kind) {
     case 'discussion.create':
-      return { path: '/api/v1/discussions', fixed: { area_id: operation.areaId,
-        ...(operation.proposal ? { proposal_context: operation.proposal } : {}) },
-      titleField: true, canFiles: false, canNote: false, summaryDiscussion: undefined };
+      return {
+        path: '/api/v1/discussions',
+        fixed: {
+          area_id: operation.areaId,
+          ...(operation.proposal ? { proposal_context: operation.proposal } : {}),
+        },
+        titleField: true,
+        canFiles: false,
+        canNote: false,
+        summaryDiscussion: undefined,
+      };
     case 'artifact.create':
-      return { path: '/api/v1/artifacts', fixed: { area_id: operation.areaId },
-        titleField: true, canFiles: true, canNote: true, summaryDiscussion: undefined };
+      return {
+        path: '/api/v1/artifacts',
+        fixed: { area_id: operation.areaId },
+        titleField: true,
+        canFiles: true,
+        canNote: true,
+        summaryDiscussion: undefined,
+      };
     case 'reply.create':
-      return { path: '/api/v1/replies', fixed: { discussion_id: operation.discussionId, parent_id: operation.parentId },
-        titleField: false, canFiles: false, canNote: false, summaryDiscussion: undefined };
+      return {
+        path: '/api/v1/replies',
+        fixed: { discussion_id: operation.discussionId, parent_id: operation.parentId },
+        titleField: false,
+        canFiles: false,
+        canNote: false,
+        summaryDiscussion: undefined,
+      };
     case 'summary.create':
-      return { path: '/api/v1/summaries', fixed: { discussion_id: operation.discussionId },
-        titleField: true, canFiles: false, canNote: true, summaryDiscussion: operation.discussionId };
+      return {
+        path: '/api/v1/summaries',
+        fixed: { discussion_id: operation.discussionId },
+        titleField: true,
+        canFiles: false,
+        canNote: true,
+        summaryDiscussion: operation.discussionId,
+      };
     case 'revision.publish':
-      return { path: '/api/v1/revisions', fixed: { resource_id: operation.resourceId,
-        expected_revision_id: operation.revisionId, title: operation.title },
-      titleField: operation.title !== null, canFiles: operation.resourceKind === 'artifact',
-      canNote: operation.resourceKind === 'artifact', summaryDiscussion: undefined };
+      return {
+        path: '/api/v1/revisions',
+        fixed: {
+          resource_id: operation.resourceId,
+          expected_revision_id: operation.revisionId,
+          title: operation.title,
+        },
+        titleField: operation.title !== null,
+        canFiles: operation.resourceKind === 'artifact',
+        canNote: operation.resourceKind === 'artifact',
+        summaryDiscussion: undefined,
+      };
     case 'summary.revise':
-      return { path: '/api/v1/summary-revisions', fixed: { resource_id: operation.resourceId,
-        expected_revision_id: operation.revisionId, title: operation.title },
-      titleField: operation.title !== null, canFiles: false, canNote: true, summaryDiscussion: operation.discussionId };
+      return {
+        path: '/api/v1/summary-revisions',
+        fixed: {
+          resource_id: operation.resourceId,
+          expected_revision_id: operation.revisionId,
+          title: operation.title,
+        },
+        titleField: operation.title !== null,
+        canFiles: false,
+        canNote: true,
+        summaryDiscussion: operation.discussionId,
+      };
   }
 }
 
@@ -72,8 +121,12 @@ export type DraftFields = {
   account: ChangeAccountValue | null;
   fileSet: FileSetValue | undefined;
 };
-export type DraftPatch = Partial<Pick<DraftFields,
-  'text' | 'title' | 'mentions' | 'references' | 'coverage' | 'note' | 'account' | 'fileSet'>>;
+export type DraftPatch = Partial<
+  Pick<
+    DraftFields,
+    'text' | 'title' | 'mentions' | 'references' | 'coverage' | 'note' | 'account' | 'fileSet'
+  >
+>;
 export type DraftBody = Omit<TargetFields, 'expected_revision_id'> & {
   expected_revision_id?: unknown;
   coverage?: CoverageDeclarationValue;
@@ -83,15 +136,28 @@ export type DraftBody = Omit<TargetFields, 'expected_revision_id'> & {
   content: AuthoredContent;
 };
 
-export function buildDraftBody({ operation, fields, patch = {} }: {
-  operation: ComposerOperation; fields: DraftFields; patch?: DraftPatch;
+export function buildDraftBody({
+  operation,
+  fields,
+  patch = {},
+}: {
+  operation: ComposerOperation;
+  fields: DraftFields;
+  patch?: DraftPatch;
 }): DraftBody {
   const { fixed, titleField } = composerOperation(operation);
   // Undefined keeps the previous field, matching the original positional
   // defaults. Null deliberately clears a note/account; empty strings/arrays stay.
-  const { text = fields.text, title = fields.title, mentions = fields.mentions,
-    references = fields.references, coverage = fields.coverage, note = fields.note,
-    account = fields.account, fileSet = fields.fileSet } = patch;
+  const {
+    text = fields.text,
+    title = fields.title,
+    mentions = fields.mentions,
+    references = fields.references,
+    coverage = fields.coverage,
+    note = fields.note,
+    account = fields.account,
+    fileSet = fields.fileSet,
+  } = patch;
   const changes = fields.format === 'loom-markdown-v3' || !!note || !!account || !!fileSet;
   return {
     ...fixed,
@@ -101,7 +167,8 @@ export function buildDraftBody({ operation, fields, patch = {} }: {
     ...(fileSet ? { file_set: fileSet } : {}),
     ...(changes ? { change_note: note, change_account: account } : {}),
     content: {
-      ...(changes ? { format: 'loom-markdown-v3' as const, references }
+      ...(changes
+        ? { format: 'loom-markdown-v3' as const, references }
         : fields.format === 'loom-markdown-v2' || references.length
           ? { format: 'loom-markdown-v2' as const, references }
           : { format: 'loom-markdown-v1' as const }),
@@ -112,7 +179,10 @@ export function buildDraftBody({ operation, fields, patch = {} }: {
 }
 
 type CorrectionRecord = Pick<Intent, 'body' | 'state' | 'conflict_revision_id'>;
-type ComparisonRevision = Pick<RevisionView, 'revision_id' | 'content' | 'change_account' | 'file_set'>;
+type ComparisonRevision = Pick<
+  RevisionView,
+  'revision_id' | 'content' | 'change_account' | 'file_set'
+>;
 type CorrectionInput = {
   operation: ComposerOperation;
   record: CorrectionRecord | undefined;
@@ -121,28 +191,51 @@ type CorrectionInput = {
 
 export function draftCorrection({ operation, record, comparison }: CorrectionInput) {
   const original = record?.body.content as AuthoredContent | undefined;
-  const legacyFileCorrection = record?.state === 'rejected' && operation.kind === 'revision.publish' &&
-    operation.resourceKind === 'artifact' && !record.body.file_set;
-  const legacyCorrection = record?.state === 'rejected' &&
-    (operation.kind === 'revision.publish' || operation.kind === 'summary.revise') && original?.format !== 'loom-markdown-v3';
+  const legacyFileCorrection =
+    record?.state === 'rejected' &&
+    operation.kind === 'revision.publish' &&
+    operation.resourceKind === 'artifact' &&
+    !record.body.file_set;
+  const legacyCorrection =
+    record?.state === 'rejected' &&
+    (operation.kind === 'revision.publish' || operation.kind === 'summary.revise') &&
+    original?.format !== 'loom-markdown-v3';
   // Format refusals have no conflict ID. Their retained expected revision is
   // still the exact comparison base, never a newer fetched current revision.
-  const comparisonRevision = record?.conflict_revision_id ??
-    ((legacyCorrection || legacyFileCorrection) && typeof record.body.expected_revision_id === 'string'
-      ? record.body.expected_revision_id : undefined);
+  const comparisonRevision =
+    record?.conflict_revision_id ??
+    ((legacyCorrection || legacyFileCorrection) &&
+    typeof record.body.expected_revision_id === 'string'
+      ? record.body.expected_revision_id
+      : undefined);
   const comparisonReady = !!comparison && comparison.revision_id === comparisonRevision;
-  const adoptsBaseReferences = legacyCorrection && comparisonReady && original?.format === 'loom-markdown-v1' &&
+  const adoptsBaseReferences =
+    legacyCorrection &&
+    comparisonReady &&
+    original?.format === 'loom-markdown-v1' &&
     comparison.content.format !== 'loom-markdown-v1';
-  const requiresComparison = legacyCorrection || legacyFileCorrection ||
+  const requiresComparison =
+    legacyCorrection ||
+    legacyFileCorrection ||
     (!!composerOperation(operation).summaryDiscussion && !!comparisonRevision);
-  return { comparisonRevision, comparisonReady, adoptsBaseReferences, requiresComparison,
-    legacyCorrection, legacyFileCorrection };
+  return {
+    comparisonRevision,
+    comparisonReady,
+    adoptsBaseReferences,
+    requiresComparison,
+    legacyCorrection,
+    legacyFileCorrection,
+  };
 }
 
 export function correctDraft(input: CorrectionInput & { fields: DraftFields }) {
   const { operation, record, comparison, fields } = input;
   const correction = draftCorrection(input);
-  if (record?.state !== 'rejected' || correction.requiresComparison && !correction.comparisonReady) return undefined;
+  if (
+    record?.state !== 'rejected' ||
+    (correction.requiresComparison && !correction.comparisonReady)
+  )
+    return undefined;
   const body = buildDraftBody({ operation, fields });
   const summary = !!composerOperation(operation).summaryDiscussion;
   // A correction never enlarges a summary's source claim. The declaration must
@@ -150,25 +243,49 @@ export function correctDraft(input: CorrectionInput & { fields: DraftFields }) {
   if (summary) delete body.coverage;
   // Only v1 lacks references. A v2→v3 correction already contains the author's
   // attempted additions, edits and withdrawals, which must not be replaced.
-  const adopted = correction.adoptsBaseReferences && comparison?.content.format !== 'loom-markdown-v1'
-    ? comparison?.content.references : undefined;
-  const account = correction.legacyCorrection && comparison?.content.format === 'loom-markdown-v3'
-    ? (comparison.change_account?.state === 'declared' ? { carry_forward_revision_id: comparison.revision_id } : null) : fields.account;
-  const fileSet = correction.legacyFileCorrection && comparison?.file_set
-    ? { version: comparison.file_set.version, files: comparison.file_set.files } : fields.fileSet;
-  const format = fileSet ? 'loom-markdown-v3' : comparison?.content.format === 'loom-markdown-v3' || fields.format === 'loom-markdown-v3'
-    ? 'loom-markdown-v3' : adopted ? 'loom-markdown-v2' : fields.format;
+  const adopted =
+    correction.adoptsBaseReferences && comparison?.content.format !== 'loom-markdown-v1'
+      ? comparison?.content.references
+      : undefined;
+  const account =
+    correction.legacyCorrection && comparison?.content.format === 'loom-markdown-v3'
+      ? comparison.change_account?.state === 'declared'
+        ? { carry_forward_revision_id: comparison.revision_id }
+        : null
+      : fields.account;
+  const fileSet =
+    correction.legacyFileCorrection && comparison?.file_set
+      ? { version: comparison.file_set.version, files: comparison.file_set.files }
+      : fields.fileSet;
+  const format = fileSet
+    ? 'loom-markdown-v3'
+    : comparison?.content.format === 'loom-markdown-v3' || fields.format === 'loom-markdown-v3'
+      ? 'loom-markdown-v3'
+      : adopted
+        ? 'loom-markdown-v2'
+        : fields.format;
   return {
-    fields: { ...fields, base: correction.comparisonRevision || fields.base,
-      coverage: summary ? undefined : fields.coverage, format, account, fileSet,
-      references: adopted ?? fields.references } satisfies DraftFields,
+    fields: {
+      ...fields,
+      base: correction.comparisonRevision || fields.base,
+      coverage: summary ? undefined : fields.coverage,
+      format,
+      account,
+      fileSet,
+      references: adopted ?? fields.references,
+    } satisfies DraftFields,
     body: {
       ...body,
       ...(fileSet ? { file_set: fileSet } : {}),
-      ...(correction.comparisonRevision ? { expected_revision_id: correction.comparisonRevision } : {}),
+      ...(correction.comparisonRevision
+        ? { expected_revision_id: correction.comparisonRevision }
+        : {}),
       ...(adopted || format === 'loom-markdown-v3'
-        ? { content: { ...body.content, format, references: adopted ?? fields.references } } : {}),
-      ...(format === 'loom-markdown-v3' ? { change_note: fields.note, change_account: account } : {}),
+        ? { content: { ...body.content, format, references: adopted ?? fields.references } }
+        : {}),
+      ...(format === 'loom-markdown-v3'
+        ? { change_note: fields.note, change_account: account }
+        : {}),
     } satisfies DraftBody,
   };
 }

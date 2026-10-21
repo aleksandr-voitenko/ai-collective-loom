@@ -1,49 +1,53 @@
-import { useState } from "react";
-import { useLocation } from "react-router";
-import { type Intent, commandRequest, isDefinitiveRejection } from "./participation-client.js";
-import { type Context, useIntent, useQuery, SeparateDraft } from "./participation-state.js";
+import { useState } from 'react';
+import { useLocation } from 'react-router';
+import { type Intent, commandRequest, isDefinitiveRejection } from './participation-client.js';
+import { type Context, useIntent, useQuery, SeparateDraft } from './participation-state.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
-import { Avatar, ErrorText } from "./participation-ui.js";
+import { Avatar, ErrorText } from './participation-ui.js';
 
 export function Admission({ context }: { context: Context }) {
-  const authority=useAuthorization();
+  const authority = useAuthorization();
   // Account selection and one-time display are protected copies. Only a saved
   // command (or its safe receipt IDs) belongs to private recovery custody.
-  const [selection,setSelection]=useState<{id:string;kind:string;nickname:string;generation:number|undefined}>();
-  const selected=selection&&authority.current(selection.generation)?selection:undefined;
-  const chosen = new URLSearchParams(useLocation().search).get("intent");
+  const [selection, setSelection] = useState<{
+    id: string;
+    kind: string;
+    nickname: string;
+    generation: number | undefined;
+  }>();
+  const selected = selection && authority.current(selection.generation) ? selection : undefined;
+  const chosen = new URLSearchParams(useLocation().search).get('intent');
   const [pending, update] = useIntent(
     () =>
-      context.store
-        .all()
-        .find((r) => r.slot === "admission" && r.key === chosen) ??
-      context.store.all().find((r) => r.slot === "admission"),
+      context.store.all().find((r) => r.slot === 'admission' && r.key === chosen) ??
+      context.store.all().find((r) => r.slot === 'admission'),
   );
-  const [nickname, setNickname] = useState(
-      String(pending?.body.nickname ?? ""),
-    ),
+  const [nickname, setNickname] = useState(String(pending?.body.nickname ?? '')),
     [kind, setKind] = useState(
-      pending?.body.kind === "human" || pending?.body.kind === "enrollment"
-        ? "human"
-        : "agent",
+      pending?.body.kind === 'human' || pending?.body.kind === 'enrollment' ? 'human' : 'agent',
     ),
     [createdAccount, setAccount] = useState<string | undefined>(
       pending?.body.participant_id as string | undefined,
     ),
     [issued, setIssued] = useState<{
-      generation:number;
+      generation: number;
       secret: string;
       participant_id: string;
       credential_id: string;
       kind: string;
       nickname: string;
     }>(),
-    [error, setError] = useState(""),
+    [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
-  const account=(pending?.body.participant_id as string|undefined)??createdAccount??selected?.id;
-  const displayNickname=selected?.nickname??nickname;
-  const accountKind=pending?.kind==='credential.issue'
-    ?pending.body.kind==='enrollment'?'human':'agent':selected?.kind??kind;
+  const account =
+    (pending?.body.participant_id as string | undefined) ?? createdAccount ?? selected?.id;
+  const displayNickname = selected?.nickname ?? nickname;
+  const accountKind =
+    pending?.kind === 'credential.issue'
+      ? pending.body.kind === 'enrollment'
+        ? 'human'
+        : 'agent'
+      : (selected?.kind ?? kind);
   const accounts = useQuery<
     {
       id: string;
@@ -52,26 +56,17 @@ export function Admission({ context }: { context: Context }) {
       state: string;
       role: string;
     }[]
-  >("/api/v1/identity/accounts");
-  const locked =
-    busy || (!!pending && (pending.state !== "draft" || !!pending.blocked_by));
+  >('/api/v1/identity/accounts');
+  const locked = busy || (!!pending && (pending.state !== 'draft' || !!pending.blocked_by));
   async function draftAccount(patch: Record<string, unknown> = {}) {
     try {
-      if (
-        pending &&
-        (pending.state !== "draft" || pending.kind !== "account.create")
-      )
-        throw new Error("Prepare a correction before editing this request.");
-      const body = { nickname, kind, role: "participant", ...patch };
+      if (pending && (pending.state !== 'draft' || pending.kind !== 'account.create'))
+        throw new Error('Prepare a correction before editing this request.');
+      const body = { nickname, kind, role: 'participant', ...patch };
       return await update((current) =>
         context.store.saveDraft(
           current ??
-            context.store.create(
-              "admission",
-              "account.create",
-              "/api/v1/identity/accounts",
-              body,
-            ),
+            context.store.create('admission', 'account.create', '/api/v1/identity/accounts', body),
           body,
         ),
       );
@@ -84,73 +79,63 @@ export function Admission({ context }: { context: Context }) {
     if (!pending) return;
     try {
       await update((current) => context.store.correct(current!));
-      setError("");
+      setError('');
     } catch (failure) {
       setError((failure as Error).message);
     }
   }
-  async function operate(
-    action: "account.create" | "credential.issue",
-    check = false,
-  ) {
-    if (busy || pending?.state === "rejected" || pending?.blocked_by) return;
+  async function operate(action: 'account.create' | 'credential.issue', check = false) {
+    if (busy || pending?.state === 'rejected' || pending?.blocked_by) return;
     let wasUncertain = false;
-    const targetNickname = displayNickname, generation=authority.capture();
-    const path =
-      "/api/v1/identity/" +
-      (action === "account.create" ? "accounts" : "credentials");
+    const targetNickname = displayNickname,
+      generation = authority.capture();
+    const path = '/api/v1/identity/' + (action === 'account.create' ? 'accounts' : 'credentials');
     const body =
-      action === "account.create"
-        ? { nickname, kind, role: "participant" }
+      action === 'account.create'
+        ? { nickname, kind, role: 'participant' }
         : {
             participant_id: account,
-            kind: accountKind === "agent" ? "agent" : "enrollment",
-            purpose: accountKind === "agent" ? null : "enroll",
-            label: "Synthetic participation",
+            kind: accountKind === 'agent' ? 'agent' : 'enrollment',
+            purpose: accountKind === 'agent' ? null : 'enroll',
+            label: 'Synthetic participation',
             replace_credential_id: null,
           };
     let record: Intent | undefined;
     setBusy(true);
     try {
       record = await update(async (current) => {
-        const draft =
-          current ?? context.store.create("admission", action, path, body);
-        wasUncertain = draft.state === "uncertain";
+        const draft = current ?? context.store.create('admission', action, path, body);
+        wasUncertain = draft.state === 'uncertain';
         if (check) return draft;
         return context.store.prepareDispatch(draft, body);
       });
       if (!record || (check && !wasUncertain)) return;
-      setError("");
+      setError('');
       const result = await commandRequest<{
         operation_state: string;
         participant_id: string;
         credential_id?: string;
         secret?: string;
-      }>(check ? "/api/v1/identity/reconcile" : record.path, {
+      }>(check ? '/api/v1/identity/reconcile' : record.path, {
         self: context.self,
-        body: check
-          ? { operation_kind: record.kind, idempotency_key: record.key }
-          : record.body,
+        body: check ? { operation_kind: record.kind, idempotency_key: record.key } : record.body,
       });
-      if (result.operation_state === "committed") {
+      if (result.operation_state === 'committed') {
         if (
-          record.kind === "credential.issue" &&
-          (result.participant_id !== record.body.participant_id ||
-            !result.credential_id)
+          record.kind === 'credential.issue' &&
+          (result.participant_id !== record.body.participant_id || !result.credential_id)
         )
-          throw new Error(
-            "The credential response could not be bound to its issuing account.",
-          );
+          throw new Error('The credential response could not be bound to its issuing account.');
         setAccount(result.participant_id);
         // Recovery keeps the credential kind from the immutable command, even
         // after a protected account selection loses its lease.
-        setKind(record.body.kind === "enrollment" ? "human" : String(record.body.kind));
+        setKind(record.body.kind === 'enrollment' ? 'human' : String(record.body.kind));
         await update(async () => {
           await context.store.complete(record!);
           return undefined;
         });
         accounts.refreshIfCurrent();
-        if (record.kind === "credential.issue") {
+        if (record.kind === 'credential.issue') {
           if (result.secret)
             setIssued({
               generation,
@@ -165,10 +150,10 @@ export function Admission({ context }: { context: Context }) {
               `The credential was issued, but its secret cannot be replayed. Revoke ${result.credential_id} and issue a replacement on this same account.`,
             );
         }
-      } else setError("This account operation remains unconfirmed.");
+      } else setError('This account operation remains unconfirmed.');
     } catch (failure) {
       if (record && !check && isDefinitiveRejection(failure, wasUncertain)) {
-        const rejected = { ...record, state: "rejected" as const };
+        const rejected = { ...record, state: 'rejected' as const };
         try {
           await update(() => context.store.settle(record!, rejected));
         } catch (storageFailure) {
@@ -194,21 +179,33 @@ export function Admission({ context }: { context: Context }) {
           }).catch((failure) => setError(failure.message))
         }
       />
-      {issued&&!authority.current(issued.generation)?<div className="notice">
-        <p>The credential display was withdrawn. Check current access before managing the issued credential; its secret cannot be replayed.</p>
-        <button onClick={()=>{setIssued(undefined);setSelection(undefined);}}>Dismiss credential display</button>
-      </div>:issued ? (
+      {issued && !authority.current(issued.generation) ? (
+        <div className="notice">
+          <p>
+            The credential display was withdrawn. Check current access before managing the issued
+            credential; its secret cannot be replayed.
+          </p>
+          <button
+            onClick={() => {
+              setIssued(undefined);
+              setSelection(undefined);
+            }}
+          >
+            Dismiss credential display
+          </button>
+        </div>
+      ) : issued ? (
         <div className="notice neutral">
           <strong>
-            {issued.kind === "agent" ? "Agent credential" : "Enrollment ticket"}{" "}
-            for {issued.nickname} — shown once
+            {issued.kind === 'agent' ? 'Agent credential' : 'Enrollment ticket'} for{' '}
+            {issued.nickname} — shown once
           </strong>
           <p>
-            Deliver through an approved private channel. It is not saved in
-            browser recovery records.
+            Deliver through an approved private channel. It is not saved in browser recovery
+            records.
           </p>
           <p>
-            Account: <code>{issued.participant_id}</code> · Credential:{" "}
+            Account: <code>{issued.participant_id}</code> · Credential:{' '}
             <code>{issued.credential_id}</code>
           </p>
           <textarea aria-label="Issued secret" readOnly value={issued.secret} />
@@ -217,7 +214,7 @@ export function Admission({ context }: { context: Context }) {
               setIssued(undefined);
               setAccount(undefined);
               setSelection(undefined);
-              setNickname("");
+              setNickname('');
             }}
           >
             Done
@@ -250,24 +247,18 @@ export function Admission({ context }: { context: Context }) {
               <option value="human">Human</option>
             </select>
           </label>
-          {pending?.state === "rejected" ? (
+          {pending?.state === 'rejected' ? (
             <div className="notice">
-              <p>
-                The account operation was rejected. Your draft is preserved.
-              </p>
-              <button onClick={correct}>
-                Prepare corrected account operation
-              </button>
+              <p>The account operation was rejected. Your draft is preserved.</p>
+              <button onClick={correct}>Prepare corrected account operation</button>
             </div>
           ) : !account ? (
             <button
               className="primary"
               disabled={busy || !!pending?.blocked_by || !nickname}
-              onClick={() => void operate("account.create")}
+              onClick={() => void operate('account.create')}
             >
-              {pending?.state === "uncertain"
-                ? "Retry same account creation"
-                : "Create account"}
+              {pending?.state === 'uncertain' ? 'Retry same account creation' : 'Create account'}
             </button>
           ) : (
             <>
@@ -277,21 +268,17 @@ export function Admission({ context }: { context: Context }) {
               <button
                 className="primary"
                 disabled={busy}
-                onClick={() => void operate("credential.issue")}
+                onClick={() => void operate('credential.issue')}
               >
-                Issue{" "}
-                {accountKind === "agent" ? "agent credential" : "enrollment ticket"}
+                Issue {accountKind === 'agent' ? 'agent credential' : 'enrollment ticket'}
               </button>
             </>
           )}
-          {pending?.state === "uncertain" && (
+          {pending?.state === 'uncertain' && (
             <button
               disabled={busy}
               onClick={() =>
-                void operate(
-                  pending.kind as "account.create" | "credential.issue",
-                  true,
-                )
+                void operate(pending.kind as 'account.create' | 'credential.issue', true)
               }
             >
               Check account operation
@@ -302,7 +289,7 @@ export function Admission({ context }: { context: Context }) {
       <details className="section">
         <summary>Participant accounts</summary>
         <button onClick={accounts.refresh}>Refresh accounts</button>
-        <ErrorText error={accounts.error}/>
+        <ErrorText error={accounts.error} />
         {accounts.data?.map((person) => (
           <div className="list-row" key={person.id}>
             <Avatar person={person} />
@@ -313,7 +300,7 @@ export function Admission({ context }: { context: Context }) {
               disabled={busy || !!pending || !!issued}
               onClick={() => {
                 setAccount(undefined);
-                setSelection({...person,generation:accounts.generation});
+                setSelection({ ...person, generation: accounts.generation });
               }}
             >
               Manage credentials
@@ -321,20 +308,20 @@ export function Admission({ context }: { context: Context }) {
             <button
               disabled={person.id === context.self.participant_id}
               onClick={() =>
-                void commandRequest("/api/v1/identity/state", {
+                void commandRequest('/api/v1/identity/state', {
                   self: context.self,
                   body: {
                     idempotency_key: crypto.randomUUID(),
                     participant_id: person.id,
                     role: person.role,
-                    state: person.state === "active" ? "suspended" : "active",
+                    state: person.state === 'active' ? 'suspended' : 'active',
                   },
                 })
                   .then(accounts.refreshIfCurrent)
                   .catch((failure) => setError(failure.message))
               }
             >
-              {person.state === "active" ? "Suspend" : "Reactivate"}
+              {person.state === 'active' ? 'Suspend' : 'Reactivate'}
             </button>
           </div>
         ))}
@@ -344,17 +331,11 @@ export function Admission({ context }: { context: Context }) {
   );
 }
 
-function CredentialList({
-  participantId,
-  context,
-}: {
-  participantId: string;
-  context: Context;
-}) {
+function CredentialList({ participantId, context }: { participantId: string; context: Context }) {
   const { data, error, refresh, refreshIfCurrent } = useQuery<
       { id: string; kind: string; label: string; state: string }[]
-    >("/api/v1/identity/credentials?participant_id=" + participantId),
-    [failure, setFailure] = useState("");
+    >('/api/v1/identity/credentials?participant_id=' + participantId),
+    [failure, setFailure] = useState('');
   return (
     <details className="section">
       <summary>Credentials for this account</summary>
@@ -366,9 +347,9 @@ function CredentialList({
             {credential.label} · {credential.kind} · {credential.state}
           </span>
           <button
-            disabled={credential.state !== "active"}
+            disabled={credential.state !== 'active'}
             onClick={() =>
-              void commandRequest("/api/v1/identity/revoke", {
+              void commandRequest('/api/v1/identity/revoke', {
                 self: context.self,
                 body: {
                   idempotency_key: crypto.randomUUID(),

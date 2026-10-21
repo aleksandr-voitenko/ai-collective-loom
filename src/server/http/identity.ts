@@ -1,10 +1,10 @@
-import { ParticipationError } from "../../contracts/participation.js";
-import { Type, type TSchema } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
-import type { FastifyInstance, FastifyRequest } from "fastify";
-import type { ActorContext } from "../modules/publication/actor.js";
-import { IdentityAdministration } from "../modules/identity/administration.js";
-import { IdentityAuthentication } from "../modules/identity/authentication.js";
+import { ParticipationError } from '../../contracts/participation.js';
+import { Type, type TSchema } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ActorContext } from '../modules/publication/actor.js';
+import { IdentityAdministration } from '../modules/identity/administration.js';
+import { IdentityAuthentication } from '../modules/identity/authentication.js';
 import {
   AccountInput,
   AuthenticationOptionsResponse,
@@ -18,30 +18,23 @@ import {
   RevokeInput,
   SignInFinish,
   Uuid,
-} from "../modules/identity/contracts.js";
-import { IdentityError } from "../modules/identity/errors.js";
-import { csrfValue, validCsrf } from "../modules/identity/secrets.js";
+} from '../modules/identity/contracts.js';
+import { IdentityError } from '../modules/identity/errors.js';
+import { csrfValue, validCsrf } from '../modules/identity/secrets.js';
 
 const closed = { additionalProperties: false };
 const Empty = Type.Object({}, closed);
 const Result = Type.Object(
   {
-    operation_state: Type.Literal("committed"),
-    idempotency: Type.Union([
-      Type.Literal("created"),
-      Type.Literal("replayed"),
-    ]),
+    operation_state: Type.Literal('committed'),
+    idempotency: Type.Union([Type.Literal('created'), Type.Literal('replayed')]),
     operation_id: Uuid,
     participant_id: Uuid,
     credential_id: Type.Optional(Uuid),
     credential_state: Type.Optional(
-      Type.Union([
-        Type.Literal("active"),
-        Type.Literal("revoked"),
-        Type.Literal("expired"),
-      ]),
+      Type.Union([Type.Literal('active'), Type.Literal('revoked'), Type.Literal('expired')]),
     ),
-    recovery: Type.Optional(Type.Literal("revoke_and_replace")),
+    recovery: Type.Optional(Type.Literal('revoke_and_replace')),
   },
   closed,
 );
@@ -51,28 +44,19 @@ const Issuance = Type.Object(
 );
 const ErrorOutput = ParticipationError;
 const errors = Object.fromEntries(
-  [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((code) => [
-    code,
-    ErrorOutput,
-  ]),
+  [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((code) => [code, ErrorOutput]),
 );
-const base = "/api/v1/identity";
-function cookie(
-  secret: string,
-  name: "session" | "challenge",
-  seconds: number,
-) {
+const base = '/api/v1/identity';
+function cookie(secret: string, name: 'session' | 'challenge', seconds: number) {
   return `__Host-loom-${name}=${secret}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${seconds}`;
 }
 function cookies(request: FastifyRequest) {
   const found: Record<string, string> = {};
-  for (const part of (request.headers.cookie ?? "")
-    .split(";")
-    .filter(Boolean)) {
-    const equal = part.indexOf("="),
+  for (const part of (request.headers.cookie ?? '').split(';').filter(Boolean)) {
+    const equal = part.indexOf('='),
       key = part.slice(0, equal).trim(),
       value = part.slice(equal + 1);
-    if (equal < 1 || key in found) throw new IdentityError("unauthenticated");
+    if (equal < 1 || key in found) throw new IdentityError('unauthenticated');
     found[key] = value;
   }
   return found;
@@ -87,48 +71,45 @@ export async function registerIdentityRoutes(
   },
 ) {
   const { authentication: auth, administration: admin } = options;
-  app.addHook("onRequest", async (request, reply) => {
-    reply.header("vary", "Cookie, Authorization");
-    const ceremony =
-      /^\/api\/v1\/identity\/(register|signin)\/(start|finish)(\?|$)/.test(
-        request.url,
-      );
-    if (ceremony && request.headers.authorization)
-      throw new IdentityError("unauthenticated");
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('vary', 'Cookie, Authorization');
+    const ceremony = /^\/api\/v1\/identity\/(register|signin)\/(start|finish)(\?|$)/.test(
+      request.url,
+    );
+    if (ceremony && request.headers.authorization) throw new IdentityError('unauthenticated');
     if (
       request.url.startsWith(base) &&
-      ["POST", "PUT", "PATCH", "DELETE"].includes(request.method) &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
       (ceremony || !request.headers.authorization) &&
       request.headers.origin !== auth.policy.origin
     )
-      throw new IdentityError("invalid_proof");
+      throw new IdentityError('invalid_proof');
   });
   async function actor(request: FastifyRequest) {
-    const session = cookies(request)["__Host-loom-session"];
+    const session = cookies(request)['__Host-loom-session'];
     const authorization = request.headers.authorization;
-    if (session && authorization) throw new IdentityError("unauthenticated");
+    if (session && authorization) throw new IdentityError('unauthenticated');
     if (authorization) {
       if (
-        !authorization.startsWith("Bearer ") ||
-        (request.headers.origin &&
-          request.headers.origin !== auth.policy.origin)
+        !authorization.startsWith('Bearer ') ||
+        (request.headers.origin && request.headers.origin !== auth.policy.origin)
       )
-        throw new IdentityError("unauthenticated");
-      return auth.authenticate(authorization.slice(7), "agent");
+        throw new IdentityError('unauthenticated');
+      return auth.authenticate(authorization.slice(7), 'agent');
     }
-    if (!session) throw new IdentityError("unauthenticated");
-    const resolved = await auth.authenticate(session, "session");
+    if (!session) throw new IdentityError('unauthenticated');
+    const resolved = await auth.authenticate(session, 'session');
     if (
-      ["POST", "PUT", "PATCH", "DELETE"].includes(request.method) &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
       (request.headers.origin !== auth.policy.origin ||
         !validCsrf(
           session,
-          typeof request.headers["x-loom-csrf"] === "string"
-            ? request.headers["x-loom-csrf"]
+          typeof request.headers['x-loom-csrf'] === 'string'
+            ? request.headers['x-loom-csrf']
             : undefined,
         ))
     )
-      throw new IdentityError("invalid_proof");
+      throw new IdentityError('invalid_proof');
     return resolved;
   }
   function command(
@@ -150,27 +131,19 @@ export async function registerIdentityRoutes(
       async (request) => action(await actor(request), request.body),
     );
   }
-  command("/accounts", AccountInput, (a, b) => admin.createAccount(a, b));
+  command('/accounts', AccountInput, (a, b) => admin.createAccount(a, b));
+  command('/credentials', IssueInput, (a, b) => admin.issueCredential(a, b), Issuance);
+  command('/state', LifecycleInput, (a, b) => admin.setAccountState(a, b));
+  command('/rename', RenameInput, (a, b) => admin.renameAccount(a, b));
+  command('/revoke', RevokeInput, (a, b) => admin.revokeCredential(a, b));
   command(
-    "/credentials",
-    IssueInput,
-    (a, b) => admin.issueCredential(a, b),
-    Issuance,
-  );
-  command("/state", LifecycleInput, (a, b) => admin.setAccountState(a, b));
-  command("/rename", RenameInput, (a, b) => admin.renameAccount(a, b));
-  command("/revoke", RevokeInput, (a, b) => admin.revokeCredential(a, b));
-  command(
-    "/reconcile",
+    '/reconcile',
     ReconcileInput,
     (a, b) => admin.reconcile(a, b),
-    Type.Union([
-      Result,
-      Type.Object({ operation_state: Type.Literal("not_recorded") }, closed),
-    ]),
+    Type.Union([Result, Type.Object({ operation_state: Type.Literal('not_recorded') }, closed)]),
   );
   app.get(
-    base + "/self",
+    base + '/self',
     {
       schema: {
         querystring: Empty,
@@ -192,12 +165,12 @@ export async function registerIdentityRoutes(
     },
     async (request) => {
       const result = await auth.self(await actor(request));
-      const session = cookies(request)["__Host-loom-session"];
+      const session = cookies(request)['__Host-loom-session'];
       return { ...result, ...(session ? { csrf: csrfValue(session) } : {}) };
     },
   );
   app.get(
-    base + "/accounts",
+    base + '/accounts',
     {
       schema: {
         querystring: Empty,
@@ -221,7 +194,7 @@ export async function registerIdentityRoutes(
     async (request) => admin.listAccounts(await actor(request)),
   );
   app.get(
-    base + "/audit",
+    base + '/audit',
     {
       schema: {
         querystring: Empty,
@@ -248,7 +221,7 @@ export async function registerIdentityRoutes(
     async (request) => admin.audit(await actor(request)),
   );
   app.get(
-    base + "/credentials",
+    base + '/credentials',
     {
       schema: {
         querystring: Type.Object({ participant_id: Uuid }, closed),
@@ -278,7 +251,7 @@ export async function registerIdentityRoutes(
       ),
   );
   app.post(
-    base + "/register/start",
+    base + '/register/start',
     {
       schema: {
         body: RegisterStart,
@@ -289,16 +262,13 @@ export async function registerIdentityRoutes(
     async (request, reply) => {
       const { binding, ...result } = await auth.startRegistration(request.body);
       if (!Value.Check(RegistrationOptionsResponse, result))
-        throw new IdentityError("service_unavailable");
-      reply.header(
-        "set-cookie",
-        cookie(binding, "challenge", auth.policy.challengeSeconds),
-      );
+        throw new IdentityError('service_unavailable');
+      reply.header('set-cookie', cookie(binding, 'challenge', auth.policy.challengeSeconds));
       return result;
     },
   );
   app.post(
-    base + "/register/finish",
+    base + '/register/finish',
     {
       bodyLimit: 65536,
       schema: {
@@ -310,7 +280,7 @@ export async function registerIdentityRoutes(
             {
               participant_id: Uuid,
               credential_id: Uuid,
-              enrollment_state: Type.Literal("bound"),
+              enrollment_state: Type.Literal('bound'),
             },
             closed,
           ),
@@ -318,13 +288,10 @@ export async function registerIdentityRoutes(
       },
     },
     async (request) =>
-      auth.finishRegistration(
-        request.body,
-        cookies(request)["__Host-loom-challenge"] ?? "",
-      ),
+      auth.finishRegistration(request.body, cookies(request)['__Host-loom-challenge'] ?? ''),
   );
   app.post(
-    base + "/signin/start",
+    base + '/signin/start',
     {
       schema: {
         body: Empty,
@@ -335,16 +302,13 @@ export async function registerIdentityRoutes(
     async (_request, reply) => {
       const { binding, ...result } = await auth.startSignIn();
       if (!Value.Check(AuthenticationOptionsResponse, result))
-        throw new IdentityError("service_unavailable");
-      reply.header(
-        "set-cookie",
-        cookie(binding, "challenge", auth.policy.challengeSeconds),
-      );
+        throw new IdentityError('service_unavailable');
+      reply.header('set-cookie', cookie(binding, 'challenge', auth.policy.challengeSeconds));
       return result;
     },
   );
   app.post(
-    base + "/signin/finish",
+    base + '/signin/finish',
     {
       bodyLimit: 65536,
       schema: {
@@ -352,40 +316,34 @@ export async function registerIdentityRoutes(
         querystring: Empty,
         response: {
           ...errors,
-          200: Type.Object(
-            { participant_id: Uuid, credential_id: Uuid },
-            closed,
-          ),
+          200: Type.Object({ participant_id: Uuid, credential_id: Uuid }, closed),
         },
       },
     },
     async (request, reply) => {
       const { session, ...result } = await auth.finishSignIn(
         request.body,
-        cookies(request)["__Host-loom-challenge"] ?? "",
+        cookies(request)['__Host-loom-challenge'] ?? '',
       );
-      reply.header(
-        "set-cookie",
-        cookie(session, "session", auth.policy.sessionSeconds),
-      );
+      reply.header('set-cookie', cookie(session, 'session', auth.policy.sessionSeconds));
       return result;
     },
   );
   app.post(
-    base + "/logout",
+    base + '/logout',
     {
       schema: {
         body: Empty,
         querystring: Empty,
         response: {
           ...errors,
-          200: Type.Object({ session_state: Type.Literal("revoked") }, closed),
+          200: Type.Object({ session_state: Type.Literal('revoked') }, closed),
         },
       },
     },
     async (request, reply) => {
       const result = await auth.logout(await actor(request));
-      reply.header("set-cookie", cookie("", "session", 0));
+      reply.header('set-cookie', cookie('', 'session', 0));
       return result;
     },
   );
