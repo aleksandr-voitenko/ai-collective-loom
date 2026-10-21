@@ -326,6 +326,10 @@ ancestor impacts, fixed clock/definition capture, both authority guard orders,
 completed-checkpoint restoration, bounded scans/bytes/quotas, unknown public work,
 history floor/epoch and native client/API restart. Shared reads run without consumers;
 a later repaired personal delivery stays independently retrievable. Build first.
+`following-collection.test.ts` separately traverses legacy/private collection pages
+against complete expected choices in retained target-ID order. Owner/tamper refusals,
+exact replay versus fresh-choice invalidation, and API restart preserve private rows;
+the same restart retains an independent shared Changes checkpoint.
 Unknown-work fixtures include contributions/summaries without companion rows but
 with known discussion owners: both explicit and followed scopes stay incomplete,
 while suppressed work and unrelated scopes preserve ordinary eligibility.
