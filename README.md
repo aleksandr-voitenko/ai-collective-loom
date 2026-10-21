@@ -177,6 +177,9 @@ Prettier version from the lockfile: 100-column target width, single quotes, two-
 indentation, and LF endings. Embedded-language formatting is disabled to preserve
 template contents. The authored API guide, migrations, documents, tests, tooling,
 and generated output are excluded by `.prettierignore`, including for editors.
+The mechanical formatting commit is listed in `.git-blame-ignore-revs`; use
+`git blame --ignore-revs-file .git-blame-ignore-revs -- path/to/file` to inspect
+the earlier source history.
 
 For the compiled application and real-service checks:
 
@@ -246,8 +249,9 @@ interrupts only this local project as described above.
 
 ## Checks and scope
 
-`npm run check` retains baseline/JSON, bootstrap, and Lore hook checks, and adds
-application typechecking, HTTP contract/router tests, and the production build.
+`npm run check` starts with source formatting validation, then runs baseline/JSON,
+bootstrap, and Lore hook checks, application typechecking, HTTP contract/router
+tests, and the production build.
 `npm run test:app:postgres` uses disposable PostgreSQL resources to check actual
 application-role readiness, parameterized transactions, rollback, startup failures,
 database loss, graceful shutdown, and Vite module/API proxy separation.
