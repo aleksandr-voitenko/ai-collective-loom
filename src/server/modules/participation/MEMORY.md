@@ -291,6 +291,10 @@ assertion attribution; identical carry-forward does not claim a new assertion.
 Omissions append withdrawal provenance; historical withdrawn entries show the
 latest eligible withdrawing revision. Unchanged immediate-base carry-forward may
 retain unavailable targets; changed/new targets require read eligibility.
+Preparation reuses one change-schema result within the call, first discovered at
+the main-base read or after the first target authorization when there is no base
+read. Empty preparation without a base read does no discovery; there is no
+cross-call cache.
 V2 is required when editing a v2 base, even an empty one. Explicit correction of a
 definitively rejected v1 edit loads its exact conflict/expected revision and carries
 that reference-aware base's declarations into a new draft for review, preserving

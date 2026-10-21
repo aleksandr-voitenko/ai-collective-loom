@@ -534,6 +534,9 @@ known-target selection without search, native worker restart/rebuild, bounded
 hidden-candidate paging and source/target/credential races. SQL barriers and
 `pg_blocking_pids` establish both commit orders. `references-client.test.ts` also
 restarts the standalone fsynced client and checks UTF-8/JSON/statement limits.
+`unit/reference-preparation.test.ts` checks at most one schema lookup per preparation,
+complete current/legacy provenance, and discovery after target authorization when
+there is no base read. Empty inputs and independent subsequent calls remain distinct.
 `web/references.test.tsx` exercises development StrictMode; Chromium scenarios
 cover exact navigation, correction, failed autosave, stale tabs, persistent restart,
 page recovery and late route/account results. Observe the failed dispatch leaving

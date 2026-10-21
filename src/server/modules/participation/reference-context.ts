@@ -36,7 +36,15 @@ export async function revisionReferences(
   revision: string,
   field: ReferenceRow['source_field'] = 'main',
 ): Promise<ReferenceRow[]> {
-  const fields = await hasChangeSchema(tx);
+  return readRevisionReferences(tx, revision, field, await hasChangeSchema(tx));
+}
+
+async function readRevisionReferences(
+  tx: SqlTransaction,
+  revision: string,
+  field: ReferenceRow['source_field'],
+  fields: boolean,
+): Promise<ReferenceRow[]> {
   if (!fields && field !== 'main') return [];
   return (
     await tx.query<ReferenceRow>(
@@ -151,14 +159,21 @@ export async function prepareReferences(
   references: ReferenceValue[],
   field: ReferenceRow['source_field'] = 'main',
 ): Promise<PreparedReference[]> {
-  const prior = field === 'main' && base ? await revisionReferences(tx, base) : [];
+  // Reuse discovery only within this preparation, keeping its first query at
+  // the base read or, without one, after the first target authorization.
+  let fields: boolean | undefined;
+  let prior: ReferenceRow[] = [];
+  if (field === 'main' && base) {
+    fields = await hasChangeSchema(tx);
+    prior = await readRevisionReferences(tx, base, 'main', fields);
+  }
   const prepared: PreparedReference[] = [];
   for (const ref of references) {
     const previous = prior.find((row) => row.reference_id === ref.reference_id);
     const same = previous && JSON.stringify(declaration(previous)) === JSON.stringify(ref);
     // Only identical immediate-base carry-forward may retain an unavailable target.
     if (!same) await referenceTarget(tx, ref.target);
-    const fields = await hasChangeSchema(tx);
+    fields ??= await hasChangeSchema(tx);
     const origin =
       field === 'change_note'
         ? undefined
