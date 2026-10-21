@@ -17,6 +17,9 @@ and observe actual PostgreSQL waiters. Movement emits its ordinary structural ev
 in addition to an eligible publication; count those separately from content events.
 The HTTPS client fixture retains independent fsynced metadata through credential
 replacement/API restart and exposes recorded expiry refusals without journal changes.
+Native creation/revision regressions omit the file envelope from a valid nonempty
+text request after expiry refusal. They compare complete publication state, retain
+rejected retry/status across restart and allow correction only with a fresh key.
 Upgrade hashes every populated pre0019 table and checks
 old format replay, references and private checkpoints. Production Chromium file
 journeys cover nested download, file-only presentation, revision reuse, reselection,

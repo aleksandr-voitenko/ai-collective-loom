@@ -22,6 +22,9 @@ deletes exact versions outside SQL. Quarantine remains reserved and retries afte
 one hour; immutable upload/expiry-refusal tombstones preserve outcome knowledge.
 Expiry is not proof that an uncertain publication failed: a saved outcome wins;
 otherwise a committed bounded expiry refusal permits explicit new-key correction.
+Refusal lookup is bound to owner/operation/key under the attempt lock, independent
+of the optional file envelope. Omitting files conflicts with the refused digest;
+exact retry/status remains rejected, including after an API restart.
 Manifest pages authorize exact context every time and disclose declared health
 only. Downloads reauthorize after native digest/length verification, then serve
 passive attachment/octet-stream/no-store/nosniff/sandbox bytes. No signed URLs.

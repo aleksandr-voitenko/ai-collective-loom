@@ -221,10 +221,15 @@ export class ParticipationPublications {
           );
           if (!found.rowCount) throw new PublicationError("invalid_input");
         }
-        if(input.file_set){
-          await fileGuard(tx);
+        // A refusal binds the attempt even if a retry omits its file envelope.
+        // Older schemas have no file attempts; successful legacy replays resolve above.
+        if ((kind === 'artifact.create' || kind === 'revision.publish') &&
+          (await tx.query<{ready:boolean}>("SELECT to_regclass('loom.file_publication_refusals') IS NOT NULL AS ready",[])).rows[0]!.ready) {
           const refusal=(await tx.query<{request_digest:string}>('SELECT request_digest FROM loom.file_publication_refusals WHERE participant_id=$1 AND operation_kind=$2 AND idempotency_key=$3',[actor.participantId,kind,input.idempotency_key])).rows[0];
           if(refusal){if(refusal.request_digest!==digest)throw new PublicationError('idempotency_conflict');return new FileError('file_expired',true);}
+        }
+        if(input.file_set){
+          await fileGuard(tx);
           for(const member of input.file_set.files)if('upload_id' in member.source){
             const upload=await uploadRow(tx,member.source.upload_id,actor.participantId);
             if(!upload.prepared_valid||['expired','cleaning'].includes(upload.state)){
