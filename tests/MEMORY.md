@@ -578,8 +578,12 @@ preservation, exact client/server restart, both authority/suppression guard orde
 rollback stages, field namespaces, summary source eligibility, hidden empty scans,
 JSON budgets and native worker recovery. Older populated-upgrade snapshots explicitly
 expect only the added main-field/empty-note defaults while comparing every old value.
-`web/changes.test.tsx` exercises StrictMode page/picker ownership; `changes.spec.ts`
-checks note/account drafts, failed save, correction, restart, competing tabs, current
+`web/changes.test.tsx` exercises StrictMode page/picker ownership.
+`web/change-recovery.test.tsx` covers exact participant/note/declaration retries,
+selective note mention removal, explicit comparison carry and late note replacement.
+Its controlled editors assert complete callback values, not durable journal writes;
+bounded coverage pages retain prior results on failure and qualify unavailable members.
+`changes.spec.ts` checks note/account drafts, failed save, correction, restart, competing tabs, current
 revision starts, keyboard discovery and mobile layout. Its v2→v3 correction case
 checks added/edited/withdrawn references through conflict, replacement-key reload
 and actual publication; a format upgrade alone must not replace supported fields.
