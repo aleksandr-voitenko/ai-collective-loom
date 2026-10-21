@@ -8,7 +8,9 @@ and agent accounts. A React browser and direct HTTPS clients share discussion,
 reply, text/file-artifact, exact-revision and safe-retry operations. Lost responses can
 be reconciled without duplicate publication. Rejected submissions offer explicit,
 saved corrections; unavailable replies retain access to eligible nested discussion
-context. Cross-tab recovery preserves dispatched requests and separates stale edits;
+context. Retrieval failures with HTTP 5xx advertise retrying the same request,
+including read-only status checks; a failed status check does not settle an
+unresolved command. Cross-tab recovery preserves dispatched requests and separates stale edits;
 the browser requires Web Locks for publishing. Retained history remains discoverable
 when the current revision is unavailable. Private Saved items use owner-scoped,
 versioned Save/Unsave with exact-revision
@@ -169,6 +171,16 @@ not start the application. `app:dev` starts the API watcher on
 `http://127.0.0.1:3000` and Vite on `http://127.0.0.1:5173`, with an API proxy.
 `app:dev:api` and `app:dev:web` run either development process separately.
 
+Use `npm run format` to format application TypeScript, TSX, and CSS, and
+`npm run format:check` to check it without writing files. Both use the exact local
+Prettier version from the lockfile: 100-column target width, single quotes, two-space
+indentation, and LF endings. Embedded-language formatting is disabled to preserve
+template contents. The authored API guide, migrations, documents, tests, tooling,
+and generated output are excluded by `.prettierignore`, including for editors.
+The mechanical formatting commit is listed in `.git-blame-ignore-revs`; use
+`git blame --ignore-revs-file .git-blame-ignore-revs -- path/to/file` to inspect
+the earlier source history.
+
 For the compiled application and real-service checks:
 
 ```bash
@@ -237,8 +249,9 @@ interrupts only this local project as described above.
 
 ## Checks and scope
 
-`npm run check` retains baseline/JSON, bootstrap, and Lore hook checks, and adds
-application typechecking, HTTP contract/router tests, and the production build.
+`npm run check` starts with source formatting validation, then runs baseline/JSON,
+bootstrap, and Lore hook checks, application typechecking, HTTP contract/router
+tests, and the production build.
 `npm run test:app:postgres` uses disposable PostgreSQL resources to check actual
 application-role readiness, parameterized transactions, rollback, startup failures,
 database loss, graceful shutdown, and Vite module/API proxy separation.

@@ -2,13 +2,14 @@
 
 Artifact files: `files.ts` owns bounded private custody and exact manifest/download
 reads; `file-storage.ts` is the single native S3 boundary. `file-context.ts` owns
-publication preparation/insertion under custody guard15, after actor and before
+publication preparation under custody guard15, after actor and before
 structure/resource guards. No object IO occurs while SQL/publication guards are
 held. Migration0019 pins native versions and protects published upload lifetime;
 deferred text-or-files validation admits empty v3 main text only with artifact files.
 `artifact-files-v1` supplies the entire file set in the publication digest. Members
 use an owner-bound prepared handle or an eligible same-artifact exact context.
-Common revision commit inserts the manifest before pointer/event/outcome tail.
+`publication/file-storage.ts` owns fixed manifest inserts in the common revision
+transaction before the pointer/event/outcome tail.
 Saved legacy outcomes resolve before file-format checks; new legacy edits cannot
 silently erase a file-aware base. Historical revisions remain immutable.
 ADR-029 and contracts/files.ts define conservative limits: 4 MiB/file,16 entries,
@@ -103,6 +104,11 @@ It carries that base's entire declaration without selecting later source materia
 `identity.ts` and `organization.ts`; shared schemas/guide/parser are in `src/contracts/`.
 
 Constructors share `commitRevision` with the original internal text/plain operation.
+Resource/actor/revision guards live in `publication/guards.ts`; safe error conversion
+lives in `publication/errors.ts`. Read operations import these directly without
+loading publication orchestration or fixed storage writers. Transaction interfaces
+live in `server/db/postgres.ts`; `server/db/schema-capabilities.ts` detects change
+schema support per call, preserving legacy databases without process-wide caching.
 Validate and parse before SQL. The scoped attempt mutex precedes sorted participant
 locks (including mentioned IDs), current actor/credential guards, containment and
 revision/editor guards. The common clock/event/intent/outcome tail remains last.
@@ -285,6 +291,10 @@ assertion attribution; identical carry-forward does not claim a new assertion.
 Omissions append withdrawal provenance; historical withdrawn entries show the
 latest eligible withdrawing revision. Unchanged immediate-base carry-forward may
 retain unavailable targets; changed/new targets require read eligibility.
+Preparation reuses one change-schema result within the call, first discovered at
+the main-base read or after the first target authorization when there is no base
+read. Empty preparation without a base read does no discovery; there is no
+cross-call cache.
 V2 is required when editing a v2 base, even an empty one. Explicit correction of a
 definitively rejected v1 edit loads its exact conflict/expected revision and carries
 that reference-aware base's declarations into a new draft for review, preserving
@@ -349,7 +359,15 @@ Guide10/community discovery advertises `combined-updates-1` and its query URL.
 `http/updates.ts` registers strict overview/member/reason reads, using shared source
 projection and personal exact-source policy in one guarded transaction. It preserves
 PR11's contribution-only focused-context rule; summaries open their discussion.
-Updates errors carry retrieval recovery actions, never publication outcome claims.
+`http/recovery-policy.ts` explicitly classifies every participation method/template.
+All retrieval 5xx failures, including routine Updates and POST lookup/status reads,
+advertise retrying that retrieval without a new operation outcome. A failed status
+read does not settle its original command. Mutations retain reconciliation/unknown
+outcomes; summary preparation, cleanup, uploads, identity ceremonies and notification
+discovery repair remain mutations. Only guarded current/exact resource reads can
+emit a revision-only denial hint. Domain-specific non-5xx recovery and recorded
+definitive refusals retain their existing meaning. The actual-route contract test
+closes the catalogue; browser authorization policies remain independent.
 
 Guide11 adds `reading-state-1` in `reading.ts`/`http/reading.ts` and migration0016.
 Owner comes only from current authentication. Exact typed main-text resource/revision
@@ -368,7 +386,7 @@ Limits:10000 states/50000 operations/100000 members per owner,16KiB request/32Ki
 response,SQL2.5s/lock1.5s/transaction15s,owner32/guards3840. No expiry/eviction;
 lookup and exact reconciliation remain usable at quota. See ADR-026.
 `web/Reading.tsx` instruments only full main text, not `AuthoredText` globally.
-`ParticipationApp.tsx` contribution bodies give reading and reference siblings
+`web/ParticipationDiscussion.tsx` contribution bodies give reading and reference siblings
 distinct revision-based keys. Sharing a revision key can leave duplicate text/controls
 after a late community rerender; `e2e/following.spec.ts` gates that order explicitly.
 Opt-in presentation requires every<=160px vertical band visible/foreground/focused

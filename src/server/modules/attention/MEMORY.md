@@ -26,9 +26,13 @@ requires ready base grouping and, for filtered cursors, a complete attention
 projection at that cursor's policy version; over100 whole-card inputs fail without truncation.
 Explicit subsets must be represented; unexpanded personal members are included in
 whole-card sets. Current eligibility is rechecked for new decisions. Recorded exact
-retry/status resolves before selection expiry, missing grouping or quotas. Absent
-status remains uncertainty. Restoration uses current versions and leaves mutes.
+retry/status resolves before token opening, selection expiry, missing grouping or
+quotas. Absent status remains uncertainty. Restoration uses current versions and leaves mutes.
 Later revisions/deliveries cannot expand a command; continuing claims retain IDs.
+`token-payloads.ts` defines the two issued selection/list shapes checked after
+decryption to unknown. Malformed authenticated JSON is invalid_input; checking does not
+coerce fields, rewrite token bytes/digests or add grouping lookups. List tokens keep
+their collection/version/position format without a new instance or expiry binding.
 
 Lock order: attempt → current actor → attention owner → structure/full sorted
 resource plan → exact revisions → state/outcome/counters. Routine retrieval adds

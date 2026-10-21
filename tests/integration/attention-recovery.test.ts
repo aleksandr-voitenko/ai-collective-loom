@@ -8,6 +8,7 @@ import { fixture } from '../helpers/attention.js';
 import { gates } from '../helpers/updates-gates.js';
 import { barrier,blockedBy,bounded } from '../helpers/search-races.js';
 import { mentioned } from '../helpers/notifications.js';
+import { editUpdatesToken } from '../helpers/updates-token.js';
 
 test('populated 0016 upgrade preserves every prior table, exact retry and shared/personal/combined/reading contracts',{timeout:120000},async t=>{
   const f=await fixture(t,{throughMigration:16}),r=await f.participant('attention_upgrade'),a=await f.artifact(),d=await f.discussion();
@@ -15,6 +16,20 @@ test('populated 0016 upgrade preserves every prior table, exact retry and shared
   const read={idempotency_key:randomUUID(),basis:'manual',episode_id:null,targets:[{resource_id:a.resource_id,revision_id:a.revision_id,read:true,expected_version:0}]};
   assert.equal((await r.client.call('/api/v1/me/reading/state',read)).status,200);
   const personal=await f.page(r.client),shared=await f.changes(r.client),combined=await f.ready(r.client,{selection:'complete'});
+  // Exercise every legacy read path before attention tables exist, including
+  // retained-page and member renewal. A v2 join here must fail on the old schema.
+  assert.equal((await f.observer.query("SELECT to_regclass('loom.attention_groups') AS relation")).rows[0].relation,null);
+  const switched=await f.ready(r.client,{switch:{token:combined.page_cursor,selection:'highlights'}});
+  assert.ok(switched.items.length);
+  const members=await f.members(r.client,{cursor:switched.items[0]!.members_cursor});assert.ok(members.items.length);
+  const reasons=await r.client.call('/api/v1/me/updates/reasons',{cursor:switched.page_cursor,event_id:members.items[0]!.source.event_id});
+  assert.equal(reasons.status,200,JSON.stringify(reasons.body));assert.deepEqual(reasons.body,members.items[0]!.source);
+  const cursorKey=(await f.observer.query('SELECT cursor_key FROM loom.updates_state')).rows[0].cursor_key;
+  const renewed=await f.ready(r.client,{recovery:{action:'renew',token:editUpdatesToken(switched.page_cursor,cursorKey,b=>b.expires=0)}});
+  for(const field of ['id','scope','definitions','reason','shared','personal'] as const)assert.deepEqual(renewed.traversal[field],switched.traversal[field]);
+  const renewedMembers=await f.members(r.client,{cursor:editUpdatesToken(members.page_cursor,cursorKey,b=>b.expires=0),renew:true});
+  assert.deepEqual(renewedMembers.items,members.items);
+  assert.equal((await f.observer.query("SELECT to_regclass('loom.attention_views') AS relation")).rows[0].relation,null);
   const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' ORDER BY tablename")).rows.map(v=>v.tablename as string);
   const digest=async(name:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT ${name==='resources'?"'{\"lifecycle_version\":1}'::jsonb || " : ''}to_jsonb(t) row FROM loom.${name} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const name of tables)before.set(name,await digest(name));

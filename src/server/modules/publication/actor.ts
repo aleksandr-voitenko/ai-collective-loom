@@ -2,8 +2,13 @@ import { PublicationError } from './errors.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 declare const trustedActor: unique symbol;
-export interface ActorContext { readonly [trustedActor]: true }
-interface Identity { readonly participantId: string; readonly credentialId: string }
+export interface ActorContext {
+  readonly [trustedActor]: true;
+}
+interface Identity {
+  readonly participantId: string;
+  readonly credentialId: string;
+}
 const identities = new WeakMap<ActorContext, Identity>();
 
 /**
@@ -13,9 +18,16 @@ const identities = new WeakMap<ActorContext, Identity>();
  * normal application startup still exposes no participant authentication routes.
  */
 export function actorFromVerifiedIdentity(identity: Identity): ActorContext {
-  if (!uuid.test(identity.participantId) || !uuid.test(identity.credentialId)) throw new PublicationError('invalid_actor');
+  if (!uuid.test(identity.participantId) || !uuid.test(identity.credentialId))
+    throw new PublicationError('invalid_actor');
   const actor = Object.freeze({}) as ActorContext;
-  identities.set(actor, Object.freeze({ participantId: identity.participantId.toLowerCase(), credentialId: identity.credentialId.toLowerCase() }));
+  identities.set(
+    actor,
+    Object.freeze({
+      participantId: identity.participantId.toLowerCase(),
+      credentialId: identity.credentialId.toLowerCase(),
+    }),
+  );
   return actor;
 }
 

@@ -63,7 +63,12 @@ exercise this production call path. Mount shared readers in a real boundary in
 fixtures; a source denial requires host Retry, while a transient503 keeps local retry.
 `contract/response-classification.test.ts` compares all registered JSON operations
 and unavailable success fields with the endpoint catalogue. Schema arguments cannot
-choose error semantics. `web/saved-authorization.test.tsx` covers successful Saved
+choose error semantics. `contract/recovery-policy.test.ts` separately inventories
+actual participation routes and injects 500/503 failures before handlers: retrievals
+retry without mutation-outcome claims, while state-changing requests retain unknown
+outcomes. It covers automatic HEAD siblings, narrow revision hints, recorded
+definitive refusals, strict validation and conservative unclassified-route fallback.
+`web/saved-authorization.test.tsx` covers successful Saved
 denials across eight hosts, private receipt settlement behind a blocked Web Lock,
 Reading receipts, and mixed-response publication without restoring older content.
 The real Saved case pre-saves both mounted targets and requires no404, preventing
@@ -114,8 +119,12 @@ moves/unknown history, bounds and native COMMIT death/replacement recovery. Capa
 counter injections test boundaries, not a claim of 50,000 actual decisions. Expiry
 regressions combine descriptor expiry with changed policy, frozen Following/bounds
 and complete retrieval; explicit refresh renews only within original custody.
-Dismissal selection expiry remains independent. Browser/StrictMode regressions
-cover Undo against a newer dismissal, same-card conflict acknowledgement and
+Dismissal selection expiry remains independent.
+The native `attention-tokens.test.ts` independently encrypts malformed payloads,
+compares complete private-state snapshots after refusals, and checks both projections'
+issued payloads/digests/list continuations. Recorded applied and policy-conflict
+replays forbid token-key reads; valid expiry and collection errors stay distinct.
+Browser/StrictMode regressions cover Undo against a newer dismissal, same-card conflict acknowledgement and
 first-load settings Unmute. Undo must use original result versions even when an
 exact retry reports newer current versions; do not mock automatic rebasing as success.
 The 101-personal-input regression checks absent, partially scanned and old-policy
@@ -193,8 +202,12 @@ After reload, scope Attention settings navigation to Community navigation: Updat
 also has an in-page link. Updates readiness requires rendered interval/coverage
 details and enabled scope refresh; the initial idle toolbar can precede the first response.
 `web/attention.test.tsx` uses StrictMode and per-target conflict/success ordering;
-`unit/attention-recovery.test.ts` checks corrupt/oversized journal preservation,
-same-key command mismatch, lock-delayed departure and failed write readback rollback.
+`unit/recovery-storage.test.ts` applies the custody fault matrix to concrete Reading
+and Attention journals: corrupt/oversized records, UTF-8 bounds, exact commands,
+queued view/owner departure, failed writes/removal and event suppression. Rollback
+assertions preserve complete raw storage, including whitespace and unrelated keys.
+Shared Changes and both Updates prefixes also check failed first/successor saves;
+their map/sequence rules and Reading's automatic preference remain independent.
 `e2e/attention.spec.ts` uses the compiled normal runner, exact durable recovery,
 keyboard Undo/viewport, stale tabs and real Web Lock sign-out. Screenshots are
 explicit opt-in LOOM_ATTENTION_REVIEW_SCREENS=1 synthetic evidence. Updates browser
@@ -238,9 +251,12 @@ HTTPS cases move a child after its displayed preview, reorder old/new paths befo
 and after a denial, then suppress the current parent before an older uppercase
 Follow/mute command reaches the server. They require descendant withdrawal, stale
 response fencing and actual safe Unfollow/Unmute with confirmation.
-The uppercase navigation matrix awaits actual native request promises and drains
-their React effect waves before DOM assertions. Intentional race barriers stay
-outside that settlement set; a short DOM poll is not a native HTTPS deadline.
+The restoration and uppercase navigation matrices await actual native request
+promises and drain their React effect waves before DOM assertions. Await held-preview
+entry inside the event's act boundary: a preceding private lookup updates state
+before that entry. Release the held response separately to preserve race order.
+Intentional race barriers stay outside ordinary settlement; a short DOM poll is
+not a native HTTPS deadline.
 `web/query-authorization.test.tsx` drives the actual query hook through all eight
 boundary configurations, with settled and pending siblings, source/history
 denials, classified current/exact misses, invalid history cursors and owner denial.
@@ -287,6 +303,11 @@ and coverage rather than ciphertext equality. Continuing unchanged main mentions
 does not generate another signal; revision-note mentions retain exact-revision identity.
 `web/updates.test.tsx` covers development StrictMode, separate expansion budgets,
 failed storage, stale tabs, route/filter/identity fencing and policy withdrawal.
+`web/updates-recovery.test.tsx` pages structural matching reasons with exact member
+cursors and offsets, suppresses duplicate requests and retries transient failures
+without advancing the saved view. Failed or held collapse saves retain expansion;
+successful close restores focus and fences a late reason response. Independent
+publication and routine-view journals remain byte-for-byte unchanged.
 `e2e/updates.spec.ts` uses the normal Chromium runner, real API/native worker,
 twenty-reply group, summary context/exact history, reload/back, focus, narrow layout
 and sign-out blocked on cleanup. Deliberate screenshots use
@@ -310,6 +331,10 @@ ancestor impacts, fixed clock/definition capture, both authority guard orders,
 completed-checkpoint restoration, bounded scans/bytes/quotas, unknown public work,
 history floor/epoch and native client/API restart. Shared reads run without consumers;
 a later repaired personal delivery stays independently retrievable. Build first.
+`following-collection.test.ts` separately traverses legacy/private collection pages
+against complete expected choices in retained target-ID order. Owner/tamper refusals,
+exact replay versus fresh-choice invalidation, and API restart preserve private rows;
+the same restart retains an independent shared Changes checkpoint.
 Unknown-work fixtures include contributions/summaries without companion rows but
 with known discussion owners: both explicit and followed scopes stay incomplete,
 while suppressed work and unrelated scopes preserve ordinary eligibility.
@@ -318,6 +343,10 @@ every prior column remains compared. Reverse publisher preparation with independ
 discussion creates: artifact creates also serialize existing editor-set invalidation.
 `web/following.test.tsx` uses development StrictMode. Keep explicit-scope controls
 outside keyed result remounts; changing a checkbox must preserve open controls/focus.
+`web/shared-changes.test.tsx` exercises multiple reason pages against the displayed
+cursor without advancing its durable checkpoint. Detail retries, invalidation and
+late ownership changes remain separate from main-page recovery. Baseline inventory
+links appear only after journal save; held locks and failed writes preserve the old page.
 URL-backed controlled checkboxes commit with router flushSync; the deferred transition
 otherwise restores the old checked value during native interaction. Rebuild before
 compiled-browser verification; this harness does not build automatically.
@@ -371,6 +400,11 @@ measurements, HTTPS/native search and fsynced external-client/server restart.
 from the production Chromium bundle. Keep `references.spec.ts` legacy-correction
 regressions in the complete normal suite. Source metadata probes cap 101; the
 shared owner guard expansion has its independent 3840 bound, not the source cap.
+`web/summary-recovery.test.tsx` covers maintenance filters/continuations and editor
+affordances, exact source selection, bounded unknown comparisons and late inspection
+responses. Preparation draft-attachment/removal/settlement faults preserve exact requests until
+durable recovery. Fixtures must retain scan-limit and prior-declaration semantics;
+an author's source declaration never establishes reading or correctness.
 Summary browser regressions revisit a completed edit for another revision, retain
 the old record on fetch/save failures, preserve current content and coverage after
 reload, publish a Unicode-boundary default title, and refresh creation in place.
@@ -481,6 +515,11 @@ extra cleanup. The PostgreSQL/Chromium fixture serves the production bundle and
 does not exercise that development lifecycle. Community-wide proposal recovery
 checks cover both drafts and lost committed responses after the destination is
 closed or unconfigured, retaining the original request and administrator fallback.
+`web/organization-recovery.test.tsx` separately exercises selected status and exact
+retry, original/current result display, and late status ownership. Real journal
+faults preserve blocked drafts and rejected originals through review/correction;
+resolved removal is selective. Context retries retain authored bytes and never
+dispatch a replacement command automatically.
 
 Search scenarios extend the same closed diagnostics with `search.spec.ts`, search/
 authors/status/admin route templates and search/refresh controls. Queries and cursors are
@@ -521,6 +560,9 @@ known-target selection without search, native worker restart/rebuild, bounded
 hidden-candidate paging and source/target/credential races. SQL barriers and
 `pg_blocking_pids` establish both commit orders. `references-client.test.ts` also
 restarts the standalone fsynced client and checks UTF-8/JSON/statement limits.
+`unit/reference-preparation.test.ts` checks at most one schema lookup per preparation,
+complete current/legacy provenance, and discovery after target authorization when
+there is no base read. Empty inputs and independent subsequent calls remain distinct.
 `web/references.test.tsx` exercises development StrictMode; Chromium scenarios
 cover exact navigation, correction, failed autosave, stale tabs, persistent restart,
 page recovery and late route/account results. Observe the failed dispatch leaving
@@ -531,14 +573,22 @@ comparison-load/save failures and reload. These differ from the already-committe
 v1 replay scenario. The comparison failure and rejection notices need exact text selectors when both show.
 Closed diagnostics add `references.spec.ts`, three route
 templates and Add/Check/Refresh controls, without changing bounds or raw containment.
+`web/composer-recovery.test.tsx` awaits actual journal writes under Web Locks before
+mention remount/removal assertions. Status misses and transient failures preserve
+uncertain bodies; recorded file expiry through status or exact retry cannot unlock
+correction until rejection is durably saved. Independent drafts stay untouched.
 
 Change notes/accounts use `changes*.test.ts`: populated pre-0011 old-column/digest
 preservation, exact client/server restart, both authority/suppression guard orders,
 rollback stages, field namespaces, summary source eligibility, hidden empty scans,
 JSON budgets and native worker recovery. Older populated-upgrade snapshots explicitly
 expect only the added main-field/empty-note defaults while comparing every old value.
-`web/changes.test.tsx` exercises StrictMode page/picker ownership; `changes.spec.ts`
-checks note/account drafts, failed save, correction, restart, competing tabs, current
+`web/changes.test.tsx` exercises StrictMode page/picker ownership.
+`web/change-recovery.test.tsx` covers exact participant/note/declaration retries,
+selective note mention removal, explicit comparison carry and late note replacement.
+Its controlled editors assert complete callback values, not durable journal writes;
+bounded coverage pages retain prior results on failure and qualify unavailable members.
+`changes.spec.ts` checks note/account drafts, failed save, correction, restart, competing tabs, current
 revision starts, keyboard discovery and mobile layout. Its v2→v3 correction case
 checks added/edited/withdrawn references through conflict, replacement-key reload
 and actual publication; a format upgrade alone must not replace supported fields.

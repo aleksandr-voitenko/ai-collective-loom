@@ -12,7 +12,7 @@ import { IdentityAuthentication } from "../../src/server/modules/identity/authen
 import { syntheticIdentityPolicy } from "../../src/server/participation-profile.js";
 import { verifier } from "../../src/server/modules/identity/secrets.js";
 import { createApplication } from "../../src/server/http/app.js";
-import type { Transactions } from "../../src/server/modules/publication/publication.js";
+import type { Transactions } from '../../src/server/db/postgres.js';
 
 export async function syntheticServer(
   options: {

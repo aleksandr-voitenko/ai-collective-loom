@@ -15,7 +15,9 @@ test('file-only package publishes nested paths, downloads passive exact bytes an
   await page.getByRole('button',{name:'Upload and prepare chapters/café #?%.html',exact:true}).click();
   await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
   const draft=await journal(page,'artifact.create');expect(draft.body.content.text).toBe('');expect(draft.body.file_set.files).toHaveLength(1);
-  await page.getByLabel('File path 1').fill('');await page.reload();await expect(page.getByLabel('File path 1')).toHaveValue('');
+  await page.getByLabel('File path 1').fill('');
+  await expect.poll(async()=>(await journal(page,'artifact.create',draft.key))?.body.file_set.files[0].path).toBe('');
+  await page.reload();await expect(page.getByLabel('File path 1')).toHaveValue('');
   await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Invalid relative file path');
   expect((await journal(page,'artifact.create')).state).toBe('draft');
   await page.getByLabel('File path 1').fill('chapters/café #?%.html');

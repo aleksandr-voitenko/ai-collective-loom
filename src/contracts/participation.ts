@@ -1,8 +1,8 @@
-import { Type, type Static } from "@sinclair/typebox";
-import {FileSet} from "./files.js";
+import { Type, type Static } from '@sinclair/typebox';
+import { FileSet } from './files.js';
 
-export const contractVersion = "participation-1";
-export const guideRevision = "14";
+export const contractVersion = 'participation-1';
+export const guideRevision = '14';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -19,33 +19,48 @@ export const limits = Object.freeze({
 });
 export const closed = { additionalProperties: false };
 export const UUID = Type.String({
-  pattern:
-    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+  pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
 });
 export const NullableId = Type.Union([UUID, Type.Null()]);
 export const Title = Type.String({ minLength: 1, maxLength: 160 });
-export const ReferenceTarget = Type.Object({
-  kind: Type.Union([Type.Literal("discussion"), Type.Literal("contribution"), Type.Literal("artifact"), Type.Literal("summary")]),
-  resource_id: UUID,
-  revision_id: Type.Optional(UUID),
-}, closed);
-export const Relationship = Type.Union([Type.Null(), Type.Literal("related_to"), Type.Literal("builds_on"), Type.Literal("contradicts")]);
-export const ReferenceDeclaration = Type.Object({
-  reference_id: UUID,
-  target: ReferenceTarget,
-  relationship: Relationship,
-  rationale: Type.Union([Type.Null(), Type.String({ maxLength: limits.rationaleBytes })]),
-}, closed);
+export const ReferenceTarget = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal('discussion'),
+      Type.Literal('contribution'),
+      Type.Literal('artifact'),
+      Type.Literal('summary'),
+    ]),
+    resource_id: UUID,
+    revision_id: Type.Optional(UUID),
+  },
+  closed,
+);
+export const Relationship = Type.Union([
+  Type.Null(),
+  Type.Literal('related_to'),
+  Type.Literal('builds_on'),
+  Type.Literal('contradicts'),
+]);
+export const ReferenceDeclaration = Type.Object(
+  {
+    reference_id: UUID,
+    target: ReferenceTarget,
+    relationship: Relationship,
+    rationale: Type.Union([Type.Null(), Type.String({ maxLength: limits.rationaleBytes })]),
+  },
+  closed,
+);
 export type ReferenceTargetValue = Static<typeof ReferenceTarget>;
 export type ReferenceValue = Static<typeof ReferenceDeclaration>;
 export const LegacyContent = Type.Object(
   {
-    format: Type.Literal("loom-markdown-v1"),
+    format: Type.Literal('loom-markdown-v1'),
     text: Type.String({ minLength: 1, maxLength: limits.textBytes }),
     mentions: Type.Array(
       Type.Object(
         {
-          token: Type.String({ pattern: "^[a-z][a-z0-9_]{0,31}$" }),
+          token: Type.String({ pattern: '^[a-z][a-z0-9_]{0,31}$' }),
           participant_id: UUID,
         },
         closed,
@@ -55,33 +70,86 @@ export const LegacyContent = Type.Object(
   },
   closed,
 );
-export const ReferencedContent = Type.Object({
-  ...LegacyContent.properties,
-  format: Type.Literal("loom-markdown-v2"),
-  references: Type.Array(ReferenceDeclaration, { maxItems: limits.references }),
-}, closed);
-export const ChangeContent = Type.Object({ ...ReferencedContent.properties, text:Type.String({maxLength:limits.textBytes}), format: Type.Literal("loom-markdown-v3") }, {...closed, description: 'V3 publication requests require explicit top-level change_note and change_account (null when absent). V1/v2 requests reject those fields. Combined authored fields retain the 16384 UTF-8 byte ceiling.'});
+export const ReferencedContent = Type.Object(
+  {
+    ...LegacyContent.properties,
+    format: Type.Literal('loom-markdown-v2'),
+    references: Type.Array(ReferenceDeclaration, { maxItems: limits.references }),
+  },
+  closed,
+);
+export const ChangeContent = Type.Object(
+  {
+    ...ReferencedContent.properties,
+    text: Type.String({ maxLength: limits.textBytes }),
+    format: Type.Literal('loom-markdown-v3'),
+  },
+  {
+    ...closed,
+    description:
+      'V3 publication requests require explicit top-level change_note and change_account (null when absent). V1/v2 requests reject those fields. Combined authored fields retain the 16384 UTF-8 byte ceiling.',
+  },
+);
 export const Content = Type.Union([LegacyContent, ReferencedContent, ChangeContent]);
 export type AuthoredContent = Static<typeof Content>;
 export type NoteContent = Static<typeof ReferencedContent>;
-export const ExactChangeTarget = Type.Object({
-  kind: Type.Union([Type.Literal('contribution'), Type.Literal('artifact'), Type.Literal('summary')]),
-  resource_id: UUID, revision_id: UUID,
-}, closed);
+export const ExactChangeTarget = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal('contribution'),
+      Type.Literal('artifact'),
+      Type.Literal('summary'),
+    ]),
+    resource_id: UUID,
+    revision_id: UUID,
+  },
+  closed,
+);
 export type ExactChangeTargetValue = Static<typeof ExactChangeTarget>;
 export const ChangeAccount = Type.Union([
-  Type.Object({ revisions: Type.Array(ExactChangeTarget, { minItems: 1, maxItems: limits.changeMembers }) }, closed),
+  Type.Object(
+    { revisions: Type.Array(ExactChangeTarget, { minItems: 1, maxItems: limits.changeMembers }) },
+    closed,
+  ),
   Type.Object({ carry_forward_revision_id: UUID }, closed),
 ]);
 export type ChangeAccountValue = Static<typeof ChangeAccount>;
 export const changeFields = {
-  change_note: Type.Optional(Type.Union([Type.Object({...ReferencedContent.properties, text:Type.String({minLength:1,maxLength:limits.noteBytes})}, {...closed,description:"Revision-owned note, at most 4096 UTF-8 bytes including rationales; only artifacts and summaries."}), Type.Null()])),
+  change_note: Type.Optional(
+    Type.Union([
+      Type.Object(
+        {
+          ...ReferencedContent.properties,
+          text: Type.String({ minLength: 1, maxLength: limits.noteBytes }),
+        },
+        {
+          ...closed,
+          description:
+            'Revision-owned note, at most 4096 UTF-8 bytes including rationales; only artifacts and summaries.',
+        },
+      ),
+      Type.Null(),
+    ]),
+  ),
   change_account: Type.Optional(Type.Union([ChangeAccount, Type.Null()])),
 };
 const attempt = { idempotency_key: UUID };
 export const DiscussionInput = Type.Object(
-  { ...attempt, ...changeFields, area_id: UUID, title: Title, content: Content,
-    proposal_context: Type.Optional(Type.Object({ affected_area_id: Type.Optional(UUID), expected_settings_version: Type.Integer({ minimum: 0 }) }, closed)),
+  {
+    ...attempt,
+    ...changeFields,
+    area_id: UUID,
+    title: Title,
+    content: Content,
+    proposal_context: Type.Optional(
+      Type.Object(
+        {
+          affected_area_id: Type.Optional(UUID),
+          expected_settings_version: Type.Integer({ minimum: 0 }),
+        },
+        closed,
+      ),
+    ),
   },
   closed,
 );
@@ -90,7 +158,14 @@ export const ReplyInput = Type.Object(
   closed,
 );
 export const ArtifactInput = Type.Object(
-  { ...attempt, ...changeFields, area_id: UUID, title: Title, content: Content, file_set:Type.Optional(FileSet) },
+  {
+    ...attempt,
+    ...changeFields,
+    area_id: UUID,
+    title: Title,
+    content: Content,
+    file_set: Type.Optional(FileSet),
+  },
   closed,
 );
 export const RevisionInput = Type.Object(
@@ -99,7 +174,7 @@ export const RevisionInput = Type.Object(
     ...changeFields,
     resource_id: UUID,
     expected_revision_id: UUID,
-    file_set:Type.Optional(FileSet),
+    file_set: Type.Optional(FileSet),
     title: Type.Union([Title, Type.Null()]),
     content: Content,
   },
@@ -118,11 +193,11 @@ export const SetupInput = Type.Object(
 );
 export const PublicationKind = Type.Union(
   [
-    "discussion.create",
-    "reply.create",
-    "artifact.create",
-    "revision.publish",
-    "community.setup",
+    'discussion.create',
+    'reply.create',
+    'artifact.create',
+    'revision.publish',
+    'community.setup',
   ].map((kind) => Type.Literal(kind)),
 );
 export const StatusInput = Type.Object(
@@ -151,8 +226,8 @@ export const EditorsInput = Type.Object(
 export const PageInput = Type.Object(
   {
     cursor: Type.Optional(Type.String({ maxLength: 1024 })),
-    limit: Type.Optional(Type.String({ pattern: "^(?:[1-9]|1[0-9]|2[0-5])$" })),
-    max_response_bytes: Type.Optional(Type.String({ pattern: "^[0-9]{4,6}$" })),
+    limit: Type.Optional(Type.String({ pattern: '^(?:[1-9]|1[0-9]|2[0-5])$' })),
+    max_response_bytes: Type.Optional(Type.String({ pattern: '^[0-9]{4,6}$' })),
   },
   closed,
 );
@@ -162,11 +237,8 @@ export const BudgetInput = Type.Object(
 );
 export const Committed = Type.Object(
   {
-    publication_state: Type.Literal("committed"),
-    idempotency: Type.Union([
-      Type.Literal("created"),
-      Type.Literal("replayed"),
-    ]),
+    publication_state: Type.Literal('committed'),
+    idempotency: Type.Union([Type.Literal('created'), Type.Literal('replayed')]),
     operation_id: UUID,
     resource_id: UUID,
     revision_id: UUID,
@@ -175,7 +247,7 @@ export const Committed = Type.Object(
 );
 export const Reconciled = Type.Union([
   Committed,
-  Type.Object({ operation_state: Type.Literal("not_recorded") }, closed),
+  Type.Object({ operation_state: Type.Literal('not_recorded') }, closed),
 ]);
 export const Participant = Type.Object(
   { id: UUID, nickname: Type.String(), kind: Type.String() },
@@ -210,25 +282,40 @@ export const Revision = Type.Object(
       maxItems: limits.mentions,
     }),
     current_revision_id: NullableId,
-    file_set:Type.Optional(Type.Object({...FileSet.properties,manifest_url:Type.String()},closed)),
-    change_note: Type.Optional(Type.Object({ state: Type.Union([Type.Literal('absent'), Type.Literal('available')]), full_content_url: Type.String() }, closed)),
-    change_account: Type.Optional(Type.Object({ state: Type.Union([Type.Literal('absent'), Type.Literal('declared')]), coverage_url: Type.String() }, closed)),
+    file_set: Type.Optional(
+      Type.Object({ ...FileSet.properties, manifest_url: Type.String() }, closed),
+    ),
+    change_note: Type.Optional(
+      Type.Object(
+        {
+          state: Type.Union([Type.Literal('absent'), Type.Literal('available')]),
+          full_content_url: Type.String(),
+        },
+        closed,
+      ),
+    ),
+    change_account: Type.Optional(
+      Type.Object(
+        {
+          state: Type.Union([Type.Literal('absent'), Type.Literal('declared')]),
+          coverage_url: Type.String(),
+        },
+        closed,
+      ),
+    ),
   },
   closed,
 );
 export const UnavailableContribution = Type.Object(
   {
     resource_id: UUID,
-    state: Type.Literal("unavailable"),
+    state: Type.Literal('unavailable'),
     discussion_id: UUID,
     parent_id: NullableId,
   },
   closed,
 );
-export const ContributionContext = Type.Union([
-  Revision,
-  UnavailableContribution,
-]);
+export const ContributionContext = Type.Union([Revision, UnavailableContribution]);
 export type ContributionContextView = Static<typeof ContributionContext>;
 export const Area = Type.Object(
   {
@@ -239,10 +326,7 @@ export const Area = Type.Object(
   },
   closed,
 );
-export const Discussion = Type.Object(
-  { id: UUID, area: Area, opening: Resource },
-  closed,
-);
+export const Discussion = Type.Object({ id: UUID, area: Area, opening: Resource }, closed);
 export const Page = Type.Object(
   {
     items: Type.Array(
@@ -250,16 +334,13 @@ export const Page = Type.Object(
         Resource,
         Area,
         Participant,
-        Type.Object(
-          { resource_id: UUID, state: Type.Literal("unavailable") },
-          closed,
-        ),
+        Type.Object({ resource_id: UUID, state: Type.Literal('unavailable') }, closed),
       ]),
       { maxItems: limits.pageItems },
     ),
     scope: Type.String(),
-    representation: Type.Literal("metadata"),
-    omitted_detail: Type.Literal("bodies"),
+    representation: Type.Literal('metadata'),
+    omitted_detail: Type.Literal('bodies'),
     next_cursor: Type.Union([Type.String(), Type.Null()]),
     complete: Type.Boolean(),
     work_budget_reached: Type.Boolean(),
@@ -271,9 +352,9 @@ export const Page = Type.Object(
 const Designation = Type.Object(
   {
     state: Type.Union([
-      Type.Literal("ready"),
-      Type.Literal("setup_incomplete"),
-      Type.Literal("unavailable"),
+      Type.Literal('ready'),
+      Type.Literal('setup_incomplete'),
+      Type.Literal('unavailable'),
     ]),
     resource_id: Type.Optional(UUID),
     revision_id: Type.Optional(UUID),
@@ -286,7 +367,7 @@ export const Onboarding = Type.Object(
     instance_id: UUID,
     contract_version: Type.Literal(contractVersion),
     guide_revision: Type.Literal(guideRevision),
-    profile: Type.Literal("synthetic"),
+    profile: Type.Literal('synthetic'),
     community_name: Type.String(),
     settings_version: Type.Integer(),
     overview: Designation,
@@ -297,17 +378,17 @@ export const Onboarding = Type.Object(
     openapi_url: Type.String(),
     limits: Type.Object(
       {
-        ...Object.fromEntries(
-          Object.keys(limits).map((key) => [key, Type.Integer()]),
-        ),
+        ...Object.fromEntries(Object.keys(limits).map((key) => [key, Type.Integer()])),
       },
       closed,
     ),
     replay_retention: Type.Literal(
-      "retained_without_automatic_expiry; destructive_restore_unsupported",
+      'retained_without_automatic_expiry; destructive_restore_unsupported',
     ),
-    derived_effects: Type.Literal("search_and_personal_direct_attention; other_projections_disabled"),
-    updates_contract: Type.Literal("combined-updates-1"),
+    derived_effects: Type.Literal(
+      'search_and_personal_direct_attention; other_projections_disabled',
+    ),
+    updates_contract: Type.Literal('combined-updates-1'),
     attention_contract: Type.Literal('attention-controls-1'),
     moderation_contract: Type.Literal('moderation-state-1'),
     moderation_url: Type.Literal('/api/v1/admin/moderation/targets'),
@@ -316,13 +397,13 @@ export const Onboarding = Type.Object(
     routine_updates_url: Type.Literal('/api/v1/me/routine-updates/query'),
     reading_contract: Type.Literal('reading-state-1'),
     reading_url: Type.Literal('/api/v1/me/reading/lookup'),
-    updates_url: Type.Literal("/api/v1/me/updates/query"),
-    notification_contract: Type.Literal("personal-attention-1"),
-    notifications_url: Type.Literal("/api/v1/me/notifications/query"),
-    following_contract: Type.Literal("following-1"),
-    following_url: Type.Literal("/api/v1/me/following"),
-    shared_changes_contract: Type.Literal("shared-changes-1"),
-    shared_changes_url: Type.Literal("/api/v1/shared-changes/query"),
+    updates_url: Type.Literal('/api/v1/me/updates/query'),
+    notification_contract: Type.Literal('personal-attention-1'),
+    notifications_url: Type.Literal('/api/v1/me/notifications/query'),
+    following_contract: Type.Literal('following-1'),
+    following_url: Type.Literal('/api/v1/me/following'),
+    shared_changes_contract: Type.Literal('shared-changes-1'),
+    shared_changes_url: Type.Literal('/api/v1/shared-changes/query'),
   },
   closed,
 );
@@ -336,7 +417,9 @@ export const ParticipationError = Type.Object(
         current_revision_id: Type.Optional(NullableId),
         unavailable_scope: Type.Optional(Type.Literal('revision')),
         minimum_response_bytes: Type.Optional(Type.Integer()),
-        operation_outcome: Type.Optional(Type.Union([Type.Literal("unknown"),Type.Literal("rejected")])),
+        operation_outcome: Type.Optional(
+          Type.Union([Type.Literal('unknown'), Type.Literal('rejected')]),
+        ),
         recovery: Type.Object({ action: Type.String() }, closed),
       },
       closed,

@@ -11,6 +11,12 @@ complete fetching never mark sources read, hide read entries or change these tok
 projection and personal reason/item/projection policy in one REPEATABLE READ
 transaction. Authenticate first; capture Following under its owner guard; capture
 both distinct committed clocks, visibility generations and epochs coherently.
+`retrieval.ts` keeps the SQL, authorization and endpoint-specific recovery order
+explicit. `descriptors.ts` owns compact tokens, continuity and query/interval binding;
+`presentation.ts` computes traversal fingerprints and already-authorized group facts.
+Shared descriptor/row types and the safe error class live in `model.ts` and
+`errors.ts`, so helpers do not import the orchestrator. Named combined/routine modes
+preserve default v1 and explicit v2; only v1 guarantees no attention-table SQL.
 Never derive personal progress from a shared position/time. Default scope is the
 union, not all activity in personally mentioned discussions. Explicit shared target
 substitutes for Following; personal-only removes shared input. Reason filter is bound.
