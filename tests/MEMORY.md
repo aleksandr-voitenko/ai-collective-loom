@@ -395,6 +395,11 @@ measurements, HTTPS/native search and fsynced external-client/server restart.
 from the production Chromium bundle. Keep `references.spec.ts` legacy-correction
 regressions in the complete normal suite. Source metadata probes cap 101; the
 shared owner guard expansion has its independent 3840 bound, not the source cap.
+`web/summary-recovery.test.tsx` covers maintenance filters/continuations and editor
+affordances, exact source selection, bounded unknown comparisons and late inspection
+responses. Preparation draft-attachment/removal/settlement faults preserve exact requests until
+durable recovery. Fixtures must retain scan-limit and prior-declaration semantics;
+an author's source declaration never establishes reading or correctness.
 Summary browser regressions revisit a completed edit for another revision, retain
 the old record on fetch/save failures, preserve current content and coverage after
 reload, publish a Unicode-boundary default title, and refresh creation in place.
