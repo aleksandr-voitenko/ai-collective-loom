@@ -1,0 +1,163 @@
+export type ParticipationRecoveryPolicy = 'retrieval' | 'revision-retrieval' | 'mutation';
+type Route = `${'GET' | 'POST'} /api/v1/${string}`;
+
+const policies = new Map<Route, ParticipationRecoveryPolicy>();
+function add(policy: ParticipationRecoveryPolicy, routes: readonly Route[]) {
+  for (const route of routes) {
+    if (policies.has(route)) throw new Error('Duplicate participation recovery policy: ' + route);
+    policies.set(route, policy);
+  }
+}
+
+// Use Fastify's registered method/template, never a request-path prefix. The
+// contract inventory requires an explicit policy for every participation route.
+add('retrieval', [
+  'GET /api/v1/admin/moderation/audit',
+  'GET /api/v1/admin/moderation/resources/:id',
+  'GET /api/v1/admin/moderation/targets',
+  'GET /api/v1/admin/notifications/failures',
+  'GET /api/v1/admin/notifications/health',
+  'GET /api/v1/admin/search/failures',
+  'GET /api/v1/admin/search/health',
+  'GET /api/v1/areas',
+  'GET /api/v1/areas/:id',
+  'GET /api/v1/areas/:id/artifacts',
+  'GET /api/v1/areas/:id/discussions',
+  'GET /api/v1/areas/:id/metadata-history',
+  'GET /api/v1/areas/:id/proposal-route',
+  'GET /api/v1/artifacts',
+  'GET /api/v1/artifacts/:id/revisions/:revision/files',
+  'GET /api/v1/artifacts/:id/revisions/:revision/files/:file/download',
+  'GET /api/v1/changes',
+  'GET /api/v1/community',
+  'GET /api/v1/contacts',
+  'GET /api/v1/contributions/:id/ancestors',
+  'GET /api/v1/contributions/:id/children',
+  'GET /api/v1/contributions/:id/context',
+  'GET /api/v1/discussions/:id',
+  'GET /api/v1/discussions/:id/summary',
+  'GET /api/v1/discussions/:id/summary-sources',
+  'GET /api/v1/file-uploads/:id',
+  'GET /api/v1/guide',
+  'GET /api/v1/identity/accounts',
+  'GET /api/v1/identity/audit',
+  'GET /api/v1/identity/credentials',
+  'GET /api/v1/identity/self',
+  'GET /api/v1/me/following',
+  'GET /api/v1/me/following/private',
+  'GET /api/v1/me/notifications/:id',
+  'GET /api/v1/me/saved-items',
+  'GET /api/v1/organization/audit',
+  'GET /api/v1/organization/children',
+  'GET /api/v1/organization/destinations',
+  'GET /api/v1/organization/resources/:id',
+  'GET /api/v1/participants',
+  'GET /api/v1/references/incoming',
+  'GET /api/v1/references/target',
+  'GET /api/v1/resources/:id/editors',
+  'GET /api/v1/resources/:id/history',
+  'GET /api/v1/resources/:id/revisions/:revision/change-coverage',
+  'GET /api/v1/resources/:id/revisions/:revision/change-note',
+  'GET /api/v1/resources/:id/revisions/:revision/references',
+  'GET /api/v1/search',
+  'GET /api/v1/search/authors',
+  'GET /api/v1/search/status',
+  'GET /api/v1/summaries/:id/revisions/:revision/coverage',
+  'GET /api/v1/summaries/:id/revisions/:revision/members',
+  'GET /api/v1/summaries/:id/revisions/:revision/sources',
+  'GET /api/v1/summaries/maintenance',
+  'GET /api/v1/summary-preparations/:id',
+  'GET /api/v1/summary-preparations/:id/members',
+  'POST /api/v1/admin/moderation/status',
+  'POST /api/v1/file-uploads/status',
+  'POST /api/v1/identity/reconcile',
+  'POST /api/v1/me/attention/dismissals/lookup',
+  'POST /api/v1/me/attention/list',
+  'POST /api/v1/me/attention/mutes/lookup',
+  'POST /api/v1/me/attention/previews',
+  'POST /api/v1/me/attention/private/dismissals/lookup',
+  'POST /api/v1/me/attention/private/list',
+  'POST /api/v1/me/attention/private/mutes/lookup',
+  'POST /api/v1/me/attention/private/status',
+  'POST /api/v1/me/attention/status',
+  'POST /api/v1/me/following/lookup',
+  'POST /api/v1/me/following/private/lookup',
+  'POST /api/v1/me/following/private/status',
+  'POST /api/v1/me/following/status',
+  'POST /api/v1/me/notifications/query',
+  'POST /api/v1/me/reading/lookup',
+  'POST /api/v1/me/reading/status',
+  'POST /api/v1/me/routine-updates/members',
+  'POST /api/v1/me/routine-updates/query',
+  'POST /api/v1/me/routine-updates/reasons',
+  'POST /api/v1/me/routine-updates/selection',
+  'POST /api/v1/me/saved-items/lookup',
+  'POST /api/v1/me/saved-items/status',
+  'POST /api/v1/me/updates/members',
+  'POST /api/v1/me/updates/query',
+  'POST /api/v1/me/updates/reasons',
+  'POST /api/v1/operations/status',
+  'POST /api/v1/organization/status',
+  'POST /api/v1/shared-changes/detail',
+  'POST /api/v1/shared-changes/query',
+  'POST /api/v1/summaries/status',
+]);
+
+// Only guarded current/exact resource reads can certify a revision-only miss.
+add('revision-retrieval', [
+  'GET /api/v1/resources/:id',
+  'GET /api/v1/resources/:id/revisions/:revision',
+]);
+
+// Preparation, cleanup and identity ceremonies can change durable state even
+// though they do not publish shared content. Read-only status routes above cannot
+// establish a new mutation outcome or settle the original command's uncertainty.
+add('mutation', [
+  'POST /api/v1/admin/moderation/state',
+  'POST /api/v1/admin/notifications/reconcile',
+  'POST /api/v1/admin/notifications/retry',
+  'POST /api/v1/admin/search/rebuild',
+  'POST /api/v1/admin/search/retry',
+  'POST /api/v1/artifacts',
+  'POST /api/v1/community/settings',
+  'POST /api/v1/community/setup',
+  'POST /api/v1/discussions',
+  'POST /api/v1/editors',
+  'POST /api/v1/file-uploads',
+  'POST /api/v1/file-uploads/:id/bytes',
+  'POST /api/v1/file-uploads/:id/finalize',
+  'POST /api/v1/file-uploads/cleanup',
+  'POST /api/v1/identity/accounts',
+  'POST /api/v1/identity/credentials',
+  'POST /api/v1/identity/logout',
+  'POST /api/v1/identity/register/finish',
+  'POST /api/v1/identity/register/start',
+  'POST /api/v1/identity/rename',
+  'POST /api/v1/identity/revoke',
+  'POST /api/v1/identity/signin/finish',
+  'POST /api/v1/identity/signin/start',
+  'POST /api/v1/identity/state',
+  'POST /api/v1/me/attention/dismissals/state',
+  'POST /api/v1/me/attention/mutes/state',
+  'POST /api/v1/me/attention/private/dismissals/state',
+  'POST /api/v1/me/attention/private/mutes/state',
+  'POST /api/v1/me/following/private/state',
+  'POST /api/v1/me/following/state',
+  'POST /api/v1/me/reading/state',
+  'POST /api/v1/me/saved-items/state',
+  'POST /api/v1/organization/changes',
+  'POST /api/v1/replies',
+  'POST /api/v1/revisions',
+  'POST /api/v1/summaries',
+  'POST /api/v1/summaries/editors',
+  'POST /api/v1/summary-preparations',
+  'POST /api/v1/summary-preparations/cleanup',
+  'POST /api/v1/summary-revisions',
+]);
+
+export const participationRecoveryPolicies: ReadonlyMap<string, ParticipationRecoveryPolicy> = policies;
+
+export function participationRecoveryPolicy(method: string, template: string | undefined) {
+  // Fastify automatically registers HEAD siblings for GET routes.
+  return participationRecoveryPolicies.get(`${method === 'HEAD' ? 'GET' : method} ${template}`);
+}

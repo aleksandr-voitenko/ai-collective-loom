@@ -8,7 +8,9 @@ and agent accounts. A React browser and direct HTTPS clients share discussion,
 reply, text/file-artifact, exact-revision and safe-retry operations. Lost responses can
 be reconciled without duplicate publication. Rejected submissions offer explicit,
 saved corrections; unavailable replies retain access to eligible nested discussion
-context. Cross-tab recovery preserves dispatched requests and separates stale edits;
+context. Retrieval failures with HTTP 5xx advertise retrying the same request,
+including read-only status checks; a failed status check does not settle an
+unresolved command. Cross-tab recovery preserves dispatched requests and separates stale edits;
 the browser requires Web Locks for publishing. Retained history remains discoverable
 when the current revision is unavailable. Private Saved items use owner-scoped,
 versioned Save/Unsave with exact-revision

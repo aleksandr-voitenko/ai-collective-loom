@@ -42,6 +42,7 @@ import { registerChanges } from './changes.js';
 import { ReferenceError } from '../modules/participation/references.js';
 import { registerSummaries } from './summaries.js';
 import { SummaryError } from '../modules/participation/summary-context.js';
+import { participationRecoveryPolicy } from './recovery-policy.js';
 
 export interface ParticipationServices {
   database: Transactions;
@@ -156,11 +157,9 @@ export function participantError(
   if (code === "invalid_cursor") action = "replay_view";
   if (code === "idempotency_conflict" || status >= 500)
     action = "reconcile_operation";
-  const personalRead = request.routeOptions.url === '/api/v1/me/notifications/query' ||
-    request.routeOptions.url === '/api/v1/me/notifications/:id' || request.routeOptions.url?.startsWith('/api/v1/shared-changes/') ||
-    request.routeOptions.url?.startsWith('/api/v1/me/updates/') ||
-    request.routeOptions.url === '/api/v1/me/reading/lookup' || request.routeOptions.url === '/api/v1/me/reading/status';
-  if (personalRead && status >= 500) action = 'retry_same_request';
+  const policy = participationRecoveryPolicy(request.method, request.routeOptions.url);
+  const retrieval = policy === 'retrieval' || policy === 'revision-retrieval';
+  if (retrieval && status >= 500) action = 'retry_same_request';
   return reply
     .code(status)
     .send({
@@ -170,12 +169,11 @@ export function participantError(
         request_id: request.id,
         recovery: { action },
         ...(current !== undefined ? { current_revision_id: current } : {}),
-        ...(error instanceof RevisionUnavailableError && request.method === 'GET' &&
-          ['/api/v1/resources/:id','/api/v1/resources/:id/revisions/:revision'].includes(request.routeOptions.url ?? '')
+        ...(error instanceof RevisionUnavailableError && request.method === 'GET' && policy === 'revision-retrieval'
           ? { unavailable_scope: 'revision' } : {}),
         ...(minimum ? { minimum_response_bytes: minimum } : {}),
         ...((error instanceof SummaryError || error instanceof FileError) && error.definitive ? { operation_outcome: "rejected" } : {}),
-        ...(status >= 500 && request.method === "POST" && !personalRead
+        ...(status >= 500 && request.method === "POST" && !retrieval
           ? { operation_outcome: "unknown" }
           : {}),
       },

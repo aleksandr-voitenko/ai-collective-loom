@@ -63,7 +63,12 @@ exercise this production call path. Mount shared readers in a real boundary in
 fixtures; a source denial requires host Retry, while a transient503 keeps local retry.
 `contract/response-classification.test.ts` compares all registered JSON operations
 and unavailable success fields with the endpoint catalogue. Schema arguments cannot
-choose error semantics. `web/saved-authorization.test.tsx` covers successful Saved
+choose error semantics. `contract/recovery-policy.test.ts` separately inventories
+actual participation routes and injects 500/503 failures before handlers: retrievals
+retry without mutation-outcome claims, while state-changing requests retain unknown
+outcomes. It covers automatic HEAD siblings, narrow revision hints, recorded
+definitive refusals, strict validation and conservative unclassified-route fallback.
+`web/saved-authorization.test.tsx` covers successful Saved
 denials across eight hosts, private receipt settlement behind a blocked Web Lock,
 Reading receipts, and mixed-response publication without restoring older content.
 The real Saved case pre-saves both mounted targets and requires no404, preventing

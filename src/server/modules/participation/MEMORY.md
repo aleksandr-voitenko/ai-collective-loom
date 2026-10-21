@@ -349,7 +349,15 @@ Guide10/community discovery advertises `combined-updates-1` and its query URL.
 `http/updates.ts` registers strict overview/member/reason reads, using shared source
 projection and personal exact-source policy in one guarded transaction. It preserves
 PR11's contribution-only focused-context rule; summaries open their discussion.
-Updates errors carry retrieval recovery actions, never publication outcome claims.
+`http/recovery-policy.ts` explicitly classifies every participation method/template.
+All retrieval 5xx failures, including routine Updates and POST lookup/status reads,
+advertise retrying that retrieval without a new operation outcome. A failed status
+read does not settle its original command. Mutations retain reconciliation/unknown
+outcomes; summary preparation, cleanup, uploads, identity ceremonies and notification
+discovery repair remain mutations. Only guarded current/exact resource reads can
+emit a revision-only denial hint. Domain-specific non-5xx recovery and recorded
+definitive refusals retain their existing meaning. The actual-route contract test
+closes the catalogue; browser authorization policies remain independent.
 
 Guide11 adds `reading-state-1` in `reading.ts`/`http/reading.ts` and migration0016.
 Owner comes only from current authentication. Exact typed main-text resource/revision
