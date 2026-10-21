@@ -510,6 +510,11 @@ extra cleanup. The PostgreSQL/Chromium fixture serves the production bundle and
 does not exercise that development lifecycle. Community-wide proposal recovery
 checks cover both drafts and lost committed responses after the destination is
 closed or unconfigured, retaining the original request and administrator fallback.
+`web/organization-recovery.test.tsx` separately exercises selected status and exact
+retry, original/current result display, and late status ownership. Real journal
+faults preserve blocked drafts and rejected originals through review/correction;
+resolved removal is selective. Context retries retain authored bytes and never
+dispatch a replacement command automatically.
 
 Search scenarios extend the same closed diagnostics with `search.spec.ts`, search/
 authors/status/admin route templates and search/refresh controls. Queries and cursors are
