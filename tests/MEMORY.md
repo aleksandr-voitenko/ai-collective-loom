@@ -119,8 +119,12 @@ moves/unknown history, bounds and native COMMIT death/replacement recovery. Capa
 counter injections test boundaries, not a claim of 50,000 actual decisions. Expiry
 regressions combine descriptor expiry with changed policy, frozen Following/bounds
 and complete retrieval; explicit refresh renews only within original custody.
-Dismissal selection expiry remains independent. Browser/StrictMode regressions
-cover Undo against a newer dismissal, same-card conflict acknowledgement and
+Dismissal selection expiry remains independent.
+The native `attention-tokens.test.ts` independently encrypts malformed payloads,
+compares complete private-state snapshots after refusals, and checks both projections'
+issued payloads/digests/list continuations. Recorded applied and policy-conflict
+replays forbid token-key reads; valid expiry and collection errors stay distinct.
+Browser/StrictMode regressions cover Undo against a newer dismissal, same-card conflict acknowledgement and
 first-load settings Unmute. Undo must use original result versions even when an
 exact retry reports newer current versions; do not mock automatic rebasing as success.
 The 101-personal-input regression checks absent, partially scanned and old-policy

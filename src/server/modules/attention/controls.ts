@@ -12,6 +12,7 @@ import { lockReferencePlan } from '../participation/reference-context.js';
 import { fit, RetrievalError } from '../participation/retrieval.js';
 import { followSource, unavailable } from '../following/context.js';
 import { sharedCandidatesSql, sharedCategories, type SharedCandidate } from '../following/retrieval.js';
+import { DismissalSelectionPayload, AttentionListPayload, type DismissalSelectionValue, type AttentionListValue } from './token-payloads.js';
 
 const L=C.attentionLimits;
 const messages={
@@ -54,7 +55,7 @@ async function seal(tx:SqlTransaction,value:unknown){
   const token=Buffer.concat([nonce,cipher.getAuthTag(),data]).toString('base64url');
   if(Buffer.byteLength(token)>L.selectionBytes)throw new AttentionError('attention_selection_too_large');return token;
 }
-async function open(tx:SqlTransaction,token:string):Promise<any>{
+async function open(tx:SqlTransaction,token:string):Promise<unknown>{
   try{if(Buffer.byteLength(token)>L.selectionBytes)throw new Error();
     const bytes=Buffer.from(token,'base64url'),cipher=createDecipheriv('aes-256-gcm',await key(tx),bytes.subarray(0,12));
     cipher.setAAD(Buffer.from(C.attentionContract));cipher.setAuthTag(bytes.subarray(12,28));
@@ -62,12 +63,12 @@ async function open(tx:SqlTransaction,token:string):Promise<any>{
   }catch{throw new PublicationError('invalid_input');}
 }
 export async function prepareAttentionSelection(tx:SqlTransaction,owner:string,instance:string,policy:number,
-  meaning:{view:string;group:string;selection:string},inputs:C.AttentionInputView[]):Promise<C.AttentionSelectionView>{
+  meaning:DismissalSelectionValue['meaning'],inputs:C.AttentionInputView[]):Promise<C.AttentionSelectionView>{
   if(!inputs.length)throw new PublicationError('unavailable');
   if(inputs.length>L.batch)throw new AttentionError('attention_selection_too_large');
   const list=normalizeInputs(inputs),states=await dismissalStates(tx,owner,list),expires=Date.now()+L.selectionSeconds*1000;
   const items=list.map(v=>({...v,dismissed:states.get(inputKey(v))?.dismissed??false,version:states.get(inputKey(v))?.version??0,availability:'available' as const}));
-  return {selection:await seal(tx,{purpose:'dismissal-selection-1',owner,instance,policy,meaning,expires,inputs:items.map(({kind,id,version})=>({kind,id,version}))}),
+  return {selection:await seal(tx,{purpose:'dismissal-selection-1',owner,instance,policy,meaning,expires,inputs:items.map(({kind,id,version})=>({kind,id,version}))} satisfies DismissalSelectionValue),
     inputs:items,policy_version:policy,shared_events:items.filter(v=>v.kind==='shared_event').length,personal_signals:items.filter(v=>v.kind==='personal_delivery').length,
     membership:'exact_represented_inputs_including_unexpanded_direct_sources',expires_at:new Date(expires).toISOString()};
 }
@@ -195,7 +196,7 @@ export class AttentionControls<M extends P.Projection='legacy'> {
       const policy=await attentionPolicy(tx,owner);let selectedPolicy=policy.version;
       if(value.selection){
         const selected=await open(tx,value.selection),instance=(await tx.query<{instance_id:string}>('SELECT instance_id FROM loom.community_settings WHERE id=1',[])).rows[0]!.instance_id;
-        if(selected.purpose!=='dismissal-selection-1'||selected.owner!==owner||selected.instance!==instance||
+        if(!Value.Check(DismissalSelectionPayload,selected)||selected.owner!==owner||selected.instance!==instance||
           JSON.stringify(selected.inputs)!==JSON.stringify(inputs.map(v=>({kind:v.kind,id:v.id,version:v.expected_version}))))throw new PublicationError('invalid_input');
         if(selected.expires<=Date.now())throw new AttentionError('attention_selection_expired');selectedPolicy=selected.policy;
       }
@@ -219,7 +220,7 @@ export class AttentionControls<M extends P.Projection='legacy'> {
     if(!Value.Check(C.AttentionListInput,value))throw new PublicationError('invalid_input');
     return this.run(actor,false,undefined,async(tx,owner)=>{
       const policy=await attentionPolicy(tx,owner),limit=value.limit??12,budget=value.max_response_bytes??L.responseBytes;let after='';
-      if(value.cursor){const c=await open(tx,value.cursor);if(c.purpose!=='attention-list-1'||c.owner!==owner||c.collection!==value.collection)throw new PublicationError('invalid_input');
+      if(value.cursor){const c=await open(tx,value.cursor);if(!Value.Check(AttentionListPayload,c)||c.owner!==owner||c.collection!==value.collection)throw new PublicationError('invalid_input');
         if(c.version!==policy.version)throw new AttentionError('attention_collection_changed');after=c.after;}
       const mutes=value.collection==='mutes'?(await tx.query<MuteRow>(`SELECT * FROM loom.attention_mutes WHERE participant_id=$1 AND muted
         AND target_kind||':'||resource_id::text>$2 ORDER BY target_kind,resource_id LIMIT $3`,[owner,after,limit+1])).rows:[];
@@ -237,7 +238,7 @@ export class AttentionControls<M extends P.Projection='legacy'> {
         if(m){page.mutes.push(item as Mute<M>);after=m.target_kind+':'+m.resource_id;}else{page.dismissals.push(item as Dismiss<M>);after=r!.input_kind+':'+r!.input_id;}consumed++;
       }
       page.complete=consumed===mutes.length+rows.length;
-      if(!page.complete)page.next_cursor=await seal(tx,{purpose:'attention-list-1',owner,collection:value.collection,version:policy.version,after});
+      if(!page.complete)page.next_cursor=await seal(tx,{purpose:'attention-list-1',owner,collection:value.collection,version:policy.version,after} satisfies AttentionListValue);
       return fit(page,budget);
     });
   }
