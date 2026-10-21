@@ -3,6 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 import { closed } from '../contracts/participation.js';
 import { MuteUpdate,DismissUpdate,attentionLimits,type AttentionInputView } from '../contracts/attention.js';
 import { contentKey } from './protected-content.js';
+import { BoundedRecoveryRecords } from './recovery-storage.js';
 const AttentionCommand=Type.Union([Type.Object({kind:Type.Literal('mute'),body:MuteUpdate},closed),Type.Object({kind:Type.Literal('dismissal'),group_id:Type.Optional(Type.String({pattern:'^[a-f0-9-]{36}$'})),body:DismissUpdate},closed)]);
 export type AttentionCommandView=Static<typeof AttentionCommand>;
 // Comparison keys follow server UUID identity; never normalize the retained
@@ -19,27 +20,20 @@ export function exportAttentionRecovery(instance:string,participant:string){
   const blob=new Blob([JSON.stringify({origin:location.origin,instance_id:instance,participant_id:participant,intents:journal.all()},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loom-attention-recovery.json';link.click();URL.revokeObjectURL(url);
 }
-const bytes=(value:string)=>new TextEncoder().encode(value).length;
 export class AttentionRecovery {
   readonly prefix:string;
   private readonly owner=identityGeneration();
+  private readonly records:BoundedRecoveryRecords<AttentionIntent>;
   constructor(instance:string,participant:string,private readonly storage:Storage=localStorage){
     this.prefix=`loom.attention:${location.origin}:${instance}:${participant}:`;
+    this.records=new BoundedRecoveryRecords({storage,prefix:this.prefix+'intent:',limits:attentionLimits,
+      validate:(record):record is AttentionIntent=>Value.Check(RecordSchema,record),id:record=>record.command.body.idempotency_key,
+      messages:{exceeds:'Attention recovery exceeds its synthetic limit. Preserve it before continuing.',
+        unreadable:'Attention recovery is unreadable. Preserve it before continuing.',
+        incompatible:'Attention recovery is incompatible. Preserve it before continuing.',
+        full:'Attention recovery is full. Resolve existing changes before creating more.'}});
   }
-  all():AttentionIntent[]{
-    const result:AttentionIntent[]=[];let total=0;
-    for(let i=0;i<this.storage.length;i++){
-      const key=this.storage.key(i);if(!key?.startsWith(this.prefix+'intent:'))continue;
-      const raw=this.storage.getItem(key)!;total+=bytes(raw);
-      if(bytes(raw)>attentionLimits.requestBytes||total>attentionLimits.localBytes||result.length>=attentionLimits.localOperations)
-        throw new Error('Attention recovery exceeds its synthetic limit. Preserve it before continuing.');
-      let record:unknown;try{record=JSON.parse(raw);}catch{throw new Error('Attention recovery is unreadable. Preserve it before continuing.');}
-      if(!Value.Check(RecordSchema,record)||key!==this.prefix+'intent:'+record.command.body.idempotency_key)
-        throw new Error('Attention recovery is incompatible. Preserve it before continuing.');
-      result.push(record);
-    }
-    return result;
-  }
+  all():AttentionIntent[]{return this.records.all();}
   private async locked<T>(work:()=>T){
     if(!navigator.locks)throw new Error('Attention changes require Web Locks to protect recovery across tabs.');
     return navigator.locks.request(this.prefix,async()=>{
@@ -49,17 +43,9 @@ export class AttentionRecovery {
   }
   private changed(){window.dispatchEvent(new Event('loom-attention'));}
   private write(record:AttentionIntent){
-    const key=this.prefix+'intent:'+record.command.body.idempotency_key,raw=JSON.stringify(record),previous=this.storage.getItem(key);
-    const others=this.all().filter(r=>r.command.body.idempotency_key!==record.command.body.idempotency_key);
-    if(!Value.Check(RecordSchema,record)||bytes(raw)>attentionLimits.requestBytes||others.length>=attentionLimits.localOperations||
-      others.reduce((n,r)=>n+bytes(JSON.stringify(r)),bytes(raw))>attentionLimits.localBytes)throw new Error('Attention recovery is full. Resolve existing changes before creating more.');
-    try{this.storage.setItem(key,raw);if(this.storage.getItem(key)!==raw)throw new Error();}
-    catch{
-      try{if(previous===null)this.storage.removeItem(key);else this.storage.setItem(key,previous);}catch{/* The exact previous intent is never replaced with different semantics. */}
-      throw new Error(record.state==='conflicted'
-        ?'Attention conflict could not be saved. The exact change remains in recovery; check its outcome again.'
-        :'Attention intent could not be saved. No new request was sent.');
-    }
+    this.records.write(record,record.state==='conflicted'
+      ?'Attention conflict could not be saved. The exact change remains in recovery; check its outcome again.'
+      :'Attention intent could not be saved. No new request was sent.');
     this.changed();return record;
   }
   save(command:AttentionCommandView,active:()=>boolean){return this.locked(()=>{

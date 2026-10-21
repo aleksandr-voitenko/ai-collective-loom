@@ -3,6 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 import { closed,UUID } from '../contracts/participation.js';
 import type { SharedOptions,SharedPageView,SharedScopeView } from '../contracts/following.js';
 import { identityGeneration } from './participation-client.js';
+import { verifiedStorageWrite } from './recovery-storage.js';
 
 const Request=Type.Object({cursor:Type.String({minLength:1,maxLength:16384}),limit:Type.Integer({minimum:1,maximum:25}),
   max_response_bytes:Type.Integer({minimum:4096,maximum:131072})},closed);
@@ -36,13 +37,10 @@ export class SharedRecovery {
       const raw=JSON.stringify(records);
       if(Object.keys(records).length>16||new TextEncoder().encode(JSON.stringify(record)).length>32768||new TextEncoder().encode(raw).length>524288)
         throw new Error('Shared recovery is full. Clear saved shared change views explicitly; other recovery records remain independent.');
-      try{this.storage.setItem(this.prefix,raw);if(this.storage.getItem(this.prefix)!==raw)throw new Error();}
-      catch{
-        // Keep the previous request recoverable even when read-back fails after
-        // a write. No successor is exposed by the view until this resolves.
-        try{if(original===null)this.storage.removeItem(this.prefix);else this.storage.setItem(this.prefix,original);}catch{/* The new bounded record also retains previous_request. */}
-        throw new Error('Shared recovery could not be saved. The successor has not been exposed; retry this page.');
-      }
+      // No successor is exposed until custody succeeds. The new bounded record
+      // also retains previous_request if storage refuses restoration.
+      verifiedStorageWrite({storage:this.storage,key:this.prefix,raw,previous:original,
+        failureMessage:'Shared recovery could not be saved. The successor has not been exposed; retry this page.'});
       return record;
     });
   }

@@ -4,6 +4,7 @@ import { closed } from '../contracts/participation.js';
 import type { UpdatesPageView, UpdatesMembersPageView } from '../contracts/updates.js';
 import type { RoutinePageView,RoutineMembersPageView } from '../contracts/routine-updates.js';
 import { identityGeneration } from './participation-client.js';
+import { verifiedStorageWrite } from './recovery-storage.js';
 
 const Request=Type.Object({cursor:Type.String({minLength:1,maxLength:16384}),limit:Type.Integer({minimum:1,maximum:25}),
   max_response_bytes:Type.Integer({minimum:4096,maximum:131072})},closed);
@@ -40,11 +41,10 @@ export class UpdatesRecovery {
       records[key]=saved;const raw=JSON.stringify(records);
       if(Object.keys(records).length>16||new TextEncoder().encode(JSON.stringify(saved)).length>131072||new TextEncoder().encode(raw).length>524288)
         throw new Error('Updates recovery is full. Clear an Updates view explicitly; publication drafts and other feeds remain separate.');
-      try{this.storage.setItem(this.prefix,raw);if(this.storage.getItem(this.prefix)!==raw)throw new Error();}
-      catch{
-        try{if(original===null)this.storage.removeItem(this.prefix);else this.storage.setItem(this.prefix,original);}catch{/* The written record also retains the previous displayed request. */}
-        throw new Error('Updates recovery could not be saved. The successor has not been exposed; retry this page.');
-      }
+      // The written record also retains the previous displayed request if
+      // storage refuses restoration; a failed save exposes no successor.
+      verifiedStorageWrite({storage:this.storage,key:this.prefix,raw,previous:original,
+        failureMessage:'Updates recovery could not be saved. The successor has not been exposed; retry this page.'});
       return saved;
     });
   }

@@ -198,8 +198,12 @@ After reload, scope Attention settings navigation to Community navigation: Updat
 also has an in-page link. Updates readiness requires rendered interval/coverage
 details and enabled scope refresh; the initial idle toolbar can precede the first response.
 `web/attention.test.tsx` uses StrictMode and per-target conflict/success ordering;
-`unit/attention-recovery.test.ts` checks corrupt/oversized journal preservation,
-same-key command mismatch, lock-delayed departure and failed write readback rollback.
+`unit/recovery-storage.test.ts` applies the custody fault matrix to concrete Reading
+and Attention journals: corrupt/oversized records, UTF-8 bounds, exact commands,
+queued view/owner departure, failed writes/removal and event suppression. Rollback
+assertions preserve complete raw storage, including whitespace and unrelated keys.
+Shared Changes and both Updates prefixes also check failed first/successor saves;
+their map/sequence rules and Reading's automatic preference remain independent.
 `e2e/attention.spec.ts` uses the compiled normal runner, exact durable recovery,
 keyboard Undo/viewport, stale tabs and real Web Lock sign-out. Screenshots are
 explicit opt-in LOOM_ATTENTION_REVIEW_SCREENS=1 synthetic evidence. Updates browser

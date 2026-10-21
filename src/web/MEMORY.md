@@ -28,6 +28,14 @@ copies or one-time secrets. Shared presentation and leased collection components
 live in `participation-ui.tsx`, without page or shell imports. Page modules do not
 import the shell; new shared helpers must preserve that direction.
 
+`recovery-storage.ts` shares exact write/readback and best-effort raw rollback
+across Reading, Attention, Shared Changes and both Updates journals. Its bounded
+per-intent scanner/writer serves only Reading and Attention: scans count stored
+UTF-8 bytes; replacement capacity counts reserialized other records. Adapters own
+schemas, limits, prefixes, locks, transitions, messages and success events. Reading
+automatic preferences and Updates partial clear keep their separate write paths.
+Feed map construction, sequence checks and tokens remain in each feed adapter.
+
 `tests/unit/protected-read-architecture.test.ts` enforces boundary-based transport
 throughout this directory. Mounted StrictMode tests cover late ownership/authority
 and recovery, while compiled Chromium exercises dialogs, native focus, routing,

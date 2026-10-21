@@ -3,6 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 import { closed } from '../contracts/participation.js';
 import { ReadingUpdate, readingLimits, type ReadingUpdateInput } from '../contracts/reading.js';
 import { identityGeneration } from './participation-client.js';
+import { BoundedRecoveryRecords } from './recovery-storage.js';
 
 const RecordSchema=Type.Object({version:Type.Literal(1),body:ReadingUpdate,attempts:Type.Integer({minimum:0}),
   state:Type.Union([Type.Literal('uncertain'),Type.Literal('rejected'),Type.Literal('conflicted')])},closed);
@@ -12,29 +13,22 @@ export function exportReadingRecovery(instance:string,participant:string){
   const blob=new Blob([JSON.stringify({origin:location.origin,instance_id:instance,participant_id:participant,intents:journal.all()},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loom-reading-recovery.json';link.click();URL.revokeObjectURL(url);
 }
-const bytes=(value:string)=>new TextEncoder().encode(value).length;
 export class ReadingRecovery {
   readonly prefix:string;
   readonly preference:string;
   private readonly owner=identityGeneration();
+  private readonly records:BoundedRecoveryRecords<ReadingIntent>;
   constructor(instance:string,participant:string,private readonly storage:Storage=localStorage){
     this.prefix=`loom.reading:${location.origin}:${instance}:${participant}:`;
     this.preference=this.prefix+'automatic';
+    this.records=new BoundedRecoveryRecords({storage,prefix:this.prefix+'intent:',limits:readingLimits,
+      validate:(record):record is ReadingIntent=>Value.Check(RecordSchema,record),id:record=>record.body.idempotency_key,
+      messages:{exceeds:'Reading recovery exceeds its synthetic limit. Preserve it before continuing.',
+        unreadable:'Reading recovery is unreadable. Preserve it before continuing.',
+        incompatible:'Reading recovery is incompatible. Preserve it before continuing.',
+        full:'Reading recovery is full. Resolve existing changes before creating more.'}});
   }
-  all():ReadingIntent[]{
-    const result:ReadingIntent[]=[];let total=0;
-    for(let i=0;i<this.storage.length;i++){
-      const key=this.storage.key(i);if(!key?.startsWith(this.prefix+'intent:'))continue;
-      const raw=this.storage.getItem(key)!;total+=bytes(raw);
-      if(bytes(raw)>readingLimits.requestBytes||total>readingLimits.localBytes||result.length>=readingLimits.localOperations)
-        throw new Error('Reading recovery exceeds its synthetic limit. Preserve it before continuing.');
-      let record:unknown;try{record=JSON.parse(raw);}catch{throw new Error('Reading recovery is unreadable. Preserve it before continuing.');}
-      if(!Value.Check(RecordSchema,record)||key!==this.prefix+'intent:'+record.body.idempotency_key)
-        throw new Error('Reading recovery is incompatible. Preserve it before continuing.');
-      result.push(record);
-    }
-    return result;
-  }
+  all():ReadingIntent[]{return this.records.all();}
   enabled(){return this.storage.getItem(this.preference)==='true';}
   private async locked<T>(work:()=>T){
     if(!navigator.locks)throw new Error('Reading changes require Web Locks to protect recovery across tabs.');
@@ -45,17 +39,9 @@ export class ReadingRecovery {
   }
   private changed(){window.dispatchEvent(new Event('loom-reading'));}
   private write(record:ReadingIntent){
-    const key=this.prefix+'intent:'+record.body.idempotency_key,raw=JSON.stringify(record),previous=this.storage.getItem(key);
-    const others=this.all().filter(r=>r.body.idempotency_key!==record.body.idempotency_key);
-    if(!Value.Check(RecordSchema,record)||bytes(raw)>readingLimits.requestBytes||others.length>=readingLimits.localOperations||
-      others.reduce((n,r)=>n+bytes(JSON.stringify(r)),bytes(raw))>readingLimits.localBytes)throw new Error('Reading recovery is full. Resolve existing changes before creating more.');
-    try{this.storage.setItem(key,raw);if(this.storage.getItem(key)!==raw)throw new Error();}
-    catch{
-      try{if(previous===null)this.storage.removeItem(key);else this.storage.setItem(key,previous);}catch{/* The exact previous intent is never replaced with different semantics. */}
-      throw new Error(record.state==='conflicted'
-        ?'Reading conflict could not be saved. The exact change remains in recovery; check its outcome again.'
-        :'Reading intent could not be saved. No new request was sent.');
-    }
+    this.records.write(record,record.state==='conflicted'
+      ?'Reading conflict could not be saved. The exact change remains in recovery; check its outcome again.'
+      :'Reading intent could not be saved. No new request was sent.');
     this.changed();return record;
   }
   save(body:ReadingUpdateInput,active:()=>boolean){return this.locked(()=>{
