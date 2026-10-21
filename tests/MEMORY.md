@@ -568,6 +568,10 @@ comparison-load/save failures and reload. These differ from the already-committe
 v1 replay scenario. The comparison failure and rejection notices need exact text selectors when both show.
 Closed diagnostics add `references.spec.ts`, three route
 templates and Add/Check/Refresh controls, without changing bounds or raw containment.
+`web/composer-recovery.test.tsx` awaits actual journal writes under Web Locks before
+mention remount/removal assertions. Status misses and transient failures preserve
+uncertain bodies; recorded file expiry through status or exact retry cannot unlock
+correction until rejection is durably saved. Independent drafts stay untouched.
 
 Change notes/accounts use `changes*.test.ts`: populated pre-0011 old-column/digest
 preservation, exact client/server restart, both authority/suppression guard orders,
