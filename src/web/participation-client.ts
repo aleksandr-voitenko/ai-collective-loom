@@ -1,3 +1,4 @@
+import {FileSet,FileMember,UploadInput,fileLimits} from "../contracts/files.js";
 import { Value } from "@sinclair/typebox/value";
 import { Type, type TSchema } from "@sinclair/typebox";
 import type { CommittedView } from "../contracts/participation.js";
@@ -13,6 +14,10 @@ const DraftNote = Type.Union([Type.Null(), Type.Object({...ReferencedContent.pro
 const DraftAccount = Type.Union([Type.Null(),
   Type.Object({revisions:Type.Array(ExactChangeTarget,{maxItems:16})},closed),
   Type.Object({carry_forward_revision_id:UUID},closed)]);
+// A path may temporarily be empty while the author edits it. Only dispatch
+// requires normalized valid paths; a partial draft must remain recoverable.
+const DraftFileSet = Type.Object({...FileSet.properties,files:Type.Array(
+  Type.Object({...FileMember.properties,path:Type.String()},closed),{maxItems:fileLimits.entries})},closed);
 
 export interface Self {
   participant_id: string;
@@ -24,6 +29,8 @@ export interface Self {
 }
 export interface RequestOptions {
   body?: unknown;
+  binaryBody?:Blob;
+  responseType?:"blob";
   self?: Self;
   signal?: AbortSignal;
   schema?: TSchema;
@@ -65,13 +72,20 @@ export async function transportRequest<T>(
       ? {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": options.binaryBody ? "application/octet-stream" : "application/json",
             ...(options.self?.csrf ? { "x-loom-csrf": options.self.csrf } : {}),
           },
-          body: JSON.stringify(options.body),
+          body: options.binaryBody ?? JSON.stringify(options.body),
         }
       : {}),
   });
+  if(options.responseType === "blob" && response.ok){
+    if(contract.access!=="read"||!path.split("?")[0]?.endsWith("/download")||Number(response.headers.get("content-length"))>fileLimits.fileBytes)throw new Error("Unsupported binary response.");
+    const blob=await response.blob();
+    if(blob.size>fileLimits.fileBytes)throw new Error("File response exceeds the byte limit.");
+    if(owner!==identityGeneration())throw new DOMException("Identity changed.","AbortError");
+    return {value:blob as T,contract,observation:classifyResponse(contract,blob)};
+  }
   const value: unknown = await response.json();
   if (owner !== identityGeneration())
     throw new DOMException("Identity changed.", "AbortError");
@@ -115,7 +129,7 @@ export async function transportRequest<T>(
 /** A first dispatch can be rejected directly. An uncertain summary request can
  * be corrected only after the server commits its irreversible expiry refusal. */
 export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
-  if (error instanceof ApiError && error.code === 'summary_preparation_expired' && error.operationOutcome === 'rejected') return true;
+  if (error instanceof ApiError && ['summary_preparation_expired','file_expired'].includes(error.code) && error.operationOutcome === 'rejected') return true;
   return (
     !wasUncertain &&
     error instanceof ApiError &&
@@ -124,6 +138,11 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       "invalid_input",
       "reference_format_required",
       "change_format_required",
+      "file_format_required",
+      "file_not_prepared",
+      "file_expired",
+      "file_mismatch",
+      "file_capacity",
       "unavailable",
       "invalid_request",
       "revision_conflict",
@@ -234,6 +253,8 @@ export class IntentStore {
           !["loom-markdown-v1", "loom-markdown-v2", "loom-markdown-v3"].includes(authored.format ?? ""))
           throw new Error("This authored recovery format is unsupported. Export the exact record before continuing.");
       }
+      if('file_set' in record.body && !Value.Check(record.state==='draft'?DraftFileSet:FileSet,record.body.file_set))throw new Error('The file manifest is incompatible. Preserve the exact journal.');
+      if(record.kind==='file.upload'&&!Value.Check(UploadInput,record.body))throw new Error('The upload metadata is incompatible. Preserve the exact journal.');
       if ('change_note' in record.body && !Value.Check(DraftNote,record.body.change_note))
         throw new Error('The saved note is incompatible. Export the exact record before continuing.');
       if ('change_account' in record.body && !Value.Check(DraftAccount,record.body.change_account))

@@ -16,9 +16,9 @@ export function httpClient(
   async function call(
     path: string,
     body?: unknown,
-    overrides: { method?: string; headers?: Record<string, string> } = {},
+    overrides: { method?: string; headers?: Record<string, string>; bytes?:Buffer } = {},
   ) {
-    const encoded = body === undefined ? undefined : JSON.stringify(body);
+    const encoded = overrides.bytes ?? (body === undefined ? undefined : JSON.stringify(body));
     const headers: Record<string, string> = {
       ...(authorization ? { authorization: "Bearer " + authorization } : {}),
       ...(Object.keys(cookies).length
@@ -30,7 +30,7 @@ export function httpClient(
         : {}),
       ...(encoded
         ? {
-            "content-type": "application/json",
+            "content-type": overrides.bytes ? "application/octet-stream" : "application/json",
             "content-length": String(Buffer.byteLength(encoded)),
             origin,
             ...(csrf ? { "x-loom-csrf": csrf } : {}),

@@ -959,3 +959,5 @@
 .moderation-target { overflow-wrap: anywhere; }
 .moderation-page > button, .moderation-page > a { margin: .5rem .5rem .5rem 0; }
 .moderation-page dialog { max-width: min(34rem, calc(100vw - 2rem)); }
+
+.file-tree{padding-left:1.2rem}.file-tree li,.file-row{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin:.6rem 0;overflow-wrap:anywhere}.file-row label{flex:1;min-width:12rem}.file-editor{margin:1rem 0}

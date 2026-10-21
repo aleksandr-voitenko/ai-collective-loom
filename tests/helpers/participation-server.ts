@@ -1,3 +1,4 @@
+import {isolatedFileStorage} from "./file-storage.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +17,7 @@ import type { Transactions } from "../../src/server/modules/publication/publicat
 export async function syntheticServer(
   options: {
     port?: number;
+    files?:boolean;
     throughMigration?: number;
     transactionWrapper?: (database: Transactions) => Transactions;
     beforeListen?: (origin: string) => Promise<void>;
@@ -23,6 +25,7 @@ export async function syntheticServer(
 ) {
   const fixture = await isolatedPublicationPostgres(options.throughMigration === undefined ? {} : { throughMigration: options.throughMigration }),
     directory = await mkdtemp(join(tmpdir(), "loom-participation-"));
+  let fileFixture:Awaited<ReturnType<typeof isolatedFileStorage>>|undefined;
   let application: Awaited<ReturnType<typeof createApplication>> | undefined;
   let reserved: Server | undefined;
   const releaseReservation = async () => {
@@ -34,6 +37,7 @@ export async function syntheticServer(
   const close = async () => {
     await releaseReservation();
     await application?.close();
+    await fileFixture?.close();
     await fixture.close();
     await rm(directory, { recursive: true, force: true });
   };
@@ -54,6 +58,7 @@ export async function syntheticServer(
     }
   };
   try {
+    if(options.files)fileFixture=await isolatedFileStorage();
     const listener = await reserve(options.port ?? 0);
     const port = (listener.address() as AddressInfo).port;
     const origin = `https://localhost:${port}`,
@@ -123,7 +128,7 @@ export async function syntheticServer(
           logger: false,
           browserRoot: fileURLToPath(new URL("../../dist/web/", import.meta.url)),
           tls,
-          participation: { database, authentication, administration },
+          participation: { database, authentication, administration, ...(fileFixture?{fileStorage:fileFixture.storage}:{}) },
         });
         application = next;
         await options.beforeListen?.(origin);
@@ -142,6 +147,7 @@ export async function syntheticServer(
     const app = await start(listener);
     return {
       ...fixture,
+      fileFixture,
       app,
       origin,
       policy,

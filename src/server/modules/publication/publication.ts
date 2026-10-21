@@ -1,3 +1,4 @@
+import {insertFiles,type PreparedFile} from "../participation/file-context.js";
 import { randomUUID } from 'node:crypto';
 import type { SqlTransaction } from '../../db/postgres.js';
 import { identityOf, type ActorContext } from './actor.js';
@@ -150,7 +151,7 @@ export class PublicationOperation {
 export async function commitRevision(tx: SqlTransaction, actor: Awaited<ReturnType<typeof lockActor>>, chain: Resource[],
   input: { idempotency_key: string; expected_revision_id: string | null; content: { format: string; text: string }; title?: string | null;
     mentions?: readonly { token: string; participant_id: string }[]; references?: readonly PreparedReference[]; coverage?: PreparedCoverage;
-    changeNote?: NoteContent; noteReferences?: readonly PreparedReference[]; changeAccount?: PreparedChangeAccount },
+    changeNote?: NoteContent; noteReferences?: readonly PreparedReference[]; changeAccount?: PreparedChangeAccount; files?:readonly PreparedFile[] },
   attempt: { kind: string; version: string; digest: string }): Promise<CommittedPublication> {
   const resource = chain[0]!;
   const ids = { operation: randomUUID(), revision: randomUUID(), event: randomUUID(), intent: randomUUID() };
@@ -159,6 +160,7 @@ export async function commitRevision(tx: SqlTransaction, actor: Awaited<ReturnTy
   for (const mention of input.mentions ?? []) await tx.query('INSERT INTO loom.revision_mentions(revision_id, token, participant_id) VALUES ($1,$2,$3)', [ids.revision, mention.token, mention.participant_id]);
   if (input.changeNote || input.changeAccount) await insertChangeFields(tx, resource.id, ids.revision, input.changeNote, input.noteReferences, input.changeAccount);
   if (input.references) await insertReferences(tx, resource.id, ids.revision, input.references, input.expected_revision_id);
+  if(input.files)await insertFiles(tx,resource.id,ids.revision,input.files);
   if (input.coverage) await insertCoverage(tx, resource.id, ids.revision, input.coverage);
   const updated = await tx.query('UPDATE loom.resources SET current_revision_id = $2 WHERE id = $1 AND current_revision_id IS NOT DISTINCT FROM $3::uuid RETURNING id', [resource.id, ids.revision, input.expected_revision_id]);
   if (updated.rowCount !== 1) throw new PublicationError('revision_conflict', resource.current_revision_id);

@@ -73,6 +73,7 @@ export interface Context {
 }
 
 export function intentUrl(record: Intent) {
+  if(record.kind==='file.upload'){const target=record.body.target as {kind:string;resource_id:string};return target.kind==='artifact'?`/loom/resource/${target.resource_id}?edit`:`/loom/area/${target.resource_id}?compose=artifacts`;}
   if (record.kind === "summary.prepare") return record.slot.slice("summary.prepare:".length);
   if (record.kind === "summary.editors" || record.kind === 'artifact.editors') return `/loom/resource/${record.body.resource_id}`;
   if (record.kind === "saved.set") return "/loom/saved";

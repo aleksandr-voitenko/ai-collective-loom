@@ -124,3 +124,13 @@ Existing visibility triggers handle suppression/restoration; no shared activity
 or content revision is added. The `test:moderation:postgres` upgrade case preserves
 populated pre-0018 content, restrictions, private choices and retained decisions.
 See [ADR-028](../docs/adr/028-administrator-suppression.md).
+
+Migration `0019_artifact_files.sql` adds owner-bound upload custody, immutable
+artifact file sets and revision-owned contexts, plus retained definitive expiry
+refusals. Native versions cannot change once selected. The original nonempty-prose
+constraint becomes a deferred text-or-files invariant for file-aware v3 artifacts;
+other empty publications remain forbidden. Existing rows, identities and migration
+bytes are unchanged, and no historical uploaded files are invented. Published
+contexts protect upload lifetime from cleanup. `test:files:postgres` checks populated
+upgrade and native SeaweedFS versions in disposable fixtures. It does not migrate
+or modify existing development data. See [ADR-029](../docs/adr/029-versioned-artifact-files.md).

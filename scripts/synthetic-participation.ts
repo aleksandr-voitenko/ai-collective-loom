@@ -4,6 +4,7 @@ import { NativeSearchWorker } from './lib/native-search-worker.js';
 import { createInterface } from 'node:readline';
 requireRepositoryRuntime();
 const server = await syntheticServer({
+  files:true,
   port: Number(process.env.LOOM_SYNTHETIC_PORT ?? 3443),
 });
 const worker=new NativeSearchWorker(server.configuration);
@@ -20,7 +21,7 @@ controls.on('line',line=>{commands=commands.then(async()=>{
 process.stdout.write('Search worker running. Enter "worker stop" or "worker start" to control indexing independently.\n');
 process.stdout.write('Notification worker running. Enter "notifications stop" or "notifications start" to test delayed availability.\n');
 process.stdout.write(
-  `Synthetic participation preview: ${server.origin}/loom\nLocal self-signed TLS certificate: ${server.directory}/cert.pem\nOne-time administrator enrollment ticket: ${server.directory}/administrator-ticket.txt\nOnly this process's temporary PostgreSQL database is used. Ctrl-C closes it.\n`,
+  `Synthetic participation preview: ${server.origin}/loom\nLocal self-signed TLS certificate: ${server.directory}/cert.pem\nOne-time administrator enrollment ticket: ${server.directory}/administrator-ticket.txt\nOnly this process's isolated PostgreSQL database and native storage are used. Ctrl-C closes it.\n`,
 );
 let closing = false;
 async function close() {

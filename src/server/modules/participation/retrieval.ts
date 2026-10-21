@@ -225,6 +225,7 @@ export class ParticipationRetrieval {
     ).rows;
     return {
       ...view,
+      ...(view.kind === "artifact" && (await tx.query<{ready:boolean}>("SELECT to_regclass('loom.artifact_file_sets') IS NOT NULL AS ready",[])).rows[0]!.ready && (await tx.query("SELECT revision_id FROM loom.artifact_file_sets WHERE revision_id=$1",[selected])).rowCount ? {file_set:{version:"artifact-files-v1" as const,files:(await tx.query<{id:string;path:string}>("SELECT id,path FROM loom.file_contexts WHERE revision_id=$1 ORDER BY path LIMIT 16",[selected])).rows.map(f=>({path:f.path,source:{revision_id:selected,file_id:f.id}})),manifest_url:`/api/v1/artifacts/${id}/revisions/${selected}/files`}} : {}),
       content: {
         ...(body.content_format !== "loom-markdown-v1"
           ? { format: body.content_format as "loom-markdown-v2" | "loom-markdown-v3", references: (await revisionReferences(tx, selected)).map(declaration) }

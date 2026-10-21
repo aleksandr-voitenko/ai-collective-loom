@@ -1,5 +1,32 @@
 # Browser test diagnostics
 
+`test:files:postgres` discovers `integration/files*.test.ts` in normal coverage
+stage accounting. `helpers/file-storage.ts` owns fresh UUID-named SeaweedFS volumes
+and credentials using the compose image pin, checks native bucket versioning, then
+tests stop/start/recreation without setup. Fix the allocated host port before
+provisioning: Docker changes an ephemeral port across start. Never reuse dev data.
+Exact-byte assertions cover snapshots, reuse, overwrite/lost finalization response,
+expiry, both cleanup orderings, owner/global byte and retained-identity frontiers,
+lost staging/database acknowledgements, page budgets and missing exact versions.
+Four uploads held before their first DB connection and four verified downloads
+held at final authorization must each reject a fifth; admission covers queued buffers.
+Finalization rechecks credential withdrawal after native writes; replacement owner
+credentials recover the same version, while administrators cannot adopt private handles.
+Native authority races pause after relevant guards (not merely shared structure)
+and observe actual PostgreSQL waiters. Movement emits its ordinary structural event
+in addition to an eligible publication; count those separately from content events.
+The HTTPS client fixture retains independent fsynced metadata through credential
+replacement/API restart and exposes recorded expiry refusals without journal changes.
+Upgrade hashes every populated pre0019 table and checks
+old format replay, references and private checkpoints. Production Chromium file
+journeys cover nested download, file-only presentation, revision reuse, reselection,
+uncertain publication, partial-path draft reload, first-refusal removal, stale
+correction/tabs and source withdrawal. StrictMode tests distinguish first metadata
+refusals from uncertain retries and admitted byte-phase failures. They
+explicitly await digest/storage completion; a dispatched DOM event is not a Web
+Crypto or Web Lock completion barrier. Private status never dispatches bytes or
+authorizes a withdrawn source. No claim of cross-machine/provider-agent validation.
+
 `test:moderation:postgres` discovers `integration/moderation*.test.ts`: actual HTTPS
 four-scope lifecycle operations, current authority, canonical replay, no-op fences,
 atomic rollback, populated pre-0018 upgrade and direct-client process loss.
@@ -409,7 +436,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 135 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 138 collected tests and <17 MiB/candidate. The test count includes
 the seven moderation scenarios so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
