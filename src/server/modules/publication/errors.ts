@@ -1,7 +1,8 @@
 export type PublicationErrorCode = 'invalid_input' | 'invalid_actor' | 'unavailable' | 'forbidden'
-  | 'revision_conflict' | 'idempotency_conflict' | 'retryable' | 'service_unavailable' | 'reference_format_required' | 'change_format_required';
+  | 'revision_conflict' | 'idempotency_conflict' | 'retryable' | 'service_unavailable' | 'reference_format_required' | 'change_format_required' | 'file_format_required';
 
 const messages: Record<PublicationErrorCode, string> = {
+  file_format_required: 'This artifact uses files. Supply artifact-files-v1 with a deliberate complete file_set.',
   invalid_input: 'The publication input is unsupported.',
   reference_format_required: 'This source uses recorded references. Edit with loom-markdown-v2 and an explicit reference list.',
   change_format_required: 'This source uses change metadata. Edit with loom-markdown-v3 and explicit change_note/change_account fields; retain its account declaration or deliberately remove it.',

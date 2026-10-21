@@ -1,3 +1,5 @@
+import {registerFiles} from "./files.js";
+import {FileError,type FileStorage} from "../modules/participation/file-storage.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Type, type TSchema } from "@sinclair/typebox";
 import * as C from "../../contracts/participation.js";
@@ -43,6 +45,7 @@ import { SummaryError } from '../modules/participation/summary-context.js';
 
 export interface ParticipationServices {
   database: Transactions;
+  fileStorage?:FileStorage;
   authentication: IdentityAuthentication;
   administration: IdentityAdministration;
 }
@@ -65,6 +68,7 @@ export function participantError(
       invalid_input: 400,
       reference_format_required: 409,
       change_format_required: 409,
+      file_format_required:409,
       invalid_actor: 401,
       unavailable: 404,
       forbidden: 403,
@@ -73,6 +77,9 @@ export function participantError(
       retryable: 503,
       service_unavailable: 503,
     }[code as PublicationError["code"]];
+  } else if(error instanceof FileError){
+    code=error.code;message=error.message;status=code==='file_storage_unavailable'?503:code==='file_capacity'?429:409;
+    action=code==='file_expired'?'retain_draft_and_reconcile':code==='file_mismatch'?'reselect_original_bytes':'retry_same_request';
   } else if (error instanceof IdentityError) {
     code = error.code;
     message = error.message;
@@ -167,7 +174,7 @@ export function participantError(
           ['/api/v1/resources/:id','/api/v1/resources/:id/revisions/:revision'].includes(request.routeOptions.url ?? '')
           ? { unavailable_scope: 'revision' } : {}),
         ...(minimum ? { minimum_response_bytes: minimum } : {}),
-        ...(error instanceof SummaryError && error.definitive ? { operation_outcome: "rejected" } : {}),
+        ...((error instanceof SummaryError || error instanceof FileError) && error.definitive ? { operation_outcome: "rejected" } : {}),
         ...(status >= 500 && request.method === "POST" && !personalRead
           ? { operation_outcome: "unknown" }
           : {}),
@@ -180,6 +187,7 @@ export async function registerParticipation(
 ) {
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
+  registerFiles(app,services.database,actor,services.fileStorage);
   registerSavedItems(app, services.database, actor);
   registerReading(app, services.database, actor);
   registerAttention(app, services.database, actor);

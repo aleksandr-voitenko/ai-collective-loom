@@ -1,3 +1,6 @@
+import {normalizeFileSet,type FileSetValue} from "../../../contracts/files.js";
+import {fileGuard,prepareFiles,uploadRow} from "./file-context.js";
+import {FileError} from "./file-storage.js";
 import { randomUUID, createHash } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
 import type { TSchema } from "@sinclair/typebox";
@@ -57,6 +60,7 @@ type Request = {
   expected_revision_id?: string;
   title?: string | null;
   content?: AuthoredContent;
+  file_set?:FileSetValue;
   overview?: AuthoredContent;
   community_name?: string;
   ordinary_area_name?: string;
@@ -121,6 +125,8 @@ function prepare(kind: string, value: unknown) {
       .sort((a,b) => a.resource_id.localeCompare(b.resource_id) || a.revision_id.localeCompare(b.revision_id));
   }
   try {
+    if(input.file_set) input.file_set=normalizeFileSet(input.file_set);
+    if(!content.text.length && (!input.file_set?.files.length || !["artifact.create","revision.publish"].includes(kind))) throw new Error("Empty text requires artifact files.");
     parseAuthored(content);
     validateChangeFields(content, input);
   } catch {
@@ -136,7 +142,7 @@ function prepare(kind: string, value: unknown) {
       throw new PublicationError("invalid_input");
   }
   const { idempotency_key: _key, ...semantic } = input;
-  const version = content.format === 'loom-markdown-v3' ? (kind.startsWith('summary.') ? 'discussion-summary-v2' : 'participation-text-v3')
+  const version = input.file_set ? 'artifact-files-v1' : content.format === 'loom-markdown-v3' ? (kind.startsWith('summary.') ? 'discussion-summary-v2' : 'participation-text-v3')
     : kind.startsWith("summary.") ? "discussion-summary-v1"
     : content.format === "loom-markdown-v2" ? "participation-text-v2" : participationSemanticVersion;
   return { input, content, version, digest: digestRequest(kind, semantic, version) };
@@ -215,6 +221,24 @@ export class ParticipationPublications {
           );
           if (!found.rowCount) throw new PublicationError("invalid_input");
         }
+        // A refusal binds the attempt even if a retry omits its file envelope.
+        // Older schemas have no file attempts; successful legacy replays resolve above.
+        if ((kind === 'artifact.create' || kind === 'revision.publish') &&
+          (await tx.query<{ready:boolean}>("SELECT to_regclass('loom.file_publication_refusals') IS NOT NULL AS ready",[])).rows[0]!.ready) {
+          const refusal=(await tx.query<{request_digest:string}>('SELECT request_digest FROM loom.file_publication_refusals WHERE participant_id=$1 AND operation_kind=$2 AND idempotency_key=$3',[actor.participantId,kind,input.idempotency_key])).rows[0];
+          if(refusal){if(refusal.request_digest!==digest)throw new PublicationError('idempotency_conflict');return new FileError('file_expired',true);}
+        }
+        if(input.file_set){
+          await fileGuard(tx);
+          for(const member of input.file_set.files)if('upload_id' in member.source){
+            const upload=await uploadRow(tx,member.source.upload_id,actor.participantId);
+            if(!upload.prepared_valid||['expired','cleaning'].includes(upload.state)){
+              if(Number((await tx.query<{count:string}>('SELECT count(*)::text AS count FROM loom.file_publication_refusals',[])).rows[0]!.count)>=4096)throw new FileError('file_capacity');
+              await tx.query('INSERT INTO loom.file_publication_refusals(participant_id,operation_kind,idempotency_key,request_digest) VALUES($1,$2,$3,$4)',[actor.participantId,kind,input.idempotency_key,digest]);
+              return new FileError('file_expired',true);
+            }
+          }
+        }
         let coverage: PreparedCoverage | undefined;
         if (input.coverage) {
           if ('preparation_id' in input.coverage) {
@@ -272,6 +296,9 @@ export class ParticipationPublications {
               "revision_conflict",
               resource.current_revision_id,
             );
+          if(input.file_set && resource.kind !== 'artifact')throw new PublicationError('invalid_input');
+          if(!input.file_set && (await tx.query<{ready:boolean}>("SELECT to_regclass('loom.artifact_file_sets') IS NOT NULL AS ready",[])).rows[0]!.ready &&
+            (await tx.query('SELECT revision_id FROM loom.artifact_file_sets WHERE revision_id=$1',[resource.current_revision_id])).rowCount)throw new PublicationError('file_format_required');
           const old = (
             await tx.query<{ title: string | null; content_format: string }>(
               "SELECT title,content_format FROM loom.revisions WHERE id=$1",
@@ -452,6 +479,7 @@ export class ParticipationPublications {
         if (input.change_account && chain[0]!.kind !== 'contribution') throw new PublicationError('invalid_input');
         const account = input.change_account ? await prepareChangeAccount(tx, resourceId, input.expected_revision_id ?? null, input.change_account) : undefined;
         const noteReferences = input.change_note ? await prepareReferences(tx, resourceId, null, input.change_note.references, 'change_note') : undefined;
+        const files=input.file_set?await prepareFiles(tx,actor.participantId,resourceId,input.area_id??chain[1]?.id,input.file_set):undefined;
         return commitRevision(
           tx,
           actor,
@@ -462,6 +490,7 @@ export class ParticipationPublications {
             content,
             title,
             mentions: content.mentions,
+            ...(files ? {files} : {}),
             ...(coverage ? { coverage } : {}),
             ...(input.change_note ? { changeNote: input.change_note, noteReferences: noteReferences! } : {}),
             ...(account ? { changeAccount: account } : {}),
@@ -471,10 +500,10 @@ export class ParticipationPublications {
           { kind, version, digest },
         );
       });
-      if (completed instanceof SummaryError) throw completed;
+      if (completed instanceof SummaryError || completed instanceof FileError) throw completed;
       return completed;
     } catch (error) {
-      if (error instanceof OrganizationError || error instanceof SummaryError) throw error;
+      if (error instanceof OrganizationError || error instanceof SummaryError || error instanceof FileError) throw error;
       return safeError(error);
     }
   }
@@ -507,12 +536,17 @@ export class ParticipationPublications {
           key,
         );
         await lockActor(tx, actor);
-        if (!saved) return { operation_state: "not_recorded" };
+        if (!saved) {
+          if((await tx.query<{ready:boolean}>("SELECT to_regclass('loom.file_publication_refusals') IS NOT NULL AS ready",[])).rows[0]!.ready &&
+            (await tx.query('SELECT idempotency_key FROM loom.file_publication_refusals WHERE participant_id=$1 AND operation_kind=$2 AND idempotency_key=$3',[identityOf(actor).participantId,kind,key])).rowCount)throw new FileError('file_expired',true);
+          return { operation_state: "not_recorded" };
+        }
         await lockContext(tx, saved.resource_id, "resolution");
         await requireRevision(tx, saved.resource_id, saved.revision_id);
         return result(saved, "replayed");
       });
     } catch (error) {
+      if(error instanceof FileError)throw error;
       return safeError(error);
     }
   }

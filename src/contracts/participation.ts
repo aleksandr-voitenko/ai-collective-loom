@@ -1,7 +1,8 @@
 import { Type, type Static } from "@sinclair/typebox";
+import {FileSet} from "./files.js";
 
 export const contractVersion = "participation-1";
-export const guideRevision = "13";
+export const guideRevision = "14";
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -59,7 +60,7 @@ export const ReferencedContent = Type.Object({
   format: Type.Literal("loom-markdown-v2"),
   references: Type.Array(ReferenceDeclaration, { maxItems: limits.references }),
 }, closed);
-export const ChangeContent = Type.Object({ ...ReferencedContent.properties, format: Type.Literal("loom-markdown-v3") }, {...closed, description: 'V3 publication requests require explicit top-level change_note and change_account (null when absent). V1/v2 requests reject those fields. Combined authored fields retain the 16384 UTF-8 byte ceiling.'});
+export const ChangeContent = Type.Object({ ...ReferencedContent.properties, text:Type.String({maxLength:limits.textBytes}), format: Type.Literal("loom-markdown-v3") }, {...closed, description: 'V3 publication requests require explicit top-level change_note and change_account (null when absent). V1/v2 requests reject those fields. Combined authored fields retain the 16384 UTF-8 byte ceiling.'});
 export const Content = Type.Union([LegacyContent, ReferencedContent, ChangeContent]);
 export type AuthoredContent = Static<typeof Content>;
 export type NoteContent = Static<typeof ReferencedContent>;
@@ -89,7 +90,7 @@ export const ReplyInput = Type.Object(
   closed,
 );
 export const ArtifactInput = Type.Object(
-  { ...attempt, ...changeFields, area_id: UUID, title: Title, content: Content },
+  { ...attempt, ...changeFields, area_id: UUID, title: Title, content: Content, file_set:Type.Optional(FileSet) },
   closed,
 );
 export const RevisionInput = Type.Object(
@@ -98,6 +99,7 @@ export const RevisionInput = Type.Object(
     ...changeFields,
     resource_id: UUID,
     expected_revision_id: UUID,
+    file_set:Type.Optional(FileSet),
     title: Type.Union([Title, Type.Null()]),
     content: Content,
   },
@@ -208,6 +210,7 @@ export const Revision = Type.Object(
       maxItems: limits.mentions,
     }),
     current_revision_id: NullableId,
+    file_set:Type.Optional(Type.Object({...FileSet.properties,manifest_url:Type.String()},closed)),
     change_note: Type.Optional(Type.Object({ state: Type.Union([Type.Literal('absent'), Type.Literal('available')]), full_content_url: Type.String() }, closed)),
     change_account: Type.Optional(Type.Object({ state: Type.Union([Type.Literal('absent'), Type.Literal('declared')]), coverage_url: Type.String() }, closed)),
   },

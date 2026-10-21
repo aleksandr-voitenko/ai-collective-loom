@@ -1,4 +1,47 @@
-# Text participation boundary
+# Participation boundary
+
+Artifact files: `files.ts` owns bounded private custody and exact manifest/download
+reads; `file-storage.ts` is the single native S3 boundary. `file-context.ts` owns
+publication preparation/insertion under custody guard15, after actor and before
+structure/resource guards. No object IO occurs while SQL/publication guards are
+held. Migration0019 pins native versions and protects published upload lifetime;
+deferred text-or-files validation admits empty v3 main text only with artifact files.
+`artifact-files-v1` supplies the entire file set in the publication digest. Members
+use an owner-bound prepared handle or an eligible same-artifact exact context.
+Common revision commit inserts the manifest before pointer/event/outcome tail.
+Saved legacy outcomes resolve before file-format checks; new legacy edits cannot
+silently erase a file-aware base. Historical revisions remain immutable.
+ADR-029 and contracts/files.ts define conservative limits: 4 MiB/file,16 entries,
+32 MiB/package,16 KiB manifest,512 UTF-8 bytes/path and8 segments. Paths use NFC
+and ASCII-case collision checks, explicitly not universal Unicode case folding.
+Four unfinished uploads/owner,128 identities/owner,4096/global; staging+final
+reservations64 MiB/owner,256 MiB/global include abandoned attempts. Handles expire
+at24h, byte admission1h; published versions have no TTL. Native work15s, lease120s.
+Cleanup claims at most8 expired unassociated uploads under the same guard, then
+deletes exact versions outside SQL. Quarantine remains reserved and retries after
+one hour; immutable upload/expiry-refusal tombstones preserve outcome knowledge.
+Expiry is not proof that an uncertain publication failed: a saved outcome wins;
+otherwise a committed bounded expiry refusal permits explicit new-key correction.
+Refusal lookup is bound to owner/operation/key under the attempt lock, independent
+of the optional file envelope. Omitting files conflicts with the refused digest;
+exact retry/status remains rejected, including after an API restart.
+Manifest pages authorize exact context every time and disclose declared health
+only. Downloads reauthorize after native digest/length verification, then serve
+passive attachment/octet-stream/no-store/nosniff/sandbox bytes. No signed URLs.
+Upload/download HTTP admission shares four slots until response completion or
+disconnection (15s deadline). Storage admission holds four slots from before the
+first DB wait for incoming buffers through final DB association/authorization,
+bounding buffers even after an HTTP disconnect.
+`web/Files.tsx` uses existing scoped IntentStore/authorization boundaries, explicit
+selection/status/prepare/download actions and SHA-256 reselection after reload.
+No file bytes/secrets/storage capabilities enter the local journal. Stale corrections
+preserve attempted manifests. Private custody receipts cannot restore source text.
+Draft path edits may be incomplete; validate strictly before immutable dispatch,
+not while reading editable journal records and blocking unrelated recovery.
+Only definitive first metadata refusals become explicitly removable rejected
+uploads; later byte/finalization failures and uncertain retries retain identity.
+The direct HTTPS client emits safe recognized error/outcome codes on refusal,
+exits1 and preserves the journal, including durable publication expiry refusals.
 
 Administrator suppression uses `moderation.ts`, contracts/moderation.ts and
 ADR-028. `resources.state` is authoritative; `lifecycle_version` advances on every
@@ -84,7 +127,9 @@ Bodies are exact v1, explicit-reference v2 or change-aware `loom-markdown-v3`,
 16 KiB UTF-8 text plus rationale and 4,096 parsed tokens maximum,
 with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images and
 non-HTTP(S) links do not render as active content. Ordinary links infer nothing.
-Files and model execution remain unsupported; persisted entities feed the independent notification consumer (ADR-023).
+Inline file embedding and model execution remain unsupported; artifact files use
+the separate passive manifest contract. Persisted authored entities feed the
+independent notification consumer (ADR-023).
 
 Eligible retrieval rows contain metadata + exact full-content paths. Default 12, max 25,
 scan max 100, serialized response budget 4–128 KiB. Maximum escaped accepted text
@@ -193,7 +238,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–13. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–14. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;

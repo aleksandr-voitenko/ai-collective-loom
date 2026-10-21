@@ -126,6 +126,15 @@ const groupLocal=Object.fromEntries(Object.entries(memberLocal).map(([p,r])=>['i
 add(['POST /api/v1/me/updates/query'],'read',sourceErrors,classified(U.UpdatesPage,groupDenials,groupLocal));
 add(['POST /api/v1/me/routine-updates/query'],'read',sourceErrors,classified(V.RoutinePage,groupDenials,groupLocal));
 
+
+add(['POST /api/v1/file-uploads','POST /api/v1/file-uploads/{id}/bytes','POST /api/v1/file-uploads/{id}/finalize'],
+ 'receipt',sourceErrors,affirmed('Owner-private upload custody; it never authorizes source content.'));
+add(['POST /api/v1/file-uploads/status','POST /api/v1/file-uploads/cleanup'],
+ 'receipt',identityErrors,affirmed('Owner-private status and cleanup; sources are never hydrated.'));
+add(['GET /api/v1/file-uploads/{id}'],'private-read',identityErrors,affirmed('Owner-private upload custody with no source metadata.'));
+add(['GET /api/v1/artifacts/{id}/revisions/{revision}/files','GET /api/v1/artifacts/{id}/revisions/{revision}/files/{file}/download'],
+ 'read',sourceErrors,affirmed('Exact contextual files under current resource and revision authority.'));
+
 const matchers=[...responseContracts].map(([route,contract])=>({route,contract,pattern:new RegExp('^'+route.split(/(\{\w+\})/).map(part=>
   /^\{\w+\}$/.test(part)?'[^/?#]+':part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('')+'$')}));
 export function responseContract(path:string,method:'GET'|'POST'){

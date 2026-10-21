@@ -1,3 +1,5 @@
+import {FileEditor,FileBrowser} from "./Files.js";
+import {normalizeFileSet,type FileSetValue} from "../contracts/files.js";
 import {
   useCallback,
   useEffect,
@@ -810,6 +812,7 @@ function Composer({
   initialFormat = "loom-markdown-v1",
   initialReferences = [],
   initialChangeAccount = null,
+  initialFileSet,
   resourceKind,
   summaryDiscussion,
   initialCoverage,
@@ -828,6 +831,7 @@ function Composer({
   initialFormat?: AuthoredContent["format"];
   initialReferences?: ReferenceValue[];
   initialChangeAccount?: ChangeAccountValue | null;
+  initialFileSet?:FileSetValue|undefined;
   resourceKind?: string;
   summaryDiscussion?: string | undefined;
   initialCoverage?: CoverageDeclarationValue | undefined;
@@ -861,6 +865,9 @@ function Composer({
     [references, setReferences] = useState(original ? original.format !== "loom-markdown-v1" ? original.references : [] : initialReferences);
   const [note,setNote] = useState<NoteContent|null>(record ? (record.body.change_note as NoteContent|null|undefined) ?? null : null);
   const [account,setAccount] = useState<ChangeAccountValue|null>(record ? (record.body.change_account as ChangeAccountValue|null|undefined) ?? null : initialChangeAccount);
+  const [fileSet,setFileSet]=useState<FileSetValue|undefined>(record?record.body.file_set as FileSetValue|undefined:initialFileSet);
+  const [filesPending,setFilesPending]=useState(false);
+  const canFiles=kind==='artifact.create'||resourceKind==='artifact';
   const canNote = kind === 'artifact.create' || !!summaryDiscussion || resourceKind === 'artifact';
   const [base, setBase] = useState(
     record?.body.expected_revision_id ?? fixed.expected_revision_id,
@@ -883,19 +890,20 @@ function Composer({
   }, []);
   const locked =
     busy || (!!record && (record.state !== "draft" || !!record.blocked_by));
+  const legacyFileCorrection=record?.state==='rejected'&&resourceKind==='artifact'&&!record.body.file_set;
   const legacyCorrection = record?.state === "rejected" &&
     (kind === "revision.publish" || kind === 'summary.revise') && original?.format !== "loom-markdown-v3";
   // A format refusal has no conflict ID: its retained expected revision is still
   // the exact comparison base. Never use a newer fetched current source instead.
   const comparisonRevision = record?.conflict_revision_id ??
-    (legacyCorrection && typeof record.body.expected_revision_id === "string"
+    ((legacyCorrection||legacyFileCorrection) && typeof record.body.expected_revision_id === "string"
       ? record.body.expected_revision_id : undefined);
   const comparisonReady = !!compare && compare.revision_id === comparisonRevision;
   // Only v1 cannot represent references. A v2→v3 correction already carries
   // attempted reference edits, including additions and deliberate withdrawals.
   const adoptsBaseReferences = legacyCorrection && comparisonReady && original?.format === 'loom-markdown-v1' &&
     compare?.content.format !== 'loom-markdown-v1';
-  const requiresComparison = legacyCorrection || (!!summaryDiscussion && !!comparisonRevision);
+  const requiresComparison = legacyCorrection || legacyFileCorrection || (!!summaryDiscussion && !!comparisonRevision);
   useEffect(() => {
     setCompare(undefined);
     setComparisonError("");
@@ -926,15 +934,17 @@ function Composer({
     nextCoverage = coverage,
     nextNote = note,
     nextAccount = account,
+    nextFiles = fileSet,
   ) {
     return {
       ...fixed,
       ...(base ? { expected_revision_id: base } : {}),
       ...(titleField ? { title: nextTitle } : {}),
       ...(nextCoverage ? { coverage: nextCoverage } : {}),
-      ...((format === 'loom-markdown-v3' || nextNote || nextAccount) ? {change_note:nextNote,change_account:nextAccount} : {}),
+      ...(nextFiles?{file_set:nextFiles}:{}),
+      ...((format === 'loom-markdown-v3' || nextNote || nextAccount || nextFiles) ? {change_note:nextNote,change_account:nextAccount} : {}),
       content: {
-        ...(format === 'loom-markdown-v3' || nextNote || nextAccount ? {format:'loom-markdown-v3',references:nextReferences}
+        ...(format === 'loom-markdown-v3' || nextNote || nextAccount || nextFiles ? {format:'loom-markdown-v3',references:nextReferences}
           : format === "loom-markdown-v2" || nextReferences.length
           ? { format: "loom-markdown-v2", references: nextReferences }
           : { format: "loom-markdown-v1" }),
@@ -951,9 +961,10 @@ function Composer({
     nextCoverage = coverage,
     nextNote = note,
     nextAccount = account,
+    nextFiles = fileSet,
   ) {
     try {
-      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences, nextCoverage, nextNote, nextAccount);
+      const body = draftBody(nextText, nextTitle, nextMentions, nextReferences, nextCoverage, nextNote, nextAccount, nextFiles);
       const next = await update((current) =>
         context.store.saveDraft(
           current ?? context.store.create(slot, kind, path, body),
@@ -997,6 +1008,7 @@ function Composer({
         wasUncertain = current?.state === "uncertain";
         const body = draftBody();
         const draft = current ?? context.store.create(slot, kind, path, body);
+        if(!wasUncertain && fileSet)normalizeFileSet(fileSet);
         parseAuthored(
           (wasUncertain ? draft.body.content : body.content) as AuthoredContent,
         );
@@ -1043,6 +1055,7 @@ function Composer({
   }
   const check = useCallback(async () => {
     if (!record || busy || record.state !== "uncertain") return;
+    const owner = identityGeneration();
     setBusy(true);
     setError("");
     try {
@@ -1059,9 +1072,13 @@ function Composer({
           "Confirmation is still unavailable. The original request may still commit.",
         );
     } catch (failure) {
-      if (live.current) setError((failure as Error).message);
+      if (isDefinitiveRejection(failure, true)) {
+        try { await update(() => context.store.settle(record, {state:'rejected'})); }
+        catch { /* Keep the exact uncertain record if local settlement failed. */ }
+      }
+      if (live.current && owner === identityGeneration()) setError((failure as Error).message);
     } finally {
-      if (live.current) setBusy(false);
+      if (live.current && owner === identityGeneration()) setBusy(false);
     }
   }, [record, busy]);
   useEffect(() => {
@@ -1084,10 +1101,12 @@ function Composer({
         ? compare?.content.references : undefined;
       const adoptedAccount = legacyCorrection && compare?.content.format === 'loom-markdown-v3'
         ? (compare.change_account?.state === 'declared' ? {carry_forward_revision_id:compare.revision_id} : null) : account;
-      const nextFormat = compare?.content.format === 'loom-markdown-v3' || format === 'loom-markdown-v3' ? 'loom-markdown-v3' : adopted ? 'loom-markdown-v2' : format;
+      const adoptedFiles=legacyFileCorrection&&compare?.file_set?{version:compare.file_set.version,files:compare.file_set.files}:fileSet;
+      const nextFormat = adoptedFiles ? "loom-markdown-v3" : compare?.content.format === 'loom-markdown-v3' || format === 'loom-markdown-v3' ? 'loom-markdown-v3' : adopted ? 'loom-markdown-v2' : format;
       await update((current) =>
         context.store.correct(current!, {
           ...body,
+          ...(adoptedFiles?{file_set:adoptedFiles}:{}),
           ...(revision ? { expected_revision_id: revision } : {}),
           ...(adopted || nextFormat === 'loom-markdown-v3' ? { content: { ...body.content, format: nextFormat, references: adopted ?? references } } : {}),
           ...(nextFormat === 'loom-markdown-v3' ? {change_note:note,change_account:adoptedAccount} : {}),
@@ -1096,7 +1115,7 @@ function Composer({
       if (live.current && owner === identityGeneration()) {
         if (revision) setBase(revision);
         if (summaryDiscussion) setCoverage(undefined);
-        setFormat(nextFormat); setAccount(adoptedAccount);
+        setFormat(nextFormat); setAccount(adoptedAccount);setFileSet(adoptedFiles);
         if (adopted) setReferences(adopted);
         setCompare(undefined);
         setError("");
@@ -1123,6 +1142,7 @@ function Composer({
         expected_revision_id: latest.revision_id,
         title: latest.title,
         content: latest.content,
+        ...(latest.file_set?{file_set:{version:latest.file_set.version,files:latest.file_set.files}}:{}),
         ...(latest.kind === 'summary' ? {coverage: { carry_forward_revision_id: latest.revision_id }} : {}),
         ...(latest.content.format === 'loom-markdown-v3' ? {change_note:null,change_account:latest.change_account?.state === 'declared' ? {carry_forward_revision_id:latest.revision_id}:null} : {}),
       }));
@@ -1179,7 +1199,7 @@ function Composer({
           {!summaryDiscussion && kind !== "revision.publish" && <button
             onClick={() =>
               void update((current) =>
-                context.store.replace(current!, draftBody("", "", [], [], undefined, null, null)),
+                context.store.replace(current!, draftBody("", "", [], [], undefined, null, null, canFiles?{version:"artifact-files-v1",files:[]}:undefined)),
               ).catch((failure) => setError(failure.message))
             }
           >
@@ -1310,6 +1330,7 @@ function Composer({
               )}
             </>
           )}
+          {canFiles&&<FileEditor context={context} target={{kind:kind==='artifact.create'?'area':'artifact',resource_id:String(fixed.resource_id??fixed.area_id)}} value={fileSet} disabled={locked} onPending={setFilesPending} onChange={async next=>{const saved=await persist(text,title,mentions,references,coverage,note,account,next);if(saved&&live.current)setFileSet(next);return !!saved;}}/>}
           <ReferenceEditor references={references} disabled={locked} onChange={next => {
             setReferences(next); if(format !== "loom-markdown-v3") setFormat("loom-markdown-v2");
             void persist(text, title, mentions, next);
@@ -1354,7 +1375,7 @@ function Composer({
           {(!record || record.state === "draft") && (
             <button
               className="primary"
-              disabled={locked || !text.trim() || (titleField && !title.trim()) || (!!summaryDiscussion && !coverage) || (!!account && ("revisions" in account ? account.revisions.length === 0 : account.carry_forward_revision_id !== base)) || (!!note && !note.text.trim())}
+              disabled={locked || filesPending || (!text.trim() && !fileSet?.files.length) || (titleField && !title.trim()) || (!!summaryDiscussion && !coverage) || (!!account && ("revisions" in account ? account.revisions.length === 0 : account.carry_forward_revision_id !== base)) || (!!note && !note.text.trim())}
               onClick={() => void send()}
             >
               {busy
@@ -1888,10 +1909,12 @@ function ResourceContent({
             <span className="author-badge">Agent</span>
           )}
         </div>
-        <ReadingText key={data.revision_id} target={{resource_id:id,revision_id:data.revision_id}} number={data.revision_number}
+        {data.content.text.length>0&&<ReadingText key={data.revision_id} target={{resource_id:id,revision_id:data.revision_id}} number={data.revision_number}
           content={data.content}
           participants={data.mentioned_participants}
         />
+        }
+        {data.file_set&&<FileBrowser key={data.revision_id} artifact={id} revision={data.revision_id}/>}
         <ChangeDetails revision={data}/>
         <ChangeDiscoveryViewComponent key={id+data.revision_id} resource={id} revision={data.revision_id} kind={data.kind === "summary" ? "summary" : data.kind === "artifact" ? "artifact" : "contribution"}/>
         <ReferenceViews key={id+data.revision_id+(revision??'current')} sourceId={id} sourceRevision={data.revision_id}
@@ -1940,6 +1963,7 @@ function ResourceContent({
           initialFormat={data.content.format}
           initialReferences={data.content.format !== "loom-markdown-v1" ? data.content.references : []}
           initialChangeAccount={data.change_account?.state === "declared" ? {carry_forward_revision_id:data.revision_id} : null}
+          initialFileSet={data.file_set?{version:data.file_set.version,files:data.file_set.files}:undefined}
           resourceKind={data.kind}
           summaryDiscussion={data.kind === 'summary' ? data.discussion_id! : undefined}
           initialCoverage={data.kind === 'summary' ? {carry_forward_revision_id:data.revision_id} : undefined}
@@ -2772,7 +2796,7 @@ function Help({ context }: { context: Context }) {
         {context.store.all().filter((record) => !["saved.set", "following.set"].includes(record.kind)).map((record) => (
           <div className="list-row" key={record.key}>
             <Link to={intentUrl(record)}>
-              {record.kind} · {record.state} ·{" "}
+              {record.kind}{record.kind==='file.upload'?' · '+String(record.body.path)+' · '+String((record.body.target as {resource_id:string}).resource_id):''} · {record.state} ·{" "}
               {new Date(record.created_at).toLocaleString()}
             </Link>
             {record.state !== "uncertain" && (
@@ -2792,7 +2816,7 @@ function Help({ context }: { context: Context }) {
         <p>
           Saved items and Following have separate private server state and recovery controls.
           Shared Changes and personal Mentions/replies have independent checkpoints.
-          Grouped Updates, uploads, read state and agent execution remain future work.
+          File recovery retains metadata only. Reselect original bytes when needed; prepared files can be recovered without another upload. Agent execution remains outside this release.
         </p>
       </section>
     </>

@@ -9,11 +9,19 @@ Keep durable setup/coverage commands in root README, decisions in `docs/adr`, an
 implementation constraints in scoped memory. Historical evidence remains in Git.
 The architecture is a proposal; its acceptance mappings are not executed results.
 
-Current implementation includes an opt-in **synthetic text participation** slice on
+Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`13`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`14`.
+Artifact files (ADR-029, migration0019) extend ordinary artifact revisions with
+complete immutable manifests and contextual exact native S3 versions. The isolated
+preview uses app-authenticated HTTPS single-part transfer/download with private
+SeaweedFS buckets; it never exposes provider credentials or signed capabilities.
+Owner custody and expired unassociated cleanup are separate from atomic shared
+publication. Text-only protocols, old digests and uncertain requests retain their
+meaning. Search covers title/authored text, never file bytes; file-only views do not
+manufacture main-text presentation. See participation memory for limits/recovery.
 Administrator suppression (ADR-028, migration0018) uses the existing resource state
 plus independent lifecycle fences and immutable decisions/audit. Only whole
 discussions, non-opening comments, summaries and artifacts are supported. Safe
@@ -106,7 +114,8 @@ assertion/change/withdrawal attribution. Direct bounded backlinks use current
 eligibility, explicit resource/exact and current/history scopes, sorted guards and
 restartable snapshot pages. Search supports all three formats' source title/body and current revision notes;
 rationale is displayed but not searched. See ADR-021
-and the participation memory; file/private-note integration remains open.
+and the participation memory. Exact artifact revisions also cover file-bearing
+artifacts; file-path assertions and private-note integration remain open.
 Discussion summaries (ADR-010) add optional canonical identity, explicit editors,
 immutable exact source declarations, bounded preparation/comparison/maintenance,
 and current authority across API/browser recovery. Coverage is an author claim,
@@ -137,7 +146,7 @@ participation memory for limits, authority and custody. Real-data gates remain.
 No real accounts/content are approved: ADR-004 identity/recovery candidates,
 production limits, retained-data operations and cross-machine validation remain
 gates. There is no default administrator or identity-header bypass. Agent memory
-and model execution stay external; uploads/grants and other derived workers stay gated.
+and model execution stay external; signed grants, attachments/extraction and other derived workers stay gated.
 See root README retained-data limits, ADR-011/015/016/017 and
 `src/server/modules/participation/MEMORY.md` for the implemented subset.
 The supplied UI v0.6 is preserved under `docs/design/ui-v0.6/`; it guides presentation,
@@ -147,7 +156,7 @@ Runtime foundation history: `LC-20261012-LMP4`; shared publication:
 Text participation, authored/retrieval contracts and browser recovery:
 `LC-20261014-9EU9`.
 Application commands require Node 24.19.0. `dev` initializes dependencies;
-`app:synthetic` builds and launches isolated temporary PostgreSQL + HTTPS with a
+`app:synthetic` builds and launches isolated temporary PostgreSQL, native versioned SeaweedFS + HTTPS with a
 private ticket file and independent supervised native search/notification workers.
 Terminal `worker stop/start` and `notifications stop/start` preserve the API. It never touches existing development data or credentials.
 

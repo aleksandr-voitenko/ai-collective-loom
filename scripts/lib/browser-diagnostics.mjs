@@ -5,12 +5,12 @@ import { join, resolve } from 'node:path';
 
 // This is a closed vocabulary, not a secret-pattern scrubber. Never add free text
 // (including reporter titles/errors/attachments) to an approved document.
-// Include the seven moderation scenarios in complete coverage manifests; retain
+// Include the moderation and three file scenarios in complete coverage manifests; retain
 // both byte envelopes and every per-test collection bound.
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
-  steps: 16, tests: 135, bytes: 131072, runBytes: 17 * 1024 * 1024 });
+  steps: 16, tests: 138, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
-export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
+export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'files.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
   'collector_missing', 'collector_unfinished', 'page_closed_before_capture', 'page_limit', 'context_limit', 'pending_limit', 'byte_limit'];
 export const details = ['none', 'default', 'persistent', 'explicit', 'dom_ready', 'load', 'closed',
@@ -21,6 +21,7 @@ export const controlNames = ['save_discussion', 'unsave_discussion', 'sign_in', 
 export const controlLabels = ['Save discussion', 'Unsave discussion', 'Sign in with passkey', 'Create passkey', 'Reply',
   'Check saved status', 'Retry same change', 'Retry collection', 'Sign out', 'Confirm move', 'Save topic', 'Check organization status', 'Retry same organization change', 'Search shared text', 'Refresh search', 'Add reference', 'Check target', 'Refresh references'];
 const routePatterns = [
+  '/api/v1/file-uploads', '/api/v1/file-uploads/status', '/api/v1/file-uploads/cleanup', '/api/v1/file-uploads/:id', '/api/v1/file-uploads/:id/bytes', '/api/v1/file-uploads/:id/finalize', '/api/v1/artifacts/:id/revisions/:revision/files', '/api/v1/artifacts/:id/revisions/:revision/files/:file/download',
   '/loom/moderation', '/api/v1/admin/moderation/state', '/api/v1/admin/moderation/status', '/api/v1/admin/moderation/targets', '/api/v1/admin/moderation/audit', '/api/v1/admin/moderation/resources/:id',
   '/loom/updates', '/api/v1/me/updates/query', '/api/v1/me/updates/members', '/api/v1/me/updates/reasons',
   '/loom/following', '/loom/changes', '/api/v1/me/following', '/api/v1/me/following/lookup', '/api/v1/me/following/state', '/api/v1/me/following/status',
