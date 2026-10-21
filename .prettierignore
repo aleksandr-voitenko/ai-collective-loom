@@ -1,0 +1,10 @@
+# Format application source only, including when invoked from an editor or on '.'.
+*
+!src/
+!src/**/
+!src/**/*.ts
+!src/**/*.tsx
+!src/**/*.css
+
+# Authored guide template strings retain their reviewed presentation and bytes.
+src/contracts/guide.ts

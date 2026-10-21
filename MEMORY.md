@@ -212,6 +212,10 @@ local PostgreSQL container with memory-backed storage and fresh credentials to
 check procedural execution, rollback/history, and runner/role invariants in CI.
 
 The actual package manifest/lockfile now pin application and test dependencies.
+Standalone `format` / `format:check` use exact local Prettier for application
+TS/TSX/CSS only. `.prettierignore` excludes the authored API guide and all other
+files; embedded-language formatting stays off to preserve template contents.
+The formatting policy is 100 columns, single quotes, two spaces and LF.
 `npm run check` retains docs, bootstrap units and hook tests, and adds application
 typechecking, HTTP/router tests, and build. `test:app:postgres` uses temporary
 PostgreSQL storage and compiled HTTP processes to verify app-role readiness,

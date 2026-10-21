@@ -171,6 +171,13 @@ not start the application. `app:dev` starts the API watcher on
 `http://127.0.0.1:3000` and Vite on `http://127.0.0.1:5173`, with an API proxy.
 `app:dev:api` and `app:dev:web` run either development process separately.
 
+Use `npm run format` to format application TypeScript, TSX, and CSS, and
+`npm run format:check` to check it without writing files. Both use the exact local
+Prettier version from the lockfile: 100-column target width, single quotes, two-space
+indentation, and LF endings. Embedded-language formatting is disabled to preserve
+template contents. The authored API guide, migrations, documents, tests, tooling,
+and generated output are excluded by `.prettierignore`, including for editors.
+
 For the compiled application and real-service checks:
 
 ```bash
