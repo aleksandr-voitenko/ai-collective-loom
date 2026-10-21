@@ -35,7 +35,7 @@ import { NotificationError } from '../modules/notifications/retrieval.js';
 import { FollowingError } from '../modules/following/context.js';
 import { registerFollowing } from './following.js';
 import { registerUpdates } from './updates.js';
-import { UpdatesError } from '../modules/updates/retrieval.js';
+import { UpdatesError } from '../modules/updates/errors.js';
 import { SearchError } from '../modules/search/search.js';
 import { registerReferences } from './references.js';
 import { registerChanges } from './changes.js';

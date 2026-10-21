@@ -12,7 +12,7 @@ import { AttentionControls } from '../modules/attention/controls.js';
 import { CombinedUpdates } from '../modules/updates/retrieval.js';
 
 export function registerAttention(app:FastifyInstance,database:Transactions,actor:(request:FastifyRequest)=>Promise<ActorContext>){
-  const service=new AttentionControls(database),privateService=new AttentionControls(database,'private'),routine=new CombinedUpdates(database,true),empty=Type.Object({},closed);
+  const service=new AttentionControls(database),privateService=new AttentionControls(database,'private'),routine=new CombinedUpdates(database,'routine'),empty=Type.Object({},closed);
   const errors=Object.fromEntries([400,401,403,404,409,410,413,415,429,500,503].map(code=>[code,ParticipationError]));
   const routes=[
     ['attention/previews',P.PreviewQuery,P.PreviewPage,'readControlPreviews',service.previews.bind(service)],

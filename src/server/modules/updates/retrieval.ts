@@ -1,69 +1,40 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../../../contracts/updates.js';
 import * as R from '../../../contracts/routine-updates.js';
 import * as A from '../../../contracts/attention.js';
 import { attentionOwner, attentionPolicy, dismissalStates, inputKey, normalizeInputs, prepareAttentionSelection, AttentionError } from '../attention/controls.js';
-import { BoundDefinition, eventPreferences, type BoundDefinitionView, type FollowTargetView } from '../../../contracts/following.js';
+import type { FollowTargetView } from '../../../contracts/following.js';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import type { ActorContext } from '../publication/actor.js';
 import { lockActor, lockContext, requireRevision } from '../publication/guards.js';
 import { safeError, PublicationError } from '../publication/errors.js';
 import { fit, RetrievalError } from '../participation/retrieval.js';
 import { lockReferencePlan } from '../participation/reference-context.js';
-import { followingDefinitions, normalizeSettings } from '../following/subscriptions.js';
+import { followingDefinitions } from '../following/subscriptions.js';
 import { followingOwner, followSource, unavailable } from '../following/context.js';
 import { SharedChanges, sharedCandidatesSql, sharedMatches, type SharedCandidate } from '../following/retrieval.js';
 import { PersonalNotifications, type PersonalCandidate } from '../notifications/retrieval.js';
 
+import { UpdatesError } from './errors.js';
+import type { UpdatesMode, State, Bound, View, Group, Member, AnyPage, AnyMembers, SelectionView } from './model.js';
+import { contractFor, encodeDescriptor, decodeDescriptor, checkContinuity, queryBinding, intervalBinding, newBound } from './descriptors.js';
+import { attentionCoverage, groupKey, traversalMetadata, directMembers, groupCounts } from './presentation.js';
+
 const L = C.updatesLimits;
-const messages = {
-  updates_attention_refresh_required: 'Attention settings changed. Refresh attention selection over the same subjects and intervals, or open Complete retrieval.',
-  updates_attention_preparing: 'Routine attention selection is still preparing. Continue preparing or refresh attention selection over the same subjects and intervals; Complete retrieval remains available.',
-  updates_token_invalid: 'This Updates descriptor does not match its owner, purpose, operation or bound selection.',
-  updates_descriptor_expired: 'This Updates view expired. Renew the same retained view and page.',
-  updates_state_unavailable: 'The bounded grouping state is unavailable. Exact page recovery cannot be established; explicitly resynchronize.',
-  updates_visibility_replay_required: 'Visibility changed. Replay both retained streams, including history before completed lower bounds.',
-  updates_shared_history_gap: 'Required shared history is unavailable. Explicit resynchronization cannot reconstruct those events.',
-  updates_personal_history_gap: 'Required personal history is unavailable. Explicit resynchronization cannot reconstruct those deliveries.',
-  updates_epoch_changed: 'An Updates or component recovery epoch changed. Continuity requires deployment recovery.',
-  updates_definition_changed: 'Following changed. Start a new retained-history scope to include newly selected history.',
-  updates_capacity: 'The synthetic grouping or custody limit was reached. Narrow oversized scopes; if retained view slots are full, reuse a saved view or wait for expiry. Live views are not evicted.',
-  updates_work_limit: 'Updates exceeded a bounded work deadline. Retry the same position; no failed component advanced.',
-  updates_view_changed: 'Authority or source state changed during retrieval. Reauthorize the same page.',
-};
-export class UpdatesError extends Error { constructor(readonly code: keyof typeof messages) { super(messages[code]); } }
 type Authority = Awaited<ReturnType<typeof lockActor>>;
-type State = { cursor_key: Buffer; epoch: string; instance: string; shared_epoch: string; personal_epoch: string;
-  shared_visibility: string; personal_visibility: string; shared_position: string; personal_position: string;
-  shared_floor: string; personal_floor: string };
-type Bound = { purpose: typeof C.updatesContract|typeof R.routineUpdatesContract; policy?:number; v: 1; owner: string; instance: string; epoch: string;
-  shared_epoch: string; personal_epoch: string; shared_visibility: string; personal_visibility: string;
-  id: string; scope: 'following'|'explicit'|'personal'; definitions: BoundDefinitionView[]; reason: 'all'|'mention'|'reply';
-  shared_lower: string; shared_upper: string; personal_lower: string; personal_upper: string;
-  shared_history: 'retained'|'incomplete'; personal_history: 'retained'|'incomplete';
-  kind: 'prepare'|'groups'|'members'|'checkpoint'; selection: 'highlights'|'complete'|'direct';
-  after: number; group: string|null; direct: boolean; expires: number; baseline: boolean };
-type View = { shared_after: string; personal_after: string; ready: boolean; unknown_shared: boolean; steps: number; retain_until: Date };
-type Group = { id: string; kind: C.UpdateGroupView['kind']; group_key: string; ordinal: number; direct: boolean; highlighted: boolean };
-type Member = { event_id: string; resource_id: string; revision_id: string|null; group_kind: Group['kind']; group_key: string;
-  shared: boolean; delivery_id: string|null; display_at: Date };
 const personalSql = `SELECT d.id,d.signal_id,d.position::text,d.available_at,s.resource_id,s.revision_id,s.source_event_id,c.parent_id,
   COALESCE(c.discussion_id,CASE WHEN r.kind='summary' THEN r.owner_resource_id END) AS discussion_id
   FROM loom.personal_deliveries d JOIN loom.notification_signals s ON s.id=d.signal_id JOIN loom.resources r ON r.id=s.resource_id
   LEFT JOIN loom.contributions c ON c.id=s.resource_id`;
 
-type AnyPage=C.UpdatesPageView|R.RoutinePageView;
-type AnyMembers=C.UpdatesMembersPageView|R.RoutineMembersPageView;
-type SelectionView={policy_version:number;scanned:number;ready:boolean};
-export class CombinedUpdates<Routine extends boolean=false> {
+export class CombinedUpdates<Mode extends UpdatesMode='combined'> {
   private readonly shared: SharedChanges;
   private readonly personal: PersonalNotifications;
-  constructor(private readonly database: Transactions, private readonly routine:Routine=false as Routine) {
+  constructor(private readonly database: Transactions, private readonly mode:Mode='combined' as Mode) {
     this.shared = new SharedChanges(database); this.personal = new PersonalNotifications(database);
   }
-  private get contract(){return this.routine?R.routineUpdatesContract:C.updatesContract;}
-  private coverage(bound:Bound):R.RoutinePageView['attention']{return {policy_version:bound.policy??0,selection:bound.selection==='complete'?'all_represented_inputs':'remaining_routine_inputs',counts:'source_records; shared_events; personal_signals_are_distinct_units',refresh:'explicit_same_scope_and_intervals'};}
+  private get contract(){return contractFor(this.mode);}
   private async run<T>(work: (tx: SqlTransaction) => Promise<T>) {
     try { return await this.database.transaction(async tx => {
       await tx.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ', []);
@@ -91,55 +62,6 @@ export class CombinedUpdates<Routine extends boolean=false> {
       LEFT JOIN loom.participant_delivery_clocks p ON p.participant_id=$1
       WHERE u.id=1 AND s.id=1 AND n.id=1 AND c.id=1 AND k.id=1`, [owner])).rows[0]!;
   }
-  private encode(state: State, bound: Bound) {
-    const {definitions, ...rest} = bound;
-    const d = definitions.map(v => [v.target.kind,v.target.resource_id,v.include_descendants ? 1 : 0,
-      eventPreferences.reduce((mask,p,i) => mask + (v.preferences.includes(p) ? 2**i : 0),0),v.version]);
-    const nonce = randomBytes(12), cipher = createCipheriv('aes-256-gcm',state.cursor_key,nonce);
-    cipher.setAAD(Buffer.from(this.contract));
-    const bytes=Buffer.concat([cipher.update(JSON.stringify({...rest,d})),cipher.final()]);
-    const token=Buffer.concat([nonce,cipher.getAuthTag(),bytes]).toString('base64url');
-    if (Buffer.byteLength(token)>L.tokenBytes) throw new UpdatesError('updates_capacity');
-    return token;
-  }
-  private decode(state: State, token: string, owner: string): Bound {
-    let bound: Bound;
-    try {
-      if (Buffer.byteLength(token)>L.tokenBytes) throw new Error();
-      const bytes=Buffer.from(token,'base64url'), cipher=createDecipheriv('aes-256-gcm',state.cursor_key,bytes.subarray(0,12));
-      cipher.setAAD(Buffer.from(this.contract)); cipher.setAuthTag(bytes.subarray(12,28));
-      const {d,...rest}=JSON.parse(Buffer.concat([cipher.update(bytes.subarray(28)),cipher.final()]).toString());
-      if (!Array.isArray(d)||d.length>64) throw new Error();
-      bound={...rest,definitions:d.map(([kind,id,desc,mask,version]:[string,string,number,number,number])=>{
-        if(![0,1].includes(desc)||!Number.isInteger(mask)||mask<1||mask>127)throw new Error();
-        return {target:{kind,resource_id:id},include_descendants:desc===1,preferences:eventPreferences.filter((_,i)=>mask&2**i),version};
-      })};
-      if(bound.purpose!==this.contract||bound.v!==1||this.routine&&(!Number.isInteger(bound.policy)||bound.policy!<0)||bound.owner!==owner||bound.instance!==state.instance||
-        !['following','explicit','personal'].includes(bound.scope)||!['all','mention','reply'].includes(bound.reason)||
-        !['prepare','groups','members','checkpoint'].includes(bound.kind)||!['highlights','complete','direct'].includes(bound.selection)||
-        !bound.definitions.every(d=>Value.Check(BoundDefinition,d))||
-        ![bound.shared_lower,bound.shared_upper,bound.personal_lower,bound.personal_upper].every(v=>/^\d{1,19}$/.test(v))||
-        BigInt(bound.shared_lower)>BigInt(bound.shared_upper)||BigInt(bound.personal_lower)>BigInt(bound.personal_upper)||
-        !Number.isInteger(bound.after)||bound.after<0||bound.after>L.members||!Number.isFinite(bound.expires)||
-        !/^[a-f0-9-]{36}$/.test(bound.id)||typeof bound.direct!=='boolean'||typeof bound.baseline!=='boolean'||
-        !['retained','incomplete'].includes(bound.shared_history)||!['retained','incomplete'].includes(bound.personal_history))throw new Error();
-    }catch{throw new UpdatesError('updates_token_invalid');}
-    if(bound.epoch!==state.epoch||bound.shared_epoch!==state.shared_epoch||bound.personal_epoch!==state.personal_epoch)
-      throw new UpdatesError('updates_epoch_changed');
-    return bound;
-  }
-  private continuity(state: State, saved: Bound, action?: string) {
-    if((saved.shared_visibility!==state.shared_visibility||saved.personal_visibility!==state.personal_visibility)&&
-      !['replay','resynchronize'].includes(action??''))throw new UpdatesError('updates_visibility_replay_required');
-    for(const component of ['shared','personal'] as const){
-      const floor=BigInt(state[`${component}_floor`]);
-      if(action!=='resynchronize'&&((action==='replay'&&floor>0n)||
-        BigInt(saved.kind==='checkpoint'?saved[`${component}_upper`]:saved[`${component}_lower`])<floor||
-        BigInt(saved[`${component}_upper`])>BigInt(state[`${component}_position`])))
-        throw new UpdatesError(component==='shared'?'updates_shared_history_gap':'updates_personal_history_gap');
-    }
-    if(saved.kind!=='checkpoint'&&saved.expires<=Date.now()&&!action)throw new UpdatesError('updates_descriptor_expired');
-  }
   private async view(tx: SqlTransaction, bound: Bound, write=false) {
     const view=(await tx.query<View>(`SELECT shared_after::text,personal_after::text,ready,unknown_shared,steps,retain_until
       FROM loom.updates_views WHERE id=$1 AND participant_id=$2 FOR ${write?'UPDATE':'SHARE'}`,[bound.id,bound.owner])).rows[0];
@@ -159,11 +81,11 @@ export class CombinedUpdates<Routine extends boolean=false> {
     await tx.query(`INSERT INTO loom.updates_views(id,participant_id,shared_after,personal_after,ready)
       VALUES($1,$2,$3,$4,$5)`,[bound.id,bound.owner,bound.shared_lower,bound.personal_lower,bound.baseline]);
   }
-  private memberColumns(bound:Bound){return this.routine&&bound.selection!=='complete'
+  private memberColumns(bound:Bound){return this.mode === 'routine'&&bound.selection!=='complete'
     ?'m.*,a.shared AS shared,CASE WHEN a.personal THEN m.delivery_id ELSE NULL END AS delivery_id':'m.*';}
-  private memberJoin(bound:Bound){return this.routine&&bound.selection!=='complete'
+  private memberJoin(bound:Bound){return this.mode === 'routine'&&bound.selection!=='complete'
     ?'JOIN loom.attention_members a ON a.view_id=m.view_id AND a.event_id=m.event_id':'';}
-  private memberWhere(bound:Bound){return this.routine&&bound.selection!=='complete'?'a.shared OR a.personal':'true';}
+  private memberWhere(bound:Bound){return this.mode === 'routine'&&bound.selection!=='complete'?'a.shared OR a.personal':'true';}
   private selectedMembers(tx:SqlTransaction,bound:Bound,groups:string[]){
     return tx.query<Member>(`SELECT ${this.memberColumns(bound)} FROM loom.updates_members m ${this.memberJoin(bound)}
       WHERE m.view_id=$1 AND (${this.memberWhere(bound)}) AND (group_kind,group_key) IN
@@ -182,7 +104,7 @@ export class CombinedUpdates<Routine extends boolean=false> {
     return view;
   }
   private async requireReadySelection(tx:SqlTransaction,bound:Bound){
-    if(!this.routine||bound.selection==='complete')return;
+    if(this.mode !== 'routine'||bound.selection==='complete')return;
     // Base grouping can finish before the bounded attention scan. Partial rows
     // are never complete membership or a whole-card dismissal selection.
     const view=(await tx.query<SelectionView>('SELECT policy_version,ready FROM loom.attention_views WHERE view_id=$1 FOR SHARE',[bound.id])).rows[0];
@@ -221,11 +143,6 @@ export class CombinedUpdates<Routine extends boolean=false> {
     await lockContext(tx,row.resource_id,'resolution',['area','discussion','contribution','artifact','summary']);
     if(row.revision_id)await requireRevision(tx,row.resource_id,row.revision_id);
   }
-  private groupKey(row: SharedCandidate): {kind: Group['kind']; key: string} {
-    if(row.discussion_id||row.resource_kind==='discussion')return {kind:'discussion',key:row.discussion_id??row.resource_id};
-    if(row.resource_kind==='artifact')return {kind:'artifact',key:row.resource_id};
-    return {kind:'structural',key:row.id};
-  }
   private async prepare(tx: SqlTransaction, actor: Authority, bound: Bound, view: View, statusSources: {id:string}[]) {
     if(view.ready){await lockReferencePlan(tx,statusSources.map(r=>r.id));return view;}
     if(view.steps>=L.steps)throw new UpdatesError('updates_capacity');
@@ -255,7 +172,7 @@ export class CombinedUpdates<Routine extends boolean=false> {
       rows.set(event.id,{event,shared:rows.get(event.id)?.shared??false,delivery:row});
     }catch(error){if(!unavailable(error))throw error;}
     for(const {event,shared,delivery} of rows.values()){
-      const key=this.groupKey(event),at=delivery&&delivery.available_at>event.created_at?delivery.available_at:event.created_at;
+      const key=groupKey(event),at=delivery&&delivery.available_at>event.created_at?delivery.available_at:event.created_at;
       await tx.query(`INSERT INTO loom.updates_members(view_id,event_id,resource_id,revision_id,group_kind,group_key,shared,delivery_id,display_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(view_id,event_id) DO UPDATE SET
         shared=loom.updates_members.shared OR EXCLUDED.shared,delivery_id=COALESCE(EXCLUDED.delivery_id,loom.updates_members.delivery_id),
@@ -278,41 +195,22 @@ export class CombinedUpdates<Routine extends boolean=false> {
     }
     return {...view,shared_after:sa,personal_after:pa,ready,unknown_shared:unknown,steps:view.steps+1};
   }
-  query(context: ActorContext, options: C.UpdatesOptions|R.RoutineOptions): Promise<Routine extends true?R.RoutinePageView:C.UpdatesPageView> {
-    if(!Value.Check(this.routine?R.RoutineQuery:C.UpdatesQuery,options)||[options.cursor,options.checkpoint,options.switch,options.recovery].filter(Boolean).length>1||
+  query(context: ActorContext, options: C.UpdatesOptions|R.RoutineOptions): Promise<Mode extends 'routine'?R.RoutinePageView:C.UpdatesPageView> {
+    if(!Value.Check(this.mode === 'routine'?R.RoutineQuery:C.UpdatesQuery,options)||[options.cursor,options.checkpoint,options.switch,options.recovery].filter(Boolean).length>1||
       options.recovery&&!options.recovery.token&&options.recovery.action!=='resynchronize')throw new PublicationError('invalid_input');
     return this.run(async tx=>{
       const actor=await lockActor(tx,context);await followingOwner(tx,actor.participantId);
-      if(this.routine)await attentionOwner(tx,actor.participantId);
-      const policy=this.routine?await attentionPolicy(tx,actor.participantId):undefined;
+      if(this.mode === 'routine')await attentionOwner(tx,actor.participantId);
+      const policy=this.mode === 'routine'?await attentionPolicy(tx,actor.participantId):undefined;
       const state=await this.state(tx,actor.participantId),token=options.cursor??options.checkpoint??options.switch?.token??options.recovery?.token;
-      const saved=token?this.decode(state,token,actor.participantId):undefined,action=options.recovery?.action;
-      if(saved)this.continuity(state,saved,action);
-      if(action==='attention_refresh'&&(!saved||saved.kind==='checkpoint'))throw new UpdatesError('updates_token_invalid');
-      if(options.checkpoint&&saved?.kind!=='checkpoint'||options.cursor&&(!saved||!['groups','prepare'].includes(saved.kind))||
-        options.switch&&saved?.kind==='checkpoint'||action==='renew'&&saved?.kind==='checkpoint')throw new UpdatesError('updates_token_invalid');
-      const scope=saved?.scope??options.scope?.kind??'following',reason=saved?.reason??options.reason??'all';
-      if(saved&&(options.reason&&options.reason!==saved.reason||options.selection&&options.selection!==saved.selection||
-        options.scope&&(options.scope.kind!==saved.scope||options.scope.kind==='explicit'&&JSON.stringify(normalizeSettings(options.scope.definition))!==
-          JSON.stringify((({version:_,...s})=>s)(saved.definitions[0]!)))))throw new UpdatesError('updates_token_invalid');
+      const saved=token?decodeDescriptor(this.mode,state,token,actor.participantId):undefined,action=options.recovery?.action;
+      if(saved)checkContinuity(state,saved,action);
+      const {scope,reason}=queryBinding(options,saved);
       const current=scope==='following'?await followingDefinitions(tx,actor.participantId):undefined;
-      const definitions=saved?.definitions??current??(scope==='personal'?[]:[{...normalizeSettings((options.scope as Extract<NonNullable<C.UpdatesOptions['scope']>,{kind:'explicit'}>).definition),version:0}]);
-      const settingsCurrent=!current||JSON.stringify(current)===JSON.stringify(definitions);
-      if(saved?.kind==='checkpoint'&&!settingsCurrent&&action!=='replay'&&action!=='resynchronize')throw new UpdatesError('updates_definition_changed');
-      if(!saved&&action!=='resynchronize'){
-        if(state.shared_floor!=='0')throw new UpdatesError('updates_shared_history_gap');
-        if(state.personal_floor!=='0')throw new UpdatesError('updates_personal_history_gap');
-      }
-      const fresh=!saved||saved.kind==='checkpoint'||action==='replay'||action==='resynchronize';
-      const resync=action==='resynchronize',replay=action==='replay';
-      let bound:Bound=fresh?{purpose:this.contract,...(this.routine?{policy:policy!.version}:{}),v:1,owner:actor.participantId,instance:state.instance,epoch:state.epoch,
-        shared_epoch:state.shared_epoch,personal_epoch:state.personal_epoch,shared_visibility:state.shared_visibility,personal_visibility:state.personal_visibility,
-        id:randomUUID(),scope,definitions,reason,shared_lower:resync?state.shared_position:replay?'0':saved?.shared_upper??'0',shared_upper:state.shared_position,
-        personal_lower:resync?state.personal_position:replay?'0':saved?.personal_upper??'0',personal_upper:state.personal_position,
-        shared_history:resync?'incomplete':saved?.shared_history??'retained',personal_history:resync?'incomplete':saved?.personal_history??'retained',
-        kind:'prepare',selection:options.selection??saved?.selection??'highlights',after:0,group:null,direct:false,
-        expires:Date.now()+L.cursorSeconds*1000,baseline:resync}:{...saved};
-      if(this.routine&&!fresh&&action!=='attention_refresh'&&(options.switch?.selection??bound.selection)!=='complete'&&bound.policy!==policy!.version)throw new UpdatesError('updates_attention_refresh_required');
+      const {definitions,settingsCurrent,fresh,resync,replay}=intervalBinding(state,options,saved,current,scope,action);
+      let bound:Bound=fresh?newBound({mode:this.mode,state,owner:actor.participantId,options,saved,policy:policy?.version,
+        scope,reason,definitions,id:randomUUID(),expires:Date.now()+L.cursorSeconds*1000,action}):{...saved!};
+      if(this.mode === 'routine'&&!fresh&&action!=='attention_refresh'&&(options.switch?.selection??bound.selection)!=='complete'&&bound.policy!==policy!.version)throw new UpdatesError('updates_attention_refresh_required');
       if(action==='attention_refresh')bound={...bound,policy:policy!.version,after:0,kind:'prepare',group:null,direct:false};
       if(fresh)await this.create(tx,bound);
       let view=await this.view(tx,bound,bound.kind==='prepare');
@@ -322,21 +220,23 @@ export class CombinedUpdates<Routine extends boolean=false> {
       if(options.switch)bound={...bound,selection:options.switch.selection,kind:view.ready?'groups':'prepare',after:0,group:null,direct:false};
       if(bound.kind==='members')throw new UpdatesError('updates_token_invalid');
       const statusSources=await this.personal.statusSources(tx);
-      const filtered=this.routine&&bound.selection!=='complete';
+      const filtered=this.mode === 'routine'&&bound.selection!=='complete';
       let selection=filtered?await this.selectionView(tx,bound):undefined;
       const basePreparing=!view.ready,selecting=!basePreparing&&filtered&&!selection!.ready;
-      const preparing=basePreparing||selecting||bound.kind==='prepare'&&!this.routine;
+      // A finishing step still returns a continuation; a fresh request acquires
+      // the complete projection plan instead of extending this preparation plan.
+      const preparing=basePreparing||selecting||bound.kind==='prepare'&&this.mode !== 'routine';
       if(basePreparing||preparing&&!selecting)view=await this.prepare(tx,actor,bound,view,statusSources);
       if(selecting)selection=await this.selectStep(tx,actor,bound,selection!,policy!,statusSources);
       if(view.ready&&(!filtered||selection?.ready)){if(bound.kind==='prepare')bound={...bound,kind:'groups',after:0};}
       else bound={...bound,kind:'prepare'};
-      const groupSql=this.routine?`SELECT g.* FROM loom.updates_groups g LEFT JOIN loom.attention_groups a ON a.view_id=g.view_id AND a.group_id=g.id
+      const groupSql=this.mode === 'routine'?`SELECT g.* FROM loom.updates_groups g LEFT JOIN loom.attention_groups a ON a.view_id=g.view_id AND a.group_id=g.id
         WHERE g.view_id=$1 AND ordinal>$2 AND (NOT $5 OR a.visible)
         AND ($3='complete' OR $3='highlights' AND CASE WHEN $5 THEN a.highlighted ELSE g.highlighted END
         OR $3='direct' AND CASE WHEN $5 THEN a.direct ELSE g.direct END) ORDER BY ordinal LIMIT $4`:`SELECT * FROM loom.updates_groups WHERE view_id=$1 AND ordinal>$2
         AND ($3='complete' OR $3='highlights' AND highlighted OR $3='direct' AND direct) ORDER BY ordinal LIMIT $4`;
       const groups=view.ready&&!preparing?(await tx.query<Group>(groupSql,
-        [bound.id,bound.after,bound.selection,(options.limit??12)+1,...(this.routine?[filtered]:[])])).rows:[];
+        [bound.id,bound.after,bound.selection,(options.limit??12)+1,...(this.mode === 'routine'?[filtered]:[])])).rows:[];
       const selected=groups.slice(0,options.limit??12);
       const members=selected.length?await this.selectedMembers(tx,bound,selected.map(g=>g.id)):[];
       const events=await this.events(tx,members);
@@ -344,30 +244,24 @@ export class CombinedUpdates<Routine extends boolean=false> {
       if(!preparing)await lockReferencePlan(tx,[...statusSources.map(r=>r.id),...events.flatMap(e=>[e.resource_id,...(e.discussion_id?[e.discussion_id]:[]),...(e.parent_id?[e.parent_id]:[])]),
         ...explanationCandidates.flatMap(e=>[e.resource_id,...(e.discussion_id?[e.discussion_id]:[])])]);
       const projection=await this.personal.projection(tx,statusSources),budget=options.max_response_bytes??131072;
-      const boundary=(component:string,position:string)=>createHmac('sha256',state.cursor_key).update(JSON.stringify([C.updatesContract,bound.owner,component,position])).digest('base64url');
-      const page:AnyPage={contract_version:this.contract,...(this.routine?{attention:this.coverage(bound)}:{}),stage:view.ready&&!preparing?'ready':'preparing',items:[],
-        traversal:{id:bound.id,scope,definitions,reason,selection:bound.selection,settings_current:settingsCurrent,grouping:'ownership; area_event',
-          order:'direct_first; frozen_recent_then_identity',expires_at:new Date(bound.expires).toISOString(),
-          shared:{contract:'shared-changes-1',lower:boundary('shared',bound.shared_lower),upper:boundary('shared',bound.shared_upper),
-            scan_complete:view.shared_after===bound.shared_upper,coverage:view.unknown_shared?'unknown':'known',history:bound.shared_history},
-          personal:{contract:'personal-attention-1',lower:boundary('personal',bound.personal_lower),upper:boundary('personal',bound.personal_upper),
-            scan_complete:view.personal_after===bound.personal_upper,coverage:'known',history:bound.personal_history}},
-        page_cursor:this.encode(state,bound),next_cursor:null,checkpoint:null,
-        complete_cursor:view.ready?this.encode(state,{...bound,kind:'groups',selection:'complete',after:0}):null,
-        direct_cursor:view.ready?this.encode(state,{...bound,kind:'groups',selection:'direct',after:0}):null,
-        records_cursor:view.ready?this.encode(state,{...bound,kind:'members',selection:'complete',after:0,group:null,direct:false}):null,
+      const page:AnyPage={contract_version:this.contract,...(this.mode === 'routine'?{attention:attentionCoverage(bound)}:{}),stage:view.ready&&!preparing?'ready':'preparing',items:[],
+        traversal:traversalMetadata(state,bound,view,settingsCurrent),
+        page_cursor:encodeDescriptor(this.mode,state,bound),next_cursor:null,checkpoint:null,
+        complete_cursor:view.ready?encodeDescriptor(this.mode,state,{...bound,kind:'groups',selection:'complete',after:0}):null,
+        direct_cursor:view.ready?encodeDescriptor(this.mode,state,{...bound,kind:'groups',selection:'direct',after:0}):null,
+        records_cursor:view.ready?encodeDescriptor(this.mode,state,{...bound,kind:'members',selection:'complete',after:0,group:null,direct:false}):null,
         page_exhausted:false,selection_exhausted:false,grouped_interval_complete:false,member_metadata_complete:false,full_contents_fetched:false,
         projection,work_budget_reached:!view.ready,recovery:action==='attention_refresh'?'attention_refreshed':action==='renew'?'renewed':replay?'visibility_replay':resync?'retained_resynchronization':'none',
         baseline_established:bound.baseline,inventory:bound.baseline?[{label:'Current topic inventory',url:'/api/v1/organization/children'},
           {label:'Current artifact inventory and exact history',url:'/api/v1/artifacts'},{label:'Retained personal attention',url:'/api/v1/me/notifications/query'}]:[],
         limit:options.limit??12,max_response_bytes:budget} as AnyPage;
-      if(preparing||!view.ready){page.next_cursor=this.encode(state,bound);return fit(page,budget);}
+      if(preparing||!view.ready){page.next_cursor=encodeDescriptor(this.mode,state,bound);return fit(page,budget);}
       let last=bound.after,consumed=0;
       for(const group of selected){
         const own=members.filter(m=>m.group_kind===group.kind&&m.group_key===group.group_key);
         const item=await this.group(tx,actor,state,bound,group,own,events,explanationCandidates,view.unknown_shared);
         if(item){
-          const preview={...page,items:[...page.items,item],next_cursor:this.encode(state,{...bound,after:group.ordinal})};
+          const preview={...page,items:[...page.items,item],next_cursor:encodeDescriptor(this.mode,state,{...bound,after:group.ordinal})};
           if(Buffer.byteLength(JSON.stringify(preview))+128>budget){if(!page.items.length)throw new RetrievalError('response_budget_too_small',Buffer.byteLength(JSON.stringify(preview))+128);break;}
           page.items.push(item);
         }
@@ -375,10 +269,10 @@ export class CombinedUpdates<Routine extends boolean=false> {
       }
       page.page_exhausted=consumed===groups.length;page.selection_exhausted=page.page_exhausted;
       page.grouped_interval_complete=page.selection_exhausted&&bound.selection==='complete'&&!view.unknown_shared&&!bound.baseline;
-      if(page.grouped_interval_complete||bound.baseline)page.checkpoint=this.encode(state,{...bound,kind:'checkpoint',after:0,expires:0,baseline:false});
-      else if(!page.selection_exhausted)page.next_cursor=this.encode(state,{...bound,after:last});
+      if(page.grouped_interval_complete||bound.baseline)page.checkpoint=encodeDescriptor(this.mode,state,{...bound,kind:'checkpoint',after:0,expires:0,baseline:false});
+      else if(!page.selection_exhausted)page.next_cursor=encodeDescriptor(this.mode,state,{...bound,after:last});
       return fit(page,budget);
-    }) as Promise<Routine extends true?R.RoutinePageView:C.UpdatesPageView>;
+    }) as Promise<Mode extends 'routine'?R.RoutinePageView:C.UpdatesPageView>;
   }
   private async events(tx: SqlTransaction, members: Member[]) {
     if(!members.length)return [];
@@ -423,7 +317,7 @@ export class CombinedUpdates<Routine extends boolean=false> {
     return null;
   }
   private async member(tx: SqlTransaction, actor: Authority, bound: Bound, member: Member, event: SharedCandidate): Promise<C.UpdateMemberView> {
-    const source={...await this.shared.item(tx,event,member.shared?sharedMatches(event,bound.definitions).reasons:[]),detail_url:this.routine?'/api/v1/me/routine-updates/reasons':'/api/v1/me/updates/reasons'};
+    const source={...await this.shared.item(tx,event,member.shared?sharedMatches(event,bound.definitions).reasons:[]),detail_url:this.mode === 'routine'?'/api/v1/me/routine-updates/reasons':'/api/v1/me/updates/reasons'};
     let personal:C.UpdateMemberView['personal']=null;
     if(member.delivery_id){
       const row=(await tx.query<PersonalCandidate>(`${personalSql} WHERE d.id=$1 AND d.recipient_id=$2`,[member.delivery_id,actor.participantId])).rows[0];
@@ -442,30 +336,25 @@ export class CombinedUpdates<Routine extends boolean=false> {
       try{await this.authorize(tx,event);eligible.push(event);}catch(error){if(!unavailable(error))throw error;}}
     if(!eligible.length)return;
     const visible=members.filter(m=>eligible.some(e=>e.id===m.event_id));
-    const count=(test:(e:SharedCandidate)=>boolean)=>eligible.filter(test).length;
     const target:FollowTargetView=group.kind==='structural'?{kind:'area',resource_id:eligible[0]!.resource_id}:{kind:group.kind,resource_id:group.group_key};
     const current=await followSource(tx,target);
-    const direct=visible.filter(m=>m.delivery_id).sort((a,b)=>b.display_at.getTime()-a.display_at.getTime()||a.event_id.localeCompare(b.event_id));
+    const direct=directMembers(visible);
     const previews:C.UpdateMemberView[]=[];
     for(const member of direct.slice(0,L.previews))previews.push(await this.member(tx,actor,bound,member,eligible.find(e=>e.id===member.event_id)!));
     return {id:group.id,kind:group.kind,current,context_url:current.state==='available'?current.browser_url:'/loom/topics',
-      counts:{certainty:unknownShared?'known_sources_only':'exact',source_records:visible.length,shared_changes:visible.filter(m=>m.shared).length,personal_signals:direct.length,
-        reply_publications:count(e=>e.resource_kind==='contribution'&&!!e.parent_id&&e.revision_number==='1'),
-        reply_revisions:count(e=>e.resource_kind==='contribution'&&!!e.parent_id&&e.revision_number!=='1'),
-        summary_changes:count(e=>e.resource_kind==='summary'),artifact_changes:count(e=>e.resource_kind==='artifact'&&e.kind==='revision.published'),
-        opening_changes:count(e=>e.resource_kind==='contribution'&&!e.parent_id),structural_changes:count(e=>e.kind==='organization.changed')},
+      counts:groupCounts(eligible,visible,direct,unknownShared),
       direct_sources:previews,direct_sources_complete:direct.length<=L.previews,
-      members_cursor:this.encode(state,{...bound,kind:'members',group:group.id,after:0,direct:false}),
-      direct_cursor:direct.length?this.encode(state,{...bound,kind:'members',group:group.id,after:0,direct:true}):null,
+      members_cursor:encodeDescriptor(this.mode,state,{...bound,kind:'members',group:group.id,after:0,direct:false}),
+      direct_cursor:direct.length?encodeDescriptor(this.mode,state,{...bound,kind:'members',group:group.id,after:0,direct:true}):null,
       explanation:await this.explanation(tx,eligible,explanations),omitted_detail:'remaining_member_metadata; full_bodies; summary_coverage_not_computed'};
   }
-  members(context: ActorContext, options: C.UpdatesMembersOptions): Promise<Routine extends true?R.RoutineMembersPageView:C.UpdatesMembersPageView> {
+  members(context: ActorContext, options: C.UpdatesMembersOptions): Promise<Mode extends 'routine'?R.RoutineMembersPageView:C.UpdatesMembersPageView> {
     if(!Value.Check(C.UpdatesMembersQuery,options))throw new PublicationError('invalid_input');
     return this.run(async tx=>{
-      const actor=await lockActor(tx,context);if(this.routine)await attentionOwner(tx,actor.participantId);
+      const actor=await lockActor(tx,context);if(this.mode === 'routine')await attentionOwner(tx,actor.participantId);
       const state=await this.state(tx,actor.participantId);
-      let bound=this.decode(state,options.cursor,actor.participantId);this.continuity(state,bound,options.renew?'renew':undefined);
-      if(this.routine&&bound.selection!=='complete'&&bound.policy!==(await attentionPolicy(tx,actor.participantId)).version)throw new UpdatesError('updates_attention_refresh_required');
+      let bound=decodeDescriptor(this.mode,state,options.cursor,actor.participantId);checkContinuity(state,bound,options.renew?'renew':undefined);
+      if(this.mode === 'routine'&&bound.selection!=='complete'&&bound.policy!==(await attentionPolicy(tx,actor.participantId)).version)throw new UpdatesError('updates_attention_refresh_required');
       if(bound.kind!=='members'&&bound.kind!=='groups')throw new UpdatesError('updates_token_invalid');
       if(bound.kind==='groups')bound={...bound,kind:'members',group:options.group_id??null,direct:options.direct_only??false,after:0};
       else if(options.group_id&&options.group_id!==bound.group||options.direct_only!==undefined&&options.direct_only!==bound.direct)throw new UpdatesError('updates_token_invalid');
@@ -475,35 +364,35 @@ export class CombinedUpdates<Routine extends boolean=false> {
       if(bound.group&&!(await tx.query('SELECT id FROM loom.updates_groups WHERE view_id=$1 AND id=$2',[bound.id,bound.group])).rowCount)throw new PublicationError('unavailable');
       const rows=(await tx.query<Member>(`SELECT ${this.memberColumns(bound)} FROM loom.updates_members m ${this.memberJoin(bound)} JOIN loom.updates_groups g
         ON g.view_id=m.view_id AND g.kind=m.group_kind AND g.group_key=m.group_key
-        WHERE m.view_id=$1 AND ($2::uuid IS NULL OR g.id=$2) AND (${this.memberWhere(bound)}) AND (NOT $3 OR ${this.routine&&bound.selection!=='complete'?'a.personal':'m.delivery_id IS NOT NULL'})
+        WHERE m.view_id=$1 AND ($2::uuid IS NULL OR g.id=$2) AND (${this.memberWhere(bound)}) AND (NOT $3 OR ${this.mode === 'routine'&&bound.selection!=='complete'?'a.personal':'m.delivery_id IS NOT NULL'})
         ORDER BY g.ordinal,(m.delivery_id IS NOT NULL) DESC,m.display_at DESC,m.event_id LIMIT $4 OFFSET $5`,
         [bound.id,bound.group,bound.direct,(options.limit??12)+1,bound.after])).rows;
       const selected=rows.slice(0,options.limit??12),events=await this.events(tx,selected);
       const personalParents=(await tx.query<{parent_id:string}>(`SELECT c.parent_id FROM loom.contributions c WHERE c.id=ANY($1::uuid[]) AND c.parent_id IS NOT NULL`,[selected.map(m=>m.resource_id)])).rows;
       await lockReferencePlan(tx,[...events.flatMap(e=>[e.resource_id,...(e.discussion_id?[e.discussion_id]:[])]),...personalParents.map(p=>p.parent_id)]);
-      const budget=options.max_response_bytes??131072,page:AnyMembers={contract_version:this.contract,...(this.routine?{attention:this.coverage(bound)}:{}),traversal_id:bound.id,
-        group_id:bound.group,direct_only:bound.direct,items:[],page_cursor:this.encode(state,bound),next_cursor:null,complete:false,
+      const budget=options.max_response_bytes??131072,page:AnyMembers={contract_version:this.contract,...(this.mode === 'routine'?{attention:attentionCoverage(bound)}:{}),traversal_id:bound.id,
+        group_id:bound.group,direct_only:bound.direct,items:[],page_cursor:encodeDescriptor(this.mode,state,bound),next_cursor:null,complete:false,
         full_contents_fetched:false,limit:options.limit??12,max_response_bytes:budget} as AnyMembers;
       let consumed=0;
       for(const row of selected){
         let item:C.UpdateMemberView|undefined;
         try{item=await this.member(tx,actor,bound,row,events.find(e=>e.id===row.event_id)!);}catch(error){if(!unavailable(error))throw error;}
-        if(item){const preview={...page,items:[...page.items,item],next_cursor:this.encode(state,{...bound,after:bound.after+consumed+1})};
+        if(item){const preview={...page,items:[...page.items,item],next_cursor:encodeDescriptor(this.mode,state,{...bound,after:bound.after+consumed+1})};
           if(Buffer.byteLength(JSON.stringify(preview))+64>budget){if(!page.items.length)throw new RetrievalError('response_budget_too_small',Buffer.byteLength(JSON.stringify(preview))+64);break;}
           page.items.push(item);}
         consumed++;
       }
       page.complete=consumed===rows.length;
-      if(!page.complete)page.next_cursor=this.encode(state,{...bound,after:bound.after+consumed});
+      if(!page.complete)page.next_cursor=encodeDescriptor(this.mode,state,{...bound,after:bound.after+consumed});
       return fit(page,budget);
-    }) as Promise<Routine extends true?R.RoutineMembersPageView:C.UpdatesMembersPageView>;
+    }) as Promise<Mode extends 'routine'?R.RoutineMembersPageView:C.UpdatesMembersPageView>;
   }
   selection(context:ActorContext,options:A.AttentionSelectionOptions){
-    if(!this.routine||!Value.Check(A.AttentionSelectionQuery,options))throw new PublicationError('invalid_input');
+    if(this.mode !== 'routine'||!Value.Check(A.AttentionSelectionQuery,options))throw new PublicationError('invalid_input');
     return this.run(async tx=>{
       const actor=await lockActor(tx,context);await attentionOwner(tx,actor.participantId);
-      const state=await this.state(tx,actor.participantId),bound=this.decode(state,options.cursor,actor.participantId);
-      this.continuity(state,bound);
+      const state=await this.state(tx,actor.participantId),bound=decodeDescriptor(this.mode,state,options.cursor,actor.participantId);
+      checkContinuity(state,bound);
       const policy=await attentionPolicy(tx,actor.participantId);
       if(bound.selection!=='complete'&&bound.policy!==policy.version)throw new UpdatesError('updates_attention_refresh_required');
       const view=await this.view(tx,bound);if(!view.ready||!['groups','members'].includes(bound.kind))throw new UpdatesError('updates_state_unavailable');
@@ -530,10 +419,10 @@ export class CombinedUpdates<Routine extends boolean=false> {
   reasons(context: ActorContext, options: C.UpdatesReasonsOptions) {
     if(!Value.Check(C.UpdatesReasonsQuery,options))throw new PublicationError('invalid_input');
     return this.run(async tx=>{
-      const actor=await lockActor(tx,context);if(this.routine)await attentionOwner(tx,actor.participantId);
-      const state=await this.state(tx,actor.participantId),bound=this.decode(state,options.cursor,actor.participantId);
-      this.continuity(state,bound);
-      if(this.routine&&bound.selection!=='complete'&&bound.policy!==(await attentionPolicy(tx,actor.participantId)).version)throw new UpdatesError('updates_attention_refresh_required');
+      const actor=await lockActor(tx,context);if(this.mode === 'routine')await attentionOwner(tx,actor.participantId);
+      const state=await this.state(tx,actor.participantId),bound=decodeDescriptor(this.mode,state,options.cursor,actor.participantId);
+      checkContinuity(state,bound);
+      if(this.mode === 'routine'&&bound.selection!=='complete'&&bound.policy!==(await attentionPolicy(tx,actor.participantId)).version)throw new UpdatesError('updates_attention_refresh_required');
       if(!['groups','members'].includes(bound.kind))throw new UpdatesError('updates_token_invalid');
       const view=await this.view(tx,bound);if(!view.ready)throw new UpdatesError('updates_state_unavailable');
       await this.requireReadySelection(tx,bound);
@@ -542,7 +431,7 @@ export class CombinedUpdates<Routine extends boolean=false> {
       const event=(await this.events(tx,members))[0]!;
       await lockReferencePlan(tx,[event.resource_id,...(event.discussion_id?[event.discussion_id]:[])]);
       return fit({...await this.shared.item(tx,event,members[0]!.shared?sharedMatches(event,bound.definitions).reasons:[],options.reason_offset??0),
-        detail_url:this.routine?'/api/v1/me/routine-updates/reasons':'/api/v1/me/updates/reasons'},options.max_response_bytes??131072);
+        detail_url:this.mode === 'routine'?'/api/v1/me/routine-updates/reasons':'/api/v1/me/updates/reasons'},options.max_response_bytes??131072);
     });
   }
 }
