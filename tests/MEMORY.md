@@ -303,6 +303,11 @@ and coverage rather than ciphertext equality. Continuing unchanged main mentions
 does not generate another signal; revision-note mentions retain exact-revision identity.
 `web/updates.test.tsx` covers development StrictMode, separate expansion budgets,
 failed storage, stale tabs, route/filter/identity fencing and policy withdrawal.
+`web/updates-recovery.test.tsx` pages structural matching reasons with exact member
+cursors and offsets, suppresses duplicate requests and retries transient failures
+without advancing the saved view. Failed or held collapse saves retain expansion;
+successful close restores focus and fences a late reason response. Independent
+publication and routine-view journals remain byte-for-byte unchanged.
 `e2e/updates.spec.ts` uses the normal Chromium runner, real API/native worker,
 twenty-reply group, summary context/exact history, reload/back, focus, narrow layout
 and sign-out blocked on cleanup. Deliberate screenshots use
