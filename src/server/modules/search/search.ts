@@ -1,8 +1,8 @@
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
-import type { SqlTransaction } from '../../db/postgres.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import type { ActorContext } from '../publication/actor.js';
-import { lockActor,lockContext,safeError,type Transactions } from '../publication/publication.js';
-import { PublicationError } from '../publication/errors.js';
+import { lockActor, lockContext } from '../publication/guards.js';
+import { safeError, PublicationError } from '../publication/errors.js';
 import { ParticipationRetrieval,RetrievalError,fit,responseBudget } from '../participation/retrieval.js';
 import { structureGuard } from '../participation/organization-context.js';
 import { searchLimits, type SearchOptions,type SearchPageView,type SearchResultView,type SearchStatusView,type SearchAuthorsOptions,type SearchAuthorsView } from '../../../contracts/search.js';

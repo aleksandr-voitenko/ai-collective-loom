@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { SqlTransaction } from '../../db/postgres.js';
-import type { Transactions } from '../publication/publication.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import { lockReferencePlan, revisionReferences, declaration } from '../participation/reference-context.js';
 import { parseAuthored, validateChangeFields } from '../../../contracts/authored.js';
 import type { AuthoredContent, NoteContent } from '../../../contracts/participation.js';

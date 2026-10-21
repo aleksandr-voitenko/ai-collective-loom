@@ -22,3 +22,9 @@ export class PublicationError extends Error {
     this.name = 'PublicationError';
   }
 }
+
+export function safeError(error: unknown): never {
+  if (error instanceof PublicationError) throw error;
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+  throw new PublicationError(['40P01', '40001', '55P03'].includes(String(code)) ? 'retryable' : 'service_unavailable');
+}

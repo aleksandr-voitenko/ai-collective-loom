@@ -1,8 +1,7 @@
 // Native discovery COMMIT barriers for disposable recovery tests only.
-import { PostgresDatabase } from '../../src/server/db/postgres.js';
+import { PostgresDatabase, type Transactions } from '../../src/server/db/postgres.js';
 import { readConfiguration } from '../../src/server/config.js';
 import { SearchWorker } from '../../src/server/modules/search/worker.js';
-import type { Transactions } from '../../src/server/modules/publication/publication.js';
 import type { QueryResultRow } from 'pg';
 
 const database = new PostgresDatabase(readConfiguration().database), phase = process.argv[2];

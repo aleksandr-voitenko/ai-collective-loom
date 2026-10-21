@@ -5,7 +5,7 @@ import { isolatedPublicationPostgres } from '../helpers/publication-postgres.js'
 import { SearchWorker } from '../../src/server/modules/search/worker.js';
 import { ParticipationPublications } from '../../src/server/modules/participation/publications.js';
 import { TextSearch } from '../../src/server/modules/search/search.js';
-import type { Transactions } from '../../src/server/modules/publication/publication.js';
+import type { Transactions } from '../../src/server/db/postgres.js';
 import type { QueryResultRow } from 'pg';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

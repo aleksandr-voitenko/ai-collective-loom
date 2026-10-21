@@ -3,7 +3,7 @@ import { Type } from '@sinclair/typebox';
 import * as C from '../../contracts/changes.js';
 import { UUID, closed, ParticipationError } from '../../contracts/participation.js';
 import type { ActorContext } from '../modules/publication/actor.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import { ChangeNotes } from '../modules/participation/changes.js';
 
 export function registerChanges(app:FastifyInstance,database:Transactions,actor:(request:FastifyRequest)=>Promise<ActorContext>){

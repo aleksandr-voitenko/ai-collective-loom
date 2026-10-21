@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { QueryResultRow } from 'pg';
 import { fixture,mentioned } from '../helpers/notifications.js';
 import { NotificationWorker } from '../../src/server/modules/notifications/worker.js';
-import type { Transactions } from '../../src/server/modules/publication/publication.js';
+import type { Transactions } from '../../src/server/db/postgres.js';
 
 test('ordered discovery, all-stage rollback, delayed availability and fixed upper bounds',{timeout:90000},async t=>{
   const f=await fixture(t),a=await f.participant('ordered_a'),b=await f.participant('ordered_b');await f.drain();

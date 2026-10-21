@@ -1,6 +1,6 @@
-import type { SqlTransaction } from '../../db/postgres.js';
-import { lockActor, lockContext, safeError, type Transactions } from '../publication/publication.js';
-import { PublicationError } from '../publication/errors.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
+import { lockActor, lockContext } from '../publication/guards.js';
+import { safeError, PublicationError } from '../publication/errors.js';
 import { RetrievalError } from '../participation/retrieval.js';
 import type { FollowTargetView, FollowSourceView } from '../../../contracts/following.js';
 

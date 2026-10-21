@@ -7,14 +7,9 @@ import {
 } from "../../../contracts/participation.js";
 import { lockAttempt } from "../../application/attempt.js";
 import { identityOf, type ActorContext } from "../publication/actor.js";
-import { PublicationError } from "../publication/errors.js";
-import {
-  lockActor,
-  lockContext,
-  requireRevision,
-  safeError,
-  type Transactions,
-} from "../publication/publication.js";
+import { PublicationError, safeError } from "../publication/errors.js";
+import { lockActor, lockContext, requireRevision } from '../publication/guards.js';
+import type { Transactions } from '../../db/postgres.js';
 import { digestRequest } from "./publications.js";
 
 export class ParticipationAdministration {

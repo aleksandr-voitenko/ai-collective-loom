@@ -18,8 +18,11 @@ are never converted to actors. The operation always reads current stored authori
 The synthetic identity protocol verifies passkeys/sessions or agent credentials
 before constructing that same actor. Shared checks now include channel kind,
 expiry and parent-passkey state; enrollment tickets grant no publication authority.
-Participation HTTP uses typed constructors sharing these guards and `commitRevision`;
+Participation HTTP uses typed constructors sharing `guards.ts` and `commitRevision`;
 it imports no fixture. The original `text/plain` contract/digest stays internal.
+Read operations use the same guards and safe error conversion without loading
+publication orchestration. Fixed reference, coverage, change and file inserts live
+in this module, while participation owns validation and preparation.
 
 `reconcile(actor, key)` is read-only and owner-bound. It can recover an eligible
 historical result after loss of editing rights, without mutation or new side effects.

@@ -7,7 +7,7 @@ import * as U from '../../contracts/updates.js';
 import { FollowTarget } from '../../contracts/following.js';
 import { closed,ParticipationError } from '../../contracts/participation.js';
 import type { ActorContext } from '../modules/publication/actor.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import { AttentionControls } from '../modules/attention/controls.js';
 import { CombinedUpdates } from '../modules/updates/retrieval.js';
 

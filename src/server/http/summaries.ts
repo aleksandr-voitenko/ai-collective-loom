@@ -3,7 +3,7 @@ import type { FastifyInstance,FastifyRequest } from 'fastify';
 import * as S from '../../contracts/summaries.js';
 import { UUID,closed,Committed,Reconciled,ParticipationError,EditorsInput } from '../../contracts/participation.js';
 import type { ActorContext } from '../modules/publication/actor.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import { ParticipationPublications } from '../modules/participation/publications.js';
 import { ParticipationAdministration } from '../modules/participation/administration.js';
 import { SummaryPreparation } from '../modules/participation/summary-preparation.js';

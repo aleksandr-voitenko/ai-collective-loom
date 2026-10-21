@@ -8,19 +8,14 @@ import {
   type PageView,
   type ContributionContextView,
 } from "../../../contracts/participation.js";
-import type { SqlTransaction } from "../../db/postgres.js";
+import type { SqlTransaction, Transactions } from "../../db/postgres.js";
 import type { ActorContext } from "../publication/actor.js";
 import { identityOf } from "../publication/actor.js";
-import { PublicationError } from "../publication/errors.js";
-import {
-  lockActor,
-  lockContext,
-  requireRevision,
-  safeError,
-  type Transactions,
-} from "../publication/publication.js";
+import { PublicationError, safeError } from "../publication/errors.js";
+import { lockActor, lockContext, requireRevision } from '../publication/guards.js';
+import { hasChangeSchema } from '../../db/schema-capabilities.js';
 import { hierarchyVersion, structureGuard } from "./organization-context.js";
-import { declaration, revisionReferences, hasChangeSchema } from "./reference-context.js";
+import { declaration, revisionReferences } from "./reference-context.js";
 
 export class RetrievalError extends Error {
   constructor(

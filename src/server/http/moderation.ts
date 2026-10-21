@@ -3,7 +3,7 @@ import { Type } from '@sinclair/typebox';
 import * as C from '../../contracts/moderation.js';
 import { ParticipationError, UUID, closed } from '../../contracts/participation.js';
 import type { ActorContext } from '../modules/publication/actor.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import { SharedModeration } from '../modules/participation/moderation.js';
 
 export function registerModeration(app:FastifyInstance,database:Transactions,actor:(request:FastifyRequest)=>Promise<ActorContext>) {

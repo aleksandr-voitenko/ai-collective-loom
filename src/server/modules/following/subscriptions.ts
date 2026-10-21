@@ -2,10 +2,10 @@ import { createHash,createCipheriv,createDecipheriv,randomBytes,randomUUID } fro
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../../../contracts/following.js';
 import * as P from '../../../contracts/private-controls.js';
-import type { SqlTransaction } from '../../db/postgres.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import { lockAttempt } from '../../application/attempt.js';
 import { identityOf,type ActorContext } from '../publication/actor.js';
-import { lockActor,type Transactions } from '../publication/publication.js';
+import { lockActor } from '../publication/guards.js';
 import { PublicationError } from '../publication/errors.js';
 import { fit,responseBudget,type PageOptions,RetrievalError } from '../participation/retrieval.js';
 import { lockReferencePlan } from '../participation/reference-context.js';

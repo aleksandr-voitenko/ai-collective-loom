@@ -2,11 +2,11 @@ import { createHash, randomUUID, randomBytes, createCipheriv, createDecipheriv }
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../../../contracts/moderation.js';
 import { UUID } from '../../../contracts/participation.js';
-import type { SqlTransaction } from '../../db/postgres.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import { lockAttempt } from '../../application/attempt.js';
 import { identityOf, type ActorContext } from '../publication/actor.js';
-import { PublicationError } from '../publication/errors.js';
-import { lockActor, safeError, type Resource, type Transactions } from '../publication/publication.js';
+import { PublicationError, safeError } from '../publication/errors.js';
+import { lockActor, type Resource } from '../publication/guards.js';
 import { lockReferencePlan } from './reference-context.js';
 import { structureGuard } from './organization-context.js';
 import { fit, RetrievalError } from './retrieval.js';

@@ -1,6 +1,6 @@
 import type { ReferenceValue } from '../../../contracts/participation.js';
 import type { SqlTransaction } from '../../db/postgres.js';
-import { hasChangeSchema } from '../participation/reference-context.js';
+import { hasChangeSchema } from '../../db/schema-capabilities.js';
 
 export type PreparedReference = ReferenceValue & { origin_revision_id: string | null; assertion_revision_id: string | null };
 

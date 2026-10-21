@@ -15,7 +15,7 @@ import {
   type PageOptions,
 } from "../modules/participation/retrieval.js";
 import { ParticipationAdministration } from "../modules/participation/administration.js";
-import type { Transactions } from "../modules/publication/publication.js";
+import type { Transactions } from '../db/postgres.js';
 import { registerIdentityRoutes } from "./identity.js";
 import { classifyError } from "./errors.js";
 import { participationGuide } from "../../contracts/guide.js";

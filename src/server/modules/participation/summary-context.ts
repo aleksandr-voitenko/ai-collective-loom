@@ -1,6 +1,6 @@
 import type { SqlTransaction } from '../../db/postgres.js';
 import { PublicationError } from '../publication/errors.js';
-import { lockContext, requireRevision } from '../publication/publication.js';
+import { lockContext, requireRevision } from '../publication/guards.js';
 import { summaryLimits } from '../../../contracts/summaries.js';
 import type { PreparedCoverage } from '../publication/summary-storage.js';
 

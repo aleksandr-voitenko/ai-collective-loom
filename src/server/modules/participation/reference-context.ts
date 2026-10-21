@@ -1,7 +1,8 @@
 import type { ReferenceValue, ReferenceTargetValue } from '../../../contracts/participation.js';
 import type { SqlTransaction } from '../../db/postgres.js';
+import { hasChangeSchema } from '../../db/schema-capabilities.js';
 import { PublicationError } from '../publication/errors.js';
-import { lockContext, requireRevision, type Resource } from '../publication/publication.js';
+import { lockContext, requireRevision, type Resource } from '../publication/guards.js';
 import { structureGuard } from './organization-context.js';
 import type { PreparedReference } from '../publication/reference-storage.js';
 
@@ -15,9 +16,6 @@ export interface ReferenceRow {
 export function declaration(row: ReferenceRow): ReferenceValue {
   return { reference_id: row.reference_id, target: { kind: row.target_kind, resource_id: row.target_id,
     ...(row.target_revision_id ? { revision_id: row.target_revision_id } : {}) }, relationship: row.relationship, rationale: row.rationale };
-}
-export async function hasChangeSchema(tx: SqlTransaction) {
-  return !!(await tx.query<{present:boolean}>("SELECT to_regclass('loom.revision_change_notes') IS NOT NULL AS present", [])).rows[0]?.present;
 }
 export async function revisionReferences(tx: SqlTransaction, revision: string, field: ReferenceRow['source_field'] = 'main'): Promise<ReferenceRow[]> {
   const fields = await hasChangeSchema(tx);

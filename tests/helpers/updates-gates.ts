@@ -1,6 +1,5 @@
 import type { QueryResultRow } from 'pg';
-import type { Transactions } from '../../src/server/modules/publication/publication.js';
-import type { SqlTransaction } from '../../src/server/db/postgres.js';
+import type { Transactions, SqlTransaction } from '../../src/server/db/postgres.js';
 import { barrier, bounded } from './search-races.js';
 export function gates(){
   type Match=(sql:string,values:readonly unknown[])=>boolean;

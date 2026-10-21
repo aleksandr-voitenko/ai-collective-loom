@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { SqlTransaction } from '../../db/postgres.js';
-import type { Transactions } from '../publication/publication.js';
-import { hasChangeSchema } from '../participation/reference-context.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
+import { hasChangeSchema } from '../../db/schema-capabilities.js';
 
 export const workerLimits = Object.freeze({ batch: 25, discovery: 50, jobs: 50000, sources: 5000, leaseSeconds: 30, attempts: 3 });
 export interface Claim {

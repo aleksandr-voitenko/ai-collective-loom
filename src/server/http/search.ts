@@ -3,7 +3,7 @@ import { Type } from '@sinclair/typebox';
 import * as C from '../../contracts/search.js';
 import { closed,UUID,ParticipationError } from '../../contracts/participation.js';
 import type { ActorContext } from '../modules/publication/actor.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import { TextSearch } from '../modules/search/search.js';
 
 export function registerSearch(app:FastifyInstance,database:Transactions,actor:(request:FastifyRequest)=>Promise<ActorContext>){

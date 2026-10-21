@@ -3,7 +3,7 @@ import type {FastifyInstance,FastifyRequest,FastifyReply} from 'fastify';
 import {UUID,closed,PageInput,ParticipationError} from '../../contracts/participation.js';
 import {UploadInput,UploadStatus,FilePage,fileLimits} from '../../contracts/files.js';
 import type {ActorContext} from '../modules/publication/actor.js';
-import type {Transactions} from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import {FileError,type FileStorage} from '../modules/participation/file-storage.js';
 import {ArtifactFiles} from '../modules/participation/files.js';
 

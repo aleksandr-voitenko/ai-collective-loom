@@ -3,7 +3,7 @@ import { Type } from '@sinclair/typebox';
 import * as C from '../../contracts/organization.js';
 import { PageInput, ParticipationError, UUID, closed, limits } from '../../contracts/participation.js';
 import type { ActorContext } from '../modules/publication/actor.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import { TopicOrganization } from '../modules/participation/organization.js';
 import type { PageOptions } from '../modules/participation/retrieval.js';
 

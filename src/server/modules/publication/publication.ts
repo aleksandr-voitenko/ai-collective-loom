@@ -1,23 +1,17 @@
-import {insertFiles,type PreparedFile} from "../participation/file-context.js";
+import {insertFiles,type PreparedFile} from "./file-storage.js";
 import { randomUUID } from 'node:crypto';
-import type { SqlTransaction } from '../../db/postgres.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import { identityOf, type ActorContext } from './actor.js';
-import { PublicationError } from './errors.js';
+import { PublicationError, safeError } from './errors.js';
 import { canonicalAttemptKey, operationKind, preparePublication, semanticVersion } from './input.js';
 import { lockAttempt } from '../../application/attempt.js';
-import { currentAuthority } from '../../application/authority.js';
+import { lockActor, lockContext, authorizePublication, requireRevision, type Resource } from './guards.js';
 import { insertReferences, type PreparedReference } from './reference-storage.js';
 import { insertCoverage, type PreparedCoverage } from './summary-storage.js';
 import { insertChangeFields } from './change-storage.js';
 import type { NoteContent } from '../../../contracts/participation.js';
 import type { PreparedChangeAccount } from '../participation/change-context.js';
 
-export interface Transactions { transaction<T>(operation: (transaction: SqlTransaction) => Promise<T>): Promise<T> }
-export interface Resource {
-  id: string; kind: 'area' | 'discussion' | 'contribution' | 'summary' | 'artifact';
-  owner_resource_id: string | null; original_author_id: string | null;
-  state: string; publication_open: boolean; current_revision_id: string | null;
-}
 export interface Outcome { id: string; resource_id: string; revision_id: string; semantic_version: string; request_digest: string }
 export interface CommittedPublication {
   publication_state: 'committed'; idempotency: 'created' | 'replayed';
@@ -25,69 +19,6 @@ export interface CommittedPublication {
 }
 export type Reconciliation = CommittedPublication | { operation_state: 'not_recorded' };
 
-// Disjoint from the 64-bit attempt-lock namespace. Structural/lifecycle writers
-// must follow ADR-006; the shared structure guard stabilizes dependency discovery.
-const structureNamespace = 0x4c4f4f4d;
-const structureGuard = 1;
-const resourceColumns = 'id, kind, owner_resource_id, original_author_id, state, publication_open, current_revision_id';
-
-export async function lockActor(tx: SqlTransaction, actor: ActorContext) {
-  const authority = await currentAuthority(tx, actor);
-  if (!authority) throw new PublicationError('unavailable');
-  return authority;
-}
-
-export async function lockContext(tx: SqlTransaction, targetId: string, mode: 'publication' | 'resolution' | 'reply-traversal', allowedKinds = ['contribution', 'summary', 'artifact'], maxResources = 32): Promise<Resource[]> {
-  await tx.query('SELECT pg_advisory_xact_lock_shared($1::integer, $2::integer)', [structureNamespace, structureGuard]);
-  const discovered = await tx.query<{ id: string }>(`WITH RECURSIVE owners AS (
-    SELECT id, owner_resource_id FROM loom.resources WHERE id = $1
-    UNION SELECT parent.id, parent.owner_resource_id FROM loom.resources parent JOIN owners child ON parent.id = child.owner_resource_id
-  ) SELECT id FROM owners LIMIT $2`, [targetId, maxResources === undefined ? null : maxResources + 1]);
-  // Bounded secondary views can fail explicitly before an unbounded lock walk.
-  // The structure guard keeps this dependency set fixed for the transaction.
-  if (maxResources !== undefined && discovered.rows.length > maxResources) throw new PublicationError('service_unavailable');
-  const locked = new Map<string, Resource>();
-  for (const id of discovered.rows.map(row => row.id).sort()) {
-    const lock = mode === 'publication' && id === targetId ? 'FOR UPDATE' : 'FOR SHARE';
-    const row = (await tx.query<Resource>('SELECT ' + resourceColumns + ' FROM loom.resources WHERE id = $1 ' + lock, [id])).rows[0];
-    if (!row) throw new PublicationError('retryable');
-    locked.set(id, row);
-  }
-  const chain: Resource[] = [];
-  let current: string | null = targetId;
-  while (current) {
-    const row = locked.get(current);
-    if (!row) throw new PublicationError(locked.size ? 'retryable' : 'unavailable');
-    if (chain.some(owner => owner.id === current)) throw new PublicationError('unavailable');
-    chain.push(row);
-    current = row.owner_resource_id;
-  }
-  if (chain.length !== locked.size) throw new PublicationError('retryable');
-  for (let index = 0; index < chain.length; index++) {
-    const row = chain[index]!;
-    const owner = chain[index + 1];
-    const ownerKind = row.kind === 'contribution' || row.kind === 'summary' ? 'discussion' : 'area';
-    // Reply ancestry is not ownership. Traversal can disclose a contribution's
-    // structural placeholder, never its body, while every owner remains active.
-    const placeholder = mode === 'reply-traversal' && index === 0 && row.kind === 'contribution';
-    if ((!placeholder && row.state !== 'active') || (owner ? owner.kind !== ownerKind : row.kind !== 'area')) throw new PublicationError('unavailable');
-  }
-  if (!allowedKinds.includes(chain[0]!.kind)) throw new PublicationError('unavailable');
-  return chain;
-}
-
-export async function authorizePublication(tx: SqlTransaction, actor: Awaited<ReturnType<typeof lockActor>>, chain: Resource[]) {
-  const resource = chain[0]!;
-  const editor = resource.kind === 'contribution' ? resource.original_author_id === actor.participantId
-    : (await tx.query('SELECT 1 FROM loom.resource_editors WHERE resource_id = $1 AND participant_id = $2', [resource.id, actor.participantId])).rowCount === 1;
-  if (!actor.administrator && !editor) throw new PublicationError(resource.current_revision_id ? 'forbidden' : 'unavailable');
-  if (chain.some(resource => !resource.publication_open)) throw new PublicationError('forbidden');
-}
-
-export async function requireRevision(tx: SqlTransaction, resourceId: string, revisionId: string) {
-  const result = await tx.query('SELECT id FROM loom.revisions WHERE resource_id = $1 AND id = $2 AND availability = $3 FOR SHARE', [resourceId, revisionId, 'available']);
-  if (!result.rowCount) throw new PublicationError('unavailable');
-}
 async function beginAttempt(tx: SqlTransaction, participantId: string, key: string): Promise<Outcome | undefined> {
   await lockAttempt(tx, participantId, operationKind, key);
   return (await tx.query<Outcome>('SELECT id, resource_id, revision_id, semantic_version, request_digest FROM loom.idempotency_records WHERE participant_id = $1 AND operation_kind = $2 AND idempotency_key = $3', [participantId, operationKind, key])).rows[0];
@@ -95,12 +26,6 @@ async function beginAttempt(tx: SqlTransaction, participantId: string, key: stri
 export function result(outcome: Pick<Outcome, 'id' | 'resource_id' | 'revision_id'>, idempotency: CommittedPublication['idempotency']): CommittedPublication {
   return { publication_state: 'committed', idempotency, operation_id: outcome.id, resource_id: outcome.resource_id, revision_id: outcome.revision_id };
 }
-export function safeError(error: unknown): never {
-  if (error instanceof PublicationError) throw error;
-  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
-  throw new PublicationError(['40P01', '40001', '55P03'].includes(String(code)) ? 'retryable' : 'service_unavailable');
-}
-
 /** Trusted internal operation; no transport, upload/parser callback or worker work. */
 export class PublicationOperation {
   constructor(private readonly database: Transactions) {}

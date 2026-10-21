@@ -4,7 +4,7 @@ import { closed, UUID, ParticipationError } from '../../contracts/participation.
 import * as C from '../../contracts/notifications.js';
 import { PersonalNotifications } from '../modules/notifications/retrieval.js';
 import { NotificationAdministration } from '../modules/notifications/administration.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import type { ActorContext } from '../modules/publication/actor.js';
 
 export function registerNotifications(app:FastifyInstance,database:Transactions,actor:(request:FastifyRequest)=>Promise<ActorContext>){

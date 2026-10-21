@@ -9,7 +9,7 @@ function gates(){
   type Match=(sql:string,values:readonly unknown[])=>boolean;
   let gate:{match:Match;phase:'before'|'after';entered:ReturnType<typeof barrier<number>>;release:ReturnType<typeof barrier<void>>;fail:boolean}|undefined;
   return {pause(match:Match,phase:'before'|'after'='after',fail=false){const g={match,phase,entered:barrier<number>(),release:barrier(),fail};gate=g;return g;},
-    wrapper:(database:import('../../src/server/modules/publication/publication.js').Transactions)=>({transaction:<T>(work:(tx:import('../../src/server/db/postgres.js').SqlTransaction)=>Promise<T>)=>database.transaction(tx=>work({
+    wrapper:(database:import('../../src/server/db/postgres.js').Transactions)=>({transaction:<T>(work:(tx:import('../../src/server/db/postgres.js').SqlTransaction)=>Promise<T>)=>database.transaction(tx=>work({
       query:async<Row extends QueryResultRow>(sql:string,values:readonly unknown[])=>{
         const g=gate?.match(sql,values)?gate:undefined;if(g)gate=undefined;
         const wait=async()=>{g!.entered.release((await tx.query<{pid:number}>('SELECT pg_backend_pid() pid',[])).rows[0]!.pid);await bounded(g!.release.promise);if(g!.fail)throw new Error('Synthetic rollback');};

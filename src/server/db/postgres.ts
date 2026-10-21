@@ -9,6 +9,8 @@ export interface SqlTransaction {
   query<Row extends QueryResultRow = QueryResultRow>(text: string, parameters: readonly unknown[]): Promise<QueryResult<Row>>;
 }
 
+export interface Transactions { transaction<T>(operation: (transaction: SqlTransaction) => Promise<T>): Promise<T> }
+
 export class PostgresDatabase implements DatabaseHealth {
   readonly #pool: pg.Pool;
   #closing: Promise<void> | undefined;

@@ -1,9 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
-import type { SqlTransaction } from '../../db/postgres.js';
+import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import type { ActorContext } from '../publication/actor.js';
-import { lockActor, lockContext, safeError, type Transactions } from '../publication/publication.js';
-import { PublicationError } from '../publication/errors.js';
+import { lockActor, lockContext } from '../publication/guards.js';
+import { safeError, PublicationError } from '../publication/errors.js';
 import { ParticipationRetrieval, RetrievalError, fit, responseBudget } from './retrieval.js';
 import { declaration, lockReferencePlan, referenceTarget, revisionReferences } from './reference-context.js';
 import { changeMembers } from './change-context.js';

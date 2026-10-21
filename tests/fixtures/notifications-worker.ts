@@ -1,8 +1,7 @@
 // Private process/COMMIT barriers; never registered by the runtime or HTTP API.
-import { PostgresDatabase } from '../../src/server/db/postgres.js';
+import { PostgresDatabase, type Transactions } from '../../src/server/db/postgres.js';
 import { readConfiguration } from '../../src/server/config.js';
 import { NotificationWorker } from '../../src/server/modules/notifications/worker.js';
-import type { Transactions } from '../../src/server/modules/publication/publication.js';
 import type { QueryResultRow } from 'pg';
 const database=new PostgresDatabase(readConfiguration().database),phase=process.argv[2];
 const wait=()=>new Promise<void>(resolve=>process.once('message',()=>resolve()));

@@ -1,9 +1,9 @@
-import {randomUUID} from 'node:crypto';
 import type {SqlTransaction} from '../../db/postgres.js';
 import type {FileSetValue,UploadStatusValue} from '../../../contracts/files.js';
 import {fileLimits} from '../../../contracts/files.js';
 import {PublicationError} from '../publication/errors.js';
-import {requireRevision,authorizePublication,lockContext, type lockActor} from '../publication/publication.js';
+import { requireRevision, authorizePublication, lockContext, type lockActor } from '../publication/guards.js';
+import type {PreparedFile} from '../publication/file-storage.js';
 import {FileError} from './file-storage.js';
 
 export type UploadRow={id:string;participant_id:string;request_digest:string;target_kind:'area'|'artifact';target_id:string;
@@ -30,7 +30,6 @@ export async function authorizeUpload(tx:SqlTransaction,actor:Awaited<ReturnType
     await requireRevision(tx,target.resource_id,chain[0]!.current_revision_id);
   }else if(chain.some(r=>!r.publication_open))throw new PublicationError('forbidden');
 }
-export type PreparedFile={path:string;upload_id:string;reused_from:string|null};
 /** Called under custody and source guards, before the common clock tail. */
 export async function prepareFiles(tx:SqlTransaction,owner:string,artifact:string,area:string|undefined,set:FileSetValue){
   const prepared:PreparedFile[]=[];let bytes=0;
@@ -53,9 +52,4 @@ export async function prepareFiles(tx:SqlTransaction,owner:string,artifact:strin
     prepared.push({path:member.path,upload_id:row.id,reused_from:reused});
   }
   return prepared;
-}
-export async function insertFiles(tx:SqlTransaction,artifact:string,revision:string,files:readonly PreparedFile[]){
-  await tx.query("INSERT INTO loom.artifact_file_sets(artifact_id,revision_id,version) VALUES($1,$2,'artifact-files-v1')",[artifact,revision]);
-  for(const file of files)await tx.query(`INSERT INTO loom.file_contexts(id,artifact_id,revision_id,path,upload_id,reused_from)
-    VALUES($1,$2,$3,$4,$5,$6)`,[randomUUID(),artifact,revision,file.path,file.upload_id,file.reused_from]);
 }

@@ -4,8 +4,9 @@ import {fileLimits,UploadInput,normalizeFilePath,type UploadInputValue,type File
 import {lockAttempt} from '../../application/attempt.js';
 import type {ActorContext} from '../publication/actor.js';
 import {identityOf} from '../publication/actor.js';
-import {lockActor,lockContext,requireRevision,safeError,type Transactions} from '../publication/publication.js';
-import {PublicationError} from '../publication/errors.js';
+import { lockActor, lockContext, requireRevision } from '../publication/guards.js';
+import { safeError, PublicationError } from '../publication/errors.js';
+import type { Transactions } from '../../db/postgres.js';
 import {canonicalAttemptKey} from '../publication/input.js';
 import {FileStorage,FileError,verifyBytes} from './file-storage.js';
 import {fileGuard,uploadRow,uploadStatus,authorizeUpload,type UploadRow} from './file-context.js';

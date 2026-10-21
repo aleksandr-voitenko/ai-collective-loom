@@ -1,7 +1,7 @@
 import type { ActorContext } from '../publication/actor.js';
-import { lockActor, safeError, type Transactions } from '../publication/publication.js';
-import { PublicationError } from '../publication/errors.js';
-import type { SqlTransaction } from '../../db/postgres.js';
+import { lockActor } from '../publication/guards.js';
+import { safeError, PublicationError } from '../publication/errors.js';
+import type { Transactions, SqlTransaction } from '../../db/postgres.js';
 import { notificationDiscoveryGuard } from './worker.js';
 
 /** Operational references only; administrator authority never selects an inbox. */

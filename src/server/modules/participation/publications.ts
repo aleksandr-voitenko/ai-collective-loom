@@ -16,23 +16,12 @@ import {
 } from "../../../contracts/participation.js";
 import { parseAuthored, validUnicode, validateChangeFields } from "../../../contracts/authored.js";
 import { lockAttempt } from "../../application/attempt.js";
-import type { SqlTransaction } from "../../db/postgres.js";
+import type { SqlTransaction, Transactions } from "../../db/postgres.js";
 import { identityOf, type ActorContext } from "../publication/actor.js";
-import { PublicationError } from "../publication/errors.js";
+import { PublicationError, safeError } from "../publication/errors.js";
 import { canonicalAttemptKey } from "../publication/input.js";
-import {
-  lockActor,
-  lockContext,
-  authorizePublication,
-  requireRevision,
-  commitRevision,
-  result,
-  safeError,
-  type Transactions,
-  type Outcome,
-  type Resource,
-  type Reconciliation,
-} from "../publication/publication.js";
+import { lockActor, lockContext, authorizePublication, requireRevision, type Resource } from '../publication/guards.js';
+import { commitRevision, result, type Outcome, type Reconciliation } from '../publication/publication.js';
 import { structureGuard, advanceHierarchy, OrganizationError } from "./organization-context.js";
 import { lockReferencePlan, prepareReferences } from "./reference-context.js";
 import { SummaryCreateInput, SummaryRevisionInput, type CoverageDeclarationValue } from "../../../contracts/summaries.js";

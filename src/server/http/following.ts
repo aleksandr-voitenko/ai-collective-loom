@@ -4,7 +4,7 @@ import * as C from '../../contracts/following.js';
 import * as P from '../../contracts/private-controls.js';
 import { closed,UUID,PageInput,ParticipationError } from '../../contracts/participation.js';
 import type { ActorContext } from '../modules/publication/actor.js';
-import type { Transactions } from '../modules/publication/publication.js';
+import type { Transactions } from '../db/postgres.js';
 import type { PageOptions } from '../modules/participation/retrieval.js';
 import { Following } from '../modules/following/subscriptions.js';
 import { SharedChanges } from '../modules/following/retrieval.js';
