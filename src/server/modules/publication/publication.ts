@@ -1,4 +1,10 @@
-import { insertFiles, type PreparedFile } from './file-storage.js';
+import {
+  insertFiles,
+  insertAttachments,
+  insertPromotion,
+  type PreparedFile,
+  type PreparedPromotion,
+} from './file-storage.js';
 import { randomUUID } from 'node:crypto';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import { identityOf, type ActorContext } from './actor.js';
@@ -142,6 +148,8 @@ export async function commitRevision(
     noteReferences?: readonly PreparedReference[];
     changeAccount?: PreparedChangeAccount;
     files?: readonly PreparedFile[];
+    attachments?: readonly PreparedFile[];
+    promotion?: PreparedPromotion;
   },
   attempt: { kind: string; version: string; digest: string },
 ): Promise<CommittedPublication> {
@@ -193,6 +201,15 @@ export async function commitRevision(
       input.expected_revision_id,
     );
   if (input.files) await insertFiles(tx, resource.id, ids.revision, input.files);
+  if (input.attachments)
+    await insertAttachments(
+      tx,
+      resource.id,
+      resource.owner_resource_id!,
+      ids.revision,
+      input.attachments,
+    );
+  if (input.promotion) await insertPromotion(tx, resource.id, ids.revision, input.promotion);
   if (input.coverage) await insertCoverage(tx, resource.id, ids.revision, input.coverage);
   const updated = await tx.query(
     'UPDATE loom.resources SET current_revision_id = $2 WHERE id = $1 AND current_revision_id IS NOT DISTINCT FROM $3::uuid RETURNING id',

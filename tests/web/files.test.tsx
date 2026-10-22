@@ -9,7 +9,7 @@ import {AuthorizationBoundary} from '../../src/web/AuthorizationBoundary.js';
 import {FileEditor,FileBrowser,fileDigest} from '../../src/web/Files.js';
 import {IntentStore,invalidateIdentity} from '../../src/web/participation-client.js';
 import type {Context} from '../../src/web/participation-state.js';
-import type {FileSetValue} from '../../src/contracts/files.js';
+import type {PublicationFileSet} from '../../src/contracts/files.js';
 
 const locks=navigator.locks;
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://loom.example/'});
@@ -22,7 +22,7 @@ function context(){const instance=randomUUID(),participant=randomUUID();return {
 function mount(t:TestContext,c:Context,target:string,browse=false){
   const calls:{path:string;options:RequestInit|undefined;finish:(response:Response)=>void}[]=[];
   t.mock.method(globalThis,'fetch',(path:string,options?:RequestInit)=>new Promise<Response>(finish=>calls.push({path,options,finish})));
-  function Editor(){const [value,setValue]=useState<FileSetValue>(),[pending,setPending]=useState(false);
+  function Editor(){const [value,setValue]=useState<PublicationFileSet>(),[pending,setPending]=useState(false);
     return <><FileEditor context={c} target={{kind:'area',resource_id:target}} value={value} disabled={false} onPending={setPending} onChange={async v=>{setValue(v);return true;}}/><output>{JSON.stringify(value??null)}</output><span>{pending?'Blocked':'Ready'}</span></>;}
   const router=createMemoryRouter([{path:'/files',element:<AuthorizationBoundary><Editor/>{browse&&<FileBrowser artifact={target} revision={randomUUID()}/>}</AuthorizationBoundary>},{path:'/other',element:<h1>Other context</h1>}],{initialEntries:['/files']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);return {calls,router};
@@ -37,7 +37,7 @@ test('editing an empty path retains readable draft custody and malformed upload 
   const c=context(),body={file_set:{version:'artifact-files-v1',files:[{path:'original',source:{upload_id:randomUUID()}}]}};
   const original=await c.store.save(c.store.create('draft','artifact.create','/api/v1/artifacts',body));
   const partial=await c.store.saveDraft(original,{file_set:{...body.file_set,files:[{...body.file_set.files[0]!,path:''}]}});
-  assert.equal((c.store.all()[0]!.body.file_set as FileSetValue).files[0]!.path,'');
+  assert.equal((c.store.all()[0]!.body.file_set as PublicationFileSet).files[0]!.path,'');
   const corrected=await c.store.saveDraft(partial,body);assert.equal(corrected.key,original.key);
   await c.store.prepareDispatch(corrected,corrected.body);assert.deepEqual(c.store.all()[0]!.body.file_set,body.file_set);
   const malformed=c.store.create('upload','file.upload','/api/v1/file-uploads',{target:null});await c.store.save(malformed);

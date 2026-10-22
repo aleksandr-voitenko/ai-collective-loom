@@ -1,3 +1,4 @@
+import { ArtifactProvenance } from './AttachmentPromotion.js';
 import { FileBrowser } from './Files.js';
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router';
@@ -126,6 +127,16 @@ export function ResourceContent({
             participants={data.mentioned_participants}
           />
         )}
+        {data.attachment_set && (
+          <FileBrowser
+            key={'attachments:' + data.revision_id}
+            contribution={id}
+            revision={data.revision_id}
+          />
+        )}
+        {data.provenance_url && (
+          <ArtifactProvenance key={'provenance:' + data.revision_id} url={data.provenance_url} />
+        )}
         {data.file_set && (
           <FileBrowser key={data.revision_id} artifact={id} revision={data.revision_id} />
         )}
@@ -218,8 +229,11 @@ export function ResourceContent({
               : null
           }
           initialFileSet={
-            data.file_set
-              ? { version: data.file_set.version, files: data.file_set.files }
+            (data.file_set ?? data.attachment_set)
+              ? {
+                  version: (data.file_set ?? data.attachment_set)!.version,
+                  files: (data.file_set ?? data.attachment_set)!.files,
+                }
               : undefined
           }
           initialCoverage={

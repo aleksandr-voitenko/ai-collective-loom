@@ -30,6 +30,7 @@
 | [Attention controls decision](adr/027-routine-attention-controls.md) | Private mutes, exact dismissal, versioned routine projection and finite retention. |
 | [Administrator suppression decision](adr/028-administrator-suppression.md) | Four local lifecycle scopes, metadata-only restoration, atomic decisions, exact recovery and finite retention. |
 | [Versioned artifact files](adr/029-versioned-artifact-files.md) | Bounded owner custody, immutable native versions and complete revision manifests, contextual downloads and recovery. |
+| [Contribution attachments and promotion](adr/030-contribution-attachments-and-promotion.md) | Exact contribution contexts, independent artifact attribution, shared native lifetime and recovery. |
 | [UI v0.6 reference](design/ui-v0.6/README.md) | Unchanged supplied prototype, design notes and screenshots; adopted subset and feature gates. |
 
 Repository development instructions are in root `AGENTS.md`; product/interface

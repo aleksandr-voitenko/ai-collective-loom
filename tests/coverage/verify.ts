@@ -54,7 +54,7 @@ try {
   const responses = new Map([['/',readFileSync(join(root,'dist/web/index.html'))],...Array.from(assets.keys(),name=>['/assets/'+name,readFileSync(join(assetsRoot,name))] as const)]);
   server=createServer((request,response)=>{
     const path=new URL(request.url!,'http://probe.invalid').pathname,body=responses.get(path);
-    response.setHeader('content-type',path.endsWith('.js')?'application/javascript':'text/html');
+    response.setHeader('content-type',path.endsWith('.js')?'application/javascript; charset=utf-8':'text/html; charset=utf-8');
     response.statusCode=body?200:404; response.end(body);
   });
   await new Promise<void>(done=>server!.listen(0,'127.0.0.1',done));
@@ -63,6 +63,31 @@ try {
   const collector=new BrowserCoverage(info,{ output:captures,assetsRoot });
   const browser=await chromium.launch();
   try {
+    // Exercise the pinned browser's parsed-source hash encoding and reject a
+    // same-URL, same-length substitution. Unicode must bind to the same build.
+    const identityAssets=join(root,'identity-assets');mkdirSync(identityAssets);
+    const identitySource="globalThis.identityAnswer = 'café — Māori 😀';\n";
+    writeFileSync(join(identityAssets,'identity.js'),identitySource);
+    responses.set('/identity.html',Buffer.from('<script src="/assets/identity.js"></script>'));
+    for(const changed of [false,true]){
+      const output=join(root,'identity-'+changed);mkdirSync(output);
+      responses.set('/assets/identity.js',Buffer.from(changed?identitySource.replace('café','cafe'):identitySource));
+      const identity=new BrowserCoverage({...info,testId:'identity-'+changed},{output,assetsRoot:identityAssets});
+      const context=identity.track(await browser.newContext()),page=await context.newPage();
+      try{
+        await page.goto(origin+'/identity.html');
+        assert.equal(await page.evaluate(()=>(globalThis as any).identityAnswer),changed?'cafe — Māori 😀':'café — Māori 😀');
+        if(!changed){await page.reload();await page.goto(origin+'/identity.html');}
+      }finally{await context.close();}
+      if(changed)await assert.rejects(()=>identity.finish(),/Every page/);
+      else{
+        await identity.finish();
+        const result=JSON.parse(readFileSync(join(output,digest('identity-false')+'-0-0.json'),'utf8'));
+        assert.deepEqual(result.issues,[]);
+        assert.equal(result.pages[0].entries.length,3,'Each navigation must retain its executed counters');
+        assert.ok(result.pages[0].entries.every((entry:any)=>entry.functions.some((fn:any)=>fn.ranges.some((range:any)=>range.count>0))));
+      }
+    }
     const context=collector.track(await browser.newContext(),'default');
     const page=await context.newPage();
     await page.goto(origin+'/?coverage-query-canary');
@@ -131,7 +156,7 @@ try {
   const broken=new BrowserCoverage({ ...info,testId:'coverage-failed-capture' },{ output:captures,assetsRoot });
   const tracked=broken.track(fakeContext as unknown as BrowserContext); await tracked.newPage(); await fakePage.close(); await tracked.close();
   assert.ok(pageClosed&&contextClosed); await assert.rejects(()=>broken.finish(),/Every page/);
-  console.log('Coverage probes passed: real Node/Chromium union, branches, cold code, all closure paths, numeric-only capture, safe disposal.');
+  console.log('Coverage probes passed: real Node/Chromium union, branches, cold code, Unicode source identity, changed-source refusal, all closure paths, numeric-only capture, safe disposal.');
 } finally {
   process.chdir(repo);
   if(server) await new Promise<void>(done=>server!.close(()=>done()));

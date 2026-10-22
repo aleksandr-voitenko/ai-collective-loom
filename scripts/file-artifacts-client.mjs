@@ -13,7 +13,7 @@ class RequestRefused extends Error {
 }
 
 async function main(){
-  const options=new Map(),allowed=['--origin','--credential-file','--ca','--journal','--action','--kind','--input','--bytes','--artifact','--revision','--file-id','--output'];
+  const options=new Map(),allowed=['--origin','--credential-file','--ca','--journal','--action','--kind','--input','--bytes','--artifact','--contribution','--revision','--file-id','--output'];
   for(let i=2;i<process.argv.length;i+=2){if(!allowed.includes(process.argv[i])||!process.argv[i+1]||options.has(process.argv[i]))throw new Error();options.set(process.argv[i],process.argv[i+1]);}
   const origin=new URL(options.get('--origin'));
   if(origin.protocol!=='https:'||origin.pathname!=='/'||origin.username||origin.password||origin.search||origin.hash)throw new Error();
@@ -37,18 +37,20 @@ async function main(){
       }catch(error){reject(error);}});
     });req.on('error',reject);req.setTimeout(15000,()=>req.destroy(new Error()));req.end(bytes);
   });}
-  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||community.guide_revision!=='14')throw new Error();
+  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15'].includes(community.guide_revision))throw new Error();
   const scope={origin:origin.origin,instance_id:community.instance_id,participant_id:self.participant_id},action=options.get('--action');
   async function retain(path,value){const handle=await open(resolve(path),'wx',0o600);try{await handle.writeFile(value);await handle.sync();}finally{await handle.close();}
     const dir=await open(dirname(resolve(path)),'r');try{await dir.sync();}finally{await dir.close();}}
   const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   if(action==='download'){
-    const ids=['--artifact','--revision','--file-id'].map(k=>options.get(k));if(ids.some(id=>!uuid.test(id??'')))throw new Error();
-    const bytes=await call(`/api/v1/artifacts/${ids[0]}/revisions/${ids[1]}/files/${ids[2]}/download`,undefined,true);
+    const contribution=options.has('--contribution');
+    if(contribution===options.has('--artifact'))throw new Error();
+    const ids=[contribution?'--contribution':'--artifact','--revision','--file-id'].map(k=>options.get(k));if(ids.some(id=>!uuid.test(id??'')))throw new Error();
+    const bytes=await call(`/api/v1/${contribution?'contributions':'artifacts'}/${ids[0]}/revisions/${ids[1]}/${contribution?'attachments':'files'}/${ids[2]}/download`,undefined,true);
     await retain(options.get('--output'),bytes);console.log(JSON.stringify({bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}));return;
   }
   if(action==='prepare'){
-    const kind=options.get('--kind');if(!['file.upload','artifact.create','revision.publish'].includes(kind))throw new Error();
+    const kind=options.get('--kind');if(!['file.upload','artifact.create','revision.publish','discussion.create','reply.create','attachment.promote'].includes(kind))throw new Error();
     const raw=await readFile(options.get('--input'),'utf8');if(Buffer.byteLength(raw)>131072)throw new Error();
     const body=JSON.parse(raw);if(!body||typeof body!=='object'||Array.isArray(body)||'idempotency_key' in body)throw new Error();
     const journal={version:1,...scope,kind,body:{...body,idempotency_key:randomUUID()}};
@@ -72,7 +74,7 @@ async function main(){
       if(result.state!=='prepared')result=await call(`/api/v1/file-uploads/${result.upload_id}/finalize`,{});
     }
   }else{
-    const path=journal.kind==='artifact.create'?'/api/v1/artifacts':journal.kind==='revision.publish'?'/api/v1/revisions':undefined;if(!path)throw new Error();
+    const path={'artifact.create':'/api/v1/artifacts','revision.publish':'/api/v1/revisions','discussion.create':'/api/v1/discussions','reply.create':'/api/v1/replies','attachment.promote':'/api/v1/attachment-promotions'}[journal.kind];if(!path)throw new Error();
     result=await call(action==='status'?'/api/v1/operations/status':path,action==='status'?{operation_kind:journal.kind,idempotency_key:journal.body.idempotency_key}:journal.body);
   }
   if(action==='lose-response'){console.log(JSON.stringify({test:'acknowledgement_discarded'}));process.exitCode=75;return;}

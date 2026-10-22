@@ -1,6 +1,6 @@
 # Participation boundary
 
-Artifact files: `files.ts` owns bounded private custody and exact manifest/download
+Artifact files and contribution attachments: `files.ts` owns bounded private custody and exact manifest/download
 reads; `file-storage.ts` is the single native S3 boundary. `file-context.ts` owns
 publication preparation under custody guard15, after actor and before
 structure/resource guards. No object IO occurs while SQL/publication guards are
@@ -8,6 +8,20 @@ held. Migration0019 pins native versions and protects published upload lifetime;
 deferred text-or-files validation admits empty v3 main text only with artifact files.
 `artifact-files-v1` supplies the entire file set in the publication digest. Members
 use an owner-bound prepared handle or an eligible same-artifact exact context.
+`contribution-attachments-v1` is independent of Markdown versions; complete sets
+bind actual contribution/discussion/revision. Explicit opening/reply/contribution
+upload targets do not widen old area/artifact handles. Prepared handles become
+bound to the first published contribution; historical context reuse is same-owner.
+`attachment-promotion.ts` selects one exact shared context under custody15 and the
+complete sorted source/destination guard plan, then uses the common publication
+tail. It creates a normal independent artifact/editor and immutable contributor,
+revision-publisher, uploader and promoter provenance. Source reads are not required
+for committed result recovery or subsequent artifact reuse. Provenance projection
+checks current source visibility separately. Migration0020 extends the existing
+lifetime predicate through the shared file_contexts table (ADR-030).
+Logical counts under custody15 cover both set kinds: 2048/actor,8192/global sets;
+8192/actor,65536/global contexts. New admission stops at capacity; retained outcome
+resolution precedes these counts. Physical upload reservations remain shared.
 `publication/file-storage.ts` owns fixed manifest inserts in the common revision
 transaction before the pointer/event/outcome tail.
 Saved legacy outcomes resolve before file-format checks; new legacy edits cannot
@@ -244,7 +258,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–14. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–15. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;

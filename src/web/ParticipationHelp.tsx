@@ -1,3 +1,4 @@
+import { promotionLabel } from './AttachmentPromotion.js';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { exportDrafts } from './participation-client.js';
@@ -36,11 +37,13 @@ export function Help({ context }: { context: Context }) {
           .map((record) => (
             <div className="list-row" key={record.key}>
               <Link to={intentUrl(record)}>
-                {record.kind}
+                {record.kind === 'attachment.promote' ? promotionLabel(record) : record.kind}
                 {record.kind === 'file.upload'
                   ? ' · ' +
                     String(record.body.path) +
                     ' · ' +
+                    String((record.body.target as { kind: string }).kind) +
+                    ' ' +
                     String((record.body.target as { resource_id: string }).resource_id)
                   : ''}{' '}
                 · {record.state} · {new Date(record.created_at).toLocaleString()}

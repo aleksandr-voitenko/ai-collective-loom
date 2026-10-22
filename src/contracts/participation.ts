@@ -1,8 +1,8 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { FileSet } from './files.js';
+import { FileSet, AttachmentSet } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '14';
+export const guideRevision = '15';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -141,6 +141,7 @@ export const DiscussionInput = Type.Object(
     area_id: UUID,
     title: Title,
     content: Content,
+    attachment_set: Type.Optional(AttachmentSet),
     proposal_context: Type.Optional(
       Type.Object(
         {
@@ -154,7 +155,14 @@ export const DiscussionInput = Type.Object(
   closed,
 );
 export const ReplyInput = Type.Object(
-  { ...attempt, ...changeFields, discussion_id: UUID, parent_id: UUID, content: Content },
+  {
+    ...attempt,
+    ...changeFields,
+    discussion_id: UUID,
+    parent_id: UUID,
+    content: Content,
+    attachment_set: Type.Optional(AttachmentSet),
+  },
   closed,
 );
 export const ArtifactInput = Type.Object(
@@ -174,6 +182,7 @@ export const RevisionInput = Type.Object(
     ...changeFields,
     resource_id: UUID,
     expected_revision_id: UUID,
+    attachment_set: Type.Optional(AttachmentSet),
     file_set: Type.Optional(FileSet),
     title: Type.Union([Title, Type.Null()]),
     content: Content,
@@ -198,6 +207,7 @@ export const PublicationKind = Type.Union(
     'artifact.create',
     'revision.publish',
     'community.setup',
+    'attachment.promote',
   ].map((kind) => Type.Literal(kind)),
 );
 export const StatusInput = Type.Object(
@@ -282,8 +292,12 @@ export const Revision = Type.Object(
       maxItems: limits.mentions,
     }),
     current_revision_id: NullableId,
+    provenance_url: Type.Optional(Type.String()),
     file_set: Type.Optional(
       Type.Object({ ...FileSet.properties, manifest_url: Type.String() }, closed),
+    ),
+    attachment_set: Type.Optional(
+      Type.Object({ ...AttachmentSet.properties, manifest_url: Type.String() }, closed),
     ),
     change_note: Type.Optional(
       Type.Object(

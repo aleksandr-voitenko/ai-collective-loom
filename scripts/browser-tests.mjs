@@ -4,6 +4,10 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, prepare, approve } from './lib/browser-diagnostics.mjs';
 
+if (process.argv.length === 2) {
+  const { runBrowserBatches } = await import('./lib/browser-batches.mjs');
+  process.exitCode = await runBrowserBatches();
+} else {
 prepare();
 const privateOutput = join(root, 'private-playwright');
 mkdirSync(privateOutput, { recursive: true, mode: 0o700 });
@@ -35,3 +39,4 @@ child.on('close', (code, signal) => {
   // Never turn an original browser failure or signal into success.
   process.exitCode = code && code !== 0 ? code : signal || spawnFailed ? 1 : approved ? 0 : 1;
 });
+}

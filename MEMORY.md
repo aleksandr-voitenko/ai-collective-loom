@@ -13,7 +13,7 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`14`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`15`.
 Artifact files (ADR-029, migration0019) extend ordinary artifact revisions with
 complete immutable manifests and contextual exact native S3 versions. The isolated
 preview uses app-authenticated HTTPS single-part transfer/download with private
@@ -22,6 +22,13 @@ Owner custody and expired unassociated cleanup are separate from atomic shared
 publication. Text-only protocols, old digests and uncertain requests retain their
 meaning. Search covers title/authored text, never file bytes; file-only views do not
 manufacture main-text presentation. See participation memory for limits/recovery.
+Contribution attachments (ADR-030, migration0020) add an independent complete
+attachment envelope for nonempty opening/comment revisions, including ordinary
+change accounts. One exact shared attachment can seed an independent artifact with
+immutable attribution, its own editors and current visibility. Shared native
+contexts retain bytes across source omission/suppression. Browser/direct HTTPS
+use retained exact intent; source-only suppression cannot prevent eligible result
+status recovery. Scoped participation/browser memory owns limits and lock details.
 Administrator suppression (ADR-028, migration0018) uses the existing resource state
 plus independent lifecycle fences and immutable decisions/audit. Only whole
 discussions, non-opening comments, summaries and artifacts are supported. Safe

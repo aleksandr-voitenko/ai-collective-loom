@@ -108,3 +108,86 @@ test('reload requires exact reselection, uncertain publication recovers, and sta
   await page.reload();await page.getByRole('button',{name:'Check status',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
   expect((await journal(page,'revision.publish')).body).toEqual(corrected.body);
 });
+
+async function attachedSource(f:Awaited<ReturnType<typeof setup>>,path='source.txt'){
+  const bytes=Buffer.from('Alice exact historical bytes');
+  const {createHash}=await import('node:crypto');
+  const upload=(await f.admin.call('/api/v1/file-uploads',{idempotency_key:randomUUID(),target:{kind:'opening',resource_id:f.area},path,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),media_type:'text/plain'})).body;
+  expect((await f.admin.call('/api/v1/file-uploads/'+upload.upload_id+'/bytes',undefined,{bytes})).status).toBe(200);
+  expect((await f.admin.call('/api/v1/file-uploads/'+upload.upload_id+'/finalize',{})).status).toBe(200);
+  const result=await f.admin.call('/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Alice attachment',content:{format:'loom-markdown-v1',text:'Alice owns this contribution',mentions:[]},attachment_set:{version:'contribution-attachments-v1',files:[{path,source:{upload_id:upload.upload_id}}]}});expect(result.status).toBe(201);
+  const source=result.body,manifest=(await f.admin.call(`/api/v1/contributions/${source.resource_id}/revisions/${source.revision_id}/attachments`)).body;
+  return {...source,discussion:manifest.discussion_id,file:manifest.items[0],bytes};
+}
+
+test('browser opening and reply attachments download exact bytes and another participant promotes an independently editable artifact',async({page,context,server})=>{
+  const f=await setup(page,context,server);
+  await page.goto(server.origin+`/loom/area/${f.area}?compose=discussions`);
+  await page.getByLabel('Title',{exact:true}).fill('Browser attachments');await page.getByLabel('Text',{exact:true}).fill('Opening with a lightweight file');
+  const bytes=Buffer.from('Opening exact bytes');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'opening.txt',mimeType:'text/plain',buffer:bytes});
+  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare opening.txt',exact:true}).click();
+  await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+  const opening=(await journal(page,'discussion.create')).result,view=await api(page,'/api/v1/resources/'+opening.resource_id);
+  await page.goto(server.origin+'/loom/discussion/'+view.discussion_id);
+  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download opening.txt',exact:true}).click();expect(await readFile((await (await download).path())!)).toEqual(bytes);
+  await page.getByRole('button',{name:'Reply',exact:true}).click();await page.getByLabel('Your reply',{exact:true}).fill('Attached reply');
+  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'reply.txt',mimeType:'text/plain',buffer:Buffer.from('Reply bytes')});
+  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare reply.txt',exact:true}).click();
+  await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Post reply',exact:true}).click();await expect(page.getByText('Your reply was posted.',{exact:true})).toBeVisible();
+  const reply=(await journal(page,'reply.create')).result;expect((await api(page,'/api/v1/resources/'+reply.resource_id)).parent_id).toBe(opening.resource_id);
+  const alice=await attachedSource(f);
+  await page.goto(server.origin+`/loom/resource/${alice.resource_id}/${alice.revision_id}`);
+  await expect(page.getByRole('link',{name:'Edit',exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:'Create artifact from attachment source.txt',exact:true}).click();
+  await page.getByLabel('Artifact title',{exact:true}).fill('Bob maintained artifact');
+  await page.getByRole('button',{name:'Select General',exact:true}).click();
+  await page.getByRole('button',{name:'Review artifact promotion',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog',{name:'Confirm independent artifact'})).toContainText(alice.revision_id);
+  await page.getByRole('button',{name:'Create independent artifact',exact:true}).click();await expect(page.getByText('The independent artifact is published. The source attachment is unchanged.',{exact:true})).toBeVisible();
+  const promoted=(await journal(page,'attachment.promote')).result;
+  await page.getByRole('link',{name:'Open independent artifact',exact:true}).click();
+  const artifactDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Download source.txt',exact:true}).click();expect(await readFile((await (await artifactDownload).path())!)).toEqual(alice.bytes);
+  await page.getByRole('button',{name:'Source attribution',exact:true}).click();await expect(page.getByRole('link',{name:'Exact source revision',exact:true})).toHaveAttribute('href',`/loom/resource/${alice.resource_id}/${alice.revision_id}`);
+  await page.goto(server.origin+`/loom/resource/${promoted.resource_id}?edit=1`);await page.getByLabel('File path 1').fill('independent.txt');await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+  expect((await f.admin.call(alice.file.download_url)).body).toBe(alice.bytes.toString());
+  await page.setViewportSize({width:390,height:844});await page.goto(server.origin+`/loom/resource/${promoted.resource_id}`);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('multiple uncertain browser promotions preserve separate exact bodies and recover after source-only suppression',async({page,context,server})=>{
+  const f=await setup(page,context,server),source=await attachedSource(f);
+  const other=(await f.admin.call('/api/v1/areas')).body.items.find((a:any)=>a.id!==f.area).id;
+  const route=`/loom/promote?contribution=${source.resource_id}&revision=${source.revision_id}&file=${source.file.file_id}`;
+  const sent:string[]=[];await page.route('**/api/v1/attachment-promotions',async r=>{sent.push(r.request().postData()!);await r.fetch();await r.abort('failed');});
+  const records:any[]=[];
+  for(const [title,area] of [['First independent copy',f.area],['Second independent copy',other]]){
+    await page.goto(server.origin+route);await page.getByLabel('Artifact title',{exact:true}).fill(title);await page.getByLabel('Destination area ID',{exact:true}).fill(area);
+    await page.getByRole('button',{name:'Review artifact promotion',exact:true}).click();await page.getByRole('button',{name:'Create independent artifact',exact:true}).click();await expect(page.getByRole('button',{name:'Check promotion status',exact:true})).toBeEnabled();
+    const rows=await page.evaluate(()=>Object.values(localStorage).map(v=>{try{return JSON.parse(v);}catch{return {};}}).filter(v=>v.kind==='attachment.promote'));records.push(rows.find(r=>r.body.title===title));
+  }
+  expect(records.map(r=>r.state)).toEqual(['uncertain','uncertain']);
+  const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+source.discussion)).body;
+  expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version})).status).toBe(200);
+  await page.reload();await expect(page.getByText('Alice exact historical bytes',{exact:true})).toHaveCount(0);
+  await page.unroute('**/api/v1/attachment-promotions');let retried='';await page.route('**/api/v1/attachment-promotions',async r=>{retried=r.request().postData()!;await r.continue();});
+  await page.getByRole('link',{name:new RegExp('Create “First independent copy” in area '+f.area)}).click();
+  await page.getByRole('button',{name:'Retry this exact promotion',exact:true}).click();await expect(page.getByRole('link',{name:'Open independent artifact',exact:true})).toBeVisible();expect(retried).toBe(sent[0]);
+  expect(await journal(page,'attachment.promote',records[1].key)).toEqual(records[1]);
+  await page.getByRole('link',{name:new RegExp('Create “Second independent copy” in area '+other)}).click();await page.getByRole('button',{name:'Check promotion status',exact:true}).click();await expect(page.getByRole('link',{name:'Open independent artifact',exact:true})).toBeVisible();
+  expect((await journal(page,'attachment.promote',records[1].key)).body).toEqual(records[1].body);expect(sent).toHaveLength(2);
+  await page.getByRole('link',{name:'Open independent artifact',exact:true}).click();await expect(page.getByRole('button',{name:'Download source.txt',exact:true})).toBeVisible();
+});
+
+test('a legacy contribution draft explicitly adopts comparison attachments without replacing attempted prose',async({page,context,server})=>{
+  const f=await setup(page,context,server),opening=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Legacy opening',content:{format:'loom-markdown-v1',text:'Initial',mentions:[]}});
+  await page.goto(server.origin+`/loom/resource/${opening.resource_id}?edit=1`);await page.getByLabel('Text',{exact:true}).fill('My attempted prose');
+  await expect.poll(async()=>(await journal(page,'revision.publish'))?.body.content.text).toBe('My attempted prose');
+  const {createHash}=await import('node:crypto'),bytes=Buffer.from('Competing attachment');
+  const upload=await api(page,'/api/v1/file-uploads',{idempotency_key:randomUUID(),target:{kind:'contribution',resource_id:opening.resource_id},path:'competing.txt',size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),media_type:'text/plain'});
+  const self=await api(page,'/api/v1/identity/self');expect((await page.request.post(server.origin+`/api/v1/file-uploads/${upload.upload_id}/bytes`,{data:bytes,headers:{origin:server.origin,'x-loom-csrf':self.csrf,'content-type':'application/octet-stream'}})).ok()).toBe(true);
+  await api(page,`/api/v1/file-uploads/${upload.upload_id}/finalize`,{});
+  const newer=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:opening.resource_id,expected_revision_id:opening.revision_id,title:'Legacy opening',content:{format:'loom-markdown-v1',text:'Competing prose',mentions:[]},attachment_set:{version:'contribution-attachments-v1',files:[{path:'competing.txt',source:{upload_id:upload.upload_id}}]}});
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your draft is preserved.',{exact:true})).toBeVisible();await page.reload();
+  await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('My attempted prose');await expect(page.getByLabel('File path 1')).toHaveValue('competing.txt');
+  await page.getByLabel('File path 1').fill('reviewed.txt');await expect.poll(async()=>(await journal(page,'revision.publish'))?.body.attachment_set?.files[0]?.path).toBe('reviewed.txt');await page.reload();
+  expect((await journal(page,'revision.publish')).body.expected_revision_id).toBe(newer.revision_id);await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+});

@@ -1,5 +1,10 @@
 import type { SqlTransaction } from '../../db/postgres.js';
-import type { FileSetValue, UploadStatusValue } from '../../../contracts/files.js';
+import type {
+  FileSetValue,
+  AttachmentSetValue,
+  UploadInputValue,
+  UploadStatusValue,
+} from '../../../contracts/files.js';
 import { fileLimits } from '../../../contracts/files.js';
 import { PublicationError } from '../publication/errors.js';
 import {
@@ -15,7 +20,7 @@ export type UploadRow = {
   id: string;
   participant_id: string;
   request_digest: string;
-  target_kind: 'area' | 'artifact';
+  target_kind: UploadInputValue['target']['kind'];
   target_id: string;
   path: string;
   size: number;
@@ -62,14 +67,27 @@ export function uploadStatus(row: UploadRow): UploadStatusValue {
 export async function authorizeUpload(
   tx: SqlTransaction,
   actor: Awaited<ReturnType<typeof lockActor>>,
-  target: { kind: 'area' | 'artifact'; resource_id: string },
+  target: UploadInputValue['target'],
 ) {
-  const chain = await lockContext(tx, target.resource_id, 'resolution', [target.kind]);
-  if (target.kind === 'artifact') {
+  const kind =
+    target.kind === 'opening' ? 'area' : target.kind === 'reply' ? 'contribution' : target.kind;
+  const chain = await lockContext(tx, target.resource_id, 'resolution', [kind]);
+  if (target.kind === 'artifact' || target.kind === 'contribution') {
     await authorizePublication(tx, actor, chain);
     if (!chain[0]!.current_revision_id) throw new PublicationError('unavailable');
     await requireRevision(tx, target.resource_id, chain[0]!.current_revision_id);
-  } else if (chain.some((r) => !r.publication_open)) throw new PublicationError('forbidden');
+  } else {
+    if (chain.some((r) => !r.publication_open)) throw new PublicationError('forbidden');
+    if (target.kind === 'reply') {
+      if (
+        !chain[0]!.current_revision_id ||
+        !(await tx.query('SELECT id FROM loom.contributions WHERE id=$1', [target.resource_id]))
+          .rowCount
+      )
+        throw new PublicationError('unavailable');
+      await requireRevision(tx, target.resource_id, chain[0]!.current_revision_id);
+    }
+  }
 }
 /** Called under custody and source guards, before the common clock tail. */
 export async function prepareFiles(
@@ -86,7 +104,10 @@ export async function prepareFiles(
       reused: string | null = null;
     if ('upload_id' in member.source) {
       row = await uploadRow(tx, member.source.upload_id, owner);
-      if (row.target_kind === 'artifact' ? row.target_id !== artifact : row.target_id !== area)
+      if (!(
+        (row.target_kind === 'artifact' && row.target_id === artifact) ||
+        (row.target_kind === 'area' && row.target_id === area)
+      ))
         throw new PublicationError('unavailable');
       if (!row.prepared_valid || row.state === 'expired' || row.state === 'cleaning')
         throw new FileError('file_expired');
@@ -110,4 +131,78 @@ export async function prepareFiles(
     prepared.push({ path: member.path, upload_id: row.id, reused_from: reused });
   }
   return prepared;
+}
+
+/** Custody15 serializes logical publication accounting as well as physical bytes.
+ * Counts include old artifacts; retained recovery never reaches this admission. */
+export async function admitFilePublication(tx: SqlTransaction, owner: string, count: number) {
+  const totals = (
+    await tx.query<{ sets: string; owned: string; contexts: string; owned_contexts: string }>(
+      `
+    WITH sets AS (
+      SELECT revision_id FROM loom.artifact_file_sets UNION ALL
+      SELECT revision_id FROM loom.contribution_attachment_sets
+    ) SELECT (SELECT count(*) FROM sets)::text AS sets,
+      (SELECT count(*) FROM sets s JOIN loom.revisions r ON r.id=s.revision_id WHERE r.publisher_id=$1)::text AS owned,
+      (SELECT count(*) FROM loom.file_contexts)::text AS contexts,
+      (SELECT count(*) FROM loom.file_contexts f JOIN loom.revisions r ON r.id=f.revision_id WHERE r.publisher_id=$1)::text AS owned_contexts`,
+      [owner],
+    )
+  ).rows[0]!;
+  if (
+    Number(totals.sets) >= fileLimits.publications ||
+    Number(totals.owned) >= fileLimits.ownerPublications ||
+    Number(totals.contexts) + count > fileLimits.contexts ||
+    Number(totals.owned_contexts) + count > fileLimits.ownerContexts
+  )
+    throw new FileError('file_capacity');
+}
+
+export async function prepareAttachments(
+  tx: SqlTransaction,
+  owner: string,
+  contribution: string,
+  target: UploadInputValue['target'],
+  set: AttachmentSetValue,
+) {
+  const files: PreparedFile[] = [];
+  let size = 0;
+  for (const member of set.files) {
+    let row: UploadRow,
+      reused: string | null = null;
+    if ('upload_id' in member.source) {
+      row = await uploadRow(tx, member.source.upload_id, owner);
+      if (row.target_kind !== target.kind || row.target_id !== target.resource_id)
+        throw new PublicationError('unavailable');
+      // A first publication binds preparation to that contribution. Knowing one's
+      // old private handle is not a cross-contribution copy capability.
+      if (
+        (
+          await tx.query(
+            'SELECT id FROM loom.file_contexts WHERE upload_id=$1 AND contribution_id IS NOT NULL AND contribution_id<>$2 LIMIT 1',
+            [row.id, contribution],
+          )
+        ).rowCount
+      )
+        throw new PublicationError('unavailable');
+      if (!row.prepared_valid || ['expired', 'cleaning'].includes(row.state))
+        throw new FileError('file_expired');
+    } else {
+      await requireRevision(tx, contribution, member.source.revision_id);
+      const context = (
+        await tx.query<{ upload_id: string }>(
+          'SELECT upload_id FROM loom.file_contexts WHERE contribution_id=$1 AND revision_id=$2 AND id=$3',
+          [contribution, member.source.revision_id, member.source.file_id],
+        )
+      ).rows[0];
+      if (!context) throw new PublicationError('unavailable');
+      row = await uploadRow(tx, context.upload_id);
+      reused = member.source.file_id;
+    }
+    if (row.state !== 'prepared' || !row.final_version) throw new FileError('file_not_prepared');
+    size += row.size;
+    if (size > fileLimits.packageBytes) throw new FileError('file_capacity');
+    files.push({ path: member.path, upload_id: row.id, reused_from: reused });
+  }
+  return files;
 }

@@ -11,7 +11,7 @@ function loadAssets(assetsRoot: string) { return new Map(readdirSync(assetsRoot)
   return ['/assets/' + name, { name, source, hash: createHash('sha256').update(source).digest('hex') }] as const;
 })); }
 type Entry = { asset: string; sha256: string; functions: { functionName: string; isBlockCoverage: boolean; ranges: { startOffset: number; endOffset: number; count: number }[] }[] };
-type State = { ready: Promise<void>; active: boolean; closed: boolean; captures: number; entries: Entry[]; kind: string; session?: CDPSession; scripts: Map<string, string>; pending: Promise<void>[] };
+type State = { ready: Promise<void>; active: boolean; closed: boolean; captures: number; entries: Entry[]; kind: string; session?: CDPSession; scripts: Map<string, string> };
 
 export class BrowserCoverage {
   private pages = new Map<Page, State>();
@@ -43,7 +43,7 @@ export class BrowserCoverage {
 
   private start(page: Page, kind: string): Promise<void> {
     const existing = this.pages.get(page); if (existing) return existing.ready;
-    const state: State = { ready: Promise.resolve(), active: false, closed: false, captures: 0, entries: [], kind, scripts: new Map(), pending: [] };
+    const state: State = { ready: Promise.resolve(), active: false, closed: false, captures: 0, entries: [], kind, scripts: new Map() };
     this.pages.set(page, state);
     state.ready = (async () => {
       const session = state.session = await page.context().newCDPSession(page);
@@ -51,11 +51,13 @@ export class BrowserCoverage {
         let pathname: string;
         try { pathname = new URL(event.url).pathname; } catch { return; }
         const asset = this.assets.get(pathname); if (!asset) return;
-        const pending = session.send('Debugger.getScriptSource', { scriptId: event.scriptId }).then(({ scriptSource }) => {
-          if (scriptSource !== asset.source) { this.issues.add('different_script_source'); return; }
-          state.scripts.set(event.scriptId, pathname);
-        }, () => { this.issues.add('missing_script_source'); });
-        state.pending.push(pending);
+        // Navigation may retire this script before getScriptSource can return.
+        // Bind counters synchronously to Chromium's parsed-source SHA-256 and
+        // exact UTF-16 range, never just its URL or a later network response.
+        if (event.hash !== asset.hash || event.length !== asset.source.length || event.startLine !== 0 || event.startColumn !== 0) {
+          this.issues.add('different_script_source'); return;
+        }
+        state.scripts.set(event.scriptId, pathname);
       });
       await session.send('Debugger.enable');
       await session.send('Profiler.enable');
@@ -83,7 +85,6 @@ export class BrowserCoverage {
     if (!state.active) return;
     assert.ok(!page.isClosed(), 'Coverage page closed before collection');
     const { result: entries } = await state.session!.send('Profiler.takePreciseCoverage');
-    await Promise.all(state.pending); state.pending = [];
     state.captures++;
     for (const entry of entries) {
       let pathname: string;

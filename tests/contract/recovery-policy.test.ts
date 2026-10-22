@@ -60,7 +60,7 @@ test('every registered participation route has a recovery policy and 500/503 rea
     'me/attention/private/mutes/state', 'me/following/private/state', 'me/following/state',
     'me/reading/state', 'me/saved-items/state', 'organization/changes', 'replies', 'revisions',
     'summaries', 'summaries/editors', 'summary-preparations', 'summary-preparations/cleanup',
-    'summary-revisions',
+    'summary-revisions', 'attachment-promotions',
   ].map(path => 'POST /api/v1/' + path));
   for (const route of mutations) assert.ok(routes.has(route), route);
   for (const [error, status, code, message] of [

@@ -5,7 +5,7 @@ import type {
   ReferenceValue,
   RevisionView,
 } from '../contracts/participation.js';
-import type { FileSetValue } from '../contracts/files.js';
+import type { FileSetValue, AttachmentSetValue, PublicationFileSet } from '../contracts/files.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
 import type { Intent } from './participation-client.js';
 
@@ -47,7 +47,7 @@ export function composerOperation(operation: ComposerOperation): OperationDetail
           ...(operation.proposal ? { proposal_context: operation.proposal } : {}),
         },
         titleField: true,
-        canFiles: false,
+        canFiles: true,
         canNote: false,
         summaryDiscussion: undefined,
       };
@@ -65,7 +65,7 @@ export function composerOperation(operation: ComposerOperation): OperationDetail
         path: '/api/v1/replies',
         fixed: { discussion_id: operation.discussionId, parent_id: operation.parentId },
         titleField: false,
-        canFiles: false,
+        canFiles: true,
         canNote: false,
         summaryDiscussion: undefined,
       };
@@ -87,7 +87,7 @@ export function composerOperation(operation: ComposerOperation): OperationDetail
           title: operation.title,
         },
         titleField: operation.title !== null,
-        canFiles: operation.resourceKind === 'artifact',
+        canFiles: true,
         canNote: operation.resourceKind === 'artifact',
         summaryDiscussion: undefined,
       };
@@ -119,7 +119,7 @@ export type DraftFields = {
   coverage: CoverageDeclarationValue | undefined;
   note: NoteContent | null;
   account: ChangeAccountValue | null;
-  fileSet: FileSetValue | undefined;
+  fileSet: PublicationFileSet | undefined;
 };
 export type DraftPatch = Partial<
   Pick<
@@ -131,6 +131,7 @@ export type DraftBody = Omit<TargetFields, 'expected_revision_id'> & {
   expected_revision_id?: unknown;
   coverage?: CoverageDeclarationValue;
   file_set?: FileSetValue;
+  attachment_set?: AttachmentSetValue;
   change_note?: NoteContent | null;
   change_account?: ChangeAccountValue | null;
   content: AuthoredContent;
@@ -164,7 +165,11 @@ export function buildDraftBody({
     ...(fields.base ? { expected_revision_id: fields.base } : {}),
     ...(titleField ? { title } : {}),
     ...(coverage ? { coverage } : {}),
-    ...(fileSet ? { file_set: fileSet } : {}),
+    ...(fileSet
+      ? fileSet.version === 'artifact-files-v1'
+        ? { file_set: fileSet as FileSetValue }
+        : { attachment_set: fileSet as AttachmentSetValue }
+      : {}),
     ...(changes ? { change_note: note, change_account: account } : {}),
     content: {
       ...(changes
@@ -181,7 +186,7 @@ export function buildDraftBody({
 type CorrectionRecord = Pick<Intent, 'body' | 'state' | 'conflict_revision_id'>;
 type ComparisonRevision = Pick<
   RevisionView,
-  'revision_id' | 'content' | 'change_account' | 'file_set'
+  'revision_id' | 'content' | 'change_account' | 'file_set' | 'attachment_set'
 >;
 type CorrectionInput = {
   operation: ComposerOperation;
@@ -194,8 +199,8 @@ export function draftCorrection({ operation, record, comparison }: CorrectionInp
   const legacyFileCorrection =
     record?.state === 'rejected' &&
     operation.kind === 'revision.publish' &&
-    operation.resourceKind === 'artifact' &&
-    !record.body.file_set;
+    !record.body.file_set &&
+    !record.body.attachment_set;
   const legacyCorrection =
     record?.state === 'rejected' &&
     (operation.kind === 'revision.publish' || operation.kind === 'summary.revise') &&
@@ -253,9 +258,10 @@ export function correctDraft(input: CorrectionInput & { fields: DraftFields }) {
         ? { carry_forward_revision_id: comparison.revision_id }
         : null
       : fields.account;
+  const comparisonFiles = comparison?.file_set ?? comparison?.attachment_set;
   const fileSet =
-    correction.legacyFileCorrection && comparison?.file_set
-      ? { version: comparison.file_set.version, files: comparison.file_set.files }
+    correction.legacyFileCorrection && comparisonFiles
+      ? { version: comparisonFiles.version, files: comparisonFiles.files }
       : fields.fileSet;
   const format = fileSet
     ? 'loom-markdown-v3'
@@ -276,7 +282,11 @@ export function correctDraft(input: CorrectionInput & { fields: DraftFields }) {
     } satisfies DraftFields,
     body: {
       ...body,
-      ...(fileSet ? { file_set: fileSet } : {}),
+      ...(fileSet
+        ? fileSet.version === 'artifact-files-v1'
+          ? { file_set: fileSet as FileSetValue }
+          : { attachment_set: fileSet as AttachmentSetValue }
+        : {}),
       ...(correction.comparisonRevision
         ? { expected_revision_id: correction.comparisonRevision }
         : {}),
