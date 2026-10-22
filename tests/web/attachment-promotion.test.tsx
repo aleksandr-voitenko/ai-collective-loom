@@ -3,12 +3,15 @@ import {afterEach,test,type TestContext} from 'node:test';
 import {randomUUID} from 'node:crypto';
 import {JSDOM} from 'jsdom';
 import {StrictMode} from 'react';
-import {createMemoryRouter} from 'react-router';
+import {createMemoryRouter,useParams} from 'react-router';
 import {RouterProvider} from 'react-router/dom';
 import {AuthorizationBoundary,useAuthorization} from '../../src/web/AuthorizationBoundary.js';
-import {PromotionPage,ArtifactProvenance} from '../../src/web/AttachmentPromotion.js';
+import {PromotionPage} from '../../src/web/AttachmentPromotion.js';
+import {ResourcePage} from '../../src/web/ParticipationResource.js';
+import {Revision,type RevisionView} from '../../src/contracts/participation.js';
+import {Value} from '@sinclair/typebox/value';
 import {IntentStore,invalidateIdentity} from '../../src/web/participation-client.js';
-import type {Context} from '../../src/web/participation-state.js';
+import {useQuery,type Context} from '../../src/web/participation-state.js';
 
 const locks=navigator.locks,dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://loom.example/'});
 for(const key of ['window','document','navigator','HTMLElement','MutationObserver','location','localStorage','Event'] as const)Object.defineProperty(globalThis,key,{value:dom.window[key],configurable:true});
@@ -76,10 +79,127 @@ test('a first definitive promotion refusal allows explicit correction while unce
   const old=c.store.all()[0]!;assert.equal(old.state,'rejected');await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Prepare corrected promotion'})));assert.notEqual(c.store.all()[0]!.key,old.key);assert.equal(c.store.all()[0]!.body.title,'Candidate');
 });
 
-test('source attribution is progressive and redacts unavailable source fields',async t=>{
-  const calls:{finish:(r:Response)=>void}[]=[];t.mock.method(globalThis,'fetch',()=>new Promise<Response>(finish=>calls.push({finish})));
-  const artifact=randomUUID(),revision=randomUUID(),router=createMemoryRouter([{path:'/',element:<AuthorizationBoundary sourcePolicy="settings"><ArtifactProvenance url={`/api/v1/artifacts/${artifact}/revisions/${revision}/provenance`}/></AuthorizationBoundary>}]);t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);
-  assert.equal(calls.length,0);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
-  await act(async()=>calls.forEach(c=>c.finish(Response.json({artifact_id:artifact,revision_id:revision,promoter_id:randomUUID(),source:{state:'unavailable'}}))));
-  assert.equal(screen.queryByRole('link',{name:'Exact source revision'}),null);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));assert.equal(screen.queryByText(/Original contributor/),null);
+function artifactFixture(){
+  const id=randomUUID(),revision=randomUUID(),person={id:randomUUID(),nickname:'Artifact creator',kind:'human' as const};
+  const path=`/api/v1/resources/${id}/revisions/${revision}`,provenance=`/api/v1/artifacts/${id}/revisions/${revision}/provenance`;
+  const file={kind:'file',file_id:randomUUID(),path:'source.txt',size:5,sha256:'a'.repeat(64),media_type:'text/plain',type_evidence:'declared',download_url:`/api/v1/artifacts/${id}/revisions/${revision}/files/exact/download`};
+  const value:RevisionView={resource_id:id,revision_id:revision,current_revision_id:revision,kind:'artifact',title:'Independent artifact',revision_number:'1',author:person,publisher:person,created_at:'2026-10-16T12:00:00Z',area_id:randomUUID(),area_title:'General',discussion_id:null,parent_id:null,can_edit:false,publication_open:true,full_content_url:path,content:{format:'loom-markdown-v1',text:'Independent artifact body',mentions:[]},mentioned_participants:[],provenance_url:provenance,file_set:{version:'artifact-files-v1',files:[],manifest_url:path+'/files'}};
+  assert.ok(Value.Check(Revision,value));
+  return {id,revision,path,provenance,value,file,unavailable:{artifact_id:id,revision_id:revision,promoter_id:person.id,source:{state:'unavailable'}},files:{artifact_id:id,revision_id:revision,prefix:'',items:[file],next_cursor:null,complete:true,availability:'declared_not_probed',max_response_bytes:100000}};
+}
+function mountResource(t:TestContext,f:ReturnType<typeof artifactFixture>,sibling?:ReturnType<typeof artifactFixture>){
+  const calls:{path:string;done:boolean;signal:AbortSignal|undefined|null;finish:(response:Response)=>void}[]=[];
+  t.mock.method(globalThis,'fetch',(path:string,options?:RequestInit)=>new Promise<Response>(resolve=>{const call={path,done:false,signal:options?.signal,finish(response:Response){assert.equal(call.done,false);call.done=true;resolve(response);}};calls.push(call);}));
+  const c=context();function Page(){const p=useParams();return <ResourcePage id={p.id!} revision={p.revision} context={c}/>;}
+  const router=createMemoryRouter([{path:'/loom/resource/:id/:revision',element:<Page/>},{path:'/other',element:<h1>Other context</h1>}],{initialEntries:[`/loom/resource/${f.id}/${f.revision}`]});
+  function Sibling(){const {data}=useQuery<RevisionView>(sibling!.path,Revision);return data&&<p>{data.title}</p>;}
+  const view=render(<StrictMode><RouterProvider router={router}/>{sibling&&<AuthorizationBoundary scope='sibling'><Sibling/></AuthorizationBoundary>}</StrictMode>);
+  t.after(async()=>{view.unmount();router.dispose();await act(async()=>{for(const call of calls.filter(c=>!c.done))call.finish(Response.json({error:{code:'service_unavailable',message:'Fixture cleanup'}},{status:503}));});});
+  const pending=(path:string)=>calls.filter(c=>!c.done&&!c.signal?.aborted&&c.path===path);
+  async function answer(path:string,value:unknown){await waitFor(()=>assert.ok(pending(path).length,'Expected read: '+path));await act(async()=>pending(path).forEach(c=>c.finish(Response.json(value))));}
+  return {calls,router,pending,answer};
+}
+const unavailableText='Source attribution details are currently unavailable.';
+test('production resource boundary reauthorizes the independent artifact after unavailable attribution',async t=>{
+  const f=artifactFixture(),m=mountResource(t,f);
+  await m.answer(f.path,f.value);assert.ok(screen.getByText('Independent artifact body'));
+  assert.equal(m.pending(f.provenance).length,0);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  await m.answer(f.provenance,f.unavailable);
+  assert.ok(screen.getByText(unavailableText));assert.equal(screen.queryByRole('link',{name:'Exact source revision'}),null);assert.equal(screen.queryByText(/Original contributor/),null);
+  assert.equal(screen.queryByText('Independent artifact body'),null,'Old artifact content must lose its lease');
+  await m.answer(f.path,{...f.value,title:'Fresh independent artifact'});
+  assert.ok(screen.getByRole('heading',{name:'Fresh independent artifact'}));assert.ok(screen.getByText('Independent artifact body'));
+  await m.answer(`/api/v1/artifacts/${f.id}/revisions/${f.revision}/files?prefix=&limit=12`,f.files);
+  assert.ok(screen.getByRole('button',{name:'Download source.txt'}));assert.ok(screen.getByText(unavailableText));
+});
+
+test('attribution denial revokes settled siblings and late artifact reads before a fresh independent read',async t=>{
+  const f=artifactFixture(),sibling=artifactFixture(),m=mountResource(t,f,sibling);
+  await m.answer(f.path,f.value);await m.answer(sibling.path,{...sibling.value,title:'Unrelated protected sibling'});
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  const old=m.pending(f.path).at(-1)!;
+  await m.answer(f.provenance,f.unavailable);
+  assert.equal(screen.queryByText('Unrelated protected sibling'),null);assert.ok(screen.getByText(unavailableText));
+  await act(async()=>old.finish(Response.json({...f.value,title:'Old delayed artifact'})));
+  assert.equal(screen.queryByRole('heading',{name:'Old delayed artifact'}),null);
+  await m.answer(f.path,f.value);
+  assert.ok(screen.getByText('Independent artifact body'));assert.equal(screen.queryByText('Unrelated protected sibling'),null);
+  assert.equal(m.pending(sibling.path).length,0,'Attribution must not reauthorize other content');
+});
+
+test('independent artifact refusal withdraws fresh unavailable attribution and cannot be restored by old success',async t=>{
+  const f=artifactFixture(),m=mountResource(t,f);
+  await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  const old=m.pending(f.path).at(-1)!;
+  await m.answer(f.provenance,f.unavailable);
+  await act(async()=>m.pending(f.path).forEach(c=>c.finish(Response.json({error:{code:'unavailable',message:'Artifact suppressed'}},{status:404}))));
+  assert.ok(screen.getByRole('button',{name:'Retry protected view'}));assert.equal(screen.queryByText(unavailableText),null);
+  await act(async()=>old.finish(Response.json(f.value)));
+  assert.equal(screen.queryByText('Independent artifact body'),null);assert.equal(screen.queryByRole('button',{name:'Download source.txt'}),null);assert.equal(m.pending(f.path).length,0);
+});
+
+test('late source success cannot disclose attribution after a newer source denial',async t=>{
+  const f=artifactFixture(),m=mountResource(t,f);
+  await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  const old=m.pending(f.provenance).at(-1)!;
+  await act(async()=>{void m.router.navigate(`/loom/resource/${f.id}/${f.revision}`);});
+  await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  await m.answer(f.provenance,f.unavailable);await m.answer(f.path,f.value);
+  const sourceFields={state:'available',...source(),discussion_id:randomUUID(),contributor_id:randomUUID(),revision_publisher_id:randomUUID(),uploader_id:randomUUID()};
+  await act(async()=>old.finish(Response.json({...f.unavailable,source:sourceFields})));
+  assert.ok(screen.getByText(unavailableText));assert.ok(screen.getByText('Independent artifact body'));
+  assert.equal(screen.queryByRole('link',{name:'Exact source revision'}),null);assert.equal(screen.queryByText(/Original contributor/),null);
+});
+
+test('late unavailable attribution cannot rearm resource reads after navigation or identity replacement',async t=>{
+  for(const identity of [false,true]){
+    const f=artifactFixture(),m=mountResource(t,f);
+    await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+    const pending=m.pending(f.provenance).at(-1)!;
+    await act(async()=>{if(identity)invalidateIdentity();else void m.router.navigate('/other');});
+    const before=m.calls.length;
+    await act(async()=>pending.finish(Response.json(f.unavailable)));
+    assert.equal(m.calls.length,before);assert.equal(screen.queryByText(unavailableText),null);assert.equal(screen.queryByText('Independent artifact body'),null);cleanup();
+  }
+});
+
+test('attribution transient errors retry independently and closing returns to the exact artifact',async t=>{
+  const f=artifactFixture(),m=mountResource(t,f);
+  await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  await m.answer(f.path,f.value);
+  await act(async()=>m.pending(f.provenance).forEach(c=>c.finish(Response.json({error:{code:'service_unavailable',message:'Retry attribution read'}},{status:503}))));
+  assert.ok(screen.getByText('Independent artifact body'));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry source attribution'})));
+  await m.answer(f.provenance,{...f.unavailable,source:{state:'available',...source(),discussion_id:randomUUID(),contributor_id:randomUUID(),revision_publisher_id:randomUUID(),uploader_id:randomUUID()}});
+  assert.ok(screen.getByRole('link',{name:'Exact source revision'}));
+  await act(async()=>fireEvent.click(screen.getByRole('link',{name:'Close source attribution'})));
+  await m.answer(f.path,f.value);assert.ok(screen.getByRole('button',{name:'Source attribution'}));assert.equal(screen.queryByText(/Original contributor/),null);
+});
+
+test('a transient independent revision read keeps explicit retry and independently checked history available',async t=>{
+  const f=artifactFixture(),m=mountResource(t,f);
+  await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  await act(async()=>m.pending(f.path).forEach(c=>c.finish(Response.json({error:{code:'service_unavailable',message:'Retry artifact read'}},{status:503}))));
+  assert.ok(screen.getByText('Retry artifact read'));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Revision history'})));
+  assert.ok(screen.getByRole('heading',{name:'Retained revisions'}));assert.ok(m.pending(`/api/v1/resources/${f.id}/history`).length);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Revision history'})));
+  assert.equal(screen.queryByRole('heading',{name:'Retained revisions'}),null);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry revision'})));
+  await m.answer(f.path,f.value);assert.ok(screen.getByText('Independent artifact body'));
+});
+
+test('a late unavailable source still revokes a newer attribution view without authorizing a retry',async t=>{
+  const f=artifactFixture(),m=mountResource(t,f);
+  await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  const old=m.pending(f.provenance).at(-1)!;
+  await act(async()=>{void m.router.navigate(`/loom/resource/${f.id}/${f.revision}`);});
+  await m.answer(f.path,f.value);await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Source attribution'})));
+  await m.answer(f.path,f.value);
+  await m.answer(f.provenance,{...f.unavailable,source:{state:'available',...source(),discussion_id:randomUUID(),contributor_id:randomUUID(),revision_publisher_id:randomUUID(),uploader_id:randomUUID()}});
+  assert.ok(screen.getByRole('link',{name:'Exact source revision'}));const before=m.calls.length;
+  await act(async()=>old.finish(Response.json(f.unavailable)));
+  assert.equal(screen.queryByRole('link',{name:'Exact source revision'}),null);assert.equal(screen.queryByText('Independent artifact body'),null);
+  assert.ok(screen.getByRole('button',{name:'Retry protected view'}));assert.equal(m.calls.length,before);
 });

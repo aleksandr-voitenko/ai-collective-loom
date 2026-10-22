@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import {
   AttachmentSelection,
   PromotionInput,
@@ -344,17 +344,35 @@ function PromotionReview({
   );
 }
 
-export function ArtifactProvenance({ url }: { url: string }) {
-  const [open, setOpen] = useState(false);
+export function ArtifactProvenance({ resource, revision }: { resource: string; revision: string }) {
+  const navigate = useNavigate();
   return (
-    <section>
-      <button onClick={() => setOpen((v) => !v)}>Source attribution</button>
-      {open && <ProvenanceDetails url={url} />}
-    </section>
+    <button onClick={() => navigate(`/loom/resource/${resource}/${revision}?attribution=1`)}>
+      Source attribution
+    </button>
   );
 }
-function ProvenanceDetails({ url }: { url: string }) {
-  const { data, error, refresh } = useQuery<PromotionProvenanceValue>(url, PromotionProvenance);
+
+export function ProvenanceDetails({
+  url,
+  reauthorizeArtifact,
+}: {
+  url: string;
+  reauthorizeArtifact: () => void;
+}) {
+  const authority = useAuthorization();
+  const { data, generation, error, refresh } = useQuery<PromotionProvenanceValue>(
+    url,
+    PromotionProvenance,
+  );
+  const reauthorize = useRef(reauthorizeArtifact);
+  reauthorize.current = reauthorizeArtifact;
+  useEffect(() => {
+    // Consume the negative evidence first. Only this still-current projection
+    // can request a new artifact read; it never restores a cached artifact body.
+    if (data?.source.state === 'unavailable' && authority.current(generation))
+      reauthorize.current();
+  }, [data, generation, authority]);
   return (
     <>
       {error && (

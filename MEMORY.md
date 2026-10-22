@@ -92,7 +92,9 @@ move or reordered response; client request age cannot order server authorization
 Positive responses retain freshness fences. Private versions, confirmation and
 command custody stay independent; private receipts cannot authorize content.
 Fresh mixed responses may publish only their own lease-gated fields (previews,
-Saved pages and audited discussion traversal); opaque full hosts still withdraw. The method/endpoint catalogue in
+Saved pages, audited discussion traversal and exact artifact attribution); opaque
+full hosts still withdraw. Attribution rechecks the independent artifact after
+source withdrawal; see the browser memory and ADR-030. The method/endpoint catalogue in
 `web/response-contracts.ts` explicitly classifies every negative success field;
 its contract test checks actual routes/schemas. Saved/Reading receipt denials are
 consumed before private settlement. See ADR-027 for the bounded exception.

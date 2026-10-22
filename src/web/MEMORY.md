@@ -31,7 +31,13 @@ uses the same IntentStore under a settings authorization boundary: private comma
 recovery survives source withdrawal, while selection/dialog metadata is leased.
 Retained promotion labels identify source/revision/file and destination/title.
 Late receipts after unmount or identity change cannot settle a journal. Attribution
-is progressive; source absence never changes the independent artifact's file context.
+is progressive: its button opens the exact resource's `?attribution=1` view. Only
+that view leases the revision and provenance queries separately; unavailable-source
+evidence revokes old content, then the current provenance projection requests a new
+artifact read. `ResourcePresentation` unmounts with its revision lease, including
+opaque controls under their own withdrawal boundary. Ordinary resource and overview
+hosts keep withdrawal; neither private receipts nor cached body values reauthorize
+content. Source absence never changes the independent artifact's file context.
 See ADR-030 and `tests/web/attachment-promotion.test.tsx`.
 
 Setup/configuration, admission/credentials and editor management have separate

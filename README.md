@@ -34,7 +34,9 @@ participant can choose **Create artifact from attachment**, confirm one exact so
 file and a destination/title, and become the new artifact's creator/editor. Source
 attribution stays recorded; the artifact has independent revisions and visibility.
 Source omission or suppression does not retarget its bytes or hide the independent
-artifact. Old exact contribution revisions retain their attachments. See
+artifact. **Source attribution** opens a reloadable exact-revision view; unavailable
+source details stay redacted while the independent artifact is checked again.
+Old exact contribution revisions retain their attachments. See
 [ADR-030](docs/adr/030-contribution-attachments-and-promotion.md).
 Normal startup keeps the original operational foundation. No default administrator,
 identity-header bypass, file uploads or model execution is enabled.

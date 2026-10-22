@@ -46,6 +46,18 @@ depending on a source URL. Source suppression/omission cannot remove this indepe
 artifact; artifact suppression applies independently. Its later same-artifact reuse
 checks the artifact's rights, never the historical source's current visibility.
 
+The browser's progressive attribution action opens a reloadable exact-revision
+view. Only its revision and provenance queries share the audited projection host;
+ordinary resource views and opaque artifact controls retain whole-view withdrawal.
+An unavailable source still revokes older same-owner projections. The current
+provenance response may render its own redacted fields and request a fresh artifact
+read, but never restore the old body or file controls. Those return only from the
+new authorized revision and file reads. Late responses, another denial, navigation
+or identity replacement retain their fences. This uses ADR-027's response-owned
+lease rule; it does not reinterpret unavailable provenance as positive authority
+for another response. Any future optional projection must be isolated and audited
+before adopting this host.
+
 The full lock plan is attempt → sorted actor/credential guards → file custody15 →
 shared structure1 → sorted source/destination/owner resources → selected revisions
 → new publication/provenance → common clock tail. No newly contested domain guard

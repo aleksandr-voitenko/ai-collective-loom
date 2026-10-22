@@ -175,6 +175,26 @@ test('multiple uncertain browser promotions preserve separate exact bodies and r
   await page.getByRole('link',{name:new RegExp('Create “Second independent copy” in area '+other)}).click();await page.getByRole('button',{name:'Check promotion status',exact:true}).click();await expect(page.getByRole('link',{name:'Open independent artifact',exact:true})).toBeVisible();
   expect((await journal(page,'attachment.promote',records[1].key)).body).toEqual(records[1].body);expect(sent).toHaveLength(2);
   await page.getByRole('link',{name:'Open independent artifact',exact:true}).click();await expect(page.getByRole('button',{name:'Download source.txt',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Source attribution',exact:true}).click();
+  await expect(page.getByText('Source attribution details are currently unavailable.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Exact source revision',exact:true})).toHaveCount(0);
+  await expect(page.getByText(/Original contributor/)).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'Second independent copy',exact:true})).toBeVisible();
+  const recoveredDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Download source.txt',exact:true}).click();expect(await readFile((await (await recoveredDownload).path())!)).toEqual(source.bytes);
+  await page.reload();
+  await expect(page.getByText('Source attribution details are currently unavailable.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Second independent copy',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Exact source revision',exact:true})).toHaveCount(0);
+  await expect(page.getByText(/Original contributor/)).toHaveCount(0);
+  const reloadedDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Download source.txt',exact:true}).click();expect(await readFile((await (await reloadedDownload).path())!)).toEqual(source.bytes);
+  const independent=(await journal(page,'attachment.promote',records[1].key)).result;
+  const artifactState=(await f.admin.call('/api/v1/admin/moderation/resources/'+independent.resource_id)).body;
+  expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:artifactState.target,suppressed:true,expected_version:artifactState.version})).status).toBe(200);
+  await page.getByRole('button',{name:'Download source.txt',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Retry protected view',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Second independent copy',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Download source.txt',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Source attribution details are currently unavailable.',{exact:true})).toHaveCount(0);
 });
 
 test('a legacy contribution draft explicitly adopts comparison attachments without replacing attempted prose',async({page,context,server})=>{

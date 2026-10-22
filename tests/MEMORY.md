@@ -31,6 +31,12 @@ Separate StrictMode promotion tests exercise durable recovery, delayed denial,
 local save failure and late navigation/identity responses. Production Chromium
 adds opening/reply authoring, exact downloads, independent promotion, multiple lost
 acknowledgements and legacy contribution correction to the existing file suite.
+Attribution regressions mount the production `ResourcePage`, not a settings-only
+fixture. Unavailable provenance must redact source details, withdraw old bodies and
+siblings, and issue a fresh independent artifact read. Late positive/negative reads,
+identity/navigation changes and independent artifact refusal retain their fences.
+Chromium opens attribution after source suppression, downloads exact bytes before
+and after reload, then suppresses the artifact and verifies whole-view withdrawal.
 Upgrade hashes every populated pre0019 table and checks
 old format replay, references and private checkpoints. Production Chromium file
 journeys cover nested download, file-only presentation, revision reuse, reselection,

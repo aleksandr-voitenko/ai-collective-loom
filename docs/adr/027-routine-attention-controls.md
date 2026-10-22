@@ -229,6 +229,8 @@ bodies are withdrawn independently of a fresh structural page. Known unavailable
 rows render only that page's authorized structural marker; they do not immediately
 refetch the unavailable body. Only immutable opening identity remains as an internal
 query seed. Source-error responses still withdraw the whole host and require Retry.
+The exact artifact attribution view isolates its revision and provenance queries
+under the same rule; ADR-030 describes its fresh independent reauthorization.
 Other hosts must isolate their projections before adopting this policy.
 
 Community proposal designation and proposal-route responses add optional
