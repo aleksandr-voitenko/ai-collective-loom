@@ -613,6 +613,11 @@ templates and Add/Check/Refresh controls, without changing bounds or raw contain
 mention remount/removal assertions. Status misses and transient failures preserve
 uncertain bodies; recorded file expiry through status or exact retry cannot unlock
 correction until rejection is durably saved. Independent drafts stay untouched.
+The Chromium conflict-correction restart case waits for the replacement URL, holds
+the real journal lock across text/title edits, and verifies the complete saved body
+before reload. A replacement key/base alone does not prove later autosaves finished;
+input completion is not a persistence barrier. Reload, navigation and process restart
+must each retain both edited fields.
 
 Change notes/accounts use `changes*.test.ts`: populated pre-0011 old-column/digest
 preservation, exact client/server restart, both authority/suppression guard orders,

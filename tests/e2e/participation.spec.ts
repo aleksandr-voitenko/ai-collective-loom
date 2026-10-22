@@ -1111,12 +1111,7 @@ test("review regression: corrected conflict drafts survive navigation and browse
     await page
       .getByRole("button", { name: "Prepare corrected submission" })
       .click();
-    await page
-      .getByLabel("Text", { exact: true })
-      .fill("Corrected text survives restart");
-    await page
-      .getByLabel("Title", { exact: true })
-      .fill("Corrected title survives restart");
+    await expect(page.getByLabel("Text", { exact: true })).toBeEnabled();
     const corrected = (await savedIntents(page)).find(
       (r) => r.slot === "edit:" + d.resource,
     );
@@ -1124,10 +1119,43 @@ test("review regression: corrected conflict drafts survive navigation and browse
     expect(corrected.body.expected_revision_id).toBe(
       (await newer.json()).revision_id,
     );
+    await expect.poll(() => new URL(page.url()).searchParams.get("intent")).toBe(corrected.key);
     const correctedUrl = page.url();
+    // A replacement key proves correction, not completion of later autosaves.
+    // Hold the real journal lock so input completion cannot stand in for custody.
+    const lockName = `loom.intent.v1:${corrected.origin}:${corrected.instance_id}:${corrected.participant_id}:`;
+    await page.evaluate(async (name) => {
+      await new Promise<void>((entered) => {
+        void navigator.locks.request(name, () => new Promise<void>((release) => {
+          (window as any).releaseCorrectedDraftLock = release;
+          entered();
+        }));
+      });
+    }, lockName);
+    await page
+      .getByLabel("Text", { exact: true })
+      .fill("Corrected text survives restart");
+    await page
+      .getByLabel("Title", { exact: true })
+      .fill("Corrected title survives restart");
+    await expect.poll(() => page.evaluate(async (name) =>
+      (await navigator.locks.query()).pending?.some((lock) => lock.name === name), lockName,
+    )).toBe(true);
+    expect((await savedIntents(page)).find((r) => r.key === corrected.key)).toEqual(corrected);
+    await page.evaluate(() => (window as any).releaseCorrectedDraftLock());
+    await expect.poll(async () =>
+      (await savedIntents(page)).find((r) => r.key === corrected.key)?.body,
+    ).toEqual({
+      ...corrected.body,
+      content: { ...corrected.body.content, text: "Corrected text survives restart" },
+      title: "Corrected title survives restart",
+    });
     await page.reload();
     await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
       "Corrected text survives restart",
+    );
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+      "Corrected title survives restart",
     );
     await page
       .getByRole("link", { name: "Topics", exact: true })
@@ -1136,6 +1164,9 @@ test("review regression: corrected conflict drafts survive navigation and browse
     await page.goto(correctedUrl);
     await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
       "Corrected text survives restart",
+    );
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+      "Corrected title survives restart",
     );
     await context.close();
     context = await diagnostics.launchPersistentContext(directory, options);
