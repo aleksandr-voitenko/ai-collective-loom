@@ -126,7 +126,13 @@ export function registerFiles(
     if (receiving >= fileLimits.active) throw new FileError('file_capacity');
     receiving++;
     let released = false;
-    const deadline = setTimeout(() => reply.raw.destroy(), fileLimits.transferMs);
+    const deadline = setTimeout(() => {
+      // Native IO starts after admission and has its own equal-length deadline.
+      // A stalled read must retain the safe storage error before HTTP closes it.
+      if (request.method === 'GET' && !reply.raw.headersSent)
+        reply.send(new FileError('file_storage_unavailable'));
+      else reply.raw.destroy();
+    }, fileLimits.transferMs);
     deadline.unref();
     const release = () => {
       if (!released) {
@@ -289,18 +295,31 @@ export function registerFiles(
       },
       async (request, reply) => {
         const p = request.params as { id: string; revision: string; file: string };
-        const result = await files.download(await actor(request), p.id, p.revision, p.file, owner);
-        const name = result.path.split('/').at(-1)!;
-        return reply
-          .header('content-type', 'application/octet-stream')
-          .header('cache-control', 'private, no-store')
-          .header('content-security-policy', "sandbox; default-src 'none'")
-          .header('x-content-type-options', 'nosniff')
-          .header(
-            'content-disposition',
-            `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`,
-          )
-          .send(result.bytes);
+        try {
+          const result = await files.download(
+            await actor(request),
+            p.id,
+            p.revision,
+            p.file,
+            owner,
+          );
+          // The admission deadline may already have settled this response.
+          if (reply.sent) return reply;
+          const name = result.path.split('/').at(-1)!;
+          return reply
+            .header('content-type', 'application/octet-stream')
+            .header('cache-control', 'private, no-store')
+            .header('content-security-policy', "sandbox; default-src 'none'")
+            .header('x-content-type-options', 'nosniff')
+            .header(
+              'content-disposition',
+              `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`,
+            )
+            .send(result.bytes);
+        } catch (error) {
+          if (reply.sent) return reply;
+          throw error;
+        }
       },
     );
   }

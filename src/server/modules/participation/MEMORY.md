@@ -51,6 +51,10 @@ Upload/download HTTP admission shares four slots until response completion or
 disconnection (15s deadline). Storage admission holds four slots from before the
 first DB wait for incoming buffers through final DB association/authorization,
 bounding buffers even after an HTTP disconnect.
+An unsent download deadline returns the ordinary503 storage-unavailable envelope
+at the same15s boundary; native IO still aborts on its own15s budget. Late success
+or failure cannot replace that response. Upload or already-started response
+deadlines still destroy the transport; no automatic request/native retry is added.
 `web/Files.tsx` uses existing scoped IntentStore/authorization boundaries, explicit
 selection/status/prepare/download actions and SHA-256 reselection after reload.
 No file bytes/secrets/storage capabilities enter the local journal. Stale corrections

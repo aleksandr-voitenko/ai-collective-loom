@@ -63,6 +63,8 @@ and render only text. Markdown/JSON/CSV/code is never interpreted or run. Images
 HTML/SVG rendering, complex documents and archive extraction remain unsupported;
 original downloads remain available. Inspection does not mark a publication read
 or create mentions.
+Downloads retain their 15-second transfer limit. A storage timeout before delivery
+returns a safe `503 file_storage_unavailable` response for an explicit later retry.
 
 The isolated preview supervises a separate file processor. `files stop` / `files start`
 leave HTTPS and existing search/notification workers available. Synthetic limits:

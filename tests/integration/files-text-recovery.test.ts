@@ -10,6 +10,7 @@ import {NativeSearchWorker} from '../../scripts/lib/native-search-worker.js';
 import {barrier,bounded} from '../helpers/search-races.js';
 import {prepareText} from '../helpers/file-text.js';
 import {randomUUID} from 'node:crypto';
+import {fileLimits} from '../../src/contracts/files.js';
 
 test('native storage loss, retry exhaustion, exact-version refusal and derived capacity stay honest',{timeout:120000},async t=>{
   const f=await fixture(t,{files:true}),p=await packageText(f),worker=new FileTextWorker(f.database,f.fileFixture!.storage);
@@ -44,6 +45,36 @@ test('native storage loss, retry exhaustion, exact-version refusal and derived c
   assert.equal((await person.client.call('/api/v1/admin/file-text/rebuild',{expected_generation:1})).status,403);
   assert.equal((await f.admin.call('/api/v1/admin/file-text/retry',{...body,claim_generation:9999})).body.error.code,'search_changed');
   assert.equal((await f.admin.call('/api/v1/admin/file-text/rebuild',{expected_generation:9999})).body.error.code,'search_changed');
+});
+
+test('a stalled exact native download returns bounded storage failure without resetting HTTPS',{timeout:120000},async t=>{
+  const f=await fixture(t,{files:true}),p=await packageText(f),storage=f.fileFixture!.storage;
+  const before=await sourceSnapshot(f),read=storage.read.bind(storage),entered=barrier(),aborted=barrier(),prepared=barrier(),release=barrier();let calls=0;
+  storage.read=async(...args)=>{
+    if(++calls===2){const bytes=await read(...args);prepared.release();await release.promise;return bytes;}
+    entered.release();
+    await new Promise<void>((_resolve,reject)=>{
+      const signal=args[4];
+      if(signal.aborted){aborted.release();reject(signal.reason);return;}
+      signal.addEventListener('abort',()=>{aborted.release();reject(signal.reason);},{once:true});
+    });
+    return read(...args);
+  };
+  try{
+    const started=Date.now(),pending=Promise.all([f.admin.call(p.file.download_url),f.admin.call(p.file.download_url)]);
+    await bounded(Promise.all([entered.promise,prepared.promise]));
+    for(const response of await pending){
+      assert.equal(response.status,503);assert.equal(response.body.error.code,'file_storage_unavailable');
+      assert.equal(response.body.error.recovery.action,'retry_same_request');
+      assert.equal(response.headers['content-type'],'application/json; charset=utf-8');
+      assert.ok(!JSON.stringify(response.body).includes('quartzneedle'),'A late verified buffer cannot replace the deadline failure');
+    }
+    assert.ok(Date.now()-started<fileLimits.transferMs+2000,'The existing transfer deadline still bounds the response');
+    release.release();await bounded(aborted.promise);assert.equal(calls,2,'Do not replay either native read');
+  }finally{release.release();storage.read=read;}
+  assert.deepEqual(await sourceSnapshot(f),before);
+  assert.equal((await f.admin.call(p.base+'/text')).body.processing,'not_discovered');
+  assert.deepEqual((await f.admin.call(p.file.download_url)).body,'quartzneedle file content','The failed transfers release admission for an explicit exact later read');
 });
 
 test('leases, stale claims, rebuild and lost COMMIT acknowledgement fence output without changing sources',{timeout:120000},async t=>{

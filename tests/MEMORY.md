@@ -7,6 +7,12 @@ The older over-cap fixture also rebuilds past a missing lowest-ID context, check
 two bounded batches, processed output, unchanged job ceiling and original download.
 Native process barriers in fixtures/file-text-worker.ts cover prepared/pre-COMMIT/
 post-COMMIT death; real waiters exercise both suppression/credential/rebuild orders.
+The stalled-download regression holds one native read until abort and another
+verified buffer past the HTTP deadline. Both return the existing503 storage error
+within the unchanged15s budget, without replay or late bytes; source rows stay
+unchanged and an explicit later exact download succeeds. The admission timer starts
+before native IO, so destroying unsent downloads at that boundary races native
+error conversion and produces ECONNRESET instead of the safe failure envelope.
 The standalone HTTPS client writes private result JSON without bodies in receipts,
 preserving exact identity/query input and unrelated journals through replacement.
 `web/file-text.test.tsx` mounts the actual file route and boundary in StrictMode;
