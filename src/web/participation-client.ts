@@ -1,4 +1,5 @@
 import { FileSet, AttachmentSet, FileMember, UploadInput, fileLimits } from '../contracts/files.js';
+import * as Editing from '../contracts/reservations.js';
 import { Value } from '@sinclair/typebox/value';
 import { Type, type TSchema } from '@sinclair/typebox';
 import type { CommittedView } from '../contracts/participation.js';
@@ -209,6 +210,9 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       'following_limit_reached',
       'organization_conflict',
       'moderation_conflict',
+      'editing_intent_conflict',
+      'editing_intent_limit',
+      'editing_intent_closed',
       'moderation_limit',
       'moderation_target_unsupported',
       'organization_limit',
@@ -327,6 +331,17 @@ export class IntentStore {
         throw new Error('The attachment manifest is incompatible. Preserve the exact journal.');
       if (record.kind === 'file.upload' && !Value.Check(UploadInput, record.body))
         throw new Error('The upload metadata is incompatible. Preserve the exact journal.');
+      if (record.kind.startsWith('editing-intent.')) {
+        const schema = {
+          announce: Editing.AnnounceIntent,
+          renew: Editing.RenewIntent,
+          release: Editing.ReleaseIntent,
+        }[record.kind.slice(15) as Editing.IntentActionValue];
+        if (!schema || !Value.Check(schema, record.body))
+          throw new Error(
+            'The editing intent command is incompatible. Preserve the exact journal.',
+          );
+      }
       if ('change_note' in record.body && !Value.Check(DraftNote, record.body.change_note))
         throw new Error(
           'The saved note is incompatible. Export the exact record before continuing.',
@@ -468,6 +483,47 @@ export class IntentStore {
       state: 'uncertain',
       body:
         record.state === 'draft' ? { ...visibleBody, idempotency_key: record.key } : record.body,
+    });
+  }
+  prepareEditingIntent(
+    action: Editing.IntentActionValue,
+    body: Record<string, unknown>,
+    target: { resource: string; base: string },
+    active: () => boolean,
+  ): Promise<Intent> {
+    return this.locked(() => {
+      if (!active()) throw new DOMException('View changed.', 'AbortError');
+      const slot =
+        'editing-intent:' + target.resource.toLowerCase() + ':' + target.base.toLowerCase();
+      if (
+        this.all().some(
+          (r) =>
+            r.kind.startsWith('editing-intent.') &&
+            r.state === 'uncertain' &&
+            r.slot.split(':')[1] === target.resource.toLowerCase(),
+        )
+      )
+        throw new Error(
+          'Resolve the saved editing intent command for this resource before another choice.',
+        );
+      const record = this.create(
+        slot,
+        'editing-intent.' + action,
+        '/api/v1/editing-intent/' + action,
+        body,
+      );
+      if (
+        !Value.Check(
+          {
+            announce: Editing.AnnounceIntent,
+            renew: Editing.RenewIntent,
+            release: Editing.ReleaseIntent,
+          }[action],
+          record.body,
+        )
+      )
+        throw new Error('Review the editing intent fields and duration before announcing.');
+      return this.write({ ...record, state: 'uncertain', sequence: 1 });
     });
   }
   prepareModeration(body: Record<string, unknown>, active: () => boolean): Promise<Intent> {

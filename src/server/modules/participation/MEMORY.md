@@ -1,5 +1,12 @@
 # Participation boundary
 
+Guide17 adds independent advisory editing intent in sibling `reservations/`,
+using the existing actor/resource/revision guards. `authorizeEditor` now owns the
+unchanged editor check; `authorizePublication` adds its existing closure refusal.
+Reservations distinguish local posting closure from lost editor authority and
+never join publication input/digests/tail, source coverage or file custody.
+See ADR-032 and the sibling memory for bounds and owner-only receipt/release.
+
 ADR-031 adds passive exact UTF-8 previews and separate Files search in sibling
 `search/`; its independent derived worker never changes these publication/native
 contexts, lifetimes, digests or personal state. See that scoped memory for bounds.
@@ -266,7 +273,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–16. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–17. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;

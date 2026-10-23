@@ -140,3 +140,10 @@ test('moderation control metadata never grants source access; every recorded lif
   assert.deepEqual(classifyError(contract,new ApiError('forbidden','Administrator role removed.')),{session:'retain',content:'withdraw'});
  }
 });
+
+ test('editing intent closure retains reads while source/editor loss withdraws and private receipt absence stays local',()=>{
+  assert.equal(classifyError(responseContract('/api/v1/editing-intent/announce','POST'),new ApiError('editing_intent_closed','Closed')).content,'retain');
+  assert.equal(classifyError(responseContract('/api/v1/editing-intent/renew','POST'),new ApiError('forbidden','Editor removed')).content,'withdraw');
+  assert.equal(classifyError(responseContract('/api/v1/editing-intent/resources/12345678-abcd-1234-abcd-123456789abc','GET'),new ApiError('unavailable','Source hidden')).content,'withdraw');
+  assert.equal(classifyError(responseContract('/api/v1/editing-intent/release','POST'),new ApiError('unavailable','Unknown private notice')).content,'retain');
+ });

@@ -15,6 +15,7 @@ import * as Sum from '../contracts/summaries.js';
 import * as Search from '../contracts/search.js';
 import { PromotionProvenance } from '../contracts/files.js';
 import * as M from '../contracts/moderation.js';
+import * as Intent from '../contracts/reservations.js';
 import { ApiError } from './request-context.js';
 
 type Access = 'public' | 'session' | 'read' | 'private-read' | 'receipt' | 'boundary-receipt';
@@ -47,6 +48,11 @@ const sourceErrors: ErrorPolicy = {
   session: 'authenticated',
   forbidden: 'withdraw',
   unavailable: 'withdraw',
+};
+const privateIntentErrors: ErrorPolicy = {
+  session: 'authenticated',
+  forbidden: 'retain',
+  unavailable: 'retain',
 };
 // These constructors require only source readability and open publication. Role
 // and editor-dependent commands use sourceErrors: refusal can invalidate other
@@ -364,6 +370,26 @@ add(
   identityErrors,
   classified(M.ModerationStatus, []),
   { lifecycleReceipt: true },
+);
+add(
+  ['GET /api/v1/editing-intent/resources/{id}'],
+  'read',
+  sourceErrors,
+  affirmed(
+    'Only currently eligible resource and exact-base metadata is returned. Temporal state is not authority.',
+  ),
+);
+add(
+  ['POST /api/v1/editing-intent/announce', 'POST /api/v1/editing-intent/renew'],
+  'boundary-receipt',
+  sourceErrors,
+  classified(Intent.IntentStatus, []),
+);
+add(
+  ['POST /api/v1/editing-intent/release', 'POST /api/v1/editing-intent/status'],
+  'boundary-receipt',
+  privateIntentErrors,
+  classified(Intent.IntentStatus, []),
 );
 
 add(

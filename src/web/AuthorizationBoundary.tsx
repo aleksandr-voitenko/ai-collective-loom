@@ -20,6 +20,7 @@ import * as P from '../contracts/private-controls.js';
 import * as O from '../contracts/organization.js';
 import * as S from '../contracts/saved-items.js';
 import * as M from '../contracts/moderation.js';
+import * as Intent from '../contracts/reservations.js';
 import { contentKey, type ContentRequest, type ContentRegion } from './protected-content.js';
 import { identityContent } from './authorization-coordinator.js';
 import { responseContract } from './response-contracts.js';
@@ -238,6 +239,23 @@ class ViewAuthorization {
       if (value.operation_state === 'not_recorded') return value;
       // A command receipt cannot refresh a title or certify source access.
       return { ...value, current: { ...value.current, source: { state: 'unavailable' } } };
+    } finally {
+      this.region.coordinator.finish(ticket);
+    }
+  }
+  async editingIntentCommand(
+    body: unknown,
+    action: 'announce' | 'renew' | 'release' | 'status',
+    self: Self,
+  ) {
+    if (!this.active()) throw stale();
+    const ticket = this.region.coordinator.beginPrivate(this.region);
+    try {
+      return await this.receipt<import('../contracts/reservations.js').IntentStatusView>(
+        ticket,
+        '/api/v1/editing-intent/' + action,
+        { body, self, schema: Intent.IntentStatus },
+      );
     } finally {
       this.region.coordinator.finish(ticket);
     }

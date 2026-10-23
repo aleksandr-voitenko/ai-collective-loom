@@ -101,6 +101,8 @@ export function intentUrl(record: Intent) {
   if (record.kind === 'saved.set') return '/loom/saved';
   if (record.kind === 'moderation.set')
     return '/loom/moderation?intent=' + encodeURIComponent(record.key);
+  if (record.kind.startsWith('editing-intent.'))
+    return '/loom/editing-intent?intent=' + encodeURIComponent(record.key);
   if (record.kind === 'following.set') return '/loom/following';
   if (record.kind === 'organization.change')
     return '/loom/organize?intent=' + encodeURIComponent(record.key);

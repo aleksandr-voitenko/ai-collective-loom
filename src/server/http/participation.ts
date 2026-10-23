@@ -27,6 +27,8 @@ import { ReadingLimitError } from '../modules/participation/reading.js';
 import { SavedItemsError } from '../modules/participation/saved-items.js';
 import { registerOrganization } from './organization.js';
 import { registerModeration } from './moderation.js';
+import { registerReservations } from './reservations.js';
+import { ReservationError } from '../modules/reservations/reservations.js';
 import { ModerationError } from '../modules/participation/moderation.js';
 import { OrganizationError } from '../modules/participation/organization-context.js';
 import { registerSearch } from './search.js';
@@ -188,6 +190,11 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
         : code === 'search_work_limit'
           ? 'review_synthetic_limit'
           : 'correct_request';
+  } else if (error instanceof ReservationError) {
+    code = error.code;
+    message = error.message;
+    status = code === 'editing_intent_limit' ? 429 : code === 'editing_intent_closed' ? 403 : 409;
+    action = code === 'editing_intent_limit' ? 'review_synthetic_limit' : 'refresh_and_review';
   } else if (error instanceof ModerationError) {
     code = error.code;
     message = error.message;
@@ -282,6 +289,7 @@ export async function registerParticipation(app: FastifyInstance, services: Part
   registerAttention(app, services.database, actor);
   registerOrganization(app, services.database, actor);
   registerModeration(app, services.database, actor);
+  registerReservations(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerNotifications(app, services.database, actor);
   registerFollowing(app, services.database, actor);

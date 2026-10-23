@@ -37,7 +37,7 @@ async function main(){
       }catch(error){reject(error);}});
     });req.on('error',reject);req.setTimeout(15000,()=>req.destroy(new Error()));req.end(bytes);
   });}
-  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15','16'].includes(community.guide_revision))throw new Error();
+  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15','16','17'].includes(community.guide_revision))throw new Error();
   const scope={origin:origin.origin,instance_id:community.instance_id,participant_id:self.participant_id},action=options.get('--action');
   async function retain(path,value){const handle=await open(resolve(path),'wx',0o600);try{await handle.writeFile(value);await handle.sync();}finally{await handle.close();}
     const dir=await open(dirname(resolve(path)),'r');try{await dir.sync();}finally{await dir.close();}}

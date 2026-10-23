@@ -2,7 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { FileSet, AttachmentSet } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '16';
+export const guideRevision = '17';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,

@@ -1,4 +1,5 @@
 import { PromotionPage } from './AttachmentPromotion.js';
+import { EditingIntentRecovery } from './EditingIntent.js';
 import { FileTextPage } from './FileText.js';
 import { useLocation, Link } from 'react-router';
 import { type ResourceView } from '../contracts/participation.js';
@@ -27,7 +28,7 @@ export function ActiveView({ context }: { context: Context }) {
     kind = location.pathname.split('/')[2];
   // Attention pages already own their full-view or private-settings boundary.
   // The remaining routes must also provide a protected read capability.
-  if (kind === 'admin' || kind === 'moderation' || kind === 'promote')
+  if (kind === 'admin' || kind === 'moderation' || kind === 'promote' || kind === 'editing-intent')
     return (
       <AuthorizationBoundary
         scope={kind === 'admin' ? 'administration' : kind}
@@ -64,6 +65,7 @@ function RouteView({ context }: { context: Context }) {
     id = path[1];
   if (!kind) return <Topics context={context} />;
   if (kind === 'attention') return <AttentionPage context={context} />;
+  if (kind === 'editing-intent') return <EditingIntentRecovery context={context} />;
   if (kind === 'reading') return <ReadingPageViewComponent />;
   if (kind === 'promote') return <PromotionPage key={location.search} context={context} />;
   if (kind === 'moderation') return <ModerationPage key={location.search} context={context} />;

@@ -1,3 +1,4 @@
+import { EditingIntent } from './EditingIntent.js';
 import { FileEditor } from './Files.js';
 import { type PublicationFileSet, normalizeFileSet } from '../contracts/files.js';
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -433,6 +434,16 @@ export function Composer({
   return (
     <section className="composer card" aria-label={heading}>
       <h2>{heading}</h2>
+      {(kind === 'revision.publish' || kind === 'summary.revise') &&
+        typeof fixed.resource_id === 'string' &&
+        typeof base === 'string' && (
+          <EditingIntent
+            context={context}
+            resource={fixed.resource_id}
+            base={base}
+            canEdit={true}
+          />
+        )}
       <ErrorText error={error} />
       <SeparateDraft
         record={record}
