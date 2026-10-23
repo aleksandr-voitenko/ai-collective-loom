@@ -464,7 +464,7 @@ export class ParticipationRetrieval {
         replay_retention:
           'retained_without_automatic_expiry; destructive_restore_unsupported' as const,
         derived_effects:
-          'search_and_personal_direct_attention; other_projections_disabled' as const,
+          'search_personal_direct_attention_and_supported_file_text; other_projections_disabled' as const,
         updates_contract: 'combined-updates-1' as const,
         attention_contract: 'attention-controls-1' as const,
         moderation_contract: 'moderation-state-1' as const,
@@ -481,6 +481,8 @@ export class ParticipationRetrieval {
         following_url: '/api/v1/me/following' as const,
         shared_changes_contract: 'shared-changes-1' as const,
         shared_changes_url: '/api/v1/shared-changes/query' as const,
+        file_text_contract: 'literal-utf8-v1' as const,
+        file_search_url: '/api/v1/search/files' as const,
       };
     });
   }

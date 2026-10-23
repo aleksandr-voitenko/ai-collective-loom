@@ -67,7 +67,7 @@ export function normalizeSearch(options: SearchOptions) {
 
 // Bounded containment walk mirrors lockContext: contribution -> discussion ->
 // areas, artifact -> areas. Reply parents are deliberately absent from this graph.
-const eligibleSql = `WITH RECURSIVE population AS MATERIALIZED (
+export const eligibleSql = `WITH RECURSIVE population AS MATERIALIZED (
   SELECT r.id,r.kind,r.owner_resource_id,r.state,r.current_revision_id,r.original_author_id,
     v.availability,v.content_format,v.created_at,COALESCE(c.discussion_id,s.discussion_id) AS discussion_id,c.parent_id
   FROM (${typedSources} LIMIT 5001) sources JOIN loom.resources r ON r.id=sources.id
@@ -134,7 +134,7 @@ async function status(
     direct_retrieval: 'independent',
   };
 }
-function excerpt(body: string, q: string) {
+export function excerpt(body: string, q: string) {
   const term = q.split(/[^\p{L}\p{N}_]+/u).find(Boolean) ?? q;
   const at = body.toLowerCase().indexOf(term),
     chars = Array.from(body),

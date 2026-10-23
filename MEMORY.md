@@ -13,15 +13,20 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`15`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`16`.
 Artifact files (ADR-029, migration0019) extend ordinary artifact revisions with
 complete immutable manifests and contextual exact native S3 versions. The isolated
 preview uses app-authenticated HTTPS single-part transfer/download with private
 SeaweedFS buckets; it never exposes provider credentials or signed capabilities.
 Owner custody and expired unassociated cleanup are separate from atomic shared
 publication. Text-only protocols, old digests and uncertain requests retain their
-meaning. Search covers title/authored text, never file bytes; file-only views do not
+meaning. Authored search remains separate; file-only views do not
 manufacture main-text presentation. See participation memory for limits/recovery.
+ADR-031/migration0021 add literal-utf8-v1 previews and independent contextual Files
+search over supported current file prefixes; exact historical previews remain exact.
+The separate same-release file-text worker uses native versions and finite derived
+reservations without changing publications or personal state. Suppressed sources and
+promoted artifacts retain independent authorization. See search/browser memory.
 Contribution attachments (ADR-030, migration0020) add an independent complete
 attachment envelope for nonempty opening/comment revisions, including ordinary
 change accounts. One exact shared attachment can seed an independent artifact with
@@ -47,7 +52,8 @@ See ADR-020; optional moderator
 delegation remains open. Combined Updates uses ADR-025 below.
 Current shared-text search is implemented for typed openings/comments/artifacts/summaries,
 with exact revisions, live containment, original-author/time/topic filters and
-explicit continuation invalidation. Search and personal direct attention have independent recoverable derived workers;
+explicit continuation invalidation. Authored search, personal direct attention and
+supported file text have independent recoverable derived workers;
 remaining projections stay disabled. See ADR-012 and
 `src/server/modules/search/MEMORY.md` for fencing, backfill, bounds and recovery.
 Personal direct attention (ADR-023, guide 8): migration 0012 backfills typed retained
@@ -155,7 +161,8 @@ participation memory for limits, authority and custody. Real-data gates remain.
 No real accounts/content are approved: ADR-004 identity/recovery candidates,
 production limits, retained-data operations and cross-machine validation remain
 gates. There is no default administrator or identity-header bypass. Agent memory
-and model execution stay external; signed grants, attachments/extraction and other derived workers stay gated.
+and model execution stay external; signed grants, complex conversion/extraction and
+other derived workers stay gated. Supported literal UTF-8 processing is ADR-031.
 See root README retained-data limits, ADR-011/015/016/017 and
 `src/server/modules/participation/MEMORY.md` for the implemented subset.
 The supplied UI v0.6 is preserved under `docs/design/ui-v0.6/`; it guides presentation,
@@ -166,8 +173,9 @@ Text participation, authored/retrieval contracts and browser recovery:
 `LC-20261014-9EU9`.
 Application commands require Node 24.19.0. `dev` initializes dependencies;
 `app:synthetic` builds and launches isolated temporary PostgreSQL, native versioned SeaweedFS + HTTPS with a
-private ticket file and independent supervised native search/notification workers.
-Terminal `worker stop/start` and `notifications stop/start` preserve the API. It never touches existing development data or credentials.
+private ticket file and independent supervised native search/notification/file-text workers.
+Terminal `worker stop/start`, `notifications stop/start` and `files stop/start` preserve
+the API. It never touches existing development data or credentials.
 
 `scripts/local.mjs` manages an explicitly local Compose project. PostgreSQL 18.4
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.
@@ -265,7 +273,8 @@ synthetic tail metrics do not approve production capacity. Checked-out connectio
 errors between queries are transaction-owned and discard the failed client.
 Outbox intents remain immutable. Search uses separate discovery/jobs, source-version
 guards and generation-fenced atomic output/job finalization (ADR-006/012).
-Ordered personal notifications use their own consumer (ADR-023); extraction and other projections remain open.
+Ordered personal notifications use their own consumer (ADR-023); supported file text
+has its independent worker (ADR-031), while complex extraction/other projections remain open.
 Publication protocol and recovery decisions: Lore-ID `LC-20261012-6OTQ`.
 Identity account creation, separate one-time issuance and restricted audits commit
 on the same application-role transaction owner. Retry/status contains safe IDs and

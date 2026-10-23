@@ -1,5 +1,24 @@
 # Browser test diagnostics
 
+`files-text*.test.ts` joins the existing files PostgreSQL suite: exact native text,
+bounded UTF8/JSON prefixes, source/private-state equality, populated0020 upgrade,
+missing/stale anti-join discovery, independent promotion and current-only matching.
+The older over-cap fixture also rebuilds past a missing lowest-ID context, checking
+two bounded batches, processed output, unchanged job ceiling and original download.
+Native process barriers in fixtures/file-text-worker.ts cover prepared/pre-COMMIT/
+post-COMMIT death; real waiters exercise both suppression/credential/rebuild orders.
+The standalone HTTPS client writes private result JSON without bodies in receipts,
+preserving exact identity/query input and unrelated journals through replacement.
+`web/file-text.test.tsx` mounts the actual file route and boundary in StrictMode;
+`files-text.spec.ts` adds a separate whole-spec Chromium batch for inert text/search/exact download, tree/back/focus/narrow
+layout, independent suppressed contexts and held success through denial/restore/
+navigation/sign-out. Status remains callable while preview refresh is pending.
+Direct Files-mode held queries exercise the real search host as well. Placement
+oracles move discussions, artifacts and ancestors without reindexing/republishing;
+exact preview context URLs and normal no-store/nosniff headers are checked natively.
+Only fixed file route vocabulary and the three new finite test identities extend
+diagnostics; all per-test/candidate byte bounds and normal execution gates remain.
+
 `test:files:postgres` discovers `integration/files*.test.ts` in normal coverage
 stage accounting. `helpers/file-storage.ts` owns fresh UUID-named SeaweedFS volumes
 and credentials using the compose image pin, checks native bucket versioning, then
@@ -518,7 +537,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 141 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 144 collected tests and <17 MiB/candidate. The test count includes
 the seven moderation scenarios so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe

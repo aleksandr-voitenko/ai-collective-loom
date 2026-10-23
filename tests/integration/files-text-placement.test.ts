@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {fixture,plain} from '../helpers/references.js';
+import {packageText,prepareText,drainFiles,sourceSnapshot} from '../helpers/file-text.js';
+
+test('fresh file results follow discussion, artifact and ancestor moves without republishing or reindexing',{timeout:120000},async t=>{
+  const f=await fixture(t,{files:true}),person=await f.participant('placement_author');
+  const artifact=await packageText(f,person.client,'artifact.txt',Buffer.from('placementneedle'));
+  const member=await prepareText(person.client,{kind:'opening',resource_id:f.area},'opening.txt',Buffer.from('placementneedle'));
+  const opening=(await person.client.call('/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Placement opening',content:plain('Introduction'),attachment_set:{version:'contribution-attachments-v1',files:[member]}})).body;
+  const discussion=(await person.client.call('/api/v1/resources/'+opening.resource_id)).body.discussion_id;
+  await drainFiles(f);
+  const original=(await person.client.call('/api/v1/search/files?q=placementneedle&limit=1')).body;assert.ok(original.next_cursor);
+  const times=(await f.observer.query('SELECT id,created_at,publisher_id FROM loom.revisions WHERE id=ANY($1::uuid[]) ORDER BY id',[[artifact.revision_id,opening.revision_id]])).rows;
+  const docs=(await f.observer.query('SELECT row_to_json(d)::text AS row FROM loom.file_text_documents d ORDER BY file_id')).rows;
+  const state=(await f.admin.call('/api/v1/organization/resources/'+f.area)).body;
+  const created=await f.admin.call('/api/v1/organization/changes',{idempotency_key:randomUUID(),kind:'area.create',parent_id:null,title:'New parent',description:'Placement',expected_hierarchy_version:state.hierarchy_version});assert.equal(created.status,200);const parent=created.body.outcome.resource_id;
+  await f.move(f.area,parent,'area.move');
+  assert.equal((await person.client.call('/api/v1/search/files?q=placementneedle&cursor='+encodeURIComponent(original.next_cursor))).body.error.code,'search_changed');
+  const nested=(await person.client.call('/api/v1/search/files?q=placementneedle&topic='+parent+'&descendants=true')).body.items;assert.equal(nested.length,2);assert.ok(nested.every((r:any)=>r.location[0].id===parent&&r.area_id===f.area));
+  assert.equal((await person.client.call('/api/v1/search/files?q=placementneedle&topic='+parent)).body.items.length,0);
+  await f.move(discussion,parent,'discussion.move');await f.move(artifact.resource_id,f.other);
+  const moved=(await person.client.call('/api/v1/search/files?q=placementneedle')).body.items;assert.equal(moved.find((r:any)=>r.kind==='discussion').area_id,parent);assert.equal(moved.find((r:any)=>r.kind==='artifact').area_id,f.other);
+  assert.ok(moved.every((r:any)=>r.author.id===person.id&&r.publisher.id===person.id));
+  assert.deepEqual((await f.observer.query('SELECT id,created_at,publisher_id FROM loom.revisions WHERE id=ANY($1::uuid[]) ORDER BY id',[[artifact.revision_id,opening.revision_id]])).rows,times);
+  assert.deepEqual((await f.observer.query('SELECT row_to_json(d)::text AS row FROM loom.file_text_documents d ORDER BY file_id')).rows,docs);
+  assert.equal((await f.observer.query("SELECT count(*)::int AS n FROM loom.shared_activity WHERE kind='revision.published' AND resource_id=ANY($1::uuid[])",[[artifact.resource_id,opening.resource_id]])).rows[0].n,2);
+  const before=await sourceSnapshot(f);for(const item of moved){const preview=await person.client.call(item.preview_url);assert.equal(preview.status,200);assert.equal((await person.client.call(preview.body.context_url)).status,200);}assert.deepEqual(await sourceSnapshot(f),before);
+});

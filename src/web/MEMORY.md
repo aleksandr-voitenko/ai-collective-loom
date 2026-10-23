@@ -1,5 +1,19 @@
 # Participation browser boundaries
 
+`FileText.tsx` renders exact literal text under the ordinary full withdrawal host;
+processing-status reads are separate, never optional unavailable-source projections.
+All text/status/download requests use current authorization and endpoint catalogues.
+Late success cannot restore a withdrawn/left/other-owner view; explicit retry checks
+authority again. Text is rendered only as text nodes in a wrapping pre, never through
+AuthoredText/Reading, parsers, embeds or executable blob previews. Files.tsx retains
+participant-bound folder/page in the existing history entry's state, leaving source URL/reading episode
+unchanged. Search's Files mode has independent schemas/cursors; switching preserves
+query/filter intent and starts a fresh traversal. Exact links preserve search URLs
+on back. File processing administration loads only when deliberately opened.
+Exact preview context_url is a structured API read; browser_context_url is separate.
+Expired preview cursors retain a First text page action. Independent status reads
+sequence their local observations while all same-owner denials still propagate.
+
 `ParticipationApp.tsx` owns session/community discovery, navigation, sign-out and
 the ReadingProvider/view keys. `ParticipationRoutes.tsx` selects page components
 and supplies fallback authorization boundaries; individual topic, discussion and

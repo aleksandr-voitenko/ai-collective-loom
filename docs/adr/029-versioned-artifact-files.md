@@ -4,6 +4,10 @@ Status: implementation contract, 21 October 2026. This is the file-artifact slic
 of ART-01–04/09–10, not attachment promotion, extraction or production approval.
 Product and architecture snapshots and existing migration bytes stay unchanged.
 
+ADR-031 subsequently adds bounded literal UTF-8 previews and separate Files search.
+This ADR's original no-extraction scope describes its initial increment; its native
+byte, custody, publication and download contracts remain unchanged.
+
 ## Custody and transport
 
 Use the pinned local SeaweedFS with private, versioned staging and final buckets.

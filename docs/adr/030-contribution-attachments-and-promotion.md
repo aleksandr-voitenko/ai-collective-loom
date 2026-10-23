@@ -4,6 +4,10 @@ Status: implementation decision, 22 October 2026; acceptance execution is record
 separately. Extends ADR-006/015/017/021/028/029 for synthetic S11, ART-05/11.
 Protected specification/architecture snapshots and earlier migrations stay unchanged.
 
+ADR-031 subsequently adds passive supported-file text and contextual Files search
+for these exact contribution and independent artifact contexts, preserving this
+publication, attribution, lifetime and browser projection contract.
+
 ## Publication identity and custody
 
 `attachment_set: {version: contribution-attachments-v1, files: [...]}` declares

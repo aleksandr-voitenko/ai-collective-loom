@@ -7,13 +7,13 @@ import {resolve,dirname} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 
 const refusalCodes=new Set(['file_storage_unavailable','file_capacity','file_not_prepared','file_expired','file_mismatch','file_busy',
-  'file_format_required','invalid_input','invalid_request','unauthenticated','unavailable','forbidden','revision_conflict','idempotency_conflict','retryable','service_unavailable']);
+  'file_format_required','invalid_input','invalid_request','invalid_search','search_changed','search_work_limit','response_budget_too_small','unauthenticated','unavailable','forbidden','revision_conflict','idempotency_conflict','retryable','service_unavailable']);
 class RequestRefused extends Error {
   constructor(code,outcome){super();this.receipt={error:{code,...(['unknown','rejected'].includes(outcome)?{operation_outcome:outcome}:{})}};}
 }
 
 async function main(){
-  const options=new Map(),allowed=['--origin','--credential-file','--ca','--journal','--action','--kind','--input','--bytes','--artifact','--contribution','--revision','--file-id','--output'];
+  const options=new Map(),allowed=['--origin','--credential-file','--ca','--journal','--action','--kind','--input','--bytes','--artifact','--contribution','--revision','--file-id','--output','--cursor'];
   for(let i=2;i<process.argv.length;i+=2){if(!allowed.includes(process.argv[i])||!process.argv[i+1]||options.has(process.argv[i]))throw new Error();options.set(process.argv[i],process.argv[i+1]);}
   const origin=new URL(options.get('--origin'));
   if(origin.protocol!=='https:'||origin.pathname!=='/'||origin.username||origin.password||origin.search||origin.hash)throw new Error();
@@ -37,16 +37,29 @@ async function main(){
       }catch(error){reject(error);}});
     });req.on('error',reject);req.setTimeout(15000,()=>req.destroy(new Error()));req.end(bytes);
   });}
-  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15'].includes(community.guide_revision))throw new Error();
+  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15','16'].includes(community.guide_revision))throw new Error();
   const scope={origin:origin.origin,instance_id:community.instance_id,participant_id:self.participant_id},action=options.get('--action');
   async function retain(path,value){const handle=await open(resolve(path),'wx',0o600);try{await handle.writeFile(value);await handle.sync();}finally{await handle.close();}
     const dir=await open(dirname(resolve(path)),'r');try{await dir.sync();}finally{await dir.close();}}
   const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-  if(action==='download'){
+  if(action==='files-search'){
+    const raw=await readFile(options.get('--input'),'utf8');if(Buffer.byteLength(raw)>4096)throw new Error();
+    const input=JSON.parse(raw);if(options.has('--cursor'))input.cursor=options.get('--cursor');
+    const result=await call('/api/v1/search/files?'+new URLSearchParams(input));
+    await retain(options.get('--output'),JSON.stringify(result)+'\n');
+    console.log(JSON.stringify({items:result.items.length,next_cursor:result.next_cursor,indexing:result.indexing}));return;
+  }
+  if(['download','text-preview','text-status'].includes(action)){
     const contribution=options.has('--contribution');
     if(contribution===options.has('--artifact'))throw new Error();
     const ids=[contribution?'--contribution':'--artifact','--revision','--file-id'].map(k=>options.get(k));if(ids.some(id=>!uuid.test(id??'')))throw new Error();
-    const bytes=await call(`/api/v1/${contribution?'contributions':'artifacts'}/${ids[0]}/revisions/${ids[1]}/${contribution?'attachments':'files'}/${ids[2]}/download`,undefined,true);
+    const base=`/api/v1/${contribution?'contributions':'artifacts'}/${ids[0]}/revisions/${ids[1]}/${contribution?'attachments':'files'}/${ids[2]}`;
+    if(action!=='download'){
+      const result=await call(base+'/text'+(action==='text-status'?'/status':options.has('--cursor')?'?cursor='+encodeURIComponent(options.get('--cursor')):''));
+      await retain(options.get('--output'),JSON.stringify(result)+'\n');
+      console.log(JSON.stringify({file_id:result.file_id,processing:result.processing,next_cursor:result.next_cursor,retained_text_complete:result.retained_text_complete}));return;
+    }
+    const bytes=await call(base+'/download',undefined,true);
     await retain(options.get('--output'),bytes);console.log(JSON.stringify({bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}));return;
   }
   if(action==='prepare'){

@@ -1342,3 +1342,20 @@
 .file-editor {
   margin: 1rem 0;
 }
+.file-preview {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.file-literal {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  max-width: 100%;
+  padding: 1rem;
+  border: 1px solid currentColor;
+}
+.file-text-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}

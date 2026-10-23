@@ -304,6 +304,7 @@ function ContributionBody({
       />
       {data.attachment_set && (
         <FileBrowser
+          participant={context.self.participant_id}
           key={'attachments:' + data.revision_id}
           contribution={id}
           revision={data.revision_id}

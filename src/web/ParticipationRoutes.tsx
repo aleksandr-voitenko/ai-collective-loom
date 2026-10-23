@@ -1,4 +1,5 @@
 import { PromotionPage } from './AttachmentPromotion.js';
+import { FileTextPage } from './FileText.js';
 import { useLocation, Link } from 'react-router';
 import { type ResourceView } from '../contracts/participation.js';
 import { type Context } from './participation-state.js';
@@ -73,6 +74,22 @@ function RouteView({ context }: { context: Context }) {
   if (kind === 'updates') return <UpdatesPage context={context} />;
   if (kind === 'changes') return <SharedChangesPage context={context} />;
   if (kind === 'search') return <SearchPageViewComponent context={context} />;
+  if (
+    kind === 'file' &&
+    (id === 'artifact' || id === 'contribution') &&
+    path[2] &&
+    path[3] &&
+    path[4]
+  )
+    return (
+      <FileTextPage
+        key={location.pathname}
+        kind={id}
+        resource={path[2]}
+        revision={path[3]}
+        file={path[4]}
+      />
+    );
   if (kind === 'summaries') return <SummaryMaintenance context={context} />;
   if (kind === 'area' && id) return <AreaPage id={id} context={context} />;
   if (kind === 'discussion' && id) return <DiscussionPage id={id} context={context} />;

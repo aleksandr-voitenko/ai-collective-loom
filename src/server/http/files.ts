@@ -22,6 +22,8 @@ import type { Transactions } from '../db/postgres.js';
 import { FileError, type FileStorage } from '../modules/participation/file-storage.js';
 import { AttachmentPromotion } from '../modules/participation/attachment-promotion.js';
 import { ArtifactFiles } from '../modules/participation/files.js';
+import { FileText } from '../modules/search/file-text.js';
+import { FileTextInput, FileTextView } from '../../contracts/file-text.js';
 
 export function registerFiles(
   app: FastifyInstance,
@@ -32,6 +34,7 @@ export function registerFiles(
   const files = new ArtifactFiles(database, storage),
     empty = Type.Object({}, closed),
     params = Type.Object({ id: UUID }, closed);
+  const text = new FileText(database);
   const errors = Object.fromEntries(
     [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((status) => [
       status,
@@ -215,6 +218,43 @@ export function registerFiles(
       owner === 'artifact'
         ? '/api/v1/artifacts/:id/revisions/:revision/files'
         : '/api/v1/contributions/:id/revisions/:revision/attachments';
+    app.get(
+      base + '/:file/text',
+      {
+        schema: {
+          operationId: owner === 'artifact' ? 'previewArtifactText' : 'previewAttachmentText',
+          params: Type.Object({ ...exact, file: UUID }, closed),
+          querystring: FileTextInput,
+          response: { ...errors, 200: FileTextView },
+        },
+      },
+      async (request) => {
+        const p = request.params as { id: string; revision: string; file: string };
+        return text.preview(
+          await actor(request),
+          owner,
+          p.id,
+          p.revision,
+          p.file,
+          request.query as {},
+        );
+      },
+    );
+    app.get(
+      base + '/:file/text/status',
+      {
+        schema: {
+          operationId: owner === 'artifact' ? 'getArtifactTextStatus' : 'getAttachmentTextStatus',
+          params: Type.Object({ ...exact, file: UUID }, closed),
+          querystring: empty,
+          response: { ...errors, 200: FileTextView },
+        },
+      },
+      async (request) => {
+        const p = request.params as { id: string; revision: string; file: string };
+        return text.preview(await actor(request), owner, p.id, p.revision, p.file, {}, 'status');
+      },
+    );
     app.get(
       base,
       {

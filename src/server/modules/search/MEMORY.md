@@ -1,4 +1,4 @@
-# Current text search
+# Authored search and independent file text
 
 ADR-012 and `src/contracts/guide.ts` define this synthetic-only boundary.
 Implementation and verification record: `LC-20261015-94TS`.
@@ -87,3 +87,36 @@ still apply. Search exposes matching_fields, excerpt.field and explicit current
 change_account status; explanation filters do not infer classification from prose.
 Historical notes are direct exact reads, outside current-only indexing. Target
 metadata/rationales are not indexed. Ranking/cursor policy is simple-title-body-note-v2.
+
+ADR-031/guide16 add separate `file-worker.ts`/`file-text.ts`/`file-decoder.ts` and
+native `server/file-text-worker.ts`. They never alter authored jobs/documents,
+notification consumption, immutable sources/intents or private state. Jobs/documents
+are per exact file_context, including retained history and independent promotions.
+Current Files search additionally requires indexed owner revision=current pointer;
+no R1 fallback when R2 is unprocessed/omitted/suppressed. Match/rank only retained
+contents using simple lexical AND, rank descending/context UUID ascending.
+Placement/original-author/revision-publication filters use the existing guarded
+source projection. File cursors have separate keys, mode/rank and file index/rebuild
+boundaries plus existing source/visibility/organization fences. Authored cursors and
+health meanings remain unchanged. Eligible status reveals no participant job counts.
+
+Class16 serializes missing/stale-context discovery and rebuild. An indexed anti-join
+in25-context batches resumes from committed jobs without a UUID high-water gap.
+Jobs<=65536; process admissions2; leases30s/renew10s/attempts3 with1/2s retry delay.
+At job capacity, discovery excludes new admission but still advances stale retained
+jobs; missing low-ID contexts cannot starve rebuild, and capacity stays explicit.
+Reserve additional output before IO: retained raw text+in-flight reservations<=32MiB,
+output<=64KiB/context. Fixed metadata/lexical overhead is bounded separately, not a
+physical disk reservation. Discovery and claims lock jobs in file-ID order before
+state. Finalize source SHARE→revision SHARE→exact immutable context/native re-read
+→job UPDATE→state UPDATE, then check claim/rebuild/time after waits. Contexts keep
+no-UPDATE/no-DELETE grants. Native IO/strict decoding occurs outside SQL; suppressed
+contexts may complete nonpublicly and never authorize participant access.
+Rebuild increments derived generation; bounded discovery replaces stale jobs/docs,
+preserving originals and other workers. Exact retry/rebuild converge without
+reapplication. Leases, output/accounting/job COMMIT and safe failure tokens recover
+process loss/acknowledgement uncertainty. GETs never enqueue or change read state.
+Decoder policy, MIME pairs, controls/BOM/newlines and precise budgets are in ADR-031
+and contracts/file-text.ts. Unsupported formats and partial suffixes stay excluded;
+unknown heartbeat/missing output never establish ready coverage. Exact preview pages
+are<=32KiB JSON; Files search retains4–128KiB pages/200-match windows/5000-source cap.
