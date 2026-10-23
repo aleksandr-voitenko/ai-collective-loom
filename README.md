@@ -26,8 +26,9 @@ complete versioned file set. Publish nested paths, replace/rename/omit files, or
 explicitly reuse an eligible file from an earlier revision of the same artifact.
 Exact old revisions keep their bytes. Upload and preparation are private custody;
 publication remains one ordinary atomic artifact event. Downloads are authenticated
-HTTPS attachments, verified against a pinned native version. Uploaded contents are
-not previewed, executed or indexed. See [ADR-029](docs/adr/029-versioned-artifact-files.md).
+HTTPS attachments, verified against a pinned native version. Supported UTF-8 files
+also have bounded literal previews and separate Files search below.
+See [ADR-029](docs/adr/029-versioned-artifact-files.md).
 Opening posts and comments can carry their own complete revision-bound attachment
 set alongside nonempty text, including change-account contributions. Any eligible
 participant can choose **Create artifact from attachment**, confirm one exact source
@@ -45,6 +46,34 @@ with topic, kind, original-author and publication-time filters. A recoverable No
 worker indexes retained sources; exact reads remain available while indexing is
 incomplete. The author picker includes suspended authors whose publications remain
 readable. See the [search decision](docs/adr/012-scoped-text-search.md).
+Search's **Files** mode independently finds terms inside current eligible artifact
+files and opening/comment attachments. Exact results link to a labelled literal
+preview, original download and surrounding publication. Historical previews stay
+exact after replacement/omission. Promoted artifacts retain their own eligibility
+when a source is suppressed. Processing distinguishes pending, complete, partial,
+unsupported and failed work; upload success does not mean indexed text. Only retained
+prefixes are searched. See [ADR-031](docs/adr/031-passive-file-text.md).
+
+Supported extensions are `.txt`, `.md`, `.csv`, `.json`, `.js`, `.ts`, `.py`, `.go`,
+`.rs`, `.c` and `.h`, with explicit MIME pairings in ADR-031 and guide16. The decoder
+validates exact native bytes as strict UTF-8, preserves BOM/newlines, rejects binary
+controls and retains at most 64 KiB per context. A longer valid file is partial; its
+suffix is excluded from search. Preview pages cap complete serialized JSON at 32 KiB
+and render only text. Markdown/JSON/CSV/code is never interpreted or run. Images,
+HTML/SVG rendering, complex documents and archive extraction remain unsupported;
+original downloads remain available. Inspection does not mark a publication read
+or create mentions.
+Downloads retain their 15-second transfer limit. A storage timeout before delivery
+returns a safe `503 file_storage_unavailable` response for an explicit later retry.
+
+The isolated preview supervises a separate file processor. `files stop` / `files start`
+leave HTTPS and existing search/notification workers available. Synthetic limits:
+two concurrent claims/process, 25 discovered contexts/batch, 30-second leases,
+attempted 10-second renewal, three attempts, and 65,536 retained contextual jobs.
+Raw retained text plus in-flight reservations caps at 32 MiB; lexical index/fixed
+metadata overhead is separately bounded, not a disk reservation. Capacity failures
+preserve originals and publication/recovery identities. These defaults are not
+approved production capacity or retention policy.
 Participants can explicitly record untyped, related-to, builds-on or contradicts
 references while publishing openings, comments, text artifacts and summaries. Exact revision
 targets, assertion history, source-owned withdrawal and bounded **Referenced by**
@@ -150,7 +179,7 @@ are `opening` (area ID), `reply` (actual parent ID) and `contribution` (edit ID)
 Their publication envelope is `attachment_set` / `contribution-attachments-v1`;
 artifact `file_set` remains unchanged. Promotion input contains `source` with
 `contribution_id`, `revision_id`, `file_id`, plus `area_id` and `title`. The prepare
-action adds its durable key. Full schemas and examples are in release guide 15.
+action adds its durable key. Full schemas and examples are in release guide 16.
 Physical upload reservations are shared across these contexts. File-aware revision
 publication additionally stops at 2048 per publisher / 8192 total sets and
 8192 per publisher / 65536 total contextual files. Existing exact recovery remains
@@ -158,6 +187,14 @@ available at capacity; these are synthetic limits, not production retention poli
 Recognized refusals print structured error codes/outcome markers and exit with
 status 1 without modifying the journal. A recorded `file_expired` refusal with
 `operation_outcome:rejected` permits explicit correction; an unknown result does not.
+
+The independent HTTPS example accepts `--action text-status` or `text-preview` with
+the exact artifact/contribution, revision and file ID, `--output` for a new private
+JSON result, and optional `--cursor` for another retained-text page.
+`--action files-search --input query.json --output results.json` reads query/filter
+JSON; `--cursor` continues that selection. Receipts contain no preview body. Query
+inputs and unrelated command journals remain unchanged. Exact browser links use
+`/loom/file/artifact/RESOURCE/REVISION/FILE` or the `contribution` variant.
 
 ## Design documents
 
@@ -306,8 +343,9 @@ inspects persisted rows through controlled concurrency, stage failures, process
 loss and backend termination. Its printed synthetic metrics are not production
 capacity approval. Search is the first consumer: lease generation and exact source
 version checks guard the atomic output/job commit. Personal direct attention has an
-independent ordered consumer; remaining projections stay disabled. The preview
-supervises both workers. Use `worker stop` / `worker start` for search or
+independent ordered consumer, and supported file text has its separate processor;
+remaining projections stay disabled. The preview supervises all three workers.
+Use `worker stop` / `worker start` for search or
 `notifications stop` / `notifications start` for personal attention while HTTPS
 stays available. A configured synthetic
 installation can run `npm run worker:search` after building and applying migrations.
@@ -394,8 +432,9 @@ and review; it does not prove correctness or privacy.
 CI uploads only authored source and numeric reports from `coverage/approved/`,
 with three-day retention. Raw counters, maps, profiles and logs remain ignored
 local output. Browser diagnostics retain their separate validated upload boundary.
-The integration job retains normal browser deadlines, one worker, zero retries,
-and the subsequent local-service smoke and persistence checks.
+The integration job has a 60-minute containing budget for the complete sequential
+run, reporting, and subsequent local-service smoke and persistence checks. It
+retains normal browser deadlines, one worker and zero retries.
 
 ## Retained-data limits
 

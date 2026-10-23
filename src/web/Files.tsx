@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { FileTextControl } from './FileText.js';
 import {
   FilePage,
   AttachmentPage,
@@ -232,9 +233,9 @@ export function FileEditor({
     >
       <h3>{version === 'artifact-files-v1' ? 'Files' : 'Attachments'}</h3>
       <p className="fineprint">
-        Up to 16 files, 4 MiB each. Uploaded contents are not indexed or previewed. Paths use
-        relative folders. Prepared files expire after 24 hours; uncertain publications must be
-        reconciled first.
+        Up to 16 files, 4 MiB each. Supported published UTF-8 files have bounded text previews and
+        search. Paths use relative folders. Prepared files expire after 24 hours; uncertain
+        publications must be reconciled first.
       </p>
       {error && <p role="alert">{error}</p>}
       {(value?.files ?? []).map((member, index) => (
@@ -401,21 +402,34 @@ export function FileEditor({
 }
 
 export function FileBrowser({
+  participant,
   artifact,
   revision,
   contribution,
 }: {
+  participant: string;
   artifact?: string;
   revision: string;
   contribution?: string;
 }) {
+  const route = useLocation(),
+    routeNavigate = useNavigate();
+  const saved = route.state?.fileBrowser;
+  const retained =
+    saved?.participant === participant &&
+    saved?.resource === (contribution ?? artifact) &&
+    saved?.revision === revision;
   const authority = useAuthorization(),
-    [prefix, setPrefix] = useState(''),
-    [cursor, setCursor] = useState(''),
+    [prefix, setPrefix] = useState(
+      retained && typeof saved.prefix === 'string' ? saved.prefix : '',
+    ),
+    [cursor, setCursor] = useState(
+      retained && typeof saved.cursor === 'string' ? saved.cursor : '',
+    ),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null),
-    focusOnLoad = useRef(false);
+    focusOnLoad = useRef(Boolean(retained));
   const path =
     `/api/v1/${contribution ? 'contributions' : 'artifacts'}/${contribution ?? artifact}/revisions/${revision}/${contribution ? 'attachments' : 'files'}?` +
     new URLSearchParams({ prefix, ...(cursor ? { cursor } : {}), limit: '12' });
@@ -427,7 +441,8 @@ export function FileBrowser({
       path,
       contribution ? AttachmentPage : FilePage,
     ),
-    live = useRef(true);
+    live = useRef(true),
+    viewOwner = useRef(identityGeneration());
   useEffect(() => {
     live.current = true;
     return () => {
@@ -441,9 +456,25 @@ export function FileBrowser({
     }
   }, [data, failure]);
   function navigate(folder: string, next = '') {
+    if (!live.current || viewOwner.current !== identityGeneration() || !authority.active()) return;
     focusOnLoad.current = true;
     setPrefix(folder);
     setCursor(next);
+    // Preserve the chosen tree page on the existing history entry. Its URL and
+    // resource/reading episode stay unchanged while an exact preview is open.
+    void routeNavigate(route.pathname + route.search, {
+      replace: true,
+      state: {
+        ...route.state,
+        fileBrowser: {
+          participant,
+          resource: contribution ?? artifact,
+          revision,
+          prefix: folder,
+          cursor: next,
+        },
+      },
+    });
   }
   async function download(url: string, name: string) {
     setBusy(true);
@@ -470,7 +501,8 @@ export function FileBrowser({
         {contribution ? 'Revision attachments' : 'Revision files'}
       </h3>
       <p>
-        Declared snapshot. Availability is checked when downloading. File contents are not indexed.
+        Declared snapshot. Downloads check exact stored bytes. Supported UTF-8 files have separate
+        bounded text processing.
       </p>
       {(failure || error) && <p role="alert">{failure || error}</p>}
       {failure && <button onClick={refresh}>Retry file list</button>}
@@ -497,6 +529,11 @@ export function FileBrowser({
                 >
                   Download {item.path}
                 </button>
+                <FileTextControl
+                  base={item.download_url.slice(0, -'/download'.length)}
+                  path={item.path}
+                  browser={`/loom/file/${contribution ? 'contribution' : 'artifact'}/${contribution ?? artifact}/${revision}/${item.file_id}`}
+                />
                 {contribution && (
                   <Link
                     to={

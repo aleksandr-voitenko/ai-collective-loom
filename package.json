@@ -46,6 +46,7 @@
     "test:browser-diagnostics": "node scripts/check-runtime.mjs && node --import tsx tests/diagnostics/verify.ts",
     "app:synthetic": "npm run app:build && node --import tsx scripts/synthetic-participation.ts",
     "worker:search": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local dist/server/search-worker.js",
+    "worker:files": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local dist/server/file-text-worker.js",
     "test:search:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/search*.test.ts",
     "test:changes:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/changes*.test.ts",
     "worker:notifications": "node scripts/check-runtime.mjs && node --env-file-if-exists=.env.local dist/server/notifications-worker.js",

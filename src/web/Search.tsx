@@ -1,4 +1,10 @@
 import { useAuthorization } from './AuthorizationBoundary.js';
+import {
+  FileSearchPage,
+  FileSearchStatus,
+  type FileSearchPageValue,
+  type FileSearchStatusValue,
+} from '../contracts/file-text.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import {
@@ -17,7 +23,29 @@ import { TopicDirectory } from './Organization.js';
 import { identityGeneration, commandRequest } from './participation-client.js';
 import { useQuery, type Context } from './participation-state.js';
 
-export function IndexingNotice({ status }: { status: SearchStatusView }) {
+export function IndexingNotice({ status }: { status: SearchStatusView | FileSearchStatusValue }) {
+  if ('population' in status)
+    return (
+      <div className="search-indexing">
+        <p role="status">
+          File text worker: {status.worker}.{' '}
+          {status.coverage === 'incomplete'
+            ? 'Processing coverage is incomplete.'
+            : 'Current eligible files have recorded processing outcomes.'}
+        </p>
+        <details>
+          <summary>Search coverage</summary>
+          <p>
+            Only current eligible artifact files and opening/comment attachments in the explicit
+            UTF-8 allowlist are searched. A partial extraction covers at most 64 KiB; unsupported
+            files and unprocessed suffixes are excluded. Pending or failed processing can contain
+            unknown matches. Excerpts are partial literal text. The selected relevance window
+            contains at most 200 matches. Historical previews and original downloads are
+            independent. Summaries have no files in this release.
+          </p>
+        </details>
+      </div>
+    );
   return (
     <div className="search-indexing">
       {status.indexing !== 'ready' && (
@@ -109,6 +137,7 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
   const location = useLocation(),
     navigate = useNavigate(),
     params = new URLSearchParams(location.search);
+  const files = params.get('mode') === 'files';
   const [query, setQuery] = useState(params.get('q') ?? ''),
     [topic, setTopic] = useState(params.get('topic') ?? ''),
     [descendants, setDescendants] = useState(params.get('descendants') === 'true'),
@@ -120,7 +149,7 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
     [topics, setTopics] = useState(false),
     [authors, setAuthors] = useState(false),
     [refresh, setRefresh] = useState(0),
-    [data, setData] = useState<SearchPageView>(),
+    [data, setData] = useState<SearchPageView | FileSearchPageValue>(),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -128,10 +157,13 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
   // effect setup owns its response, including development StrictMode's replay.
   useEffect(() => {
     const selected = new URLSearchParams(location.search);
+    const fileMode = selected.get('mode') === 'files';
+    selected.delete('mode');
+    if (fileMode) selected.delete('explanation');
     setQuery(selected.get('q') ?? '');
     setTopic(selected.get('topic') ?? '');
     setDescendants(selected.get('descendants') === 'true');
-    setExplanation(selected.get('explanation') ?? '');
+    setExplanation(new URLSearchParams(location.search).get('explanation') ?? '');
     setKind(selected.get('kind') ?? '');
     setAuthor(selected.get('author') ?? '');
     setFrom(selected.get('from')?.slice(0, 10) ?? '');
@@ -147,10 +179,13 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
     }
     setBusy(true);
     void authority
-      .read<SearchPageView>('/api/v1/search?' + selected, {
-        schema: SearchPage,
-        signal: controller.signal,
-      })
+      .read<SearchPageView | FileSearchPageValue>(
+        (fileMode ? '/api/v1/search/files?' : '/api/v1/search?') + selected,
+        {
+          schema: fileMode ? FileSearchPage : SearchPage,
+          signal: controller.signal,
+        },
+      )
       .then(
         (value) => {
           if (active && owner === identityGeneration()) {
@@ -171,9 +206,13 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
       controller.abort();
     };
   }, [location.search, refresh]);
-  const status = useQuery<SearchStatusView>('/api/v1/search/status', SearchStatus);
-  function submit() {
-    const selected = new URLSearchParams({ q: query });
+  const status = useQuery<SearchStatusView | FileSearchStatusValue>(
+    files ? '/api/v1/search/files/status' : '/api/v1/search/status',
+    files ? FileSearchStatus : SearchStatus,
+  );
+  function submit(mode = files ? 'files' : 'text') {
+    const selected = new URLSearchParams(query ? { q: query } : {});
+    if (mode === 'files') selected.set('mode', 'files');
     if (topic) {
       selected.set('topic', topic);
       selected.set('descendants', String(descendants));
@@ -198,7 +237,20 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
   return (
     <section className="search-page">
       <h1>Search</h1>
-      <p className="subtitle">Find current shared text and open its exact matching revision.</p>
+      <p className="subtitle">
+        Find current shared text or supported file contents and open the exact matching revision.
+      </p>
+      <label>
+        Search mode{' '}
+        <select
+          aria-label="Search mode"
+          value={files ? 'files' : 'text'}
+          onChange={(e) => submit(e.target.value)}
+        >
+          <option value="text">Shared text</option>
+          <option value="files">Files</option>
+        </select>
+      </label>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -222,16 +274,20 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
           <label>
             Content kind
             <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="">All text</option>
+              <option value="">{files ? 'All file owners' : 'All text'}</option>
               <option value="discussion">Discussions</option>
               <option value="comment">Comments</option>
-              <option value="artifact">Text artifacts</option>
+              <option value="artifact">{files ? 'Artifacts' : 'Text artifacts'}</option>
               <option value="summary">Discussion summaries</option>
             </select>
           </label>
           <label>
             Change explanations
-            <select value={explanation} onChange={(e) => setExplanation(e.target.value)}>
+            <select
+              disabled={files}
+              value={explanation}
+              onChange={(e) => setExplanation(e.target.value)}
+            >
               <option value="">All publications</option>
               <option value="revision_note">With a current revision note</option>
               <option value="change_account">Explicit change accounts</option>
@@ -299,7 +355,7 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
         )}
         <div className="actions">
           <button className="primary" type="submit">
-            Search shared text
+            {files ? 'Search files' : 'Search shared text'}
           </button>
           <button type="button" onClick={restart}>
             Refresh search
@@ -332,50 +388,84 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
               : ''}
           </p>
           <div className="collection">
-            {data.items.map((item) => (
-              <article className="search-result" key={item.result_id}>
-                <small>
-                  {item.kind === 'comment'
-                    ? 'Comment'
-                    : item.kind === 'discussion'
-                      ? 'Discussion'
-                      : item.kind === 'summary'
-                        ? 'Discussion summary'
-                        : 'Text artifact'}
-                </small>
-                <h3>
-                  <Link to={item.browser_url}>
-                    {item.title ?? 'Comment by ' + item.author.nickname}
-                  </Link>
-                </h3>
-                <p>{item.location.map((a) => a.title).join(' › ')}</p>
-                <p className="byline">
-                  By {item.author.nickname} · Revision published by {item.publisher.nickname} ·{' '}
-                  <time dateTime={item.published_at}>
-                    {new Date(item.published_at).toLocaleString()}
-                  </time>
-                </p>
-                <p className="fineprint">
-                  Matching{' '}
-                  {item.matching_fields
-                    .map((field) => (field === 'change_note' ? 'revision note' : 'main content'))
-                    .join(' and ')}
-                  {item.change_account ? ' · Explicit change account' : ''}
-                </p>
-                <p>
-                  <small>
-                    {item.excerpt.field === 'change_note' ? 'Revision note excerpt' : 'Excerpt'}
-                  </small>
-                  <br />
-                  {item.excerpt.text}
-                </p>
-                <Link to={item.browser_context_url}>Open context</Link>
-              </article>
-            ))}
+            {data.ranking === 'simple-file-contents-v1'
+              ? data.items.map((item) => (
+                  <article className="search-result" key={item.file_id}>
+                    <small>
+                      {item.kind} file · Matching file contents · {item.extraction} extraction
+                    </small>
+                    <h3>
+                      <Link to={item.browser_url}>{item.path}</Link>
+                    </h3>
+                    <p>
+                      {item.title ?? 'Comment'} · {item.location.map((a) => a.title).join(' › ')}
+                    </p>
+                    <p className="byline">
+                      Original publication by {item.author.nickname} · Revision published by{' '}
+                      {item.publisher.nickname} ·{' '}
+                      <time dateTime={item.published_at}>
+                        {new Date(item.published_at).toLocaleString()}
+                      </time>
+                    </p>
+                    <p>
+                      <small>Partial literal text excerpt</small>
+                      <br />
+                      {item.excerpt}
+                    </p>
+                    {item.extraction === 'partial' && (
+                      <p>Unprocessed suffix excluded from search.</p>
+                    )}
+                    <Link to={item.browser_url}>Open exact text preview</Link>{' '}
+                    <Link to={item.browser_context_url}>Open context</Link>
+                  </article>
+                ))
+              : data.items.map((item) => (
+                  <article className="search-result" key={item.result_id}>
+                    <small>
+                      {item.kind === 'comment'
+                        ? 'Comment'
+                        : item.kind === 'discussion'
+                          ? 'Discussion'
+                          : item.kind === 'summary'
+                            ? 'Discussion summary'
+                            : 'Text artifact'}
+                    </small>
+                    <h3>
+                      <Link to={item.browser_url}>
+                        {item.title ?? 'Comment by ' + item.author.nickname}
+                      </Link>
+                    </h3>
+                    <p>{item.location.map((a) => a.title).join(' › ')}</p>
+                    <p className="byline">
+                      By {item.author.nickname} · Revision published by {item.publisher.nickname} ·{' '}
+                      <time dateTime={item.published_at}>
+                        {new Date(item.published_at).toLocaleString()}
+                      </time>
+                    </p>
+                    <p className="fineprint">
+                      Matching{' '}
+                      {item.matching_fields
+                        .map((field) =>
+                          field === 'change_note' ? 'revision note' : 'main content',
+                        )
+                        .join(' and ')}
+                      {item.change_account ? ' · Explicit change account' : ''}
+                    </p>
+                    <p>
+                      <small>
+                        {item.excerpt.field === 'change_note' ? 'Revision note excerpt' : 'Excerpt'}
+                      </small>
+                      <br />
+                      {item.excerpt.text}
+                    </p>
+                    <Link to={item.browser_context_url}>Open context</Link>
+                  </article>
+                ))}
           </div>
           {!data.items.length && (
             <p>
-              {data.indexing.coverage === 'current_supported_text'
+              {data.indexing.coverage === 'current_supported_text' ||
+              data.indexing.coverage === 'retained_prefixes_ready'
                 ? 'No matching results in this selection.'
                 : 'No indexed matches in this selection yet. Indexing is incomplete.'}
             </p>

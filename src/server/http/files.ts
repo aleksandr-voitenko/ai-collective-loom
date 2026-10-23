@@ -22,6 +22,8 @@ import type { Transactions } from '../db/postgres.js';
 import { FileError, type FileStorage } from '../modules/participation/file-storage.js';
 import { AttachmentPromotion } from '../modules/participation/attachment-promotion.js';
 import { ArtifactFiles } from '../modules/participation/files.js';
+import { FileText } from '../modules/search/file-text.js';
+import { FileTextInput, FileTextView } from '../../contracts/file-text.js';
 
 export function registerFiles(
   app: FastifyInstance,
@@ -32,6 +34,7 @@ export function registerFiles(
   const files = new ArtifactFiles(database, storage),
     empty = Type.Object({}, closed),
     params = Type.Object({ id: UUID }, closed);
+  const text = new FileText(database);
   const errors = Object.fromEntries(
     [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((status) => [
       status,
@@ -123,7 +126,13 @@ export function registerFiles(
     if (receiving >= fileLimits.active) throw new FileError('file_capacity');
     receiving++;
     let released = false;
-    const deadline = setTimeout(() => reply.raw.destroy(), fileLimits.transferMs);
+    const deadline = setTimeout(() => {
+      // Native IO starts after admission and has its own equal-length deadline.
+      // A stalled read must retain the safe storage error before HTTP closes it.
+      if (request.method === 'GET' && !reply.raw.headersSent)
+        reply.send(new FileError('file_storage_unavailable'));
+      else reply.raw.destroy();
+    }, fileLimits.transferMs);
     deadline.unref();
     const release = () => {
       if (!released) {
@@ -216,6 +225,43 @@ export function registerFiles(
         ? '/api/v1/artifacts/:id/revisions/:revision/files'
         : '/api/v1/contributions/:id/revisions/:revision/attachments';
     app.get(
+      base + '/:file/text',
+      {
+        schema: {
+          operationId: owner === 'artifact' ? 'previewArtifactText' : 'previewAttachmentText',
+          params: Type.Object({ ...exact, file: UUID }, closed),
+          querystring: FileTextInput,
+          response: { ...errors, 200: FileTextView },
+        },
+      },
+      async (request) => {
+        const p = request.params as { id: string; revision: string; file: string };
+        return text.preview(
+          await actor(request),
+          owner,
+          p.id,
+          p.revision,
+          p.file,
+          request.query as {},
+        );
+      },
+    );
+    app.get(
+      base + '/:file/text/status',
+      {
+        schema: {
+          operationId: owner === 'artifact' ? 'getArtifactTextStatus' : 'getAttachmentTextStatus',
+          params: Type.Object({ ...exact, file: UUID }, closed),
+          querystring: empty,
+          response: { ...errors, 200: FileTextView },
+        },
+      },
+      async (request) => {
+        const p = request.params as { id: string; revision: string; file: string };
+        return text.preview(await actor(request), owner, p.id, p.revision, p.file, {}, 'status');
+      },
+    );
+    app.get(
       base,
       {
         schema: {
@@ -249,18 +295,31 @@ export function registerFiles(
       },
       async (request, reply) => {
         const p = request.params as { id: string; revision: string; file: string };
-        const result = await files.download(await actor(request), p.id, p.revision, p.file, owner);
-        const name = result.path.split('/').at(-1)!;
-        return reply
-          .header('content-type', 'application/octet-stream')
-          .header('cache-control', 'private, no-store')
-          .header('content-security-policy', "sandbox; default-src 'none'")
-          .header('x-content-type-options', 'nosniff')
-          .header(
-            'content-disposition',
-            `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`,
-          )
-          .send(result.bytes);
+        try {
+          const result = await files.download(
+            await actor(request),
+            p.id,
+            p.revision,
+            p.file,
+            owner,
+          );
+          // The admission deadline may already have settled this response.
+          if (reply.sent) return reply;
+          const name = result.path.split('/').at(-1)!;
+          return reply
+            .header('content-type', 'application/octet-stream')
+            .header('cache-control', 'private, no-store')
+            .header('content-security-policy', "sandbox; default-src 'none'")
+            .header('x-content-type-options', 'nosniff')
+            .header(
+              'content-disposition',
+              `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`,
+            )
+            .send(result.bytes);
+        } catch (error) {
+          if (reply.sent) return reply;
+          throw error;
+        }
       },
     );
   }

@@ -1,17 +1,18 @@
 import { spawn,type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseConfiguration } from '../../src/server/config.js';
+import type {StorageConfiguration} from '../../src/server/modules/participation/file-storage.js';
 
 /** Same-release native consumers, independently supervised by the isolated preview. */
 export class NativeSearchWorker {
   private child:ChildProcess|undefined;
   private exit:Promise<void>|undefined;
-  constructor(private readonly configuration:DatabaseConfiguration,private readonly consumer:'search'|'notifications'='search') {}
+  constructor(private readonly configuration:DatabaseConfiguration,private readonly consumer:'search'|'notifications'|'file-text'='search',private readonly storage?:StorageConfiguration) {}
   async start(){
     if(this.child)return;
     const c=this.configuration;
     const child=spawn(process.execPath,[fileURLToPath(new URL(`../../dist/server/${this.consumer}-worker.js`,import.meta.url))],{
-      env:{...process.env,LOOM_PARTICIPATION_PROFILE:'synthetic',LOOM_DATABASE_HOST:c.host,LOOM_POSTGRES_PORT:String(c.port),LOOM_DATABASE_NAME:c.database,LOOM_DATABASE_USER:c.user,LOOM_PG_APP_PASSWORD:c.password},
+      env:{...process.env,LOOM_PARTICIPATION_PROFILE:'synthetic',LOOM_DATABASE_HOST:c.host,LOOM_POSTGRES_PORT:String(c.port),LOOM_DATABASE_NAME:c.database,LOOM_DATABASE_USER:c.user,LOOM_PG_APP_PASSWORD:c.password,...(this.storage?{LOOM_FILE_STORAGE:JSON.stringify(this.storage)}:{})},
       stdio:['ignore','pipe','pipe','ipc'],
     });
     this.child=child;this.exit=new Promise(resolve=>child.once('close',()=>{if(this.child===child)this.child=undefined;resolve();}));

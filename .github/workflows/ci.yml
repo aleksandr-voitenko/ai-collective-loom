@@ -35,8 +35,9 @@ jobs:
   local-integration:
     needs: checks
     runs-on: ubuntu-24.04
-    # Complete coverage includes fast, all PostgreSQL, Chromium, and reporting.
-    timeout-minutes: 45
+    # Budget the complete sequential coverage run, reporting, smoke and persistence.
+    # Individual test deadlines, worker count and retries remain in their runners.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:

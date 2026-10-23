@@ -1,5 +1,9 @@
 # Participation boundary
 
+ADR-031 adds passive exact UTF-8 previews and separate Files search in sibling
+`search/`; its independent derived worker never changes these publication/native
+contexts, lifetimes, digests or personal state. See that scoped memory for bounds.
+
 Artifact files and contribution attachments: `files.ts` owns bounded private custody and exact manifest/download
 reads; `file-storage.ts` is the single native S3 boundary. `file-context.ts` owns
 publication preparation under custody guard15, after actor and before
@@ -47,6 +51,10 @@ Upload/download HTTP admission shares four slots until response completion or
 disconnection (15s deadline). Storage admission holds four slots from before the
 first DB wait for incoming buffers through final DB association/authorization,
 bounding buffers even after an HTTP disconnect.
+An unsent download deadline returns the ordinary503 storage-unavailable envelope
+at the same15s boundary; native IO still aborts on its own15s budget. Late success
+or failure cannot replace that response. Upload or already-started response
+deadlines still destroy the transport; no automatic request/native retry is added.
 `web/Files.tsx` uses existing scoped IntentStore/authorization boundaries, explicit
 selection/status/prepare/download actions and SHA-256 reselection after reload.
 No file bytes/secrets/storage capabilities enter the local journal. Stale corrections
@@ -258,7 +266,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–15. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–16. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;

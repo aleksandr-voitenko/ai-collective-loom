@@ -24,7 +24,7 @@ function mount(t:TestContext,c:Context,target:string,browse=false){
   t.mock.method(globalThis,'fetch',(path:string,options?:RequestInit)=>new Promise<Response>(finish=>calls.push({path,options,finish})));
   function Editor(){const [value,setValue]=useState<PublicationFileSet>(),[pending,setPending]=useState(false);
     return <><FileEditor context={c} target={{kind:'area',resource_id:target}} value={value} disabled={false} onPending={setPending} onChange={async v=>{setValue(v);return true;}}/><output>{JSON.stringify(value??null)}</output><span>{pending?'Blocked':'Ready'}</span></>;}
-  const router=createMemoryRouter([{path:'/files',element:<AuthorizationBoundary><Editor/>{browse&&<FileBrowser artifact={target} revision={randomUUID()}/>}</AuthorizationBoundary>},{path:'/other',element:<h1>Other context</h1>}],{initialEntries:['/files']});
+  const router=createMemoryRouter([{path:'/files',element:<AuthorizationBoundary><Editor/>{browse&&<FileBrowser participant={c.self.participant_id} artifact={target} revision={randomUUID()}/>}</AuthorizationBoundary>},{path:'/other',element:<h1>Other context</h1>}],{initialEntries:['/files']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);return {calls,router};
 }
 async function saved(c:Context,target:string){const file=new File(['original'],'original.txt',{type:'text/plain'});

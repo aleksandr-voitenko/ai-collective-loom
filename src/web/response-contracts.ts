@@ -579,6 +579,29 @@ add(
   classified(PromotionProvenance, ['source.state']),
 );
 
+add(
+  [
+    'GET /api/v1/search/files',
+    'GET /api/v1/search/files/status',
+    'GET /api/v1/admin/file-text/health',
+    'GET /api/v1/artifacts/{id}/revisions/{revision}/files/{file}/text',
+    'GET /api/v1/artifacts/{id}/revisions/{revision}/files/{file}/text/status',
+    'GET /api/v1/contributions/{id}/revisions/{revision}/attachments/{file}/text',
+    'GET /api/v1/contributions/{id}/revisions/{revision}/attachments/{file}/text/status',
+  ],
+  'read',
+  sourceErrors,
+  affirmed(
+    'Current exact file authority precedes all derivative metadata and text; processing health never denotes source authority.',
+  ),
+);
+add(
+  ['POST /api/v1/admin/file-text/retry', 'POST /api/v1/admin/file-text/rebuild'],
+  'receipt',
+  sourceErrors,
+  affirmed('Administrator derived-work maintenance never authorizes source content.'),
+);
+
 const matchers = [...responseContracts].map(([route, contract]) => ({
   route,
   contract,

@@ -188,6 +188,7 @@ function ResourcePresentation({
         )}
         {data.attachment_set && (
           <FileBrowser
+            participant={context.self.participant_id}
             key={'attachments:' + data.revision_id}
             contribution={id}
             revision={data.revision_id}
@@ -198,6 +199,7 @@ function ResourcePresentation({
         )}
         {data.file_set && (
           <FileBrowser
+            participant={context.self.participant_id}
             key={'files:' + data.revision_id}
             artifact={id}
             revision={data.revision_id}

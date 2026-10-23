@@ -2,7 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { FileSet, AttachmentSet } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '15';
+export const guideRevision = '16';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -399,9 +399,12 @@ export const Onboarding = Type.Object(
     replay_retention: Type.Literal(
       'retained_without_automatic_expiry; destructive_restore_unsupported',
     ),
-    derived_effects: Type.Literal(
-      'search_and_personal_direct_attention; other_projections_disabled',
-    ),
+    derived_effects: Type.Union([
+      Type.Literal('search_and_personal_direct_attention; other_projections_disabled'),
+      Type.Literal(
+        'search_personal_direct_attention_and_supported_file_text; other_projections_disabled',
+      ),
+    ]),
     updates_contract: Type.Literal('combined-updates-1'),
     attention_contract: Type.Literal('attention-controls-1'),
     moderation_contract: Type.Literal('moderation-state-1'),
@@ -418,6 +421,8 @@ export const Onboarding = Type.Object(
     following_url: Type.Literal('/api/v1/me/following'),
     shared_changes_contract: Type.Literal('shared-changes-1'),
     shared_changes_url: Type.Literal('/api/v1/shared-changes/query'),
+    file_text_contract: Type.Optional(Type.Literal('literal-utf8-v1')),
+    file_search_url: Type.Optional(Type.Literal('/api/v1/search/files')),
   },
   closed,
 );

@@ -52,6 +52,7 @@ test('every registered participation route has a recovery policy and 500/503 rea
   const mutations = new Set([
     'admin/moderation/state', 'admin/notifications/reconcile', 'admin/notifications/retry',
     'admin/search/rebuild', 'admin/search/retry', 'artifacts', 'community/settings',
+    'admin/file-text/retry', 'admin/file-text/rebuild',
     'community/setup', 'discussions', 'editors', 'file-uploads', 'file-uploads/:id/bytes',
     'file-uploads/:id/finalize', 'file-uploads/cleanup', 'identity/accounts', 'identity/credentials',
     'identity/logout', 'identity/register/finish', 'identity/register/start', 'identity/rename',

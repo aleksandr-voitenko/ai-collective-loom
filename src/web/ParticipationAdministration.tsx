@@ -10,6 +10,7 @@ import { type Intent, commandRequest, isDefinitiveRejection } from './participat
 import { type Context, useIntent, SeparateDraft, useQuery } from './participation-state.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
 import { SearchAdministration } from './Search.js';
+import { FileTextAdministration } from './FileText.js';
 import { ErrorText } from './participation-ui.js';
 import { Admission } from './ParticipationAdmission.js';
 
@@ -139,6 +140,7 @@ export function Administration({ context }: { context: Context }) {
         </div>
       )}
       <SearchAdministration context={context} />
+      <FileTextAdministration context={context} />
       <ErrorText error={error} />
       <SeparateDraft
         record={setupIntent}
