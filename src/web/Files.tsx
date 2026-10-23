@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router';
 import {
   FilePage,
+  AttachmentPage,
+  type AttachmentPageValue,
   UploadStatus,
   fileLimits,
   normalizeFilePath,
   normalizeFileSet,
   type FilePageValue,
-  type FileSetValue,
+  type PublicationFileSet,
   type UploadInputValue,
   type UploadStatusValue,
 } from '../contracts/files.js';
@@ -35,17 +38,21 @@ export function FileEditor({
 }: {
   context: Context;
   target: UploadInputValue['target'];
-  value: FileSetValue | undefined;
+  value: PublicationFileSet | undefined;
   disabled: boolean;
-  onChange: (value: FileSetValue) => Promise<boolean>;
+  onChange: (value: PublicationFileSet) => Promise<boolean>;
   onPending: (pending: boolean) => void;
 }) {
+  const version = ['area', 'artifact'].includes(target.kind)
+    ? 'artifact-files-v1'
+    : 'contribution-attachments-v1';
   const [records, setRecords] = useState(() =>
     context.store
       .all()
       .filter(
         (r) =>
           r.kind === 'file.upload' &&
+          (r.body.target as UploadInputValue['target']).kind === target.kind &&
           (r.body.target as UploadInputValue['target']).resource_id.toLowerCase() ===
             target.resource_id.toLowerCase(),
       ),
@@ -73,6 +80,7 @@ export function FileEditor({
         .filter(
           (r) =>
             r.kind === 'file.upload' &&
+            (r.body.target as UploadInputValue['target']).kind === target.kind &&
             (r.body.target as UploadInputValue['target']).resource_id.toLowerCase() ===
               target.resource_id.toLowerCase(),
         ),
@@ -135,7 +143,7 @@ export function FileEditor({
       member = { path: String(record.body.path), source: { upload_id: status.upload_id } };
     const existing = current.value?.files ?? [];
     const set = normalizeFileSet({
-      version: 'artifact-files-v1',
+      version,
       files: existing.some(
         (m) => 'upload_id' in m.source && m.source.upload_id === status.upload_id,
       )
@@ -218,8 +226,11 @@ export function FileEditor({
     bytes.current.set(record.key, file);
   }
   return (
-    <section aria-label="Artifact files" className="file-editor">
-      <h3>Files</h3>
+    <section
+      aria-label={version === 'artifact-files-v1' ? 'Artifact files' : 'Contribution attachments'}
+      className="file-editor"
+    >
+      <h3>{version === 'artifact-files-v1' ? 'Files' : 'Attachments'}</h3>
       <p className="fineprint">
         Up to 16 files, 4 MiB each. Uploaded contents are not indexed or previewed. Paths use
         relative folders. Prepared files expire after 24 hours; uncertain publications must be
@@ -248,7 +259,7 @@ export function FileEditor({
             disabled={disabled || busy}
             onClick={() =>
               void onChange({
-                version: 'artifact-files-v1',
+                version,
                 files: value!.files.filter((_, i) => i !== index),
               })
             }
@@ -389,7 +400,15 @@ export function FileEditor({
   );
 }
 
-export function FileBrowser({ artifact, revision }: { artifact: string; revision: string }) {
+export function FileBrowser({
+  artifact,
+  revision,
+  contribution,
+}: {
+  artifact?: string;
+  revision: string;
+  contribution?: string;
+}) {
   const authority = useAuthorization(),
     [prefix, setPrefix] = useState(''),
     [cursor, setCursor] = useState(''),
@@ -398,9 +417,16 @@ export function FileBrowser({ artifact, revision }: { artifact: string; revision
   const heading = useRef<HTMLHeadingElement>(null),
     focusOnLoad = useRef(false);
   const path =
-    `/api/v1/artifacts/${artifact}/revisions/${revision}/files?` +
+    `/api/v1/${contribution ? 'contributions' : 'artifacts'}/${contribution ?? artifact}/revisions/${revision}/${contribution ? 'attachments' : 'files'}?` +
     new URLSearchParams({ prefix, ...(cursor ? { cursor } : {}), limit: '12' });
-  const { data, error: failure, refresh } = useQuery<FilePageValue>(path, FilePage),
+  const {
+      data,
+      error: failure,
+      refresh,
+    } = useQuery<FilePageValue | AttachmentPageValue>(
+      path,
+      contribution ? AttachmentPage : FilePage,
+    ),
     live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -439,9 +465,9 @@ export function FileBrowser({ artifact, revision }: { artifact: string; revision
     }
   }
   return (
-    <section aria-label="Revision files">
+    <section aria-label={contribution ? 'Revision attachments' : 'Revision files'}>
       <h3 ref={heading} tabIndex={-1}>
-        Revision files
+        {contribution ? 'Revision attachments' : 'Revision files'}
       </h3>
       <p>
         Declared snapshot. Availability is checked when downloading. File contents are not indexed.
@@ -471,6 +497,16 @@ export function FileBrowser({ artifact, revision }: { artifact: string; revision
                 >
                   Download {item.path}
                 </button>
+                {contribution && (
+                  <Link
+                    to={
+                      '/loom/promote?' +
+                      new URLSearchParams({ contribution, revision, file: item.file_id })
+                    }
+                  >
+                    Create artifact from attachment {item.path}
+                  </Link>
+                )}
               </>
             )}
           </li>

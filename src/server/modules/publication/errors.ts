@@ -13,7 +13,7 @@ export type PublicationErrorCode =
 
 const messages: Record<PublicationErrorCode, string> = {
   file_format_required:
-    'This artifact uses files. Supply artifact-files-v1 with a deliberate complete file_set.',
+    'This revision uses files. Supply its complete file_set for an artifact or attachment_set for a contribution, including an explicit empty set when removing files.',
   invalid_input: 'The publication input is unsupported.',
   reference_format_required:
     'This source uses recorded references. Edit with loom-markdown-v2 and an explicit reference list.',

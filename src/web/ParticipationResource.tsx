@@ -1,3 +1,4 @@
+import { ArtifactProvenance, ProvenanceDetails } from './AttachmentPromotion.js';
 import { FileBrowser } from './Files.js';
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router';
@@ -21,9 +22,15 @@ export function ResourcePage(props: {
   revision: string | undefined;
   context: Context;
 }) {
+  const location = useLocation();
+  const attribution = !!props.revision && new URLSearchParams(location.search).has('attribution');
   return (
-    <AuthorizationBoundary scope={'resource:' + props.id}>
-      <ResourceContent {...props} />
+    <AuthorizationBoundary
+      key={props.id + ':' + props.revision + ':' + attribution}
+      scope={'resource:' + props.id}
+      sourcePolicy={attribution ? 'projections' : 'withdraw'}
+    >
+      <ResourceContent {...props} attribution={attribution} />
     </AuthorizationBoundary>
   );
 }
@@ -32,33 +39,86 @@ export function ResourceContent({
   id,
   revision,
   context,
+  attribution = false,
 }: {
   id: string;
   revision: string | undefined;
   context: Context;
+  attribution?: boolean;
 }) {
   const { data, error, refresh } = useQuery<RevisionView>(
     `/api/v1/resources/${id}${revision ? '/revisions/' + revision : ''}`,
     Revision,
   );
-  const [edit, setEdit] = useState(new URLSearchParams(useLocation().search).has('edit')),
-    [history, setHistory] = useState(false);
-  const historyView = (
+  const presentation = data && (
+    <ResourcePresentation
+      data={data}
+      id={id}
+      revision={revision}
+      context={context}
+      attribution={attribution}
+    />
+  );
+  // Attribution owns only its fresh response. A source denial removes the whole
+  // old resource presentation; its body and controls return only after a new read.
+  return (
+    <>
+      {error ? (
+        <>
+          <ErrorText error={error} />
+          <button onClick={refresh}>Retry revision</button>
+          <p>Retained revisions may still be available. Each revision has its own access check.</p>
+          <ResourceHistory id={id} />
+        </>
+      ) : data ? (
+        attribution ? (
+          // Only revision and attribution query values share the projection host.
+          // Opaque controls keep conservative withdrawal for their own denials.
+          <AuthorizationBoundary>{presentation}</AuthorizationBoundary>
+        ) : (
+          presentation
+        )
+      ) : (
+        <p role="status">Loading revision…</p>
+      )}
+      {attribution && revision && (
+        <section aria-label="Source attribution">
+          <Link to={`/loom/resource/${id}/${revision}`}>Close source attribution</Link>
+          <ProvenanceDetails
+            url={`/api/v1/artifacts/${id}/revisions/${revision}/provenance`}
+            reauthorizeArtifact={refresh}
+          />
+        </section>
+      )}
+    </>
+  );
+}
+
+function ResourceHistory({ id }: { id: string }) {
+  const [history, setHistory] = useState(false);
+  return (
     <>
       <button onClick={() => setHistory((value) => !value)}>Revision history</button>
       {history && <RevisionHistory id={id} />}
     </>
   );
-  if (error)
-    return (
-      <>
-        <ErrorText error={error} />
-        <button onClick={refresh}>Retry revision</button>
-        <p>Retained revisions may still be available. Each revision has its own access check.</p>
-        {historyView}
-      </>
-    );
-  if (!data) return <p role="status">Loading revision…</p>;
+}
+
+function ResourcePresentation({
+  data,
+  id,
+  revision,
+  context,
+  attribution,
+}: {
+  data: RevisionView;
+  id: string;
+  revision: string | undefined;
+  context: Context;
+  attribution: boolean;
+}) {
+  const [edit, setEdit] = useState(new URLSearchParams(useLocation().search).has('edit')),
+    [history, setHistory] = useState(false);
   return (
     <>
       <div className="breadcrumb">
@@ -126,8 +186,22 @@ export function ResourceContent({
             participants={data.mentioned_participants}
           />
         )}
+        {data.attachment_set && (
+          <FileBrowser
+            key={'attachments:' + data.revision_id}
+            contribution={id}
+            revision={data.revision_id}
+          />
+        )}
+        {data.provenance_url && !attribution && (
+          <ArtifactProvenance resource={id} revision={data.revision_id} />
+        )}
         {data.file_set && (
-          <FileBrowser key={data.revision_id} artifact={id} revision={data.revision_id} />
+          <FileBrowser
+            key={'files:' + data.revision_id}
+            artifact={id}
+            revision={data.revision_id}
+          />
         )}
         <ChangeDetails revision={data} />
         <ChangeDiscoveryViewComponent
@@ -218,8 +292,11 @@ export function ResourceContent({
               : null
           }
           initialFileSet={
-            data.file_set
-              ? { version: data.file_set.version, files: data.file_set.files }
+            (data.file_set ?? data.attachment_set)
+              ? {
+                  version: (data.file_set ?? data.attachment_set)!.version,
+                  files: (data.file_set ?? data.attachment_set)!.files,
+                }
               : undefined
           }
           initialCoverage={

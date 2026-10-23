@@ -1,10 +1,26 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { UUID, closed, PageInput, ParticipationError } from '../../contracts/participation.js';
-import { UploadInput, UploadStatus, FilePage, fileLimits } from '../../contracts/files.js';
+import {
+  UUID,
+  closed,
+  PageInput,
+  ParticipationError,
+  Committed,
+} from '../../contracts/participation.js';
+import {
+  UploadInput,
+  UploadStatus,
+  FilePage,
+  AttachmentPage,
+  AttachmentSelection,
+  PromotionInput,
+  PromotionProvenance,
+  fileLimits,
+} from '../../contracts/files.js';
 import type { ActorContext } from '../modules/publication/actor.js';
 import type { Transactions } from '../db/postgres.js';
 import { FileError, type FileStorage } from '../modules/participation/file-storage.js';
+import { AttachmentPromotion } from '../modules/participation/attachment-promotion.js';
 import { ArtifactFiles } from '../modules/participation/files.js';
 
 export function registerFiles(
@@ -148,50 +164,104 @@ export function registerFiles(
       },
     );
   });
+  const promotion = new AttachmentPromotion(database);
+  app.post(
+    '/api/v1/attachment-promotions',
+    {
+      bodyLimit: 4096,
+      schema: {
+        operationId: 'promoteAttachment',
+        body: PromotionInput,
+        querystring: empty,
+        response: { ...errors, 201: Committed },
+      },
+    },
+    async (request, reply) =>
+      reply.code(201).send(await promotion.publish(await actor(request), request.body)),
+  );
   const exact = { id: UUID, revision: UUID };
   app.get(
-    '/api/v1/artifacts/:id/revisions/:revision/files',
+    '/api/v1/artifacts/:id/revisions/:revision/provenance',
     {
       schema: {
-        operationId: 'listArtifactFiles',
+        operationId: 'getPromotionProvenance',
         params: Type.Object(exact, closed),
-        querystring: Type.Object(
-          { ...PageInput.properties, prefix: Type.Optional(Type.String({ maxLength: 512 })) },
-          closed,
-        ),
-        response: { ...errors, 200: FilePage },
+        querystring: empty,
+        response: { ...errors, 200: PromotionProvenance },
       },
     },
     async (request) => {
       const p = request.params as { id: string; revision: string };
-      return files.manifest(await actor(request), p.id, p.revision, request.query as {});
+      return promotion.provenance(await actor(request), p.id, p.revision);
     },
   );
   app.get(
-    '/api/v1/artifacts/:id/revisions/:revision/files/:file/download',
+    '/api/v1/contributions/:id/revisions/:revision/attachments/:file',
     {
       schema: {
-        operationId: 'downloadArtifactFile',
+        operationId: 'getContributionAttachment',
         params: Type.Object({ ...exact, file: UUID }, closed),
         querystring: empty,
-        response: errors,
+        response: { ...errors, 200: AttachmentSelection },
       },
-      onRequest: admitTransfer,
     },
-    async (request, reply) => {
+    async (request) => {
       const p = request.params as { id: string; revision: string; file: string };
-      const result = await files.download(await actor(request), p.id, p.revision, p.file);
-      const name = result.path.split('/').at(-1)!;
-      return reply
-        .header('content-type', 'application/octet-stream')
-        .header('cache-control', 'private, no-store')
-        .header('content-security-policy', "sandbox; default-src 'none'")
-        .header('x-content-type-options', 'nosniff')
-        .header(
-          'content-disposition',
-          `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`,
-        )
-        .send(result.bytes);
+      return files.attachment(await actor(request), p.id, p.revision, p.file);
     },
   );
+  for (const owner of ['artifact', 'contribution'] as const) {
+    const base =
+      owner === 'artifact'
+        ? '/api/v1/artifacts/:id/revisions/:revision/files'
+        : '/api/v1/contributions/:id/revisions/:revision/attachments';
+    app.get(
+      base,
+      {
+        schema: {
+          operationId: owner === 'artifact' ? 'listArtifactFiles' : 'listContributionAttachments',
+          params: Type.Object(exact, closed),
+          querystring: Type.Object(
+            { ...PageInput.properties, prefix: Type.Optional(Type.String({ maxLength: 512 })) },
+            closed,
+          ),
+          response: { ...errors, 200: owner === 'artifact' ? FilePage : AttachmentPage },
+        },
+      },
+      async (request) => {
+        const p = request.params as { id: string; revision: string };
+        return owner === 'artifact'
+          ? files.manifest(await actor(request), p.id, p.revision, request.query as {})
+          : files.attachments(await actor(request), p.id, p.revision, request.query as {});
+      },
+    );
+    app.get(
+      base + '/:file/download',
+      {
+        schema: {
+          operationId:
+            owner === 'artifact' ? 'downloadArtifactFile' : 'downloadContributionAttachment',
+          params: Type.Object({ ...exact, file: UUID }, closed),
+          querystring: empty,
+          response: errors,
+        },
+        onRequest: admitTransfer,
+      },
+      async (request, reply) => {
+        const p = request.params as { id: string; revision: string; file: string };
+        const result = await files.download(await actor(request), p.id, p.revision, p.file, owner);
+        const name = result.path.split('/').at(-1)!;
+        return reply
+          .header('content-type', 'application/octet-stream')
+          .header('cache-control', 'private, no-store')
+          .header('content-security-policy', "sandbox; default-src 'none'")
+          .header('x-content-type-options', 'nosniff')
+          .header(
+            'content-disposition',
+            `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`,
+          )
+          .send(result.bytes);
+      },
+    );
+  }
 }

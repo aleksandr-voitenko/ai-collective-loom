@@ -1,5 +1,16 @@
-import { normalizeFileSet, type FileSetValue } from '../../../contracts/files.js';
-import { fileGuard, prepareFiles, uploadRow } from './file-context.js';
+import {
+  normalizeFileSet,
+  type AttachmentSetValue,
+  type FileSetValue,
+} from '../../../contracts/files.js';
+import {
+  fileGuard,
+  prepareFiles,
+  prepareAttachments,
+  admitFilePublication,
+  uploadRow,
+} from './file-context.js';
+import { hasAttachmentSchema } from '../../db/schema-capabilities.js';
 import { FileError } from './file-storage.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
@@ -73,6 +84,7 @@ type Request = {
   title?: string | null;
   content?: AuthoredContent;
   file_set?: FileSetValue;
+  attachment_set?: AttachmentSetValue;
   overview?: AuthoredContent;
   community_name?: string;
   ordinary_area_name?: string;
@@ -158,7 +170,9 @@ function prepare(kind: string, value: unknown) {
         );
   }
   try {
+    if (input.file_set && input.attachment_set) throw new Error();
     if (input.file_set) input.file_set = normalizeFileSet(input.file_set);
+    if (input.attachment_set) input.attachment_set = normalizeFileSet(input.attachment_set);
     if (
       !content.text.length &&
       (!input.file_set?.files.length || !['artifact.create', 'revision.publish'].includes(kind))
@@ -179,17 +193,19 @@ function prepare(kind: string, value: unknown) {
       throw new PublicationError('invalid_input');
   }
   const { idempotency_key: _key, ...semantic } = input;
-  const version = input.file_set
-    ? 'artifact-files-v1'
-    : content.format === 'loom-markdown-v3'
-      ? kind.startsWith('summary.')
-        ? 'discussion-summary-v2'
-        : 'participation-text-v3'
-      : kind.startsWith('summary.')
-        ? 'discussion-summary-v1'
-        : content.format === 'loom-markdown-v2'
-          ? 'participation-text-v2'
-          : participationSemanticVersion;
+  const version = input.attachment_set
+    ? 'contribution-attachments-v1'
+    : input.file_set
+      ? 'artifact-files-v1'
+      : content.format === 'loom-markdown-v3'
+        ? kind.startsWith('summary.')
+          ? 'discussion-summary-v2'
+          : 'participation-text-v3'
+        : kind.startsWith('summary.')
+          ? 'discussion-summary-v1'
+          : content.format === 'loom-markdown-v2'
+            ? 'participation-text-v2'
+            : participationSemanticVersion;
   return { input, content, version, digest: digestRequest(kind, semantic, version) };
 }
 async function outcome(tx: SqlTransaction, participant: string, kind: string, key: string) {
@@ -258,7 +274,9 @@ export class ParticipationPublications {
         // A refusal binds the attempt even if a retry omits its file envelope.
         // Older schemas have no file attempts; successful legacy replays resolve above.
         if (
-          (kind === 'artifact.create' || kind === 'revision.publish') &&
+          ['artifact.create', 'revision.publish', 'discussion.create', 'reply.create'].includes(
+            kind,
+          ) &&
           (
             await tx.query<{ ready: boolean }>(
               "SELECT to_regclass('loom.file_publication_refusals') IS NOT NULL AS ready",
@@ -278,9 +296,12 @@ export class ParticipationPublications {
             return new FileError('file_expired', true);
           }
         }
-        if (input.file_set) {
+        const declaredFiles = input.file_set ?? input.attachment_set;
+        if (declaredFiles) {
           await fileGuard(tx);
-          for (const member of input.file_set.files)
+          if (await hasAttachmentSchema(tx))
+            await admitFilePublication(tx, actor.participantId, declaredFiles.files.length);
+          for (const member of declaredFiles.files)
             if ('upload_id' in member.source) {
               const upload = await uploadRow(tx, member.source.upload_id, actor.participantId);
               if (!upload.prepared_valid || ['expired', 'cleaning'].includes(upload.state)) {
@@ -358,7 +379,7 @@ export class ParticipationPublications {
             : input.change_account && 'carry_forward_revision_id' in input.change_account
               ? await changeMembers(tx, input.change_account.carry_forward_revision_id)
               : [];
-        if (content.format !== 'loom-markdown-v1' || coverage) {
+        if (content.format !== 'loom-markdown-v1' || coverage || input.attachment_set) {
           // Setup must take the exclusive structure guard before any shared plan.
           if (kind === 'community.setup') {
             await tx.query(
@@ -411,6 +432,20 @@ export class ParticipationPublications {
           await authorizePublication(tx, actor, chain);
           if (resource.current_revision_id !== input.expected_revision_id)
             throw new PublicationError('revision_conflict', resource.current_revision_id);
+          if (input.attachment_set && (resource.kind !== 'contribution' || !content.text.length))
+            throw new PublicationError('invalid_input');
+          if (
+            !input.attachment_set &&
+            resource.kind === 'contribution' &&
+            (await hasAttachmentSchema(tx)) &&
+            (
+              await tx.query(
+                'SELECT revision_id FROM loom.contribution_attachment_sets WHERE revision_id=$1',
+                [resource.current_revision_id],
+              )
+            ).rowCount
+          )
+            throw new PublicationError('file_format_required');
           if (input.file_set && resource.kind !== 'artifact')
             throw new PublicationError('invalid_input');
           if (
@@ -645,6 +680,19 @@ export class ParticipationPublications {
               input.file_set,
             )
           : undefined;
+        const attachments = input.attachment_set
+          ? await prepareAttachments(
+              tx,
+              actor.participantId,
+              resourceId,
+              kind === 'discussion.create'
+                ? { kind: 'opening', resource_id: input.area_id! }
+                : kind === 'reply.create'
+                  ? { kind: 'reply', resource_id: input.parent_id! }
+                  : { kind: 'contribution', resource_id: resourceId },
+              input.attachment_set,
+            )
+          : undefined;
         return commitRevision(
           tx,
           actor,
@@ -656,6 +704,7 @@ export class ParticipationPublications {
             title,
             mentions: content.mentions,
             ...(files ? { files } : {}),
+            ...(attachments ? { attachments } : {}),
             ...(coverage ? { coverage } : {}),
             ...(input.change_note
               ? { changeNote: input.change_note, noteReferences: noteReferences! }
@@ -696,7 +745,8 @@ export class ParticipationPublications {
     return id;
   }
   async reconcile(actor: ActorContext, kind: string, key: string): Promise<Reconciliation> {
-    if (!schemas[kind]) throw new PublicationError('invalid_input');
+    if (!schemas[kind] && kind !== 'attachment.promote')
+      throw new PublicationError('invalid_input');
     key = canonicalAttemptKey(key);
     try {
       return await this.database.transaction(async (tx) => {

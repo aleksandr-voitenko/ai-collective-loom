@@ -1,4 +1,4 @@
-import { FileSet, FileMember, UploadInput, fileLimits } from '../contracts/files.js';
+import { FileSet, AttachmentSet, FileMember, UploadInput, fileLimits } from '../contracts/files.js';
 import { Value } from '@sinclair/typebox/value';
 import { Type, type TSchema } from '@sinclair/typebox';
 import type { CommittedView } from '../contracts/participation.js';
@@ -44,6 +44,11 @@ const DraftFileSet = Type.Object(
       maxItems: fileLimits.entries,
     }),
   },
+  closed,
+);
+
+const DraftAttachmentSet = Type.Object(
+  { ...DraftFileSet.properties, version: AttachmentSet.properties.version },
   closed,
 );
 
@@ -312,6 +317,14 @@ export class IntentStore {
         !Value.Check(record.state === 'draft' ? DraftFileSet : FileSet, record.body.file_set)
       )
         throw new Error('The file manifest is incompatible. Preserve the exact journal.');
+      if (
+        'attachment_set' in record.body &&
+        !Value.Check(
+          record.state === 'draft' ? DraftAttachmentSet : AttachmentSet,
+          record.body.attachment_set,
+        )
+      )
+        throw new Error('The attachment manifest is incompatible. Preserve the exact journal.');
       if (record.kind === 'file.upload' && !Value.Check(UploadInput, record.body))
         throw new Error('The upload metadata is incompatible. Preserve the exact journal.');
       if ('change_note' in record.body && !Value.Check(DraftNote, record.body.change_note))

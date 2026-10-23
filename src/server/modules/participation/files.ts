@@ -6,6 +6,8 @@ import {
   normalizeFilePath,
   type UploadInputValue,
   type FilePageValue,
+  type AttachmentPageValue,
+  type AttachmentSelectionValue,
 } from '../../../contracts/files.js';
 import { lockAttempt } from '../../application/attempt.js';
 import type { ActorContext } from '../publication/actor.js';
@@ -281,11 +283,34 @@ export class ArtifactFiles {
     });
   }
   async manifest(
-    actorContext: ActorContext,
+    actor: ActorContext,
     artifact: string,
     revision: string,
     options: { prefix?: string; cursor?: string; limit?: string; max_response_bytes?: string } = {},
   ): Promise<FilePageValue> {
+    return this.list(actor, artifact, revision, options, 'artifact') as Promise<FilePageValue>;
+  }
+  async attachments(
+    actor: ActorContext,
+    contribution: string,
+    revision: string,
+    options: { prefix?: string; cursor?: string; limit?: string; max_response_bytes?: string } = {},
+  ): Promise<AttachmentPageValue> {
+    return this.list(
+      actor,
+      contribution,
+      revision,
+      options,
+      'contribution',
+    ) as Promise<AttachmentPageValue>;
+  }
+  private async list(
+    actorContext: ActorContext,
+    artifact: string,
+    revision: string,
+    options: { prefix?: string; cursor?: string; limit?: string; max_response_bytes?: string } = {},
+    kind: 'artifact' | 'contribution',
+  ): Promise<FilePageValue | AttachmentPageValue> {
     artifact = canonicalAttemptKey(artifact);
     revision = canonicalAttemptKey(revision);
     let prefix = '';
@@ -323,7 +348,7 @@ export class ArtifactFiles {
     return this.run(() =>
       this.database.transaction(async (tx) => {
         await lockActor(tx, actorContext);
-        await lockContext(tx, artifact, 'resolution', ['artifact']);
+        const chain = await lockContext(tx, artifact, 'resolution', [kind]);
         await requireRevision(tx, artifact, revision);
         const rows = (
           await tx.query<{
@@ -335,7 +360,7 @@ export class ArtifactFiles {
           }>(
             `SELECT f.id,f.path,u.size,u.sha256,u.media_type
         FROM loom.file_contexts f JOIN loom.file_uploads u ON u.id=f.upload_id
-        WHERE f.artifact_id=$1 AND f.revision_id=$2 ORDER BY f.path COLLATE "C" LIMIT $3`,
+        WHERE f.${kind === 'artifact' ? 'artifact_id' : 'contribution_id'}=$1 AND f.revision_id=$2 ORDER BY f.path COLLATE "C" LIMIT $3`,
             [artifact, revision, fileLimits.entries + 1],
           )
         ).rows;
@@ -361,7 +386,7 @@ export class ArtifactFiles {
               sha256: row.sha256,
               media_type: row.media_type,
               type_evidence: 'declared',
-              download_url: `/api/v1/artifacts/${artifact}/revisions/${revision}/files/${row.id}/download`,
+              download_url: `/api/v1/${kind === 'artifact' ? 'artifacts' : 'contributions'}/${artifact}/revisions/${revision}/${kind === 'artifact' ? 'files' : 'attachments'}/${row.id}/download`,
             });
         }
         const items = [...entries.values()].sort((a, b) =>
@@ -379,8 +404,25 @@ export class ArtifactFiles {
                 ]),
               ).toString('base64url')
             : null;
-        const page: FilePageValue = {
-          artifact_id: artifact,
+        const source =
+          kind === 'contribution'
+            ? (
+                await tx.query<{ discussion_id: string; publisher_id: string }>(
+                  'SELECT c.discussion_id,r.publisher_id FROM loom.contributions c JOIN loom.revisions r ON r.resource_id=c.id WHERE c.id=$1 AND r.id=$2',
+                  [artifact, revision],
+                )
+              ).rows[0]
+            : undefined;
+        if (kind === 'contribution' && !source) throw new PublicationError('unavailable');
+        const page: FilePageValue | AttachmentPageValue = {
+          ...(kind === 'artifact'
+            ? { artifact_id: artifact }
+            : {
+                contribution_id: artifact,
+                discussion_id: source!.discussion_id,
+                contributor_id: chain[0]!.original_author_id!,
+                revision_publisher_id: source!.publisher_id,
+              }),
           revision_id: revision,
           prefix,
           items: [],
@@ -407,7 +449,13 @@ export class ArtifactFiles {
       }),
     );
   }
-  async download(actor: ActorContext, artifact: string, revision: string, file: string) {
+  async download(
+    actor: ActorContext,
+    artifact: string,
+    revision: string,
+    file: string,
+    kind: 'artifact' | 'contribution' = 'artifact',
+  ) {
     return this.run(async () => {
       const store = this.store();
       artifact = canonicalAttemptKey(artifact);
@@ -416,11 +464,11 @@ export class ArtifactFiles {
       const authorize = () =>
         this.database.transaction(async (tx) => {
           await lockActor(tx, actor);
-          await lockContext(tx, artifact, 'resolution', ['artifact']);
+          await lockContext(tx, artifact, 'resolution', [kind]);
           await requireRevision(tx, artifact, revision);
           const context = (
             await tx.query<{ upload_id: string; path: string }>(
-              'SELECT upload_id,path FROM loom.file_contexts WHERE artifact_id=$1 AND revision_id=$2 AND id=$3',
+              `SELECT upload_id,path FROM loom.file_contexts WHERE ${kind === 'artifact' ? 'artifact_id' : 'contribution_id'}=$1 AND revision_id=$2 AND id=$3`,
               [artifact, revision, file],
             )
           ).rows[0];
@@ -441,6 +489,54 @@ export class ArtifactFiles {
       );
       return { bytes, path: selected.path };
     });
+  }
+  async attachment(
+    actor: ActorContext,
+    contribution: string,
+    revision: string,
+    file: string,
+  ): Promise<AttachmentSelectionValue> {
+    contribution = canonicalAttemptKey(contribution);
+    revision = canonicalAttemptKey(revision);
+    file = canonicalAttemptKey(file);
+    return this.run(() =>
+      this.database.transaction(async (tx) => {
+        await lockActor(tx, actor);
+        const chain = await lockContext(tx, contribution, 'resolution', ['contribution']);
+        await requireRevision(tx, contribution, revision);
+        const row = (
+          await tx.query<{
+            path: string;
+            size: number;
+            sha256: string;
+            media_type: string;
+            publisher_id: string;
+          }>(
+            `
+        SELECT f.path,u.size,u.sha256,u.media_type,r.publisher_id FROM loom.file_contexts f
+        JOIN loom.file_uploads u ON u.id=f.upload_id JOIN loom.revisions r ON r.id=f.revision_id
+        WHERE f.contribution_id=$1 AND f.revision_id=$2 AND f.id=$3 AND u.state='prepared' AND u.final_version IS NOT NULL`,
+            [contribution, revision, file],
+          )
+        ).rows[0];
+        if (!row) throw new PublicationError('unavailable');
+        const { publisher_id, ...metadata } = row;
+        return {
+          contribution_id: contribution,
+          discussion_id: chain[0]!.owner_resource_id!,
+          revision_id: revision,
+          contributor_id: chain[0]!.original_author_id!,
+          revision_publisher_id: publisher_id,
+          file: {
+            ...metadata,
+            kind: 'file',
+            file_id: file,
+            type_evidence: 'declared',
+            download_url: `/api/v1/contributions/${contribution}/revisions/${revision}/attachments/${file}/download`,
+          },
+        };
+      }),
+    );
   }
   private async run<T>(work: () => Promise<T>): Promise<T> {
     try {

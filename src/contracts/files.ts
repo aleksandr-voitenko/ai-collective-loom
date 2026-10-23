@@ -24,6 +24,10 @@ export const fileLimits = Object.freeze({
   preparedSeconds: 86400,
   cleanupItems: 8,
   versions: 8,
+  ownerPublications: 2048,
+  publications: 8192,
+  ownerContexts: 8192,
+  contexts: 65536,
 });
 export const FilePath = Type.String({ minLength: 1, maxLength: fileLimits.pathBytes });
 export const FileMember = Type.Object(
@@ -44,12 +48,23 @@ export const FileSet = Type.Object(
   closed,
 );
 export type FileSetValue = Static<typeof FileSet>;
+export const AttachmentSet = Type.Object(
+  { ...FileSet.properties, version: Type.Literal('contribution-attachments-v1') },
+  closed,
+);
+export type AttachmentSetValue = Static<typeof AttachmentSet>;
+export type PublicationFileSet = FileSetValue | AttachmentSetValue;
 export type FileMemberValue = Static<typeof FileMember>;
 export const UploadInput = Type.Object(
   {
     idempotency_key: id,
     target: Type.Object(
-      { kind: Type.Union([Type.Literal('area'), Type.Literal('artifact')]), resource_id: id },
+      {
+        kind: Type.Union(
+          ['area', 'artifact', 'opening', 'reply', 'contribution'].map((k) => Type.Literal(k)),
+        ),
+        resource_id: id,
+      },
       closed,
     ),
     path: FilePath,
@@ -122,6 +137,65 @@ export const FilePage = Type.Object(
   closed,
 );
 export type FilePageValue = Static<typeof FilePage>;
+const { artifact_id: _artifact, ...filePageFields } = FilePage.properties;
+export const AttachmentPage = Type.Object(
+  {
+    ...filePageFields,
+    contribution_id: id,
+    discussion_id: id,
+    contributor_id: id,
+    revision_publisher_id: id,
+  },
+  closed,
+);
+export type AttachmentPageValue = Static<typeof AttachmentPage>;
+export const AttachmentSelection = Type.Object(
+  {
+    contribution_id: id,
+    discussion_id: id,
+    revision_id: id,
+    contributor_id: id,
+    revision_publisher_id: id,
+    file: FileEntry,
+  },
+  closed,
+);
+export type AttachmentSelectionValue = Static<typeof AttachmentSelection>;
+export const PromotionInput = Type.Object(
+  {
+    idempotency_key: id,
+    source: Type.Object({ contribution_id: id, revision_id: id, file_id: id }, closed),
+    area_id: id,
+    title: Type.String({ minLength: 1, maxLength: 160 }),
+  },
+  closed,
+);
+export type PromotionInputValue = Static<typeof PromotionInput>;
+export const PromotionProvenance = Type.Object(
+  {
+    artifact_id: id,
+    revision_id: id,
+    promoter_id: id,
+    source: Type.Union([
+      Type.Object({ state: Type.Literal('unavailable') }, closed),
+      Type.Object(
+        {
+          state: Type.Literal('available'),
+          discussion_id: id,
+          contribution_id: id,
+          revision_id: id,
+          file_id: id,
+          contributor_id: id,
+          revision_publisher_id: id,
+          uploader_id: id,
+        },
+        closed,
+      ),
+    ]),
+  },
+  closed,
+);
+export type PromotionProvenanceValue = Static<typeof PromotionProvenance>;
 
 export function normalizeFilePath(value: string): string {
   const path = value.normalize('NFC');
@@ -137,7 +211,7 @@ export function normalizeFilePath(value: string): string {
     throw new Error('Invalid relative file path.');
   return path;
 }
-export function normalizeFileSet(value: FileSetValue): FileSetValue {
+export function normalizeFileSet<T extends PublicationFileSet>(value: T): T {
   const files = value.files
     .map((member) => ({
       path: normalizeFilePath(member.path),
@@ -170,5 +244,5 @@ export function normalizeFileSet(value: FileSetValue): FileSetValue {
     new TextEncoder().encode(JSON.stringify(result)).length > fileLimits.manifestBytes
   )
     throw new Error('File manifest exceeds the synthetic limit.');
-  return result;
+  return result as T;
 }

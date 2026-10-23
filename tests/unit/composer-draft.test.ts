@@ -27,11 +27,11 @@ const rejected = (format: AuthoredContent['format'], extra: Record<string, unkno
 });
 
 for (const { operation, path, target, titleField, canFiles, canNote, summaryDiscussion } of [
-  { operation: { kind: 'discussion.create', areaId: 'area' }, path: '/api/v1/discussions', target: { area_id: 'area' }, titleField: true, canFiles: false, canNote: false, summaryDiscussion: undefined },
+  { operation: { kind: 'discussion.create', areaId: 'area' }, path: '/api/v1/discussions', target: { area_id: 'area' }, titleField: true, canFiles: true, canNote: false, summaryDiscussion: undefined },
   { operation: { kind: 'artifact.create', areaId: 'area' }, path: '/api/v1/artifacts', target: { area_id: 'area' }, titleField: true, canFiles: true, canNote: true, summaryDiscussion: undefined },
-  { operation: { kind: 'reply.create', discussionId: 'discussion', parentId: 'parent' }, path: '/api/v1/replies', target: { discussion_id: 'discussion', parent_id: 'parent' }, titleField: false, canFiles: false, canNote: false, summaryDiscussion: undefined },
+  { operation: { kind: 'reply.create', discussionId: 'discussion', parentId: 'parent' }, path: '/api/v1/replies', target: { discussion_id: 'discussion', parent_id: 'parent' }, titleField: false, canFiles: true, canNote: false, summaryDiscussion: undefined },
   { operation: { kind: 'summary.create', discussionId: 'discussion' }, path: '/api/v1/summaries', target: { discussion_id: 'discussion' }, titleField: true, canFiles: false, canNote: true, summaryDiscussion: 'discussion' },
-  { operation: revision, path: '/api/v1/revisions', target: { resource_id: 'source', expected_revision_id: 'initial', title: 'Original title' }, titleField: true, canFiles: false, canNote: false, summaryDiscussion: undefined },
+  { operation: revision, path: '/api/v1/revisions', target: { resource_id: 'source', expected_revision_id: 'initial', title: 'Original title' }, titleField: true, canFiles: true, canNote: false, summaryDiscussion: undefined },
   { operation: { kind: 'summary.revise', resourceId: 'source', revisionId: 'initial', title: 'Original title', discussionId: 'discussion' }, path: '/api/v1/summary-revisions', target: { resource_id: 'source', expected_revision_id: 'initial', title: 'Original title' }, titleField: true, canFiles: false, canNote: true, summaryDiscussion: 'discussion' },
 ] satisfies { operation: ComposerOperation; path: string; target: object; titleField: boolean; canFiles: boolean; canNote: boolean; summaryDiscussion: string | undefined }[]) {
   test(`${operation.kind} derives its route, target, capabilities and complete new draft`, () => {
@@ -98,7 +98,7 @@ test('correction requires a rejected attempt and its exact retained comparison b
     assert.equal(correctDraft({ operation: revision, fields: fields(), record, comparison: current }), undefined);
     assert.deepEqual(draftCorrection({ operation: revision, record, comparison: current }), {
       comparisonRevision: 'conflict', comparisonReady: false, adoptsBaseReferences: false, requiresComparison: true,
-      legacyCorrection: true, legacyFileCorrection: false,
+      legacyCorrection: true, legacyFileCorrection: true,
     });
   }
   const noConflict = { state: 'rejected' as const, body: record.body };
@@ -171,3 +171,16 @@ test('same-v1 correction and unversioned creation preserve fields without introd
     fields: created, body: { area_id: 'area', title: 'Draft title', content: content() },
   });
 });
+
+for (const attempted of [undefined, { version: 'contribution-attachments-v1' as const, files: [{ path: 'attempted.txt', source: { upload_id: 'private' } }] }]) {
+  test('contribution correction carries only unsupported attachment fields and preserves attempted authored metadata '+!!attempted, () => {
+    const current = fields({ format: 'loom-markdown-v3', fileSet: attempted, references: [reference], account });
+    const base = { ...comparison('loom-markdown-v3'), attachment_set: { version: 'contribution-attachments-v1' as const, files: [{ path: 'base.txt', source: { revision_id: 'conflict', file_id: 'context' } }], manifest_url: '/exact' } };
+    const record = rejected('loom-markdown-v3', attempted ? { attachment_set: attempted } : {});
+    const result = correctDraft({ operation: revision, fields: current, record, comparison: base })!;
+    assert.deepEqual(result.body, { resource_id: 'source', expected_revision_id: 'conflict', title: current.title,
+      content: { format: 'loom-markdown-v3', text: current.text, mentions: current.mentions, references: [reference] },
+      change_note: null, change_account: account, attachment_set: attempted ?? { version: base.attachment_set.version, files: base.attachment_set.files } });
+    assert.equal(result.body.file_set, undefined);
+  });
+}

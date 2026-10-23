@@ -134,3 +134,12 @@ bytes are unchanged, and no historical uploaded files are invented. Published
 contexts protect upload lifetime from cleanup. `test:files:postgres` checks populated
 upgrade and native SeaweedFS versions in disposable fixtures. It does not migrate
 or modify existing development data. See [ADR-029](../docs/adr/029-versioned-artifact-files.md).
+
+Migration `0020_contribution_attachments.sql` extends upload target kinds and adds
+immutable complete contribution attachment sets. A file context has exactly one
+artifact or contribution owner, constrained to the exact revision/set. Independent
+artifact promotion records immutable source and actor attribution alongside its
+initial artifact set. Existing native-version lifetime guards cover both owners;
+no old upload/version, outcome or source row is rewritten. Populated upgrade tests
+compare every old column and retained traversal semantics in disposable fixtures.
+See [ADR-030](../docs/adr/030-contribution-attachments-and-promotion.md).

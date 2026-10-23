@@ -1,5 +1,5 @@
 import { FileEditor } from './Files.js';
-import { type FileSetValue, normalizeFileSet } from '../contracts/files.js';
+import { type PublicationFileSet, normalizeFileSet } from '../contracts/files.js';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, Link } from 'react-router';
 import {
@@ -65,7 +65,7 @@ export function Composer({
   initialFormat?: AuthoredContent['format'];
   initialReferences?: ReferenceValue[];
   initialChangeAccount?: ChangeAccountValue | null;
-  initialFileSet?: FileSetValue | undefined;
+  initialFileSet?: PublicationFileSet | undefined;
   initialCoverage?: CoverageDeclarationValue | undefined;
   heading: string;
   onCommitted?: (value: CommittedView) => void;
@@ -112,8 +112,10 @@ export function Composer({
       ? ((record.body.change_account as ChangeAccountValue | null | undefined) ?? null)
       : initialChangeAccount,
   );
-  const [fileSet, setFileSet] = useState<FileSetValue | undefined>(
-    record ? (record.body.file_set as FileSetValue | undefined) : initialFileSet,
+  const [fileSet, setFileSet] = useState<PublicationFileSet | undefined>(
+    record
+      ? ((record.body.file_set ?? record.body.attachment_set) as PublicationFileSet | undefined)
+      : initialFileSet,
   );
   const [filesPending, setFilesPending] = useState(false);
   const [base, setBase] = useState<unknown>(
@@ -360,6 +362,14 @@ export function Composer({
           ...(latest.file_set
             ? { file_set: { version: latest.file_set.version, files: latest.file_set.files } }
             : {}),
+          ...(latest.attachment_set
+            ? {
+                attachment_set: {
+                  version: latest.attachment_set.version,
+                  files: latest.attachment_set.files,
+                },
+              }
+            : {}),
           ...(latest.kind === 'summary'
             ? { coverage: { carry_forward_revision_id: latest.revision_id } }
             : {}),
@@ -466,7 +476,16 @@ export function Composer({
                       references: [],
                       note: null,
                       account: null,
-                      ...(canFiles ? { fileSet: { version: 'artifact-files-v1', files: [] } } : {}),
+                      ...(canFiles
+                        ? {
+                            fileSet: {
+                              version: canNote
+                                ? 'artifact-files-v1'
+                                : 'contribution-attachments-v1',
+                              files: [],
+                            },
+                          }
+                        : {}),
                     }),
                   ),
                 ).catch((failure) => setError(failure.message))
@@ -582,8 +601,17 @@ export function Composer({
             <FileEditor
               context={context}
               target={{
-                kind: kind === 'artifact.create' ? 'area' : 'artifact',
-                resource_id: String(fixed.resource_id ?? fixed.area_id),
+                kind:
+                  kind === 'artifact.create'
+                    ? 'area'
+                    : kind === 'discussion.create'
+                      ? 'opening'
+                      : kind === 'reply.create'
+                        ? 'reply'
+                        : canNote
+                          ? 'artifact'
+                          : 'contribution',
+                resource_id: String(fixed.resource_id ?? fixed.parent_id ?? fixed.area_id),
               }}
               value={fileSet}
               disabled={locked}
@@ -699,7 +727,7 @@ export function Composer({
               disabled={
                 locked ||
                 filesPending ||
-                (!text.trim() && !fileSet?.files.length) ||
+                (!text.trim() && (!canNote || !fileSet?.files.length)) ||
                 (titleField && !title.trim()) ||
                 (!!summaryDiscussion && !coverage) ||
                 (!!account &&

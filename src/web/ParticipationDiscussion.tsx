@@ -1,3 +1,4 @@
+import { FileBrowser } from './Files.js';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, Link } from 'react-router';
 import {
@@ -301,6 +302,13 @@ function ContributionBody({
         content={data.content}
         participants={data.mentioned_participants}
       />
+      {data.attachment_set && (
+        <FileBrowser
+          key={'attachments:' + data.revision_id}
+          contribution={id}
+          revision={data.revision_id}
+        />
+      )}
       <ChangeDetails revision={data} />
       <ReferenceViews
         key={'references:' + data.revision_id}

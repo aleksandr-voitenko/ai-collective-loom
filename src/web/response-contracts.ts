@@ -13,6 +13,7 @@ import * as V from '../contracts/routine-updates.js';
 import * as Ref from '../contracts/references.js';
 import * as Sum from '../contracts/summaries.js';
 import * as Search from '../contracts/search.js';
+import { PromotionProvenance } from '../contracts/files.js';
 import * as M from '../contracts/moderation.js';
 import { ApiError } from './request-context.js';
 
@@ -165,6 +166,7 @@ add(
     'POST /api/v1/discussions',
     'POST /api/v1/replies',
     'POST /api/v1/artifacts',
+    'POST /api/v1/attachment-promotions',
     'POST /api/v1/summaries',
     'POST /api/v1/operations/status',
     'POST /api/v1/summaries/status',
@@ -556,6 +558,25 @@ add(
   'read',
   sourceErrors,
   affirmed('Exact contextual files under current resource and revision authority.'),
+);
+
+add(
+  [
+    'GET /api/v1/contributions/{id}/revisions/{revision}/attachments',
+    'GET /api/v1/contributions/{id}/revisions/{revision}/attachments/{file}',
+    'GET /api/v1/contributions/{id}/revisions/{revision}/attachments/{file}/download',
+  ],
+  'read',
+  sourceErrors,
+  affirmed(
+    'Exact contribution-owned attachment metadata and passive native bytes require current contextual authorization.',
+  ),
+);
+add(
+  ['GET /api/v1/artifacts/{id}/revisions/{revision}/provenance'],
+  'read',
+  sourceErrors,
+  classified(PromotionProvenance, ['source.state']),
 );
 
 const matchers = [...responseContracts].map(([route, contract]) => ({

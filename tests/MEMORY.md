@@ -20,6 +20,23 @@ replacement/API restart and exposes recorded expiry refusals without journal cha
 Native creation/revision regressions omit the file envelope from a valid nonempty
 text request after expiry refusal. They compare complete publication state, retain
 rejected retry/status across restart and allow correction only with a fresh key.
+Contribution attachment suites remain in `files*.test.ts`: native rollback at set,
+context, provenance and tail stages; both actual PostgreSQL waiter orders for
+source suppression/destination/actor changes and custody cleanup; historical bytes,
+independent promotion, change accounts, summary gaps and private-state isolation.
+`files-attachments-upgrade` compares every pre0020 column plus retained semantic
+shared/personal/combined traversals. Its uncertain upload uses a native staged
+version without a database acknowledgement, not a bypass of version immutability.
+Separate StrictMode promotion tests exercise durable recovery, delayed denial,
+local save failure and late navigation/identity responses. Production Chromium
+adds opening/reply authoring, exact downloads, independent promotion, multiple lost
+acknowledgements and legacy contribution correction to the existing file suite.
+Attribution regressions mount the production `ResourcePage`, not a settings-only
+fixture. Unavailable provenance must redact source details, withdraw old bodies and
+siblings, and issue a fresh independent artifact read. Late positive/negative reads,
+identity/navigation changes and independent artifact refusal retain their fences.
+Chromium opens attribution after source suppression, downloads exact bytes before
+and after reload, then suppresses the artifact and verifies whole-view withdrawal.
 Upgrade hashes every populated pre0019 table and checks
 old format replay, references and private checkpoints. Production Chromium file
 journeys cover nested download, file-only presentation, revision reuse, reselection,
@@ -424,6 +441,22 @@ reloading. Publication retry must also be enabled before advancing its expiry fi
 `helpers/browser-fixtures.ts` shares the existing synthetic PostgreSQL/HTTPS server
 and preserves context-before-server disposal (Lore `LC-20261014-WZF5`). Test bodies,
 normal timeouts, worker count and retry policy are unchanged by diagnostics.
+Full invocations now use `scripts/lib/browser-batches.mjs`: the private inventory
+reporter discovers hashed test identities, then fresh sequential processes run
+whole spec files through the same containing runner. Grouping whole files preserves
+hooks/serial groups and releases V8-retained generated schemas between batches.
+Explicit Playwright arguments keep the focused single-invocation path. Validate
+each complete batch against discovery before retaining its approved JSON, then
+validate the union under the original bounds. Missing/duplicate/foreign identities,
+invalid candidates and interruption withhold the aggregate; a later success cannot
+erase an earlier failure. Publish completion after all retained bundles. Node
+counters and browser captures still use the existing coverage directories/merger.
+`bootstrap/browser-batches.test.mjs` exercises the real worker exits, interruption,
+failure/canary containment, per-process Node flushes and aggregate integrity.
+Every nested probe, including failure/invalid/interrupted runs, owns its coverage
+directory. Never mix its Playwright-transformed application imports into the
+enclosing Node suite's tsx collection; the unchanged map-consistency guard rejects
+those incompatible generated coordinates. The real browser stage stays separate.
 The HTTPS fixture keeps a TCP listener before freezing the identity origin and
 passes that server through Fastify's listen call. Cleanup ownership transfers on
 the HTTPS listening event; closing the original server afterward closes HTTPS too.
@@ -450,8 +483,17 @@ Combined coverage separately publishes authored source and numeric reports from
 `coverage/approved/`; never upload raw counters, maps, logs or browser profiles.
 `helpers/browser-coverage.ts` samples before navigation/disposal without changing
 test deadlines or holding application requests. `tests/coverage/verify.ts` guards
-real Node/browser branch merging, unmapped cold code and safe disposal. Coverage
-method, gates and artifact constraints: root README Coverage and
+real Node/browser branch merging, unmapped cold code and safe disposal. The collector
+binds each parsed script synchronously to the built asset's SHA-256, UTF-16 length
+and zero source offset. Fetching script text afterward races navigation: Chromium
+can report `No script for id` even though the parse event has the matching hash.
+Missing/mismatched identity still refuses coverage; URLs alone never prove source.
+`unit/browser-coverage.test.ts` reproduces retired source retrieval and checks
+fail-closed identities; the real Chromium probe checks Unicode, repeated navigation
+counters and same-URL/same-length changed bytes. Retained failed assertion steps can
+include successful polls' earlier attempts; inspect capture issues and teardown
+steps before attributing a covered browser failure to its last polling assertion.
+Coverage method, gates and artifact constraints: root README Coverage and
 `scripts/lib/coverage/`.
 `integration/participation.test.ts` checks credential metadata and logout through
 the production identity routes over actual HTTPS. It verifies administrator-only
@@ -476,7 +518,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 138 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 141 collected tests and <17 MiB/candidate. The test count includes
 the seven moderation scenarios so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
@@ -577,6 +619,11 @@ templates and Add/Check/Refresh controls, without changing bounds or raw contain
 mention remount/removal assertions. Status misses and transient failures preserve
 uncertain bodies; recorded file expiry through status or exact retry cannot unlock
 correction until rejection is durably saved. Independent drafts stay untouched.
+The Chromium conflict-correction restart case waits for the replacement URL, holds
+the real journal lock across text/title edits, and verifies the complete saved body
+before reload. A replacement key/base alone does not prove later autosaves finished;
+input completion is not a persistence barrier. Reload, navigation and process restart
+must each retain both edited fields.
 
 Change notes/accounts use `changes*.test.ts`: populated pre-0011 old-column/digest
 preservation, exact client/server restart, both authority/suppression guard orders,

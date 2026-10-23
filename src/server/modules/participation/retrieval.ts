@@ -13,7 +13,7 @@ import type { ActorContext } from '../publication/actor.js';
 import { identityOf } from '../publication/actor.js';
 import { PublicationError, safeError } from '../publication/errors.js';
 import { lockActor, lockContext, requireRevision } from '../publication/guards.js';
-import { hasChangeSchema } from '../../db/schema-capabilities.js';
+import { hasChangeSchema, hasAttachmentSchema } from '../../db/schema-capabilities.js';
 import { hierarchyVersion, structureGuard } from './organization-context.js';
 import { declaration, revisionReferences } from './reference-context.js';
 
@@ -245,6 +245,40 @@ export class ParticipationRetrieval {
               manifest_url: `/api/v1/artifacts/${id}/revisions/${selected}/files`,
             },
           }
+        : {}),
+      ...(view.kind === 'contribution' &&
+      (await hasAttachmentSchema(tx)) &&
+      (
+        await tx.query(
+          'SELECT revision_id FROM loom.contribution_attachment_sets WHERE revision_id=$1',
+          [selected],
+        )
+      ).rowCount
+        ? {
+            attachment_set: {
+              version: 'contribution-attachments-v1' as const,
+              files: (
+                await tx.query<{ id: string; path: string }>(
+                  'SELECT id,path FROM loom.file_contexts WHERE contribution_id=$1 AND revision_id=$2 ORDER BY path LIMIT 16',
+                  [id, selected],
+                )
+              ).rows.map((f) => ({
+                path: f.path,
+                source: { revision_id: selected, file_id: f.id },
+              })),
+              manifest_url: `/api/v1/contributions/${id}/revisions/${selected}/attachments`,
+            },
+          }
+        : {}),
+      ...(view.kind === 'artifact' &&
+      (await hasAttachmentSchema(tx)) &&
+      (
+        await tx.query(
+          'SELECT revision_id FROM loom.attachment_promotions WHERE artifact_id=$1 AND revision_id=$2',
+          [id, selected],
+        )
+      ).rowCount
+        ? { provenance_url: `/api/v1/artifacts/${id}/revisions/${selected}/provenance` }
         : {}),
       content: {
         ...(body.content_format !== 'loom-markdown-v1'
