@@ -552,6 +552,10 @@ suite still uses actual HTTPS, virtual WebAuthn and disposable PostgreSQL.
 
 CI uses an immutable upload action, an always-running validator and an explicit
 upload-ready output, with three-day retention and no continue-on-error.
+The integration job's 60-minute containing budget includes complete sequential
+coverage, reporting, smoke and persistence; it does not change individual test
+deadlines, one worker or zero retries. Check hosted total duration when suite
+growth makes that budget insufficient; preserve every suite and gate.
 The manual `verify_failure_upload` input runs the probe configuration after the
 normal browser suite; expect a failed step/run and a successful approved upload.
 It defaults off and never applies to push/PR runs. Contract: `LC-20261014-3D4P`.
