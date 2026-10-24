@@ -40,6 +40,16 @@ export class PublicationError extends Error {
   }
 }
 
+// Issued only after source and action authority are established. A local or
+// inherited publication restriction does not revoke independent reading access.
+export class PublicationClosedError extends PublicationError {
+  constructor() {
+    super('forbidden');
+    this.message =
+      'This discussion or topic is closed to publication. Retained content stays readable. Keep your draft and exact request for recovery or explicit correction.';
+  }
+}
+
 export function safeError(error: unknown): never {
   if (error instanceof PublicationError) throw error;
   const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;

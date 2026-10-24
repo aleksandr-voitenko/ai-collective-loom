@@ -6,7 +6,7 @@ import type {
   UploadStatusValue,
 } from '../../../contracts/files.js';
 import { fileLimits } from '../../../contracts/files.js';
-import { PublicationError } from '../publication/errors.js';
+import { PublicationClosedError, PublicationError } from '../publication/errors.js';
 import {
   requireRevision,
   authorizePublication,
@@ -73,11 +73,10 @@ export async function authorizeUpload(
     target.kind === 'opening' ? 'area' : target.kind === 'reply' ? 'contribution' : target.kind;
   const chain = await lockContext(tx, target.resource_id, 'resolution', [kind]);
   if (target.kind === 'artifact' || target.kind === 'contribution') {
-    await authorizePublication(tx, actor, chain);
     if (!chain[0]!.current_revision_id) throw new PublicationError('unavailable');
     await requireRevision(tx, target.resource_id, chain[0]!.current_revision_id);
+    await authorizePublication(tx, actor, chain);
   } else {
-    if (chain.some((r) => !r.publication_open)) throw new PublicationError('forbidden');
     if (target.kind === 'reply') {
       if (
         !chain[0]!.current_revision_id ||
@@ -87,6 +86,8 @@ export async function authorizeUpload(
         throw new PublicationError('unavailable');
       await requireRevision(tx, target.resource_id, chain[0]!.current_revision_id);
     }
+    // Certify closure only after the selected publication remains readable.
+    if (chain.some((r) => !r.publication_open)) throw new PublicationClosedError();
   }
 }
 /** Called under custody and source guards, before the common clock tail. */

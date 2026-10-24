@@ -567,8 +567,8 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 148 collected tests and <17 MiB/candidate. The test count includes
-the seven moderation scenarios so combined coverage captures the complete suite;
+128 KiB/document, 157 collected tests and <17 MiB/candidate. The test count includes
+the discussion closure journeys so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
@@ -602,6 +602,22 @@ are curated separately, never included in the approved diagnostic upload candida
 cookie/bearer authority, immutable identities/scopes, exclusive/shared structure-lock
 barriers in both commit orders, quotas, replay, rollback and restart. Its quota data
 is synthetic fixture state, not a supported product mutation or data-reset procedure.
+
+`integration/organization-discussion*.test.ts` covers local/inherited closure,
+suppression, publication and authority races, rollback and exact retry, pre-0024
+populated upgrade and standalone HTTPS close/open with credential replacement.
+Combined suppression/closure cases require source denials for reply parents, fresh
+summary declarations and exact promotions; historical summary carry-forward remains
+independent. The authority race
+orders two UUIDs so revocation holds the original author's row before waiting for
+the closer; this deterministically detects repeated-resource-update FK deadlocks.
+Structural checks inspect Following and both Updates modes, immutable historical
+membership separately from current paths, coverage and private state. Mounted
+`web/discussion-closure.test.tsx` uses actual production hosts under StrictMode.
+Compiled organization/files journeys cover K1/K2, both lost-response points, prepared
+attachments and publication status after closure. Opt-in
+`LOOM_DISCUSSION_REVIEW_SCREENS=1` curates synthetic narrow-screen evidence under
+`/tmp/loom-review-evidence/discussions`, separately from approved diagnostics.
 
 `web/organization.test.tsx` mounts actual development React in StrictMode with
 JSDOM and HTTP stubs. It checks successful/rejected command completion and delayed

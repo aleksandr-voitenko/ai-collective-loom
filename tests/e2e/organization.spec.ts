@@ -1,7 +1,7 @@
 import type { Page, BrowserContext } from '@playwright/test';
 import { test, expect } from '../helpers/browser-fixtures.js';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { syntheticServer } from '../helpers/participation-server.js';
@@ -239,4 +239,39 @@ test('destination pagination fails explicitly after a hierarchy change and refre
   await create(page,'Intervening topic');await page.getByRole('button',{name:'Next topics'}).click();await expect(page.getByRole('alert')).toContainText('Start this view again');
   await expect(page.getByRole('button',{name:'Confirm move',exact:true})).toBeVisible();await page.getByRole('button',{name:'Refresh topics'}).click();await expect(page.getByRole('button',{name:'Next topics'})).toBeEnabled();await page.getByRole('button',{name:'Next topics'}).click();
   await expect(page.getByRole('heading',{name:'Choose a destination',exact:true})).toBeFocused();
+});
+
+test('discussion close and reopen controls retain readable history and distinguish inherited closure',async({page,context,server})=>{
+ const f=await setup(page,context,server);
+ const opened=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.general,title:'Lifecycle discussion',content:content('Readable discussion history')});
+ const other=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.general,title:'Independent discussion',content:content('Still open')});
+ const discussion=(await api(page,'/api/v1/resources/'+opened.resource_id)).discussion_id,otherId=(await api(page,'/api/v1/resources/'+other.resource_id)).discussion_id;
+ await page.goto(server.origin+'/loom/discussion/'+discussion);await page.getByRole('link',{name:'Close discussion',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(page.getByRole('heading',{name:'Close discussion',exact:true})).toBeVisible();await expect(page.getByText(/including administrator publications/)).toBeVisible();
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('button',{name:'Confirm close',exact:true}).focus();await page.keyboard.press('Enter');await view(page);
+ await expect(page.getByText(/This discussion is closed to publication/)).toBeVisible();await expect(page.getByText('Readable discussion history',{exact:true})).toBeVisible();
+ expect((await api(page,'/api/v1/discussions/'+otherId)).publication_open).toBe(true);
+ if(process.env.LOOM_DISCUSSION_REVIEW_SCREENS==='1'){await mkdir('/tmp/loom-review-evidence/discussions',{recursive:true});await page.screenshot({path:'/tmp/loom-review-evidence/discussions/closed-mobile.png',fullPage:true});}
+ await command(page,f.general,'area.close');await page.getByRole('link',{name:'Reopen discussion',exact:true}).click();await page.getByRole('button',{name:'Confirm reopen',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(page.getByText(/An ancestor topic is still closed/)).toBeVisible();await view(page);await expect(page.getByText(/locally open, but a topic above it is closed/)).toBeVisible();
+ expect((await api(page,'/api/v1/discussions/'+discussion)).local_open).toBe(true);await command(page,f.general,'area.open');await page.reload();await expect(page.getByText('Readable discussion history',{exact:true})).toBeVisible();await expect(page.getByText(/This discussion is.*closed/)).toHaveCount(0);
+ expect((await api(page,'/api/v1/resources/'+opened.resource_id)).revision_id).toBe(opened.revision_id);
+});
+
+test('lost discussion close before receipt and after commit retains K1 across reload and a second tab reopening with K2',async({page,context,server})=>{
+ const f=await setup(page,context,server),opened=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.general,title:'Recover closure',content:content('Retained opening')});
+ const discussion=(await api(page,'/api/v1/resources/'+opened.resource_id)).discussion_id;
+ await page.goto(server.origin+'/loom/organize?target='+discussion+'&action=discussion.close');
+ await page.route('**'+changes,route=>route.abort('failed'),{times:1});await page.getByRole('button',{name:'Confirm close',exact:true}).click();await expect(page.getByRole('button',{name:'Check organization status'})).toBeVisible();
+ const record=(await records(page)).find(r=>r.body.kind==='discussion.close')!;expect(record.state).toBe('uncertain');
+ await page.getByRole('button',{name:'Check organization status'}).click();await expect(page.getByText('Confirmation is unavailable. Keep this exact request; it may still commit.',{exact:true})).toBeVisible();
+ expect((await api(page,'/api/v1/discussions/'+discussion)).local_open).toBe(true);
+ await page.reload();await expect(page.getByRole('button',{name:'Retry same organization change'})).toBeVisible();
+ let sent:string|null=null;await page.route('**'+changes,async route=>{sent=route.request().postData();const result=await route.fetch();expect(result.status()).toBe(200);await route.abort('failed');},{times:1});await page.getByRole('button',{name:'Retry same organization change'}).click();await expect(page.getByRole('button',{name:'Retry same organization change'})).toBeVisible();expect(sent).toBe(JSON.stringify(record.body));
+ const other=await context.newPage();await other.goto(server.origin+'/loom/discussion/'+discussion);await other.getByRole('link',{name:'Reopen discussion',exact:true}).click();await other.getByRole('button',{name:'Confirm reopen',exact:true}).click();await expect(other.getByText('Organization change confirmed.',{exact:true})).toBeVisible();
+ await page.goto(server.origin+'/loom/help');await page.getByRole('link').filter({hasText:'organization.change · uncertain'}).click();
+ await page.getByRole('button',{name:'Retry same organization change'}).click();await expect(page.getByText(/Original decision: locally closed. Current discussion: locally open/)).toBeVisible();
+ expect((await records(page)).find(r=>r.key===record.key)!.body).toEqual(record.body);expect((await api(page,'/api/v1/discussions/'+discussion)).publication_open).toBe(true);
+ expect((await server.observer.query('SELECT count(*)::int n FROM loom.organization_operations WHERE idempotency_key=$1',[record.key])).rows[0].n).toBe(1);await other.close();
 });

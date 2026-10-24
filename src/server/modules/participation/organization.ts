@@ -347,15 +347,18 @@ export class TopicOrganization {
           );
           await this.metadata(tx, actor, id, metadataVersion, input.title, input.description);
         } else {
-          await tx.query('UPDATE loom.resources SET publication_open=$2 WHERE id=$1', [
-            id,
-            input.kind === 'area.open',
-          ]);
+          // One tuple update avoids rechecking unchanged foreign keys on a second
+          // write while identity administration holds another participant row.
+          await tx.query(
+            'UPDATE loom.resources SET publication_open=$2,organization_version=organization_version+1 WHERE id=$1',
+            [id, input.kind === 'area.open' || input.kind === 'discussion.open'],
+          );
         }
-        await tx.query(
-          'UPDATE loom.resources SET organization_version=organization_version+1 WHERE id=$1',
-          [id],
-        );
+        if ('parent_id' in input || input.kind === 'area.edit')
+          await tx.query(
+            'UPDATE loom.resources SET organization_version=organization_version+1 WHERE id=$1',
+            [id],
+          );
       }
       const hierarchy = await advanceHierarchy(tx),
         current = await this.projection(tx, actor, id);

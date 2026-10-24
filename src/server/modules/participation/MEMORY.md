@@ -273,7 +273,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–17. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–19. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;
@@ -286,7 +286,18 @@ Migration 0006 records legacy metadata as an unattributed baseline. Structural
 events share the last clock tail with explicit before/after scopes and NULL revision;
 old event scopes and content identities/revisions/editors/bookmarks stay unchanged.
 Closure is local plus inherited, blocks all new text publications/revisions even
-for administrators, and preserves reading. Reopen never clears child restrictions.
+for administrators, and preserves reading. Reopen never clears child restrictions. Guide19 adds discussion.close/open to the
+same organization-v1 namespace; migration0024 only extends its kind constraint.
+Close/open updates the flag and target version in one tuple write: a second UPDATE
+can recheck an unchanged author FK against concurrent identity administration.
+The closure race test guarantees that competing participant lock order.
+PublicationClosedError retains forbidden with certified forbidden_reason=
+publication_closed after source/action authority. Reply parent revisions, fresh
+summary source declarations and exact promotion/upload sources are checked before
+closure; immediate-base summary coverage still permits historical carry-forward.
+Status remains read-only and can
+recover eligible publication results after closure; mutation replay still checks
+closure. Discussion detail exposes local_open and effective publication_open.
 Only current administrators mutate/reconcile; audit has a separate admin-only route.
 `organization-v1` retains original outcome references and freshly authorized current
 state. Exact outcomes resolve before stale preconditions; K1→B, K2→C, retry K1 stays C.
@@ -298,7 +309,7 @@ Optional `proposal_context` keeps ordinary discussion creation/digest compatibil
 and binds affected area/settings; community-wide suggestions omit the area and
 resume at the overview instead of inventing a subject. It never reroutes a retained draft. References are
 withheld when affected sources are unavailable. `web/Organization.tsx` reuses the
-extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 7 and
+extracted `participation-state.tsx` hooks and scoped journal ownership. Guide 19, `scripts/organization-client.mjs` and
 `test:organization:postgres`/`e2e/organization.spec.ts` define the supported slice.
 
 Search (ADR-012) lives in the sibling `search/` module and reuses these exact-body
