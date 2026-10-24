@@ -9,6 +9,14 @@ The settings-policy `/loom/editing-intent` route retains private status/exact re
 and owner release after source loss, including confirmed commands. Receipts never
 rehydrate source metadata. Existing IntentStore/Web Locks preserve immutable requests
 and compare pending resource identity before new commands; no new journal prefix.
+An uncertain renewal permits a separate release only for the same notice at an
+observed version at least as new as its expected version. Unknown announcements
+and releases retain overlap protection. Explicit terminal reconciliation stores
+`editing_intent_release` beside immutable request bytes, keeping the original state
+uncertain while unblocking new intent. It requires a validated released receipt for
+the exact notice at a later version; expiry/absence/denial do not qualify. Web Locks,
+sequence checks and view ownership fence reconciliation; late settlement preserves
+its evidence. Older journal records remain readable without the optional field.
 Saved slot labels retain resource/base while renew/release bodies retain prior notice
 and expected version. Composer notices use its retained/corrected draft base rather
 than newer resource defaults. Responses arriving after route/identity departure are ignored

@@ -3,7 +3,12 @@ import { Link } from 'react-router';
 import * as C from '../contracts/reservations.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
 import { type Context, useQuery } from './participation-state.js';
-import { identityGeneration, isDefinitiveRejection, type Intent } from './participation-client.js';
+import {
+  editingIntentReleased,
+  identityGeneration,
+  isDefinitiveRejection,
+  type Intent,
+} from './participation-client.js';
 
 function useCommands(context: Context) {
   const authority = useAuthorization(),
@@ -95,6 +100,15 @@ function useCommands(context: Context) {
     receiptRecord,
     execute,
     send,
+    acknowledgeRelease: async (record: Intent) => {
+      setError('');
+      try {
+        if (receipt) await context.store.acknowledgeEditingIntentRelease(record, receipt, owned);
+        if (owned()) window.dispatchEvent(new Event('loom-editing-intent'));
+      } catch (failure) {
+        if (owned()) setError((failure as Error).message);
+      }
+    },
     dismiss: async (record: Intent) => {
       try {
         await context.store.remove(record);
@@ -113,7 +127,9 @@ function Feedback({ commands }: { commands: ReturnType<typeof useCommands> }) {
       {result && (
         <p role="status">
           {result.operation_state === 'not_recorded'
-            ? 'No recorded outcome was found. Keep the exact command; it may still commit.'
+            ? commands.receiptRecord?.editing_intent_release
+              ? 'No recorded outcome was found. The notice is permanently released; the exact command remains retained.'
+              : 'No recorded outcome was found. Keep the exact command; it may still commit.'
             : `Original ${result.action} accepted at ${result.outcome.accepted_at}, expiry ${result.outcome.expires_at}. Observed ${result.current.state} at ${result.observed_at}. Refresh notices to inspect current source metadata.`}
         </p>
       )}
@@ -163,9 +179,25 @@ function Recovery({
           )}
           {record.state === 'uncertain' ? (
             <>
-              <button disabled={commands.busy} onClick={() => void commands.execute(record)}>
-                Retry exact editing intent command
-              </button>
+              {record.editing_intent_release ? (
+                <p>
+                  Notice permanently released. The retained command no longer blocks new intent; its
+                  original outcome may still be unknown.
+                </p>
+              ) : (
+                <button disabled={commands.busy} onClick={() => void commands.execute(record)}>
+                  Retry exact editing intent command
+                </button>
+              )}
+              {!record.editing_intent_release &&
+                editingIntentReleased(record, commands.receipt) && (
+                  <button
+                    disabled={commands.busy}
+                    onClick={() => void commands.acknowledgeRelease(record)}
+                  >
+                    Keep command and unblock new intent
+                  </button>
+                )}
             </>
           ) : (
             <button disabled={commands.busy} onClick={() => void commands.dismiss(record)}>
@@ -283,7 +315,10 @@ function IntentControls({
     };
   }, []);
   const pending = commands.records.some(
-    (r) => r.state === 'uncertain' && r.slot.split(':')[1] === resource.toLowerCase(),
+    (r) =>
+      r.state === 'uncertain' &&
+      !r.editing_intent_release &&
+      r.slot.split(':')[1] === resource.toLowerCase(),
   );
   return (
     <div>
@@ -346,7 +381,7 @@ function IntentControls({
                       </button>
                     )}
                     <button
-                      disabled={commands.busy || pending || stale}
+                      disabled={commands.busy || stale}
                       onClick={() =>
                         void commands.send(
                           'release',

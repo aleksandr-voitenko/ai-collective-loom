@@ -152,3 +152,103 @@ test('invalid browser duration remains correctable without creating uncertain cu
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Announce editing intent'})));
   await m.answer('/api/v1/editing-intent/announce',f.receipt);assert.equal(f.c.store.all()[0]!.body.purpose,'Retained purpose');assert.equal(f.c.store.all()[0]!.body.duration_minutes,1);
 });
+
+for(const withdrawal of ['source','editor'] as const)test('private release reconciles an unreceived renewal after '+withdrawal+' withdrawal without discarding custody',async t=>{
+  const f=fixture(),target={resource:f.id,base:f.base};
+  const announcement=await f.c.store.prepareEditingIntent('announce',{resource_id:f.id,base_revision_id:f.base,purpose:'Retained intent',scope:{kind:'whole'}},target,()=>true);
+  await f.c.store.settle(announcement,{state:'committed'});
+  const other=await f.c.store.prepareEditingIntent('renew',{notice_id:randomUUID(),expected_version:1},{resource:randomUUID(),base:randomUUID()},()=>true);
+  const otherRaw=localStorage.getItem(f.c.store.prefix+other.key),m=mount(t,f);
+  await m.answer('/api/v1/resources/'+f.id,f.revision);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect editing intent'})));await m.answer(path(f),f.page);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Renew editing intent'})));
+  await m.answer('/api/v1/editing-intent/renew',{error:{code:'service_unavailable',message:'Request never reached server'}},503);
+  const renewal=f.c.store.all().find(r=>r.kind==='editing-intent.renew'&&r.key!==other.key)!;
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh editing intent'})));
+  if(withdrawal==='source')await m.answer(path(f),{error:{code:'unavailable',message:'Withdrawn source'}},404);
+  else{await m.answer(path(f),{...f.page,items:[{...f.page.items[0],owner_may_edit:false}]});assert.equal((screen.getByRole('button',{name:'Release editing intent'}) as HTMLButtonElement).disabled,false);}
+  await act(async()=>m.router.navigate('/loom/editing-intent'));
+  const group=()=>within(screen.getByRole('group',{name:'renew '+renewal.key}));
+  await act(async()=>fireEvent.click(group().getByRole('button',{name:'Check editing intent outcome'})));
+  await m.answer('/api/v1/editing-intent/status',{operation_state:'not_recorded'});
+  await act(async()=>fireEvent.click(group().getByRole('button',{name:'Retry exact editing intent command'})));
+  await m.answer('/api/v1/editing-intent/renew',{error:{code:withdrawal==='source'?'unavailable':'forbidden',message:'Authority withdrawn'}},withdrawal==='source'?404:403);
+  assert.equal(f.c.store.all().find(r=>r.key===renewal.key)!.state,'uncertain');
+  await act(async()=>fireEvent.click(within(screen.getByRole('group',{name:'announce '+announcement.key})).getByRole('button',{name:'Check editing intent outcome'})));
+  await m.answer('/api/v1/editing-intent/status',f.receipt);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Release recovered editing intent'})));
+  await m.answer('/api/v1/editing-intent/release',{...f.receipt,action:'release',outcome:{...f.receipt.outcome,version:2,released_at:f.receipt.observed_at},current:{...f.receipt.current,version:2,state:'released',released_at:f.receipt.observed_at}});
+  assert.equal(f.c.store.all().find(r=>r.key===renewal.key)!.state,'uncertain','Release is not proof of the earlier command outcome');
+  await assert.rejects(f.c.store.prepareEditingIntent('announce',announcement.body,target,()=>true),/Resolve/);
+  await act(async()=>fireEvent.click(group().getByRole('button',{name:'Keep command and unblock new intent'})));
+  await waitFor(()=>assert.ok(group().getByText(/no longer blocks new intent/)));
+  const retained=f.c.store.all().find(r=>r.key===renewal.key)!;assert.deepEqual(retained.body,renewal.body);assert.equal(retained.key,renewal.key);assert.equal(retained.state,'uncertain');
+  assert.equal(localStorage.getItem(f.c.store.prefix+other.key),otherRaw);
+  await act(async()=>fireEvent.click(group().getByRole('button',{name:'Check editing intent outcome'})));
+  await m.answer('/api/v1/editing-intent/status',{operation_state:'not_recorded'});assert.ok(screen.getByText(/notice is permanently released; the exact command remains retained/));
+  await act(async()=>m.router.navigate('/loom/resource/'+f.id));
+  const retry=screen.queryAllByRole('button',{name:'Retry protected view'})[0];if(retry)await act(async()=>fireEvent.click(retry));
+  await m.answer('/api/v1/resources/'+f.id,f.revision);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect editing intent'})));await m.answer(path(f),{...f.page,items:[]});
+  await act(async()=>fireEvent.change(screen.getByLabelText('Purpose'),{target:{value:'New deliberate intent'}}));
+  assert.equal((screen.getByRole('button',{name:'Announce editing intent'}) as HTMLButtonElement).disabled,false);
+});
+
+test('terminal reconciliation retains exact custody across late replies and a new store; invalid evidence cannot unblock intent',async()=>{
+  const f=fixture(),store=f.c.store,target={resource:f.id,base:f.base};
+  const renewal=await store.prepareEditingIntent('renew',{notice_id:f.receipt.current.notice_id,expected_version:1},target,()=>true);
+  const released:IntentResultView={...f.receipt,current:{...f.receipt.current,version:2,state:'released',released_at:f.receipt.observed_at}};
+  for(const evidence of [{operation_state:'not_recorded'} as const,f.receipt,{...released,current:{...released.current,state:'expired' as const}},{...released,current:{...released.current,released_at:null}},{...released,current:{...released.current,notice_id:randomUUID()}},{...released,current:{...released.current,version:1}}])await assert.rejects(store.acknowledgeEditingIntentRelease(renewal,evidence,()=>true),/confirmed terminal/);
+  await assert.rejects(store.acknowledgeEditingIntentRelease(renewal,released,()=>false),{name:'AbortError'});
+  const retained=await store.acknowledgeEditingIntentRelease(renewal,released,()=>true);
+  assert.deepEqual(retained.body,renewal.body);assert.equal(retained.state,'uncertain');
+  await assert.rejects(store.acknowledgeEditingIntentRelease(renewal,released,()=>true),/changed in another view/);
+  await assert.rejects(store.prepareDispatch(renewal,renewal.body),/changed in another view/);
+  const later=await store.settle(renewal,{state:'committed'});assert.deepEqual(later.editing_intent_release,released);assert.deepEqual(later.body,renewal.body);
+  const reload=new IntentStore(store.instance,store.participant,localStorage,location.origin,locks);assert.deepEqual(reload.all(),[later]);
+  const next=await reload.prepareEditingIntent('announce',{resource_id:f.id,base_revision_id:f.base,purpose:'New intention',scope:{kind:'whole'}},target,()=>true);
+  await assert.rejects(reload.prepareEditingIntent('release',{notice_id:f.receipt.current.notice_id,expected_version:2},target,()=>true),/Resolve/,'An unknown announcement is never bypassed');
+  await assert.rejects(reload.acknowledgeEditingIntentRelease(next,released,()=>true),/confirmed terminal/);
+  localStorage.setItem(store.prefix+later.key,JSON.stringify({...later,editing_intent_release:{...released,current:{...released.current,state:'active'}}}));assert.throws(()=>reload.all(),/terminal editing intent receipt is incompatible/);
+});
+
+test('release exception is notice-specific and never overlaps another uncertain release',async()=>{
+  const f=fixture(),store=f.c.store,target={resource:f.id,base:f.base};
+  const renewal=await store.prepareEditingIntent('renew',{notice_id:f.receipt.current.notice_id,expected_version:2},target,()=>true);
+  for(const body of [{notice_id:randomUUID(),expected_version:2},{notice_id:f.receipt.current.notice_id,expected_version:1}])await assert.rejects(store.prepareEditingIntent('release',body,target,()=>true),/Resolve/);
+  await assert.rejects(store.prepareEditingIntent('renew',renewal.body,target,()=>true),/Resolve/);
+  const release=await store.prepareEditingIntent('release',{notice_id:f.receipt.current.notice_id.toUpperCase(),expected_version:2},target,()=>true);
+  await assert.rejects(store.prepareEditingIntent('release',release.body,target,()=>true),/Resolve/);
+  const receipt:IntentResultView={...f.receipt,current:{...f.receipt.current,version:3,state:'released',released_at:f.receipt.observed_at}};
+  const reconciled=await store.acknowledgeEditingIntentRelease(release,receipt,()=>true);assert.equal(reconciled.state,'uncertain');assert.deepEqual(reconciled.body,release.body);
+});
+
+test('failed terminal reconciliation write preserves the earlier request and its overlap guard',async t=>{
+  const f=fixture(),store=f.c.store,target={resource:f.id,base:f.base};
+  const renewal=await store.prepareEditingIntent('renew',{notice_id:f.receipt.current.notice_id,expected_version:1},target,()=>true),before=Object.entries(localStorage);
+  const receipt:IntentResultView={...f.receipt,current:{...f.receipt.current,version:2,state:'released',released_at:f.receipt.observed_at}};
+  t.mock.method(Object.getPrototypeOf(localStorage),'setItem',()=>{});
+  await assert.rejects(store.acknowledgeEditingIntentRelease(renewal,receipt,()=>true),/could not be saved/);
+  assert.deepEqual(Object.entries(localStorage),before);await assert.rejects(store.prepareEditingIntent('renew',renewal.body,target,()=>true),/Resolve/);
+});
+
+for(const departure of ['storage','route','identity'] as const)test('mounted terminal reconciliation preserves custody after '+departure,async t=>{
+  const f=fixture(),store=f.c.store,target={resource:f.id,base:f.base};
+  const a=await store.prepareEditingIntent('announce',{resource_id:f.id,base_revision_id:f.base,purpose:'Retained intention',scope:{kind:'whole'}},target,()=>true);await store.settle(a,{state:'committed'});
+  const r=await store.prepareEditingIntent('renew',{notice_id:f.receipt.current.notice_id,expected_version:1},target,()=>true),m=mount(t,f,'/loom/editing-intent');
+  await act(async()=>fireEvent.click(within(screen.getByRole('group',{name:'announce '+a.key})).getByRole('button',{name:'Check editing intent outcome'})));
+  await m.answer('/api/v1/editing-intent/status',{...f.receipt,current:{...f.receipt.current,version:2,state:'released',released_at:f.receipt.observed_at}});
+  const before=Object.entries(localStorage);
+  if(departure==='storage'){
+    t.mock.method(Object.getPrototypeOf(localStorage),'setItem',()=>{});
+    await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Keep command and unblock new intent'})));
+    await waitFor(()=>assert.match(screen.getByRole('alert').textContent!,/could not be saved/));
+  }else{
+    let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+    t.mock.method(locks,'request',async(_name:string,work:()=>unknown)=>{await gate;return work();});
+    await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Keep command and unblock new intent'})));
+    await act(async()=>{if(departure==='identity')invalidateIdentity();else void m.router.navigate('/other');});
+    await act(async()=>release());
+  }
+  assert.deepEqual(Object.entries(localStorage),before);assert.equal(store.all().find(i=>i.key===r.key)!.state,'uncertain');
+});

@@ -218,6 +218,10 @@ Editing intent recovery at `/loom/editing-intent` remains reachable after source
 Receipts return original accepted timestamps/version separately from current temporal
 state, without protected source metadata. An old retry cannot reactivate a notice
 or mutate a replacement. Source restoration does not reset its original expiry.
+A lost renewal does not prevent a separate release of that same notice. After a
+receipt confirms permanent release, “Keep command and unblock new intent” retains
+the exact uncertain command and release evidence while allowing a deliberate new
+announcement. Missing outcomes, failed retries and expiry alone do not unblock it.
 
 The independent `scripts/editing-intent-client.mjs` accepts `--origin`, `--ca`,
 `--credential-file` and a new `--journal` per command. Use `--action prepare

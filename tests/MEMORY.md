@@ -12,7 +12,13 @@ multiple immutable journals, failed saves/readbacks/capacity and late denial/rou
 responses. `reservations.spec.ts` joins normal Chromium batches with four journeys:
 all kinds/overlap/background expiry, multiple pending commands across reload,
 failed storage and optional failures versus publication, and
-source withdrawal with safe private cleanup. LOOM_RESERVATIONS_REVIEW_SCREENS=1
+source/editor withdrawal with an unreceived renewal, private terminal release and
+explicit reconciliation before replacement. The unreceived case aborts before
+route.fetch; the committed lost-response control fetches before aborting. Late exact
+renewal after restoration/replacement must conflict without changing either notice.
+Mounted tests also cover reconciliation readback failure, stale tabs, departure,
+invalid release evidence and late settlement without losing immutable command bytes.
+LOOM_RESERVATIONS_REVIEW_SCREENS=1
 curates a synthetic narrow screenshot under /tmp/loom-review-evidence/reservations;
 it is separate from diagnostic artifacts. Native input byte tests must include JSON
 escaping: maximal raw fields can exceed the independent4KiB transport envelope.

@@ -48,7 +48,12 @@ test('lost announcement and renewal survive reload, current release and exact re
   await refresh(page);await page.route('**/api/v1/editing-intent/renew',async route=>{await route.fetch();await route.abort('failed');},{times:1});
   await page.getByRole('button',{name:'Renew editing intent',exact:true}).click();await expect(page.getByRole('button',{name:'Retry exact editing intent command',exact:true})).toBeEnabled();
   const renewal=await journal(page,'editing-intent.renew');const current=(await api(page,base+'/status',{action:'renew',idempotency_key:renewal.key})).current;
-  await api(page,base+'/release',{idempotency_key:randomUUID(),notice_id:current.notice_id,expected_version:current.version});
+  await page.goto(server.origin+'/loom/editing-intent');
+  await page.getByRole('group',{name:'announce '+first.key,exact:true}).getByRole('button',{name:'Check editing intent outcome',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Release recovered editing intent',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'Release recovered editing intent',exact:true}).click();await expect(page.getByText(/Observed released at/)).toBeVisible();
+  const released=await journal(page,'editing-intent.release');expect(released.body.expected_version).toBe(current.version);
+  await page.getByRole('group',{name:'release '+released.key,exact:true}).getByRole('button',{name:'Dismiss resolved editing intent command',exact:true}).click();
   const b=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Second pending command',content:plain('Second source')});
   await open(page,server.origin,b.resource_id);await announce(page,'Second intent');await refresh(page);
   await page.route('**/api/v1/editing-intent/release',async route=>{await route.fetch();await route.abort('failed');},{times:1});
@@ -76,18 +81,53 @@ test('optional retrieval and capacity failures preserve complete composer drafts
   const saved=await journal(page,'revision.publish');expect(saved.body.content.text).toBe('Complete authored draft survives notice failure');expect((await api(page,'/api/v1/resources/'+a.resource_id)).revision_id).toBe(saved.result.revision_id);
 });
 
-test('held source response cannot restore notices after suppression; owner private release remains usable',async({page,context,server})=>{
-  const f=await setup(page,context,server),a=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Withdrawn intent',content:plain('Withdrawn body')});
-  await open(page,server.origin,a.resource_id);await announce(page);await refresh(page);
-  let release!:()=>void,entered!:()=>void;const entry=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
-  await page.route('**/api/v1/editing-intent/resources/*',async route=>{const response=await route.fetch();entered();await gate;await route.fulfill({response});},{times:1});
-  await page.getByRole('button',{name:'Refresh editing intent',exact:true}).click();await entry;
-  const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+a.resource_id)).body;
-  await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version});
-  // A separate current source read delivers denial through the real notice host.
-  await page.getByRole('button',{name:'Refresh editing intent',exact:true}).click();await expect(page.getByRole('button',{name:'Retry protected view',exact:true})).toBeVisible();release();
-  await expect(page.getByText('Shorten the opening',{exact:true})).toHaveCount(0);await expect(page.getByText('Withdrawn body',{exact:true})).toHaveCount(0);
-  await page.goto(server.origin+'/loom/editing-intent');await page.getByRole('button',{name:'Check editing intent outcome',exact:true}).click();await expect(page.getByRole('button',{name:'Release recovered editing intent',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Release recovered editing intent',exact:true}).click();await expect(page.getByText(/Observed released at/)).toBeVisible();
-  await expect(page.getByText('Withdrawn body',{exact:true})).toHaveCount(0);
+test('unreceived renewals survive withdrawal, private terminal release and replacement without late reactivation',async({page,context,server})=>{
+  const f=await setup(page,context,server);
+  for(const withdrawal of ['source','editor']){
+    const a=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Withdrawn intent '+withdrawal,content:plain('Withdrawn body '+withdrawal)});
+    await open(page,server.origin,a.resource_id);await announce(page);await refresh(page);
+    // Find the announcement for this exact resource when the second scenario shares the journal.
+    const announcement=await page.evaluate(id=>Object.entries(localStorage).filter(([k])=>k.startsWith('loom.intent.v1:')).map(([,v])=>JSON.parse(v)).find(r=>r.kind==='editing-intent.announce'&&r.body.resource_id===id),a.resource_id);
+    // Unlike route.fetch()+abort, this request is lost BEFORE the server receives it.
+    await page.route('**/api/v1/editing-intent/renew',route=>route.abort('failed'),{times:1});
+    await page.getByRole('button',{name:'Renew editing intent',exact:true}).click();await expect(page.getByRole('button',{name:'Retry exact editing intent command',exact:true})).toBeEnabled();
+    const renewal=await page.evaluate(id=>Object.entries(localStorage).filter(([k])=>k.startsWith('loom.intent.v1:')).map(([,v])=>JSON.parse(v)).find(r=>r.kind==='editing-intent.renew'&&r.slot.split(':')[1]===id),a.resource_id);
+    expect(await api(page,base+'/status',{action:'renew',idempotency_key:renewal.key})).toEqual({operation_state:'not_recorded'});
+    let restore:()=>Promise<void>;
+    if(withdrawal==='source'){
+      let release!:()=>void,entered!:()=>void;const entry=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+      await page.route('**/api/v1/editing-intent/resources/*',async route=>{const response=await route.fetch();entered();await gate;await route.fulfill({response});},{times:1});
+      await page.getByRole('button',{name:'Refresh editing intent',exact:true}).click();await entry;
+      const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+a.resource_id)).body;
+      const suppressed=await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version});expect(suppressed.status).toBe(200);
+      await page.getByRole('button',{name:'Refresh editing intent',exact:true}).click();await expect(page.getByRole('button',{name:'Retry protected view',exact:true})).toBeVisible();release();
+      await expect(page.getByText('Shorten the opening',{exact:true})).toHaveCount(0);await expect(page.getByText('Withdrawn body '+withdrawal,{exact:true})).toHaveCount(0);
+      restore=async()=>{const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+a.resource_id)).body;expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:false,expected_version:state.version})).status).toBe(200);};
+    }else{
+      const editors=(await f.admin.call('/api/v1/resources/'+a.resource_id+'/editors')).body;
+      expect((await f.admin.call('/api/v1/editors',{idempotency_key:randomUUID(),resource_id:a.resource_id,expected_version:editors.version,participant_ids:[]})).status).toBe(200);
+      await refresh(page);await expect(page.getByRole('button',{name:'Release editing intent',exact:true})).toBeEnabled();
+      restore=async()=>{const editors=(await f.admin.call('/api/v1/resources/'+a.resource_id+'/editors')).body;expect((await f.admin.call('/api/v1/editors',{idempotency_key:randomUUID(),resource_id:a.resource_id,expected_version:editors.version,participant_ids:[f.person]})).status).toBe(200);};
+    }
+    await page.goto(server.origin+'/loom/editing-intent');await page.reload();
+    const group=page.getByRole('group',{name:'renew '+renewal.key,exact:true});
+    await group.getByRole('button',{name:'Check editing intent outcome',exact:true}).click();await expect(page.getByText(/No recorded outcome/)).toBeVisible();
+    await group.getByRole('button',{name:'Retry exact editing intent command',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();
+    expect((await journal(page,'editing-intent.renew',renewal.key)).state).toBe('uncertain');
+    const unrelated=await page.evaluate(key=>Object.entries(localStorage).filter(([k])=>!k.endsWith(key)),renewal.key);
+    await page.getByRole('group',{name:'announce '+announcement.key,exact:true}).getByRole('button',{name:'Check editing intent outcome',exact:true}).click();
+    await page.getByRole('button',{name:'Release recovered editing intent',exact:true}).click();await expect(page.getByText(/Observed released at/)).toBeVisible();
+    expect((await journal(page,'editing-intent.renew',renewal.key)).state).toBe('uncertain');
+    await group.getByRole('button',{name:'Keep command and unblock new intent',exact:true}).click();await expect(group.getByText(/no longer blocks new intent/)).toBeVisible();
+    await page.reload();await expect(group.getByText(/no longer blocks new intent/)).toBeVisible();
+    const retained=await journal(page,'editing-intent.renew',renewal.key);expect(retained.body).toEqual(renewal.body);expect(retained.state).toBe('uncertain');
+    for(const [key,value] of unrelated.filter(([,v])=>{try{return JSON.parse(v).key!==announcement.key;}catch{return true;}}))expect(await page.evaluate(k=>localStorage.getItem(k),key)).toBe(value);
+    await restore();await open(page,server.origin,a.resource_id);await announce(page,'Replacement intent');
+    const before=await api(page,base+'/resources/'+a.resource_id),replacement=before.items.find((r:any)=>r.state==='active');expect(replacement.notice_id).not.toBe(renewal.body.notice_id);
+    // Deliver the exact old command after release AND replacement. It cannot take effect.
+    const self=await api(page,'/api/v1/identity/self');const late=await page.request.post(server.origin+base+'/renew',{data:renewal.body,headers:{origin:server.origin,'x-loom-csrf':self.csrf}});expect(late.status()).toBe(409);
+    const after=await api(page,base+'/resources/'+a.resource_id);expect(after.items).toEqual(before.items);
+    expect((await api(page,base+'/status',{action:'announce',idempotency_key:announcement.key})).current.state).toBe('released');
+    expect(await api(page,base+'/status',{action:'renew',idempotency_key:renewal.key})).toEqual({operation_state:'not_recorded'});
+  }
 });

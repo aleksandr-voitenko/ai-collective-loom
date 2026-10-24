@@ -62,6 +62,15 @@ notice errors/capacity do not disable Publish. Protected metadata uses existing
 authorization leases; private recovery remains separately reachable. Focus/background
 changes mark observations stale, never renew. Explicit refresh leaves drafts intact.
 
+Recovery permits a separate exact-notice release past an uncertain renewal, since
+terminal release fences future renewal effects even if the earlier outcome is
+unknown. It does not bypass an unknown announcement or release. After a matching
+terminal receipt, explicit reconciliation retains the immutable request and unknown
+outcome with separate release evidence, allowing a new deliberate intent. Absence,
+expiry and authorization refusals do not prove rollback and cannot do this. Late
+settlement retains terminal evidence. This relies on irreversible release and unique
+notice identity; revisit the client rule if either server guarantee changes.
+
 ## Alternatives and reconsideration
 
 Exclusive edit locks, presence heartbeats and coupling release to publication would
