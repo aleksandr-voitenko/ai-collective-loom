@@ -17,6 +17,8 @@ export const OrganizationKind = Type.Union(
     'artifact.move',
     'area.open',
     'area.close',
+    'discussion.open',
+    'discussion.close',
   ].map((k) => Type.Literal(k)),
 );
 const version = Type.Integer({ minimum: 0, maximum: 2147483646 });
@@ -36,7 +38,7 @@ export const OrganizationInput = Type.Union([
   ...(['discussion.move', 'artifact.move'] as const).map((kind) =>
     Type.Object({ ...target, kind: Type.Literal(kind), parent_id: UUID }, closed),
   ),
-  ...(['area.open', 'area.close'] as const).map((kind) =>
+  ...(['area.open', 'area.close', 'discussion.open', 'discussion.close'] as const).map((kind) =>
     Type.Object({ ...target, kind: Type.Literal(kind) }, closed),
   ),
 ]);

@@ -48,6 +48,16 @@ embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundar
 `ParticipationDiscussion.tsx` keeps discussion traversal and reply expansion together;
 reading and reference siblings use distinct revision keys (LC-20261018-QWNB).
 
+Discussion headers distinguish local closure from inherited topic closure; only
+administrators receive the contextual close/reopen organization links. The existing
+Organization journal keeps the same scope and bytes, with original decision versus
+current local/effective state displayed on recovery. No reopening resends drafts.
+`response-contracts.ts` accepts certified `forbidden_reason: publication_closed`
+only for publication/preparation/upload endpoints. This retains independent readable
+history after closure; generic forbidden/identity/source loss still withdraws it.
+Mounted `discussion-closure` tests use the actual ActiveView/resource/organization
+hosts, including contribution/summary intents and storage refusal before dispatch.
+
 `ParticipationComposer.tsx` coordinates authored drafts, correction and exact retry.
 `composer-draft.ts` derives routes/targets/capabilities from its six-kind caller
 operation union and owns pure draft construction/comparison/correction transitions.

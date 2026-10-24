@@ -2,7 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { FileSet, AttachmentSet } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '18';
+export const guideRevision = '19';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -340,7 +340,16 @@ export const Area = Type.Object(
   },
   closed,
 );
-export const Discussion = Type.Object({ id: UUID, area: Area, opening: Resource }, closed);
+export const Discussion = Type.Object(
+  {
+    id: UUID,
+    area: Area,
+    opening: Resource,
+    local_open: Type.Boolean(),
+    publication_open: Type.Boolean(),
+  },
+  closed,
+);
 export const Page = Type.Object(
   {
     items: Type.Array(
@@ -437,6 +446,7 @@ export const ParticipationError = Type.Object(
         request_id: UUID,
         current_revision_id: Type.Optional(NullableId),
         unavailable_scope: Type.Optional(Type.Literal('revision')),
+        forbidden_reason: Type.Optional(Type.Literal('publication_closed')),
         minimum_response_bytes: Type.Optional(Type.Integer()),
         operation_outcome: Type.Optional(
           Type.Union([Type.Literal('unknown'), Type.Literal('rejected')]),

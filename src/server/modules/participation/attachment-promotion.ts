@@ -10,7 +10,7 @@ import type { Transactions } from '../../db/postgres.js';
 import { lockAttempt } from '../../application/attempt.js';
 import { identityOf, type ActorContext } from '../publication/actor.js';
 import { lockActor, lockContext, requireRevision } from '../publication/guards.js';
-import { PublicationError, safeError } from '../publication/errors.js';
+import { PublicationClosedError, PublicationError, safeError } from '../publication/errors.js';
 import { commitRevision, result, type Outcome } from '../publication/publication.js';
 import type { PreparedPromotion } from '../publication/file-storage.js';
 import { canonicalAttemptKey } from '../publication/input.js';
@@ -50,7 +50,7 @@ export class AttachmentPromotion {
           // The independent result, not an old source preview, controls recovery.
           const chain = await lockContext(tx, saved.resource_id, 'resolution', ['artifact']);
           await requireRevision(tx, saved.resource_id, saved.revision_id);
-          if (chain.some((r) => !r.publication_open)) throw new PublicationError('forbidden');
+          if (chain.some((r) => !r.publication_open)) throw new PublicationClosedError();
           if (saved.semantic_version !== version || saved.request_digest !== digest)
             throw new PublicationError('idempotency_conflict');
           return result(saved, 'replayed');
@@ -62,7 +62,6 @@ export class AttachmentPromotion {
           'contribution',
         ]);
         const destination = await lockContext(tx, input.area_id, 'resolution', ['area']);
-        if (destination.some((r) => !r.publication_open)) throw new PublicationError('forbidden');
         await requireRevision(tx, input.source.contribution_id, input.source.revision_id);
         const context = (
           await tx.query<{ upload_id: string; path: string; publisher_id: string }>(
@@ -77,6 +76,7 @@ export class AttachmentPromotion {
         const upload = await uploadRow(tx, context.upload_id);
         if (upload.state !== 'prepared' || !upload.final_version)
           throw new PublicationError('unavailable');
+        if (destination.some((r) => !r.publication_open)) throw new PublicationClosedError();
         const artifact = randomUUID();
         const provenance: PreparedPromotion = {
           ...input.source,

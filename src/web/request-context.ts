@@ -5,6 +5,7 @@ export class ApiError extends Error {
     readonly currentRevision?: string,
     readonly operationOutcome?: 'unknown' | 'rejected',
     readonly unavailableScope?: 'revision',
+    readonly forbiddenReason?: 'publication_closed',
   ) {
     super(message);
   }

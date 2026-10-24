@@ -19,7 +19,12 @@ dismissed individually without losing publication drafts. See the [Saved items d
 Identity policies, production limits and retained-data operations still require
 review, so use synthetic content only.
 Administrators can create nested topics, revise their scope, move topic subtrees,
-discussions and artifacts, and close/reopen contributions. Bounded navigation and
+discussions and artifacts, and close/reopen topics or individual discussions.
+A closed discussion rejects new replies, opening/comment revisions and initial or
+revised summaries, including administrator publications. Eligible history stays
+readable. Reopening changes only the local restriction; closed ancestors and
+suppression remain independent. Prepared drafts/files and uncertain requests stay
+available for deliberate correction or status recovery. Bounded navigation and
 safe retry preserve stable references and history. See the [organization decision](docs/adr/020-topic-organization.md).
 In the isolated preview, ordinary artifacts can contain files only or text plus a
 complete versioned file set. Publish nested paths, replace/rename/omit files, or
@@ -146,6 +151,28 @@ PostgreSQL database and UUID-named SeaweedFS container/volume, using the pinned
 provider and fresh private credentials. Ctrl-C removes those preview resources;
 it does not touch development volumes. Native test fixtures separately exercise
 restart/recreation without reprovisioning existing storage.
+
+For administrator discussion controls, use **Close discussion** / **Reopen discussion**
+on the discussion page, or `scripts/organization-client.mjs` over HTTPS. Inspect
+`GET /api/v1/organization/resources/{discussion_id}` for current `version` and
+`hierarchy_version`, then prepare a JSON command with `kind: "discussion.close"`
+(or `"discussion.open"`), `resource_id`, `expected_version` and
+`expected_hierarchy_version`. For example, with private synthetic credential and
+CA files:
+
+```bash
+node scripts/organization-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --action inspect --resource DISCUSSION_UUID
+node scripts/organization-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --action prepare --input command.json --journal new-command.json
+node scripts/organization-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --action send --journal new-command.json
+```
+
+Use `--action status` or `retry` with the same journal after an uncertain response;
+`lose-response` intentionally discards a successful reply for disposable tests.
+The journal is created exclusively with mode 0600, fsynced and read back before
+send. Credentials remain separate. A new deliberate decision uses a new journal.
+Retrying close K1 after reopen K2 reports the original closed outcome separately
+from current open state and cannot close again. Guide 19 and generated OpenAPI
+specify all fields and errors; no production retention policy is added.
 
 Artifact file limits are synthetic: 4 MiB/file, 16 entries and 32 MiB/revision,
 16 KiB manifest, 512 UTF-8 bytes/path and eight segments. Upload admission lasts

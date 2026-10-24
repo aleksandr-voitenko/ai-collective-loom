@@ -399,6 +399,8 @@ export class ParticipationRetrieval {
         id,
         area: { ...area, publication_open: chain.slice(1).every((r) => r.publication_open) },
         opening: await this.resource(tx, authority, discussion.opening_id),
+        local_open: chain[0]!.publication_open,
+        publication_open: chain.every((r) => r.publication_open),
       };
     });
   }

@@ -1,7 +1,7 @@
 # ADR-020: Administrator-managed topic organization
 
 Status: implemented for the synthetic profile. Product v0.9 remains
-authoritative; optional moderator delegation and attention services remain open.
+authoritative; optional moderator delegation remains open. Following and Updates use ADR-024/025/027.
 ADR-012 now implements current text search using this canonical ownership and
 hierarchy epoch. This record extends ADR-003/006/015/016/017 without changing imports.
 
@@ -49,14 +49,42 @@ time; moves/closure do not create authored revisions. Migration records an expli
 unattributed baseline for existing metadata, never inventing historical authorship.
 New setup and organization metadata records are attributable.
 
-Closing an area changes only its local `publication_open`. Effective closure is
-inherited by all descendants and blocks discussion, reply and artifact creation and
-all contribution/artifact revisions, including administrator publications. Existing
-resource-local restrictions still apply. Reads, metadata maintenance and structural
-moves remain allowed where source visibility permits. Reopening changes only the
-named area; independent descendant closures remain. Moving into a closed branch
-is allowed and immediately inherits its contribution restriction. No deletion or
-source suppression operation is introduced.
+Closing an area or an individual discussion changes only its local
+`publication_open`. Effective closure is inherited through the current owner chain.
+Area closure blocks new discussions/artifacts as well as descendant publications;
+discussion closure blocks replies, opening/comment revisions and initial/revised
+summaries, including administrator publications. Reopening changes only the named
+resource. Independent descendant restrictions survive ancestor reopening, and moves
+preserve local flags while deriving effective eligibility from the new ancestry.
+Suppression/restoration (ADR-028), account state, editor rights and revision bases
+remain independent. Closing is neither hiding, completion nor an Archive subsystem.
+
+Guide 19 adds `discussion.close` and `discussion.open` to the existing
+`organization-v1` family. Migration0024 extends only its operation-kind constraint;
+it does not rewrite flags, versions, old decisions/digests or invent history. Use
+the organization protocol rather than a second lifecycle subsystem because these
+are the same local publication flag, administrator authority and recovery semantics.
+Reconsider authority separately if optional moderator delegation is approved.
+
+Eligible current/exact reads, search, references, file downloads/previews, source
+coverage and private controls retain their own rules. Closure creates no summary
+source. Promotion may read a closed eligible source and publish to an open eligible
+destination; a separately owned artifact is not frozen by its former source.
+Private upload cleanup and editing-intent release remain available under their
+existing custody rules. Publication status can recover a committed eligible result
+after closure; mutation replay still requires current action authority.
+
+A closure-only refusal keeps HTTP403/code `forbidden` and adds the certified
+`forbidden_reason: publication_closed` after source/action checks. Reply parents,
+fresh summary declarations and exact promotion/upload sources must pass their
+existing visibility checks first; closure cannot mask an independent denial.
+Immediate-base summary coverage keeps its separate historical carry-forward rule.
+Browser endpoint
+contracts recognize it only on publication/preparation/upload operations. It retains
+independently readable content and exact drafts; generic forbidden, suppression and
+identity withdrawal still revoke protected projections. The hint neither grants
+reading authority nor settles an uncertain request. Explicit reopening never
+resends or rebases a draft automatically.
 
 ## Transaction and event protocol
 
@@ -67,13 +95,20 @@ guard. Organization does not acquire the configuration guard. Publication contin
 to take the shared structure guard, so move/close races have one committed order.
 Cycle checks run after the exclusive guard; simultaneous opposite moves cannot
 both pass against outdated ancestry. No contested domain guard follows the clock.
+Close/open writes the local flag and organization version in one resource UPDATE.
+Two updates of the same tuple can recheck unchanged foreign keys and deadlock with
+identity administration holding the resource author's row while awaiting the closer.
+The combined write avoids that extra dependency without new locks or digest changes;
+real waiter tests force the revoker's participant lock order to cover the regression.
 
 Structural activity uses the same `shared_activity` table and transactional clock,
 with a NULL revision and explicit before/after area scopes. It does not fabricate
 a content revision or replay publications. Earlier `area_scope_ids` remain untouched;
 only new publications capture current ancestry. The upgrade does not infer missing
 historical ancestry. The search consumer recognizes structural intents without
-reindexing text: fresh searches use current ownership. Other consumers remain open.
+reindexing text: fresh searches use current ownership. Following and both Updates contracts consume the structural facts without
+creating new direct-attention deliveries or replaying old content. Fixed activity
+traversals preserve event-time relevance while displaying separately current paths.
 
 ## Retry, disclosure and browsing
 
@@ -112,12 +147,12 @@ draft resumes at the community overview.
 
 ## Verification and limits
 
-Use populated pre-0006 upgrades, real isolated PostgreSQL/HTTPS, deterministic
+Use populated pre-0006 and pre-0024 upgrades, real isolated PostgreSQL/HTTPS, deterministic
 barriers and persisted row inspection for identities, cycles, publication ordering,
 versions, replay and suppression. Browser checks use shared diagnostic fixtures and
 the containing runner for reload, stale tabs, late account/route results, keyboard
-and narrow layouts. Record actual results separately. Same-machine synthetic
-clients do not establish cross-machine operation or human usability; production
+and narrow layouts. Record actual results separately. `scripts/organization-client.mjs` retains fsynced private command journals across
+restart and credential replacement. Same-machine synthetic clients do not establish cross-machine operation or human usability; production
 identity, retention/restore, multi-process cursor custody and capacity remain gates.
 
 ## Following increment
@@ -125,5 +160,5 @@ identity, retention/restore, multi-process cursor custody and capacity remain ga
 [ADR-024](024-following-shared-changes.md) adds independent owner-private Following
 and ungrouped complete shared retrieval. It retains this decision’s source identities
 and personal-delivery boundaries. New structural events capture bounded descendant
-impacts; older missing facts remain explicit unknown coverage. Grouped Updates,
-combined checkpoints, mutes/dismissal and reading progress remain separate work.
+impacts; older missing facts remain explicit unknown coverage. Grouped Updates and combined checkpoints are specified in ADR-025; reading and
+routine attention remain independent under ADR-026/027.

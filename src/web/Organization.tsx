@@ -161,9 +161,10 @@ export function OrganizationActions({
       <Link className="button" to={url(kind + '.move')}>
         Move {kind === 'area' ? 'topic' : kind}
       </Link>
-      {kind === 'area' && (
-        <Link className="button" to={url(localOpen ? 'area.close' : 'area.open')}>
-          {localOpen ? 'Close topic' : 'Reopen topic'}
+      {(kind === 'area' || kind === 'discussion') && (
+        <Link className="button" to={url(kind + (localOpen ? '.close' : '.open'))}>
+          {localOpen ? 'Close ' : 'Reopen '}
+          {kind === 'area' ? 'topic' : 'discussion'}
         </Link>
       )}
     </div>
@@ -434,9 +435,8 @@ function OrganizationForm({
             ? 'Edit topic'
             : move
               ? 'Move ' + (source?.kind === 'area' ? 'topic' : (source?.kind ?? 'resource'))
-              : kind === 'area.close'
-                ? 'Close topic'
-                : 'Reopen topic'}
+              : (kind.endsWith('.close') ? 'Close ' : 'Reopen ') +
+                (source?.kind === 'discussion' ? 'discussion' : 'topic')}
       </h1>
       {source && (
         <p className="notice">
@@ -548,6 +548,18 @@ function OrganizationForm({
             revisions. Retained content stays readable.
           </p>
         )}
+        {kind === 'discussion.close' && (
+          <p>
+            Close this discussion to new replies, opening/comment revisions and initial or revised
+            summaries, including administrator publications. Retained content stays readable.
+          </p>
+        )}
+        {kind === 'discussion.open' && (
+          <p>
+            Remove this discussion’s local closure. A closed ancestor topic still prevents
+            publication. Other access and editing restrictions remain in effect.
+          </p>
+        )}
         {kind === 'area.open' && (
           <p>
             Remove this topic’s local closure. Other ancestor and descendant restrictions remain in
@@ -558,9 +570,9 @@ function OrganizationForm({
           <button className="primary" disabled={locked} type="submit">
             {move
               ? 'Confirm move'
-              : kind === 'area.close'
+              : kind.endsWith('.close')
                 ? 'Confirm close'
-                : kind === 'area.open'
+                : kind.endsWith('.open')
                   ? 'Confirm reopen'
                   : 'Save topic'}
           </button>
@@ -594,6 +606,15 @@ function OrganizationForm({
             Current location: {pathText(result.current)} · version {result.current.version} ·{' '}
             {result.current.publication_open ? 'Open' : 'Closed'}.
           </p>
+          {(kind === 'discussion.close' || kind === 'discussion.open') && (
+            <p>
+              Original decision: locally {result.outcome.local_open ? 'open' : 'closed'}. Current
+              discussion: locally {result.current.local_open ? 'open' : 'closed'}.
+              {result.current.local_open &&
+                !result.current.publication_open &&
+                ' An ancestor topic is still closed; publication remains unavailable.'}
+            </p>
+          )}
           <Link
             to={
               result.current.kind === 'area'

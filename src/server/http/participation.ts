@@ -3,7 +3,7 @@ import { FileError, type FileStorage } from '../modules/participation/file-stora
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Type, type TSchema } from '@sinclair/typebox';
 import * as C from '../../contracts/participation.js';
-import { PublicationError } from '../modules/publication/errors.js';
+import { PublicationClosedError, PublicationError } from '../modules/publication/errors.js';
 import { IdentityError } from '../modules/identity/errors.js';
 import type { IdentityAuthentication } from '../modules/identity/authentication.js';
 import type { IdentityAdministration } from '../modules/identity/administration.js';
@@ -259,6 +259,7 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
     status = failure.status;
   }
   if (status === 401 || status === 403) action = 'reauthenticate_or_request_authority';
+  if (error instanceof PublicationClosedError) action = 'retain_draft_and_reconcile';
   if (code === 'revision_conflict') action = 'compare_and_resubmit';
   if (code === 'invalid_cursor') action = 'replay_view';
   if (code === 'idempotency_conflict' || status >= 500) action = 'reconcile_operation';
@@ -271,6 +272,9 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
       message,
       request_id: request.id,
       recovery: { action },
+      ...(error instanceof PublicationClosedError
+        ? { forbidden_reason: 'publication_closed' }
+        : {}),
       ...(current !== undefined ? { current_revision_id: current } : {}),
       ...(error instanceof RevisionUnavailableError &&
       request.method === 'GET' &&

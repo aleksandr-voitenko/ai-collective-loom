@@ -76,6 +76,7 @@ export type ResponseContract = {
   errors: ErrorPolicy;
   rule: Rule;
   revisionMiss: boolean;
+  publicationClosureRefusal?: boolean;
   preview?: Preview;
   publicationClosure?: 'proposal_area.state' | 'state';
   lifecycleReceipt?: boolean;
@@ -94,6 +95,7 @@ function add(
   rule: Rule,
   options: {
     revisionMiss?: boolean;
+    publicationClosureRefusal?: boolean;
     preview?: Preview;
     publicationClosure?: 'proposal_area.state' | 'state';
     lifecycleReceipt?: boolean;
@@ -186,9 +188,16 @@ add(
   ),
 );
 add(
+  ['POST /api/v1/revisions', 'POST /api/v1/summary-revisions'],
+  'receipt',
+  sourceErrors,
+  affirmed(
+    'Revision outcome; certified closure preserves reads, while editor refusal withdraws protected content.',
+  ),
+  { publicationClosureRefusal: true },
+);
+add(
   [
-    'POST /api/v1/revisions',
-    'POST /api/v1/summary-revisions',
     'POST /api/v1/community/setup',
     'POST /api/v1/community/settings',
     'POST /api/v1/editors',
@@ -234,7 +243,6 @@ add(
     'GET /api/v1/resources/{id}/revisions/{revision}/change-note',
     'GET /api/v1/resources/{id}/revisions/{revision}/change-coverage',
     'GET /api/v1/changes',
-    'POST /api/v1/summary-preparations',
     'GET /api/v1/summary-preparations/{id}',
     'GET /api/v1/summary-preparations/{id}/members',
     'GET /api/v1/discussions/{id}/summary-sources',
@@ -248,6 +256,13 @@ add(
   affirmed(
     'Successful response authorizes its returned representation; omitted or unknown members make no access claim.',
   ),
+);
+add(
+  ['POST /api/v1/summary-preparations'],
+  'read',
+  sourceErrors,
+  affirmed('Prepared source declaration; certified closure alone does not revoke reading.'),
+  { publicationClosureRefusal: true },
 );
 add(
   ['GET /api/v1/resources/{id}', 'GET /api/v1/resources/{id}/revisions/{revision}'],
@@ -564,6 +579,7 @@ add(
   'receipt',
   sourceErrors,
   affirmed('Owner-private upload custody; it never authorizes source content.'),
+  { publicationClosureRefusal: true },
 );
 add(
   ['POST /api/v1/file-uploads/status', 'POST /api/v1/file-uploads/cleanup'],
@@ -690,6 +706,12 @@ export function classifyError(contract: ResponseContract, error: ApiError): Erro
         return { session: 'revoke', content: 'withdraw' };
     }
   }
+  if (
+    contract.publicationClosureRefusal &&
+    error.code === 'forbidden' &&
+    error.forbiddenReason === 'publication_closed'
+  )
+    return { session: 'retain', content: 'retain' };
   const content =
     error.code === 'forbidden'
       ? policy.forbidden

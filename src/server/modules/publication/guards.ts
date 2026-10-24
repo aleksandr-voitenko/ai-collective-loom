@@ -1,7 +1,7 @@
 import type { SqlTransaction } from '../../db/postgres.js';
 import type { ActorContext } from './actor.js';
 import { currentAuthority } from '../../application/authority.js';
-import { PublicationError } from './errors.js';
+import { PublicationClosedError, PublicationError } from './errors.js';
 
 export interface Resource {
   id: string;
@@ -93,7 +93,7 @@ export async function authorizePublication(
   chain: Resource[],
 ) {
   await authorizeEditor(tx, actor, chain);
-  if (chain.some((resource) => !resource.publication_open)) throw new PublicationError('forbidden');
+  if (chain.some((resource) => !resource.publication_open)) throw new PublicationClosedError();
 }
 
 // Editing-intent controls distinguish ordinary closure from lost editor rights,
