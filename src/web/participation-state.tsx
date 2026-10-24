@@ -98,6 +98,8 @@ export function intentUrl(record: Intent) {
   if (record.kind === 'summary.prepare') return record.slot.slice('summary.prepare:'.length);
   if (record.kind === 'summary.editors' || record.kind === 'artifact.editors')
     return `/loom/resource/${record.body.resource_id}`;
+  if (record.kind.startsWith('notes.'))
+    return '/loom/notes/' + String(record.body.note_id) + '?intent=' + record.key;
   if (record.kind === 'saved.set') return '/loom/saved';
   if (record.kind === 'moderation.set')
     return '/loom/moderation?intent=' + encodeURIComponent(record.key);

@@ -1,3 +1,4 @@
+import { AddPrivateNote } from './PrivateNotes.js';
 import { ArtifactProvenance, ProvenanceDetails } from './AttachmentPromotion.js';
 import { EditingIntent } from './EditingIntent.js';
 import { FileBrowser } from './Files.js';
@@ -164,6 +165,18 @@ function ResourcePresentation({
             }
           />
         )}
+        <AddPrivateNote
+          target={{
+            kind:
+              data.kind === 'artifact'
+                ? 'artifact'
+                : data.kind === 'summary'
+                  ? 'summary'
+                  : 'contribution',
+            resource_id: id,
+            ...(revision ? { revision_id: revision } : {}),
+          }}
+        />
         <button onClick={() => setHistory((value) => !value)}>Revision history</button>
       </div>
       {revision && data.revision_id !== data.current_revision_id && (

@@ -17,6 +17,7 @@ import type { Transactions } from '../../src/server/db/postgres.js';
 export async function syntheticServer(
   options: {
     port?: number;
+    logger?: Parameters<typeof createApplication>[0]['logger'];
     files?:boolean;
     throughMigration?: number;
     transactionWrapper?: (database: Transactions) => Transactions;
@@ -125,7 +126,7 @@ export async function syntheticServer(
             isReady: () => fixture.database.isReady(),
             close: async () => {},
           },
-          logger: false,
+          logger: options.logger ?? false,
           browserRoot: fileURLToPath(new URL("../../dist/web/", import.meta.url)),
           tls,
           participation: { database, authentication, administration, ...(fileFixture?{fileStorage:fileFixture.storage}:{}) },

@@ -13,7 +13,7 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`17`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`18`.
 Advisory Editing intent (ADR-032/migration0022) lives in sibling reservations/:
 exact-base notices, fixed PostgreSQL expiry, optimistic renew/release and private
 owner recovery. Publication remains independent. Browser and direct HTTPS share
@@ -151,7 +151,10 @@ Private Saved items now support discussion/contribution/artifact resource refere
 and exact contribution/artifact revisions. Owners come from current authentication,
 with no administrator override. Migration 0005 retains versioned target tombstones
 and immutable applied/conflict decisions, without shared publication side effects.
-See ADR-013; private notes remain open.
+See ADR-013. Owner-private notes are a separate module (ADR-033, migration0023):
+plain-text CRUD/search, terminal tombstones and content-free decisions, with no
+shared publication/derived-worker registration or administrator override. See
+`src/server/modules/notes/MEMORY.md` for source authority, limits and recovery.
 Synthetic caps are 500 target states/10,000 decisions per
 participant; expiry, erasure and destructive restore remain unapproved.
 Exact private reading (ADR-026, migration0016) adds owner/resource/revision states

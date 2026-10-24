@@ -700,3 +700,17 @@ synthetic screen evidence is curated separately from the private runner output.
 Direct-client recovery fixtures include reordered entities and uppercase UUIDs:
 inspect canonical meaning without rewriting the saved request. Build before HTTPS
 suites; a concurrent rebuild temporarily removes the browser output they require.
+
+Owner-private notes: `test:notes:postgres` discovers `integration/notes*.test.ts`
+through the existing coverage script. Native cases use actual PostgreSQL waiters
+for owner, source and credential races, inspect every prior table for noninterference,
+and exercise populated migration0022 upgrades. Capacity uses real 128/500 identity
+populations; the separate decision frontier is explicitly injected. HTTPS client
+processes use private mode-0600 journals, replacement credentials and killed-child
+recovery. `web/private-notes.test.tsx` mounts actual ActiveView hosts; unit custody
+checks and six compiled Chromium journeys cover distinct boundaries. Regression
+cases fence late autosaves after individual/all-copy cleanup and refresh a create
+committed on its original draft route when another tab deletes it. Synthetic
+review screenshots are opt-in `LOOM_NOTES_REVIEW_SCREENS=1` under `/tmp`, outside
+approved diagnostics. Notes extend only the closed diagnostic route/spec inventory
+and its exact test count; byte, event, deadline, worker and coverage gates remain.

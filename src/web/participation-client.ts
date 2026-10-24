@@ -1,4 +1,6 @@
 import { FileSet, AttachmentSet, FileMember, UploadInput, fileLimits } from '../contracts/files.js';
+import * as Notes from '../contracts/notes.js';
+import { validNoteRecord, validateNoteCommand, noteAction, terminalNote } from './note-recovery.js';
 import * as Editing from '../contracts/reservations.js';
 import { Value } from '@sinclair/typebox/value';
 import { Type, type TSchema } from '@sinclair/typebox';
@@ -207,6 +209,8 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       'nickname_conflict',
       'credential_limit',
       'saved_limit_reached',
+      'note_limit',
+      'note_deleted',
       'following_limit_reached',
       'organization_conflict',
       'moderation_conflict',
@@ -243,6 +247,7 @@ export interface Intent {
   conflict_revision_id?: string;
   blocked_by?: string;
   editing_intent_release?: Editing.IntentResultView;
+  note_receipt?: Notes.NoteResultView;
 }
 /** Terminal notice state fences future effects without deciding a lost command's outcome. */
 export function editingIntentReleased(record: Intent, receipt?: Editing.IntentStatusView) {
@@ -344,6 +349,10 @@ export class IntentStore {
         throw new Error('The attachment manifest is incompatible. Preserve the exact journal.');
       if (record.kind === 'file.upload' && !Value.Check(UploadInput, record.body))
         throw new Error('The upload metadata is incompatible. Preserve the exact journal.');
+      if (record.kind.startsWith('notes.') && !validNoteRecord(record))
+        throw new Error(
+          'A private note recovery record is incompatible. Preserve the exact journal.',
+        );
       if (record.kind.startsWith('editing-intent.')) {
         const schema = {
           announce: Editing.AnnounceIntent,
@@ -482,6 +491,10 @@ export class IntentStore {
     return this.locked(() => {
       this.owned(record);
       const current = this.all().find((item) => item.key === record.key);
+      // Explicit private-copy cleanup also fences queued autosaves from old editors.
+      // A deliberate new draft has sequence zero and remains independently writable.
+      if (record.kind.startsWith('notes.') && record.sequence > 0 && !current)
+        throw new StaleIntentError();
       if ((current?.sequence ?? 0) !== record.sequence || (current && current.state !== 'draft')) {
         // A stale editor's unsent work is distinct from the exact dispatched
         // operation. Retain it, but require an explicit review before any POST.
@@ -505,6 +518,119 @@ export class IntentStore {
       body:
         record.state === 'draft' ? { ...visibleBody, idempotency_key: record.key } : record.body,
     });
+  }
+  prepareNote(
+    record: Intent,
+    body: Record<string, unknown>,
+    active: () => boolean,
+  ): Promise<Intent> {
+    return this.locked(() => {
+      if (!active()) throw new DOMException('View changed.', 'AbortError');
+      const current = this.current(record),
+        action = noteAction(record);
+      if (current && !['draft', 'uncertain'].includes(current.state)) throw new StaleIntentError();
+      if (record.blocked_by) throw new Error('Review the separately saved note before saving it.');
+      const exact =
+        record.state === 'uncertain' ? record.body : { ...body, idempotency_key: record.key };
+      validateNoteCommand(action, exact);
+      // Exact retries remain usable beside an uncertain delete; only new decisions overlap.
+      if (
+        record.state !== 'uncertain' &&
+        this.all().some(
+          (other) =>
+            other.key !== record.key &&
+            other.kind.startsWith('notes.') &&
+            other.state === 'uncertain' &&
+            String(other.body.note_id).toLowerCase() === String(exact.note_id).toLowerCase() &&
+            !(
+              action === 'delete' &&
+              other.kind === 'notes.update' &&
+              Number(exact.expected_version) >= Number(other.body.expected_version)
+            ),
+        )
+      )
+        throw new Error(
+          'Reconcile the existing uncertain note command before another save. A known note may still be deleted past an uncertain update.',
+        );
+      return this.write({
+        ...record,
+        body: exact,
+        state: 'uncertain',
+        sequence: record.sequence + 1,
+      });
+    });
+  }
+  settleNote(
+    record: Intent,
+    receipt: Notes.NoteResultView,
+    active: () => boolean,
+  ): Promise<Intent> {
+    return this.locked(() => {
+      if (!active()) throw new DOMException('View changed.', 'AbortError');
+      this.owned(record);
+      const current = this.all().find((item) => item.key === record.key);
+      if (
+        !current ||
+        !this.sameRequest(current, record) ||
+        current.state === 'draft' ||
+        !Value.Check(Notes.NoteResult, receipt) ||
+        receipt.action !== noteAction(record) ||
+        receipt.outcome.note_id !== String(record.body.note_id).toLowerCase()
+      )
+        throw new StaleIntentError();
+      if (current.state !== 'uncertain') return current;
+      return this.write({
+        ...current,
+        state: receipt.operation_state === 'applied' ? 'committed' : 'rejected',
+        note_receipt: receipt,
+        sequence: current.sequence + 1,
+      });
+    });
+  }
+  clearNoteCopies(
+    id: string,
+    terminal: Notes.NoteDeletedView | undefined,
+    active: () => boolean,
+  ): Promise<void> {
+    return this.locked(() => {
+      if (!active()) throw new DOMException('View changed.', 'AbortError');
+      const records = this.all().filter(
+        (r) =>
+          r.kind.startsWith('notes.') && String(r.body.note_id).toLowerCase() === id.toLowerCase(),
+      );
+      if (records.some((r) => r.state === 'uncertain' && (!terminal || !terminalNote(r, terminal))))
+        throw new Error(
+          'An unresolved note command remains. Reconcile it or obtain a current terminal deletion before explicitly forgetting it.',
+        );
+      for (const record of records) this.removeNoteCopyBytes(record);
+    });
+  }
+  removeNoteCopy(record: Intent, active: () => boolean): Promise<void> {
+    return this.locked(() => {
+      if (!active()) throw new DOMException('View changed.', 'AbortError');
+      const current = this.current(record);
+      if (!current || !current.kind.startsWith('notes.') || current.state === 'uncertain')
+        throw new StaleIntentError();
+      this.removeNoteCopyBytes(current);
+    });
+  }
+  private removeNoteCopyBytes(record: Intent) {
+    const key = this.prefix + record.key,
+      prior = this.storage.getItem(key);
+    try {
+      this.storage.removeItem(key);
+      if (this.storage.getItem(key) !== null)
+        throw new Error(
+          'Local note copies could not be cleared. Server deletion does not clear this device.',
+        );
+    } catch (error) {
+      try {
+        if (prior !== null) this.storage.setItem(key, prior);
+      } catch {
+        /* Report incomplete cleanup without claiming erasure. */
+      }
+      throw error;
+    }
   }
   prepareEditingIntent(
     action: Editing.IntentActionValue,

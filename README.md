@@ -230,9 +230,73 @@ The independent `scripts/editing-intent-client.mjs` accepts `--origin`, `--ca`,
 credentials stay outside the journal. Legitimate replacement credentials for the
 same participant retain recovery. `--action inspect --resource ID --output result.json`
 supports `--limit` and `--cursor`; `lose-response` deliberately discards an accepted
-reply for testing. Guide 17 and generated OpenAPI describe the complete schemas.
+reply for testing. Guide 18 and generated OpenAPI describe the complete schemas.
 `npm run test:reservations:postgres` runs disposable native authority/expiry/race,
 upgrade and independent HTTPS checks; the normal coverage pipeline includes it.
+
+## Owner-private notes
+
+Private notes at `/loom/notes` store optional titles, nonblank plain text and up to
+8 explicit discussion, contribution, summary or artifact links. Revision-bearing
+links may pin an exact revision. “Add private note” carries only the selected IDs;
+source text is never copied automatically. Literal HTML, Markdown and mentions stay
+plain text. Notes have no public history, sharing or undelete. Other accounts,
+including administrators, cannot access them through application endpoints.
+
+Search matches all lexical terms in your current title/body, using PostgreSQL's
+`simple` dictionary; punctuation-only queries match nothing and an empty query
+lists notes. Queries travel in POST bodies, with participant-bound browser history
+state rather than URLs. Results have abbreviated 160-character excerpts, stable
+note-ID ordering and separately retrievable full details. Pages default to 12,
+cap at 25 and fit a full serialized 1–32 KiB JSON budget. Own mutations invalidate
+continuations; another owner's changes do not. Tokens expire after five minutes
+and API restart requires a fresh traversal.
+
+Synthetic limits are 128 active notes and 500 retained identities per participant,
+256 UTF-8 title bytes, 16 KiB body bytes and 2 KiB canonical links. Requests/details
+cap at 128 KiB; queries at 256 UTF-8 bytes and 32 whitespace terms. General decisions
+cap at 10,000 per participant, with a separate successful deletion reserved for
+each admitted identity. Exact status and replay remain available at capacity.
+These bounds do not approve production workload or retention policy.
+
+Saving/deleting uses an expected private version. Conflicts preserve the proposed
+text and links for explicit correction. An uncertain command keeps its exact key,
+identity and bytes. Status reports the original decision separately from current
+state; old saves cannot restore a deleted identity. Source suppression redacts
+fresh source previews but leaves your independently authored note editable and
+deletable. Introducing a new link still requires current reading authorization.
+Notes never change shared publication, activity, notifications, backlinks, summary
+coverage, Saved items, Following, reading, attention or editing intent.
+
+Deletion transactionally removes current server text, links and lexical data.
+Minimal private identity/version/digest/outcome fences remain; there is no old-body
+archive. This is **application deletion**, not immediate secure erasure from disk,
+WAL, backups or prior copies. Infrastructure, database and credential recovery are
+trusted powers. Production retention, account erasure and backup restoration remain
+separate decisions.
+
+**Shared-device warning:** the browser's existing origin/instance/account journal
+retains drafts and exact commands, up to 32 records/1 MiB, without automatic expiry
+or device-owner encryption. Sign-out offers private export and local cleanup.
+Server deletion does not certify cleanup of other tabs, devices or exports. The
+note page can clear resolved copies; validated terminal deletion also permits
+explicit forgetting of unknown commands without claiming they failed. Failed
+local persistence prevents dispatch, and failed cleanup never reports erasure.
+
+The independent `scripts/private-notes-client.mjs` uses `--origin`, optional `--ca`,
+`--credential-file` and a fresh `--journal` for each command. Prepare with
+`--action prepare --kind create|update|delete --input command.json`, then use
+`--action send`, `status` or `retry`. The input contains the guide's fields without
+an idempotency key; create may omit `note_id`. Preparation adds missing identities
+and fsyncs exact request bytes to a mode-0600 journal. Credentials stay separate.
+`--action read|sources --note ID --output private-result.json` and
+`--action query --input private-query.json --output private-results.json` use new
+private output files. Console receipts contain no note prose or links.
+`lose-response` discards an accepted reply for synthetic recovery checks. These
+local processes demonstrate independent HTTPS clients, not cross-machine/provider
+validation. See [ADR-033](docs/adr/033-owner-private-notes.md), release guide 18 and
+generated OpenAPI. `npm run test:notes:postgres` runs disposable native acceptance,
+upgrade, concurrency and independent-client checks in the normal coverage path.
 
 ## Design documents
 
@@ -298,6 +362,7 @@ npm run test:following:postgres # private definitions, shared intervals, moves, 
 npm run test:updates:postgres # combined grouping, paired recovery, guard races, bounds and populated upgrade
 npm run test:attention:postgres # private mute/dismissal, frozen sets, complete retrieval and recovery
 npm run test:reading:postgres # exact private state, unread precedence, atomic batches and durable recovery
+npm run test:notes:postgres # private CRUD/search, isolation, terminal deletion and exact recovery
 npm run test:moderation:postgres # administrator lifecycle, real guard races, selective restoration and exact recovery
 npx playwright install chromium
 npm run test:e2e # actual browser; fresh database and synthetic WebAuthn identities
