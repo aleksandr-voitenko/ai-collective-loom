@@ -1,5 +1,28 @@
 # Participation browser boundaries
 
+`EditingIntent.tsx` adds explicit optional controls beside exact/current resources
+and existing-revision composers, without changing their draft or publication state.
+Initial collapsed controls perform no notice read/mutation. Refresh is independent;
+focus/background/reconnection/storage changes mark observations stale and never renew. The source
+query uses its existing authorization host and lease; transient failure remains local.
+The settings-policy `/loom/editing-intent` route retains private status/exact retry
+and owner release after source loss, including confirmed commands. Receipts never
+rehydrate source metadata. Existing IntentStore/Web Locks preserve immutable requests
+and compare pending resource identity before new commands; no new journal prefix.
+An uncertain renewal permits a separate release only for the same notice at an
+observed version at least as new as its expected version. Unknown announcements
+and releases retain overlap protection. Explicit terminal reconciliation stores
+`editing_intent_release` beside immutable request bytes, keeping the original state
+uncertain while unblocking new intent. It requires a validated released receipt for
+the exact notice at a later version; expiry/absence/denial do not qualify. Web Locks,
+sequence checks and view ownership fence reconciliation; late settlement preserves
+its evidence. Older journal records remain readable without the optional field.
+Saved slot labels retain resource/base while renew/release bodies retain prior notice
+and expected version. Composer notices use its retained/corrected draft base rather
+than newer resource defaults. Responses arriving after route/identity departure are ignored
+before settlement. ADR-032
+and the reservations memory own semantic/expiry/limit decisions.
+
 `FileText.tsx` renders exact literal text under the ordinary full withdrawal host;
 processing-status reads are separate, never optional unavailable-source projections.
 All text/status/download requests use current authorization and endpoint catalogues.

@@ -13,7 +13,12 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`16`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`17`.
+Advisory Editing intent (ADR-032/migration0022) lives in sibling reservations/:
+exact-base notices, fixed PostgreSQL expiry, optimistic renew/release and private
+owner recovery. Publication remains independent. Browser and direct HTTPS share
+bounded commands; source loss preserves safe cleanup without redisclosure.
+See `src/server/modules/reservations/MEMORY.md` for limits, lock order and expiry.
 Artifact files (ADR-029, migration0019) extend ordinary artifact revisions with
 complete immutable manifests and contextual exact native S3 versions. The isolated
 preview uses app-authenticated HTTPS single-part transfer/download with private

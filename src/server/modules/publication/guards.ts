@@ -92,6 +92,17 @@ export async function authorizePublication(
   actor: Awaited<ReturnType<typeof lockActor>>,
   chain: Resource[],
 ) {
+  await authorizeEditor(tx, actor, chain);
+  if (chain.some((resource) => !resource.publication_open)) throw new PublicationError('forbidden');
+}
+
+// Editing-intent controls distinguish ordinary closure from lost editor rights,
+// while ordinary publication retains its established error and digest contract.
+export async function authorizeEditor(
+  tx: SqlTransaction,
+  actor: Awaited<ReturnType<typeof lockActor>>,
+  chain: Resource[],
+) {
   const resource = chain[0]!;
   const editor =
     resource.kind === 'contribution'
@@ -104,7 +115,6 @@ export async function authorizePublication(
         ).rowCount === 1;
   if (!actor.administrator && !editor)
     throw new PublicationError(resource.current_revision_id ? 'forbidden' : 'unavailable');
-  if (chain.some((resource) => !resource.publication_open)) throw new PublicationError('forbidden');
 }
 
 export async function requireRevision(tx: SqlTransaction, resourceId: string, revisionId: string) {

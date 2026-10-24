@@ -1,4 +1,5 @@
 import { ArtifactProvenance, ProvenanceDetails } from './AttachmentPromotion.js';
+import { EditingIntent } from './EditingIntent.js';
 import { FileBrowser } from './Files.js';
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router';
@@ -257,6 +258,14 @@ function ResourcePresentation({
           )}
         </div>
       </article>
+      {!edit && (
+        <EditingIntent
+          context={context}
+          resource={id}
+          base={data.revision_id}
+          canEdit={data.can_edit}
+        />
+      )}
       {data.kind === 'summary' && (
         <CoverageDetails key={data.revision_id} id={id} revision={data.revision_id} />
       )}

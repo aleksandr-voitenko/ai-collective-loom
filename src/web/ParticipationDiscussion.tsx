@@ -20,6 +20,7 @@ import { SuppressLink } from './Moderation.js';
 import { SummarySection } from './Summaries.js';
 import { Avatar, Collection, ErrorText } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
+import { EditingIntent } from './EditingIntent.js';
 
 export function DiscussionPage({ id, context }: { id: string; context: Context }) {
   return (
@@ -311,6 +312,12 @@ function ContributionBody({
         />
       )}
       <ChangeDetails revision={data} />
+      <EditingIntent
+        context={context}
+        resource={id}
+        base={data.revision_id}
+        canEdit={data.can_edit}
+      />
       <ReferenceViews
         key={'references:' + data.revision_id}
         sourceId={id}

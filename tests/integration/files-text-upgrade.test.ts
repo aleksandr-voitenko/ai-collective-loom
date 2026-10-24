@@ -17,7 +17,8 @@ test('0021 preserves populated source/native/attempt tables and authored travers
   const first=await publish('Baseline one',16),second=await publish('Baseline two',16);
   const text=new SearchWorker(f.database);for(let i=0;i<5;i++)await text.tick();
   const authored=(await f.admin.call('/api/v1/search?q=baseline&limit=1')).body;assert.ok(authored.next_cursor);
-  stage='migration';const before=await sourceSnapshot(f);await f.migrate();assert.deepEqual(await sourceSnapshot(f),before);
+  // Keep this historical upgrade at its own boundary; later migrations add new state.
+  stage='migration';const before=await sourceSnapshot(f);await f.migrate(21);assert.deepEqual(await sourceSnapshot(f),before);
   const worker=new FileTextWorker(f.database,f.fileFixture!.storage);
   assert.equal(await worker.discover(),25);assert.equal((await f.observer.query('SELECT count(*)::int AS n FROM loom.file_text_jobs')).rows[0].n,25);
   stage='later publication';const later=await publish('Later current',1);

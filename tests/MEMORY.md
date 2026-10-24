@@ -1,9 +1,33 @@
 # Browser test diagnostics
 
+`reservations*.test.ts` covers native PostgreSQL/HTTPS advisory overlap, original
+versus current recovery, source/editor/credential withdrawal, real lock waiters in
+both orders, independent client credential replacement, populated0021 preservation,
+actual resource/owner population bounds and escaped JSON pagination. A real one-minute
+wait with the API stopped and no worker/client activity is distinct from private
+fixture expiry changes. A killed HTTPS child leaves committed exact intent recoverable.
+The reservation snapshot helper includes every old table, including file-text state.
+Production `ActiveView`/`ResourcePage` StrictMode tests cover explicit controls,
+multiple immutable journals, failed saves/readbacks/capacity and late denial/route/identity
+responses. `reservations.spec.ts` joins normal Chromium batches with four journeys:
+all kinds/overlap/background expiry, multiple pending commands across reload,
+failed storage and optional failures versus publication, and
+source/editor withdrawal with an unreceived renewal, private terminal release and
+explicit reconciliation before replacement. The unreceived case aborts before
+route.fetch; the committed lost-response control fetches before aborting. Late exact
+renewal after restoration/replacement must conflict without changing either notice.
+Mounted tests also cover reconciliation readback failure, stale tabs, departure,
+invalid release evidence and late settlement without losing immutable command bytes.
+LOOM_RESERVATIONS_REVIEW_SCREENS=1
+curates a synthetic narrow screenshot under /tmp/loom-review-evidence/reservations;
+it is separate from diagnostic artifacts. Native input byte tests must include JSON
+escaping: maximal raw fields can exceed the independent4KiB transport envelope.
+
 `files-text*.test.ts` joins the existing files PostgreSQL suite: exact native text,
 bounded UTF8/JSON prefixes, source/private-state equality, populated0020 upgrade,
 missing/stale anti-join discovery, independent promotion and current-only matching.
-The older over-cap fixture also rebuilds past a missing lowest-ID context, checking
+The0021 upgrade explicitly targets migration21; reservation tests separately check
+every old table across0021→0022. The older over-cap fixture also rebuilds past a missing lowest-ID context, checking
 two bounded batches, processed output, unchanged job ceiling and original download.
 Native process barriers in fixtures/file-text-worker.ts cover prepared/pre-COMMIT/
 post-COMMIT death; real waiters exercise both suppression/credential/rebuild orders.
@@ -543,7 +567,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 144 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 148 collected tests and <17 MiB/candidate. The test count includes
 the seven moderation scenarios so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe

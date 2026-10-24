@@ -1,4 +1,5 @@
 import { FileSet, AttachmentSet, FileMember, UploadInput, fileLimits } from '../contracts/files.js';
+import * as Editing from '../contracts/reservations.js';
 import { Value } from '@sinclair/typebox/value';
 import { Type, type TSchema } from '@sinclair/typebox';
 import type { CommittedView } from '../contracts/participation.js';
@@ -209,6 +210,9 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       'following_limit_reached',
       'organization_conflict',
       'moderation_conflict',
+      'editing_intent_conflict',
+      'editing_intent_limit',
+      'editing_intent_closed',
       'moderation_limit',
       'moderation_target_unsupported',
       'organization_limit',
@@ -238,6 +242,19 @@ export interface Intent {
   result?: CommittedView;
   conflict_revision_id?: string;
   blocked_by?: string;
+  editing_intent_release?: Editing.IntentResultView;
+}
+/** Terminal notice state fences future effects without deciding a lost command's outcome. */
+export function editingIntentReleased(record: Intent, receipt?: Editing.IntentStatusView) {
+  return (
+    ['editing-intent.renew', 'editing-intent.release'].includes(record.kind) &&
+    receipt?.operation_state === 'recorded' &&
+    receipt.current.state === 'released' &&
+    receipt.current.released_at !== null &&
+    receipt.current.notice_id === receipt.outcome.notice_id &&
+    receipt.current.notice_id.toLowerCase() === String(record.body.notice_id).toLowerCase() &&
+    receipt.current.version > Number(record.body.expected_version)
+  );
 }
 export class StaleIntentError extends Error {
   constructor() {
@@ -327,6 +344,25 @@ export class IntentStore {
         throw new Error('The attachment manifest is incompatible. Preserve the exact journal.');
       if (record.kind === 'file.upload' && !Value.Check(UploadInput, record.body))
         throw new Error('The upload metadata is incompatible. Preserve the exact journal.');
+      if (record.kind.startsWith('editing-intent.')) {
+        const schema = {
+          announce: Editing.AnnounceIntent,
+          renew: Editing.RenewIntent,
+          release: Editing.ReleaseIntent,
+        }[record.kind.slice(15) as Editing.IntentActionValue];
+        if (!schema || !Value.Check(schema, record.body))
+          throw new Error(
+            'The editing intent command is incompatible. Preserve the exact journal.',
+          );
+      }
+      if (
+        record.editing_intent_release !== undefined &&
+        (!Value.Check(Editing.IntentResult, record.editing_intent_release) ||
+          !editingIntentReleased(record, record.editing_intent_release))
+      )
+        throw new Error(
+          'The terminal editing intent receipt is incompatible. Preserve the journal.',
+        );
       if ('change_note' in record.body && !Value.Check(DraftNote, record.body.change_note))
         throw new Error(
           'The saved note is incompatible. Export the exact record before continuing.',
@@ -468,6 +504,80 @@ export class IntentStore {
       state: 'uncertain',
       body:
         record.state === 'draft' ? { ...visibleBody, idempotency_key: record.key } : record.body,
+    });
+  }
+  prepareEditingIntent(
+    action: Editing.IntentActionValue,
+    body: Record<string, unknown>,
+    target: { resource: string; base: string },
+    active: () => boolean,
+  ): Promise<Intent> {
+    return this.locked(() => {
+      if (!active()) throw new DOMException('View changed.', 'AbortError');
+      const slot =
+        'editing-intent:' + target.resource.toLowerCase() + ':' + target.base.toLowerCase();
+      if (
+        this.all().some(
+          (r) =>
+            r.kind.startsWith('editing-intent.') &&
+            r.state === 'uncertain' &&
+            !r.editing_intent_release &&
+            r.slot.split(':')[1] === target.resource.toLowerCase() &&
+            // A separate release can only close the same notice. Keep the lost
+            // renewal intact; unknown announcements/releases still need recovery.
+            !(
+              action === 'release' &&
+              r.kind === 'editing-intent.renew' &&
+              String(r.body.notice_id).toLowerCase() === String(body.notice_id).toLowerCase() &&
+              Number(body.expected_version) >= Number(r.body.expected_version)
+            ),
+        )
+      )
+        throw new Error(
+          'Resolve the saved editing intent command for this resource before another choice.',
+        );
+      const record = this.create(
+        slot,
+        'editing-intent.' + action,
+        '/api/v1/editing-intent/' + action,
+        body,
+      );
+      if (
+        !Value.Check(
+          {
+            announce: Editing.AnnounceIntent,
+            renew: Editing.RenewIntent,
+            release: Editing.ReleaseIntent,
+          }[action],
+          record.body,
+        )
+      )
+        throw new Error('Review the editing intent fields and duration before announcing.');
+      return this.write({ ...record, state: 'uncertain', sequence: 1 });
+    });
+  }
+  acknowledgeEditingIntentRelease(
+    record: Intent,
+    receipt: Editing.IntentStatusView,
+    active: () => boolean,
+  ): Promise<Intent> {
+    return this.locked(() => {
+      if (!active()) throw new DOMException('View changed.', 'AbortError');
+      const current = this.current(record);
+      if (
+        !current ||
+        current.state !== 'uncertain' ||
+        !Value.Check(Editing.IntentResult, receipt) ||
+        !editingIntentReleased(current, receipt)
+      )
+        throw new Error('A confirmed terminal release for this exact notice is required.');
+      // Preserve immutable custody and uncertainty about the original outcome.
+      // Late settlement merges into this record and cannot erase the release.
+      return this.write({
+        ...current,
+        sequence: current.sequence + 1,
+        editing_intent_release: receipt,
+      });
     });
   }
   prepareModeration(body: Record<string, unknown>, active: () => boolean): Promise<Intent> {

@@ -196,6 +196,44 @@ JSON; `--cursor` continues that selection. Receipts contain no preview body. Que
 inputs and unrelated command journals remain unchanged. Exact browser links use
 `/loom/file/artifact/RESOURCE/REVISION/FILE` or the `contribution` variant.
 
+Existing openings, comments, summaries and artifacts offer **Editing intent** in
+their resource and editing views. Explicitly announce a purpose and whole-resource
+or described scope against an exact base; inspect peers, renew or release. Notices
+are advisory: overlap, expiry, retrieval failure and notice capacity never prevent
+an otherwise authorized publication. An older base stays fixed. Expiry uses
+PostgreSQL time without a client heartbeat or worker; publishing never renews or
+releases intent automatically. See [ADR-032](docs/adr/032-advisory-editing-intent.md).
+
+The synthetic default is 30 minutes, with explicit 1–120-minute durations.
+Purpose/scope cap at 512/256 UTF-8 bytes; requests at 4 KiB and serialized pages
+at 32 KiB. Inspection returns up to 25 entries, scanning at most 100 retained
+notices/resource. Retention caps are 100/resource, 128/participant and 4096/community;
+active caps are 25/resource and 16/participant. General decisions cap at 10,000,
+with separate reserved capacity for one release per admitted notice. Exact replay
+and owner status remain available; unresolved decisions are never silently evicted.
+These volume bounds do not approve production retention or workload capacity.
+
+The browser retains exact commands in its existing bounded identity journal;
+Editing intent recovery at `/loom/editing-intent` remains reachable after source loss.
+Receipts return original accepted timestamps/version separately from current temporal
+state, without protected source metadata. An old retry cannot reactivate a notice
+or mutate a replacement. Source restoration does not reset its original expiry.
+A lost renewal does not prevent a separate release of that same notice. After a
+receipt confirms permanent release, “Keep command and unblock new intent” retains
+the exact uncertain command and release evidence while allowing a deliberate new
+announcement. Missing outcomes, failed retries and expiry alone do not unblock it.
+
+The independent `scripts/editing-intent-client.mjs` accepts `--origin`, `--ca`,
+`--credential-file` and a new `--journal` per command. Use `--action prepare
+--kind announce|renew|release --input command.json`, then `--action send`,
+`status` or `retry`. Preparation adds the key and fsyncs exact private request bytes;
+credentials stay outside the journal. Legitimate replacement credentials for the
+same participant retain recovery. `--action inspect --resource ID --output result.json`
+supports `--limit` and `--cursor`; `lose-response` deliberately discards an accepted
+reply for testing. Guide 17 and generated OpenAPI describe the complete schemas.
+`npm run test:reservations:postgres` runs disposable native authority/expiry/race,
+upgrade and independent HTTPS checks; the normal coverage pipeline includes it.
+
 ## Design documents
 
 Start with the [documentation index](docs/README.md). The

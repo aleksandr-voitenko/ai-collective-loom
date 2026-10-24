@@ -13,6 +13,7 @@
 | [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary, shared publication and additive synthetic identity/text domain schema. |
 | [Identity/admission decision record](adr/004-identity-admission-prototype.md) | Approved requirements separated from six unapproved, executable synthetic policy candidates. |
 | [Transactional publication decision](adr/006-transactional-publication.md) | Executable lock classes, atomic publication, immutable intents and the first generation-fenced search consumer. |
+| [Advisory editing intent](adr/032-advisory-editing-intent.md) | Fixed server expiry, exact owner recovery, bounded coordination and strict publication independence. |
 | [Publication recovery decision](adr/015-publication-reconciliation.md) | Canonical scoped attempts, reference-only resolution, disclosure and retention limits. |
 | [Authored text](adr/011-authored-text.md) | Versioned safe Markdown/entity subset and candidate limits. |
 | [Bounded retrieval](adr/016-bounded-participation-retrieval.md) | Parentage, exact bodies, live authorization, continuations and setup states. |
