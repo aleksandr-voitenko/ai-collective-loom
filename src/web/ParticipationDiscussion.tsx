@@ -38,6 +38,8 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     id: string;
     area: { id: string; title: string; description: string };
     opening: ResourceView;
+    local_open: boolean;
+    publication_open: boolean;
   }>('/api/v1/discussions/' + id);
   const [reload, setReload] = useState(0),
     [summaryReload, setSummaryReload] = useState(0);
@@ -84,6 +86,14 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               History & details
             </Link>
           </div>
+          {!data.publication_open && (
+            <p className="notice" role="status">
+              {data.local_open
+                ? 'This discussion is locally open, but a topic above it is closed to publication.'
+                : 'This discussion is closed to publication.'}{' '}
+              Replies, revisions and summaries are paused. Retained content stays readable.
+            </p>
+          )}
           {data.opening.affected_area_id && (
             <p>
               Organizational suggestion concerning{' '}
@@ -103,7 +113,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
             />
           )}
           {context.self.role === 'administrator' && (
-            <OrganizationActions id={id} kind="discussion" />
+            <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
           )}
         </>
       ) : (

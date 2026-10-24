@@ -13,7 +13,7 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`18`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`19`.
 Advisory Editing intent (ADR-032/migration0022) lives in sibling reservations/:
 exact-base notices, fixed PostgreSQL expiry, optimistic renew/release and private
 owner recovery. Publication remains independent. Browser and direct HTTPS share
@@ -47,10 +47,12 @@ removes only local suppression. Both credentials require current administrator
 authority. Existing visibility generations drive replay; no shared lifecycle event,
 content revision or private choice is fabricated. See participation memory.
 Administrator topic organization adds an implicit root, bounded nested areas,
-attributed metadata history, versioned subtree/content moves and inherited closure.
+attributed metadata history, versioned subtree/content moves and local/inherited
+area or discussion closure. Discussion close/open uses the same organization-v1
+protocol (migration0024); it blocks replies, revisions and summaries, never reads.
 Resource ownership remains authoritative; the existing exclusive structure guard
 serializes organization with publication, followed by the common clock/event tail.
-Exact recovery returns original and current state without reapplying earlier moves.
+Exact recovery returns original and current state without reapplying earlier decisions.
 Proposal discussions bind their destination/settings; topic-specific suggestions
 also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.
 See ADR-020; optional moderator

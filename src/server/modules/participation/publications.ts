@@ -29,7 +29,7 @@ import { parseAuthored, validUnicode, validateChangeFields } from '../../../cont
 import { lockAttempt } from '../../application/attempt.js';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import { identityOf, type ActorContext } from '../publication/actor.js';
-import { PublicationError, safeError } from '../publication/errors.js';
+import { PublicationClosedError, PublicationError, safeError } from '../publication/errors.js';
 import { canonicalAttemptKey } from '../publication/input.js';
 import {
   lockActor,
@@ -218,7 +218,7 @@ async function outcome(tx: SqlTransaction, participant: string, kind: string, ke
   ).rows[0];
 }
 function open(chain: Resource[]) {
-  if (chain.some((resource) => !resource.publication_open)) throw new PublicationError('forbidden');
+  if (chain.some((resource) => !resource.publication_open)) throw new PublicationClosedError();
 }
 export class ParticipationPublications {
   constructor(private readonly database: Transactions) {}
@@ -429,6 +429,14 @@ export class ParticipationPublications {
             throw new PublicationError('unavailable');
           if (!resource.current_revision_id) throw new PublicationError('unavailable');
           await requireRevision(tx, resource.id, resource.current_revision_id);
+          if (kind === 'summary.revise' && coverage?.preparation_id) {
+            if (!(await preparation(tx, actor.participantId, coverage.preparation_id, true)).valid)
+              return expirePreparation(tx, coverage.preparation_id);
+            // A fresh declaration requires current source access; immediate-base
+            // carry-forward deliberately keeps its independent historical rule.
+            for (const member of coverage.members)
+              await authorizeMember(tx, coverage.discussion_id, member);
+          }
           await authorizePublication(tx, actor, chain);
           if (resource.current_revision_id !== input.expected_revision_id)
             throw new PublicationError('revision_conflict', resource.current_revision_id);
@@ -479,7 +487,6 @@ export class ParticipationPublications {
           resourceId = resource.id;
         } else if (kind === 'summary.create') {
           const owners = await lockContext(tx, input.discussion_id!, 'resolution', ['discussion']);
-          open(owners);
           if (
             !coverage ||
             coverage.discussion_id !== input.discussion_id ||
@@ -500,6 +507,7 @@ export class ParticipationPublications {
             return expirePreparation(tx, coverage.preparation_id);
           for (const member of coverage.members)
             await authorizeMember(tx, coverage.discussion_id, member);
+          open(owners);
           resourceId = await this.createResource(
             tx,
             actor.participantId,
@@ -575,7 +583,6 @@ export class ParticipationPublications {
             kind === 'reply.create'
               ? await lockContext(tx, input.parent_id!, 'resolution')
               : await lockContext(tx, input.area_id!, 'resolution', ['area']);
-          open(owners);
           let ownerId = input.area_id!;
           if (kind === 'reply.create') {
             const parent = owners[0]!;
@@ -593,14 +600,17 @@ export class ParticipationPublications {
               throw new PublicationError('unavailable');
             await requireRevision(tx, parent.id, parent.current_revision_id);
             ownerId = row!.discussion_id;
-          } else if (kind === 'discussion.create') {
+          } else if (kind !== 'discussion.create' && kind !== 'artifact.create')
+            throw new PublicationError('invalid_input');
+          open(owners);
+          if (kind === 'discussion.create') {
             ownerId = await this.createResource(
               tx,
               actor.participantId,
               'discussion',
               input.area_id!,
             );
-          } else if (kind !== 'artifact.create') throw new PublicationError('invalid_input');
+          }
           const resourceKind = kind === 'artifact.create' ? 'artifact' : 'contribution';
           resourceId = await this.createResource(tx, actor.participantId, resourceKind, ownerId);
           if (kind === 'discussion.create')
@@ -643,12 +653,6 @@ export class ParticipationPublications {
           // New rows are owned by this transaction. Existing owner locks were taken
           // before insertion; no competing transaction can yet see these identities.
           chain = await lockContext(tx, resourceId, 'publication');
-        }
-        if (kind === 'summary.revise' && coverage?.preparation_id) {
-          if (!(await preparation(tx, actor.participantId, coverage.preparation_id, true)).valid)
-            return expirePreparation(tx, coverage.preparation_id);
-          for (const member of coverage.members)
-            await authorizeMember(tx, coverage.discussion_id, member);
         }
         if (input.change_note && !['artifact', 'summary'].includes(chain[0]!.kind))
           throw new PublicationError('invalid_input');

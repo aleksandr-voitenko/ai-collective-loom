@@ -147,3 +147,17 @@ test('moderation control metadata never grants source access; every recorded lif
   assert.equal(classifyError(responseContract('/api/v1/editing-intent/resources/12345678-abcd-1234-abcd-123456789abc','GET'),new ApiError('unavailable','Source hidden')).content,'withdraw');
   assert.equal(classifyError(responseContract('/api/v1/editing-intent/release','POST'),new ApiError('unavailable','Unknown private notice')).content,'retain');
  });
+
+test('only certified publication closure on declared endpoints preserves reading; other refusals still withdraw',()=>{
+ const id='12345678-abcd-1234-abcd-123456789abc';
+ const hint=(code:string)=>new ApiError(code,'Closure reason supplied',undefined,undefined,undefined,'publication_closed');
+ for(const path of ['/api/v1/revisions','/api/v1/summary-revisions','/api/v1/summary-preparations','/api/v1/file-uploads','/api/v1/file-uploads/'+id+'/bytes','/api/v1/file-uploads/'+id+'/finalize']){
+  const contract=responseContract(path,'POST');
+  assert.deepEqual(classifyError(contract,hint('forbidden')),{session:'retain',content:'retain'});
+  assert.deepEqual(classifyError(contract,new ApiError('forbidden','Editor denied')),{session:'retain',content:'withdraw'});
+  assert.deepEqual(classifyError(contract,hint('unavailable')),{session:'retain',content:'withdraw'});
+  assert.deepEqual(classifyError(contract,hint('invalid_actor')),{session:'revoke',content:'withdraw'});
+ }
+ for(const [path,method] of [['/api/v1/organization/changes','POST'],['/api/v1/resources/'+id,'GET'],['/api/v1/admin/moderation/state','POST']] as const)
+  assert.deepEqual(classifyError(responseContract(path,method),hint('forbidden')),{session:'retain',content:'withdraw'});
+});

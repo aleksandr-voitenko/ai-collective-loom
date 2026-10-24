@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 import type { ActorContext } from '../publication/actor.js';
 import { identityOf } from '../publication/actor.js';
 import { lockActor, lockContext } from '../publication/guards.js';
-import { safeError, PublicationError } from '../publication/errors.js';
+import { safeError, PublicationClosedError, PublicationError } from '../publication/errors.js';
 import type { Transactions, SqlTransaction } from '../../db/postgres.js';
 import { lockAttempt } from '../../application/attempt.js';
 import {
@@ -155,8 +155,8 @@ export class SummaryPreparation {
           ...members.map((m) => m.contribution_id),
         ]);
         const chain = await lockContext(tx, input.discussion_id, 'resolution', ['discussion']);
-        if (chain.some((r) => !r.publication_open)) throw new PublicationError('forbidden');
         for (const m of members) await authorizeMember(tx, input.discussion_id, m);
+        if (chain.some((r) => !r.publication_open)) throw new PublicationClosedError();
         const id = randomUUID();
         await tx.query(
           'INSERT INTO loom.summary_preparations(id,participant_id,idempotency_key,request_digest,discussion_id,scope) VALUES ($1,$2,$3,$4,$5,$6)',

@@ -152,6 +152,7 @@ export async function transportRequest<T>(
           current_revision_id?: string;
           operation_outcome?: 'unknown' | 'rejected';
           unavailable_scope?: unknown;
+          forbidden_reason?: unknown;
         };
       }
     ).error;
@@ -161,6 +162,9 @@ export async function transportRequest<T>(
       error?.current_revision_id,
       error?.operation_outcome,
       contract.revisionMiss && error?.unavailable_scope === 'revision' ? 'revision' : undefined,
+      contract.publicationClosureRefusal && error?.forbidden_reason === 'publication_closed'
+        ? 'publication_closed'
+        : undefined,
     );
     // Error evidence is consumed once, at the endpoint boundary, regardless of
     // which view/command initiated it or whether that caller is still mounted.
