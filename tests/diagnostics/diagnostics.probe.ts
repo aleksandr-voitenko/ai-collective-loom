@@ -21,6 +21,7 @@ const test = diagnosticTest.extend<{ probe: string }>({
       response.writeHead(200, { 'content-type': 'text/html', 'set-cookie': `session=${canary}; SameSite=Lax`, 'x-secret': canary });
       response.end(`<main class="loom-app"><div class="account"></div><h1>Probe ${canary}</h1>
         <label>Issued secret<input aria-label="Issued secret" readonly value="${canary}"></label>
+        <label>Note text<textarea>${canary}</textarea></label><label>Search private notes<input value="${canary}"></label>
         <button aria-label="Sign out">Sign out</button><p role="alert">${canary}</p>
         <script>localStorage.setItem('credential', '${canary}'); sessionStorage.setItem('ticket', '${canary}'); console.error('${canary}');</script></main>`);
     });
@@ -44,6 +45,8 @@ test('missing control ' + canary, async ({ page, context, probe }, info) => {
   await other.goto(probe + '/loom/discussion/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa?secret=' + canary);
   await other.evaluate(async value => {
     await fetch('/api/v1/identity/self?challenge=' + value, { headers: { authorization: 'Bearer ' + value, 'x-loom-csrf': value } });
+    await fetch('/api/v1/me/notes/query', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({query:value})});
+    localStorage.setItem('private-note-draft', JSON.stringify({title:value,body:value,links:[value]}));
     void fetch('/api/v1/areas?ticket=' + value);
   }, canary);
   await info.attach(canary, { body: Buffer.from(canary), contentType: 'text/plain' });

@@ -15,6 +15,7 @@ import * as Sum from '../contracts/summaries.js';
 import * as Search from '../contracts/search.js';
 import { PromotionProvenance } from '../contracts/files.js';
 import * as M from '../contracts/moderation.js';
+import * as Notes from '../contracts/notes.js';
 import * as Intent from '../contracts/reservations.js';
 import { ApiError } from './request-context.js';
 
@@ -626,6 +627,31 @@ add(
   'receipt',
   sourceErrors,
   affirmed('Administrator derived-work maintenance never authorizes source content.'),
+);
+
+add(
+  ['GET /api/v1/me/notes/{id}', 'POST /api/v1/me/notes/query'],
+  'private-read',
+  privateIntentErrors,
+  affirmed('Current independently owned private note content; no shared source projection.'),
+);
+add(
+  ['POST /api/v1/me/notes/create', 'POST /api/v1/me/notes/update'],
+  'receipt',
+  sourceErrors,
+  affirmed('Content-free private note outcome; new links require current source authority.'),
+);
+add(
+  ['POST /api/v1/me/notes/delete', 'POST /api/v1/me/notes/status'],
+  'receipt',
+  privateIntentErrors,
+  affirmed('Content-free owner-only note outcome, independent of linked sources.'),
+);
+add(
+  ['GET /api/v1/me/notes/{id}/sources'],
+  'read',
+  privateIntentErrors,
+  classified(Notes.NoteSources, ['items[].source.state']),
 );
 
 const matchers = [...responseContracts].map(([route, contract]) => ({

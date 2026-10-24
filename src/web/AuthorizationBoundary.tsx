@@ -20,6 +20,7 @@ import * as P from '../contracts/private-controls.js';
 import * as O from '../contracts/organization.js';
 import * as S from '../contracts/saved-items.js';
 import * as M from '../contracts/moderation.js';
+import * as Notes from '../contracts/notes.js';
 import * as Intent from '../contracts/reservations.js';
 import { contentKey, type ContentRequest, type ContentRegion } from './protected-content.js';
 import { identityContent } from './authorization-coordinator.js';
@@ -298,8 +299,11 @@ class ViewAuthorization {
     const route = path.split('?')[0];
     const allowed =
       options.body === undefined
-        ? route === '/api/v1/me/following/private' && options.schema === P.FollowPage
-        : (route === '/api/v1/me/following/private/lookup' && options.schema === P.FollowItem) ||
+        ? (route === '/api/v1/me/following/private' && options.schema === P.FollowPage) ||
+          (/^\/api\/v1\/me\/notes\/[a-f0-9-]{36}$/i.test(route ?? '') &&
+            options.schema === Notes.NoteDetail)
+        : (route === '/api/v1/me/notes/query' && options.schema === Notes.NotePage) ||
+          (route === '/api/v1/me/following/private/lookup' && options.schema === P.FollowItem) ||
           (route === '/api/v1/me/attention/private/mutes/lookup' &&
             options.schema === P.MuteItem) ||
           (route === '/api/v1/me/attention/private/list' && options.schema === P.AttentionList);

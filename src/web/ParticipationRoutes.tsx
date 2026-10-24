@@ -1,3 +1,4 @@
+import { PrivateNotesPage } from './PrivateNotes.js';
 import { PromotionPage } from './AttachmentPromotion.js';
 import { EditingIntentRecovery } from './EditingIntent.js';
 import { FileTextPage } from './FileText.js';
@@ -28,7 +29,13 @@ export function ActiveView({ context }: { context: Context }) {
     kind = location.pathname.split('/')[2];
   // Attention pages already own their full-view or private-settings boundary.
   // The remaining routes must also provide a protected read capability.
-  if (kind === 'admin' || kind === 'moderation' || kind === 'promote' || kind === 'editing-intent')
+  if (
+    kind === 'notes' ||
+    kind === 'admin' ||
+    kind === 'moderation' ||
+    kind === 'promote' ||
+    kind === 'editing-intent'
+  )
     return (
       <AuthorizationBoundary
         scope={kind === 'admin' ? 'administration' : kind}
@@ -64,6 +71,8 @@ function RouteView({ context }: { context: Context }) {
     kind = path[0],
     id = path[1];
   if (!kind) return <Topics context={context} />;
+  if (kind === 'notes')
+    return <PrivateNotesPage key={location.pathname + location.search} context={context} />;
   if (kind === 'attention') return <AttentionPage context={context} />;
   if (kind === 'editing-intent') return <EditingIntentRecovery context={context} />;
   if (kind === 'reading') return <ReadingPageViewComponent />;

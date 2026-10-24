@@ -27,6 +27,8 @@ import { ReadingLimitError } from '../modules/participation/reading.js';
 import { SavedItemsError } from '../modules/participation/saved-items.js';
 import { registerOrganization } from './organization.js';
 import { registerModeration } from './moderation.js';
+import { registerNotes } from './notes.js';
+import { NoteError } from '../modules/notes/notes.js';
 import { registerReservations } from './reservations.js';
 import { ReservationError } from '../modules/reservations/reservations.js';
 import { ModerationError } from '../modules/participation/moderation.js';
@@ -190,6 +192,11 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
         : code === 'search_work_limit'
           ? 'review_synthetic_limit'
           : 'correct_request';
+  } else if (error instanceof NoteError) {
+    code = error.code;
+    message = error.message;
+    status = code === 'note_limit' ? 429 : 409;
+    action = code === 'note_collection_changed' ? 'replay_view' : 'review_current_note';
   } else if (error instanceof ReservationError) {
     code = error.code;
     message = error.message;
@@ -290,6 +297,7 @@ export async function registerParticipation(app: FastifyInstance, services: Part
   registerOrganization(app, services.database, actor);
   registerModeration(app, services.database, actor);
   registerReservations(app, services.database, actor);
+  registerNotes(app, services.database, actor);
   registerSearch(app, services.database, actor);
   registerNotifications(app, services.database, actor);
   registerFollowing(app, services.database, actor);

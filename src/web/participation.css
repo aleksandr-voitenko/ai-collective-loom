@@ -1359,3 +1359,30 @@
   flex-wrap: wrap;
   gap: 0.4rem;
 }
+
+.private-notes .note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.private-notes textarea {
+  width: 100%;
+  min-height: 12rem;
+}
+.private-notes input,
+.private-notes select {
+  max-width: 100%;
+}
+.private-notes fieldset {
+  min-width: 0;
+  margin-block: 1rem;
+}
+.private-notes .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.private-notes .notice button,
+.private-notes article button {
+  margin: 0.25rem;
+}

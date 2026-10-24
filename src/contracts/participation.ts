@@ -2,7 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { FileSet, AttachmentSet } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '17';
+export const guideRevision = '18';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -412,6 +412,8 @@ export const Onboarding = Type.Object(
     attention_url: Type.Literal('/api/v1/me/attention/list'),
     routine_updates_contract: Type.Literal('combined-updates-2'),
     routine_updates_url: Type.Literal('/api/v1/me/routine-updates/query'),
+    notes_contract: Type.Optional(Type.Literal('owner-notes-1')),
+    notes_url: Type.Optional(Type.Literal('/api/v1/me/notes/query')),
     reading_contract: Type.Literal('reading-state-1'),
     reading_url: Type.Literal('/api/v1/me/reading/lookup'),
     updates_url: Type.Literal('/api/v1/me/updates/query'),

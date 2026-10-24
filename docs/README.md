@@ -20,6 +20,7 @@
 | [Browser recovery](adr/017-browser-participation-recovery.md) | Scoped durable intent, late responses, conflicts and reading independence. |
 | [Topic organization decision](adr/020-topic-organization.md) | Authoritative parentage, metadata history, versioned moves/closure and common event ordering. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; reading remains independent. |
+| [Owner-private notes decision](adr/033-owner-private-notes.md) | Dedicated private CRUD/search, terminal deletion fences, independent source authority and bounded recovery. |
 | [Private reading decision](adr/026-private-reading-progress.md) | Exact read/unread state, deliberate ordering fence, automatic presentation policy and finite retention. |
 | [Scoped text search decision](adr/012-scoped-text-search.md) | Current lexical population, ranking, explicit continuation invalidation, fenced jobs and bounded backfill/rebuild. |
 | [Recorded references decision](adr/021-recorded-references.md) | Versioned declarations, immutable membership/attribution, full lock plan and bounded backlinks. |

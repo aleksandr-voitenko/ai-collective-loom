@@ -220,6 +220,10 @@ export function ParticipationApp() {
           <Icon name="topic" />
           Following
         </NavLink>
+        <NavLink to="/loom/notes">
+          <Icon name="saved" />
+          Private notes
+        </NavLink>
         <NavLink to="/loom/saved">
           <Icon name="saved" />
           Saved items
@@ -325,25 +329,27 @@ export function ParticipationApp() {
             ☰
           </button>
           <span>
-            {location.pathname.includes('/admin')
-              ? 'Administration'
-              : location.pathname.includes('/overview')
-                ? 'Community overview'
-                : location.pathname.includes('/artifacts')
-                  ? 'Artifacts'
-                  : location.pathname.includes('/following')
-                    ? 'Following'
-                    : location.pathname.includes('/changes')
-                      ? 'Changes'
-                      : location.pathname.includes('/updates')
-                        ? 'Updates'
-                        : location.pathname.includes('/notifications')
-                          ? 'Mentions/replies'
-                          : location.pathname.includes('/saved')
-                            ? 'Saved items'
-                            : location.pathname.includes('/search')
-                              ? 'Search'
-                              : 'Topics'}
+            {location.pathname.includes('/notes')
+              ? 'Private notes'
+              : location.pathname.includes('/admin')
+                ? 'Administration'
+                : location.pathname.includes('/overview')
+                  ? 'Community overview'
+                  : location.pathname.includes('/artifacts')
+                    ? 'Artifacts'
+                    : location.pathname.includes('/following')
+                      ? 'Following'
+                      : location.pathname.includes('/changes')
+                        ? 'Changes'
+                        : location.pathname.includes('/updates')
+                          ? 'Updates'
+                          : location.pathname.includes('/notifications')
+                            ? 'Mentions/replies'
+                            : location.pathname.includes('/saved')
+                              ? 'Saved items'
+                              : location.pathname.includes('/search')
+                                ? 'Search'
+                                : 'Topics'}
           </span>
           <span className="release-label">Synthetic preview</span>
         </header>

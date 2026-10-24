@@ -96,3 +96,19 @@ throughout this directory. Mounted StrictMode tests cover late ownership/authori
 and recovery, while compiled Chromium exercises dialogs, native focus, routing,
 cross-tab journals and the delayed-community sibling-key regression. Build before
 browser suites; never run a cleaning build during compiled-browser/native tests.
+
+Private notes (`PrivateNotes.tsx`, ADR-033) use the actual `/loom/notes` settings
+host. Closed privateRead routes authorize owner detail/search separately from
+leased `/sources` previews. Source denial withdraws previews while retaining
+owner text/cleanup; identity loss withdraws both. Queries use POST and participant-
+bound history state. Note receipts contain no bodies and cannot authorize sources.
+`note-recovery.ts` validates drafts/exact commands; IntentStore shares the existing
+32-record/1-MiB journal. Unknown updates permit a separate optimistic delete.
+Explicit terminal forgetting requires the same identity, valid deletion timestamp
+and a version above the attempted base, without deciding the earlier outcome.
+Clear/remove readback failures stay visible; late receipts and queued autosaves never
+recreate removed persisted note records. Note/storage events invalidate pages and
+previews; a relevant cross-tab storage event consults the current journal and makes
+one fresh owner read for a saved or attempted note, including a create committed
+without leaving its draft route. Unsent drafts are not rebased. See focused mounted
+and compiled `notes` tests.

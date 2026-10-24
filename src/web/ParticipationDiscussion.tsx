@@ -1,3 +1,4 @@
+import { AddPrivateNote } from './PrivateNotes.js';
 import { FileBrowser } from './Files.js';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, Link } from 'react-router';
@@ -67,6 +68,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
           </div>
           <div className="header-line">
             <h1>{data.opening.title}</h1>
+            <AddPrivateNote target={{ kind: 'discussion', resource_id: id }} />
             <SuppressLink context={context} id={id} kind="discussion" />
             <SaveControl
               context={context}
