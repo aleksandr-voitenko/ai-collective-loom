@@ -273,7 +273,7 @@ later uncertain retries and stale first refusals remain uncertain under journal
 sequence/owner guards (`LC-20261014-8GYV`). Tests: `test:saved-items:postgres`,
 `e2e/saved-items.spec.ts`; the external
 `scripts/saved-items-client.mjs` persists immutable fsynced intent and accepts the
-unchanged Saved contract in guide revisions 2–19. Production and cross-machine gates remain.
+unchanged Saved contract in guide revisions 2–20. Production and cross-machine gates remain.
 Saved-state rationale, retention choices and evidence: `LC-20261014-OIAD`.
 
 Organization (ADR-020): `resources.owner_resource_id` is the only parentage;

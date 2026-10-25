@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router';
 import { type Intent, commandRequest, isDefinitiveRejection } from './participation-client.js';
-import { type Context, useIntent, useQuery, SeparateDraft } from './participation-state.js';
+import { type Context, useIntent, SeparateDraft } from './participation-state.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
 import { Avatar, ErrorText } from './participation-ui.js';
+import { useAdministrationPage, AdministrationPageControls } from './AdministrationBrowsing.js';
+import type {
+  AdministrativeAccountView,
+  AdministrativeCredentialView,
+} from '../contracts/administration.js';
 
 export function Admission({ context }: { context: Context }) {
   const authority = useAuthorization();
@@ -48,15 +53,37 @@ export function Admission({ context }: { context: Context }) {
         ? 'human'
         : 'agent'
       : (selected?.kind ?? kind);
-  const accounts = useQuery<
-    {
-      id: string;
-      nickname: string;
-      kind: string;
-      state: string;
-      role: string;
-    }[]
-  >('/api/v1/identity/accounts');
+  const accounts = useAdministrationPage<AdministrativeAccountView>('accounts', context.self);
+  const [lookup, setLookup] = useState(''),
+    [lookupBusy, setLookupBusy] = useState(false);
+  const [found, setFound] = useState<{
+    person: AdministrativeAccountView;
+    generation: number | undefined;
+  }>();
+  const [lookupSequence] = useState(() => ({ value: 0 }));
+  async function findAccount() {
+    if (lookupBusy) return;
+    const sequence = ++lookupSequence.value;
+    setLookupBusy(true);
+    setError('');
+    try {
+      const result = await authority.readAuthorized<AdministrativeAccountView>(
+        '/api/v1/identity/accounts/lookup',
+        {
+          self: context.self,
+          body: /^[a-f0-9-]{36}$/i.test(lookup.trim())
+            ? { id: lookup.trim() }
+            : { nickname: lookup.trim() },
+        },
+      );
+      if (sequence === lookupSequence.value && authority.current(result.generation))
+        setFound({ person: result.value, generation: result.generation });
+    } catch (failure) {
+      if (sequence === lookupSequence.value) setError((failure as Error).message);
+    } finally {
+      if (sequence === lookupSequence.value) setLookupBusy(false);
+    }
+  }
   const locked = busy || (!!pending && (pending.state !== 'draft' || !!pending.blocked_by));
   async function draftAccount(patch: Record<string, unknown> = {}) {
     try {
@@ -288,9 +315,36 @@ export function Admission({ context }: { context: Context }) {
       )}
       <details className="section">
         <summary>Participant accounts</summary>
-        <button onClick={accounts.refresh}>Refresh accounts</button>
-        <ErrorText error={accounts.error} />
-        {accounts.data?.map((person) => (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void findAccount();
+          }}
+        >
+          <label>
+            Exact account ID or nickname
+            <input
+              value={lookup}
+              maxLength={36}
+              onChange={(event) => {
+                setLookup(event.target.value);
+                lookupSequence.value++;
+                setFound(undefined);
+                setLookupBusy(false);
+              }}
+            />
+          </label>
+          <button aria-disabled={lookupBusy}>Find account</button>
+        </form>
+        <AdministrationPageControls page={accounts} name="accounts" />
+        {[
+          ...(found && authority.current(found.generation) ? [found.person] : []),
+          ...(accounts.data?.items.filter(
+            (person) =>
+              person.id !==
+              (found && authority.current(found.generation) ? found.person.id : undefined),
+          ) ?? []),
+        ].map((person) => (
           <div className="list-row" key={person.id}>
             <Avatar person={person} />
             <span>
@@ -300,7 +354,13 @@ export function Admission({ context }: { context: Context }) {
               disabled={busy || !!pending || !!issued}
               onClick={() => {
                 setAccount(undefined);
-                setSelection({ ...person, generation: accounts.generation });
+                setSelection({
+                  ...person,
+                  generation:
+                    found?.person.id === person.id && authority.current(found.generation)
+                      ? found.generation
+                      : accounts.generation,
+                });
               }}
             >
               Manage credentials
@@ -317,7 +377,10 @@ export function Admission({ context }: { context: Context }) {
                     state: person.state === 'active' ? 'suspended' : 'active',
                   },
                 })
-                  .then(accounts.refreshIfCurrent)
+                  .then(() => {
+                    setFound((current) => (current?.person.id === person.id ? undefined : current));
+                    accounts.refreshIfCurrent();
+                  })
                   .catch((failure) => setError(failure.message))
               }
             >
@@ -326,25 +389,30 @@ export function Admission({ context }: { context: Context }) {
           </div>
         ))}
       </details>
-      {account && <CredentialList participantId={account} context={context} />}
+      {account && <CredentialList key={account} participantId={account} context={context} />}
     </section>
   );
 }
 
 function CredentialList({ participantId, context }: { participantId: string; context: Context }) {
-  const { data, error, refresh, refreshIfCurrent } = useQuery<
-      { id: string; kind: string; label: string; state: string }[]
-    >('/api/v1/identity/credentials?participant_id=' + participantId),
+  const page = useAdministrationPage<AdministrativeCredentialView>(
+      'credentials',
+      context.self,
+      participantId,
+    ),
     [failure, setFailure] = useState('');
   return (
     <details className="section">
       <summary>Credentials for this account</summary>
-      <button onClick={refresh}>Refresh credentials</button>
-      <ErrorText error={error || failure} />
-      {data?.map((credential) => (
+      <AdministrationPageControls page={page} name="credentials" />
+      <ErrorText error={failure} />
+      {page.data?.items.map((credential) => (
         <div className="list-row" key={credential.id}>
           <span>
             {credential.label} · {credential.kind} · {credential.state}
+            <br />
+            <code>{credential.id}</code> · Created {credential.created_at} · Expires{' '}
+            {credential.expires_at ?? 'Never'}
           </span>
           <button
             disabled={credential.state !== 'active'}
@@ -357,7 +425,7 @@ function CredentialList({ participantId, context }: { participantId: string; con
                   credential_id: credential.id,
                 },
               })
-                .then(refreshIfCurrent)
+                .then(page.refreshIfCurrent)
                 .catch((failure) => setFailure(failure.message))
             }
           >

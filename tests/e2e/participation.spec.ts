@@ -1042,12 +1042,12 @@ test("review regression: rejected admission preserves editable correction and un
     const response=await route.fetch();expect(response.status()).toBe(200);
     accountReady=true;await accountHeld;await route.fulfill({response});
   });
-  await page.route('**/api/v1/identity/credentials?*',async route=>{credentialReads++;await route.continue();});
+  await page.route('**/api/v1/identity/credentials/query',async route=>{credentialReads++;await route.continue();});
   try{
     await page.getByRole('button',{name:'Create account',exact:true}).click();
     await expect.poll(()=>accountReady).toBe(true);
     await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[administrator]));
-    const refusal=page.waitForResponse(r=>r.url().endsWith('/api/v1/identity/accounts')&&r.request().method()==='GET'&&r.status()===403);
+    const refusal=page.waitForResponse(r=>r.url().endsWith('/api/v1/identity/accounts/query')&&r.request().method()==='POST'&&r.status()===403);
     await page.getByRole('button',{name:'Refresh accounts',exact:true}).click();await refusal;
     await expect(page.getByText('human_recovery · human · active',{exact:true})).toHaveCount(0);
     releaseAccount();

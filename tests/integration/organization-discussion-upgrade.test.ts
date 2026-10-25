@@ -9,7 +9,7 @@ import {reservationSnapshot as snapshot} from '../helpers/reservations.js';
 import {prepareText} from '../helpers/file-text.js';
 import {createNote,accepted} from '../helpers/notes.js';
 
-test('populated 0023 upgrade preserves every old row, exact bytes, flags and retained organization/publication decisions',{timeout:120000},async t=>{
+test('populated 0023 to 0024 upgrade preserves every old row, exact bytes, flags and retained organization/publication decisions',{timeout:120000},async t=>{
  const f=await fixture(t,{files:true,throughMigration:23}),d=await f.discussion(),c=await f.reply(d),s=await f.create(d.id);
  const member=await prepareText(f.admin,{kind:'area',resource_id:f.area},'closure-baseline.txt');
  const body={idempotency_key:randomUUID(),area_id:f.area,title:'Retained file',content:{format:'loom-markdown-v3',text:'Retained prose',mentions:[],references:[]},change_note:null,change_account:null,file_set:{version:'artifact-files-v1',files:[member]}};
@@ -24,7 +24,7 @@ test('populated 0023 upgrade preserves every old row, exact bytes, flags and ret
  // Existing local flags may already be closed even though the old public command
  // family could only close areas. The upgrade must preserve those imported facts.
  await f.observer.query('UPDATE loom.resources SET publication_open=false WHERE id=$1',[d.id]);
- const before=await snapshot(f);await f.migrate();assert.deepEqual(await snapshot(f),before);await f.migrate();assert.deepEqual(await snapshot(f),before);
+ const before=await snapshot(f);await f.migrate(24);assert.deepEqual(await snapshot(f),before);await f.migrate(24);assert.deepEqual(await snapshot(f),before);
  assert.equal((await f.organizationState(d.id)).local_open,false);
  const replay=await f.organize(old);assert.deepEqual(replay.outcome,decision.outcome);assert.equal(replay.current.local_open,false);
  assert.equal((await f.admin.call('/api/v1/artifacts',body)).body.revision_id,a.revision_id);

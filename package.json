@@ -36,7 +36,7 @@
     "test:app": "node scripts/check-runtime.mjs && node --import tsx --test tests/unit/*.test.ts tests/contract/*.test.ts tests/web/*.test.tsx",
     "test:app:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/application.test.ts",
     "test:publication:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/publication.test.ts",
-    "test:identity:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity.test.ts",
+    "test:identity:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/identity*.test.ts",
     "test:participation:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/participation.test.ts",
     "test:saved-items:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/saved-items.test.ts",
     "test:organization:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/organization*.test.ts",

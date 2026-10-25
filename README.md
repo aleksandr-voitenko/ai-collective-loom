@@ -152,6 +152,34 @@ provider and fresh private credentials. Ctrl-C removes those preview resources;
 it does not touch development volumes. Native test fixtures separately exercise
 restart/recreation without reprovisioning existing storage.
 
+Administration supports complete bounded account browsing, exact stable-ID/current-nickname
+lookup, separately paginated non-secret credential history, and a read-only identity
+audit view. Each page stays at25items/32KiB; Next/Previous/Retry preserve bounded
+views and failed-page position. Concurrent collection changes require explicit
+Refresh. Current authority is checked on every page, and withdrawal fences late
+responses. Guide20/OpenAPI expose additive read-only POST operations; the old
+GET account/credential/audit arrays remain legacy first100-row limited views.
+See [ADR-035](docs/adr/035-complete-administrative-browsing.md).
+
+The independent HTTPS reader takes a private credential file and saves one private
+page per invocation. Run each collection separately; add `--after-page` with its
+previous output and a new output filename until the returned `complete` is true:
+
+```bash
+node scripts/administration-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --collection accounts --output accounts-1.json
+node scripts/administration-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --collection accounts --after-page accounts-1.json --output accounts-2.json
+node scripts/administration-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --collection credentials --participant ACCOUNT_UUID --output credentials-1.json
+node scripts/administration-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --collection audit --output audit-1.json
+node scripts/administration-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --nickname KNOWN_NICKNAME --output lookup.json
+```
+
+Use `--after-page credentials-1.json` or `--after-page audit-1.json` for those
+collections' next pages. Optional `--limit`/`--max-bytes` change budgets at the same
+position. Cursors expire after ten minutes and on API process restart; changes,
+expiry and restart require deliberately omitting `--after-page` to start over.
+Keep output files private: they contain administrative metadata, never credentials.
+These reads send no mutations and cannot replay an issued secret.
+
 For administrator discussion controls, use **Close discussion** / **Reopen discussion**
 on the discussion page, or `scripts/organization-client.mjs` over HTTPS. Inspect
 `GET /api/v1/organization/resources/{discussion_id}` for current `version` and

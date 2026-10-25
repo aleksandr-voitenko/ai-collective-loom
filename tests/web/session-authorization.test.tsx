@@ -26,6 +26,7 @@ const css=registerHooks({load(url,context,next){return url.endsWith('.css')?{for
 const {ParticipationApp}=await import('../../src/web/ParticipationApp.js');css.deregister();
 afterEach(()=>{cleanup();invalidateIdentity();localStorage.clear();});
 const self:Self={participant_id:randomUUID(),credential_id:randomUUID(),nickname:'Reader',kind:'human',role:'participant'};
+const browsingPage=(items:unknown[])=>({contract:'administration-pages-1',scope:{collection:'accounts',participant_id:null,order:'id',consistency:'restart-on-change'},items,next_cursor:null,complete:true,expires_at:'2090-01-01Z'});
 const denied=()=>Response.json({error:{code:'unauthenticated',message:'Sign in required.'}},{status:401});
 
 test('the production shell settles anonymous discovery and retains a failed sign-in form across navigation',async t=>{
@@ -179,10 +180,10 @@ test(`production administration: ${path} refusal withdraws metadata before journ
  if(path!=='first')await store.prepareDispatch(draft,body);
  const commands:{path:string;body:unknown;resolve:(r:Response)=>void}[]=[];
  t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST')return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
+  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
   if(url==='/api/v1/identity/self')return Promise.resolve(Response.json(admin));
   if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts')return Promise.resolve(Response.json([{id:randomUUID(),nickname:'ProtectedAccount',kind:'agent',state:'suspended',role:'participant'}]));
+  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([{id:randomUUID(),nickname:'ProtectedAccount',kind:'agent',state:'suspended',role:'participant'}])));
   if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
@@ -219,11 +220,11 @@ test(`production administration: ${arrival} copies cannot outlive their content 
  const commands:{path:string;body:unknown;resolve:(r:Response)=>void}[]=[];
  const reads:{resolve:(r:Response)=>void}[]=[];
  t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST')return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
+  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
   if(url==='/api/v1/identity/self')return Promise.resolve(Response.json(admin));
   if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts')return Promise.resolve(Response.json([{id:account,nickname:'ProtectedSelection',kind:accountKind,state:'active',role:'participant'}]));
-  if(url.startsWith('/api/v1/identity/credentials?'))return new Promise<Response>(resolve=>reads.push({resolve}));
+  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([{id:account,nickname:'ProtectedSelection',kind:accountKind,state:'active',role:'participant'}])));
+  if(url==='/api/v1/identity/credentials/query')return new Promise<Response>(resolve=>reads.push({resolve}));
   if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
@@ -249,7 +250,7 @@ test(`production administration: ${arrival} copies cannot outlive their content 
   assert.ok(screen.queryByRole('button',{name:'Issue enrollment ticket'}),'Pending recovery must use the immutable command kind, not withdrawn selection metadata.');
   await act(async()=>commands[0]!.resolve(response()));
  }
- await act(async()=>{for(const read of reads)read.resolve(Response.json([{id:credential,kind:'agent',label:'ProtectedCredential',state:'active'}]));});
+ await act(async()=>{for(const read of reads)read.resolve(Response.json(browsingPage([{id:credential,kind:'agent',label:'ProtectedCredential',state:'active'}])));});
  assert.equal(identityGeneration(),before);
  assert.equal(!!screen.queryByLabelText('Issued secret'),false);
  assert.equal(!!screen.queryByDisplayValue('ProtectedSelection'),false);
@@ -279,12 +280,12 @@ test(`production administration: late ${action} success cannot start protected r
  }
  const commands:{path:string;resolve:(r:Response)=>void}[]=[],reads:string[]=[];
  t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST')return new Promise<Response>(resolve=>commands.push({path:url,resolve}));
+  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,resolve}));
   reads.push(url);
   if(url==='/api/v1/identity/self')return Promise.resolve(Response.json(admin));
   if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts')return Promise.resolve(Response.json([{id:account,nickname:'ProtectedAccount',kind:'human',state:'active',role:'participant'}]));
-  if(url.startsWith('/api/v1/identity/credentials?'))return Promise.resolve(Response.json([{id:credential,kind:'enrollment',label:'ProtectedCredential',state:'active'}]));
+  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([{id:account,nickname:'ProtectedAccount',kind:'human',state:'active',role:'participant'}])));
+  if(url==='/api/v1/identity/credentials/query')return Promise.resolve(Response.json(browsingPage([{id:credential,kind:'enrollment',label:'ProtectedCredential',state:'active'}])));
   if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
@@ -323,11 +324,11 @@ test(`production configuration: ${outcome} success refreshes only with current c
  const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});community.settings_version=1;
  const commands:{path:string;body:Record<string,unknown>;resolve:(r:Response)=>void}[]=[],reads:string[]=[];
  t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST')return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
+  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
   reads.push(url);
   if(url==='/api/v1/identity/self')return Promise.resolve(Response.json({...self,role:'administrator'}));
   if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts')return Promise.resolve(Response.json([]));
+  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([])));
   if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
@@ -363,11 +364,11 @@ test(`production setup: ${path} settlement leaves reauthorization to an explicit
  if(path!=='first')await store.prepareDispatch(draft,body);
  const commands:{resolve:(r:Response)=>void}[]=[],reads:string[]=[];
  t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST')return new Promise<Response>(resolve=>commands.push({resolve}));
+  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({resolve}));
   reads.push(url);
   if(url==='/api/v1/identity/self')return Promise.resolve(Response.json({...self,role:'administrator'}));
   if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts')return Promise.resolve(Response.json([]));
+  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([])));
   if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);

@@ -24,6 +24,7 @@ import {
   type Transactions,
 } from './policy.js';
 import { deploymentCapability, matches, opaqueToken } from './secrets.js';
+import { AdministrationBrowsing } from './browsing.js';
 
 interface Outcome {
   id: string;
@@ -170,6 +171,7 @@ async function credentialRows(tx: SqlTransaction, participantId: string) {
 
 /** Dormant application operations: no normal startup route and no default operator. */
 export class IdentityAdministration {
+  readonly browsing: AdministrationBrowsing;
   private readonly policy: Readonly<IdentityPolicy>;
   private readonly operator: Readonly<OperatorVerifiers>;
   constructor(
@@ -186,6 +188,7 @@ export class IdentityAdministration {
       throw new Error('Distinct deployment capability verifiers are required.');
     this.policy = Object.freeze({ ...policy });
     this.operator = Object.freeze({ ...operator });
+    this.browsing = new AdministrationBrowsing(database);
   }
   private async run<T>(operation: (tx: SqlTransaction) => Promise<T>) {
     try {
