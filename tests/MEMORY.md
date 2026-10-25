@@ -1,5 +1,21 @@
 # Browser test diagnostics
 
+Administrative browsing: `identity-browsing.test.ts` joins the existing identity
+PostgreSQL suite. Deterministic >100 account/credential/audit fixtures compare full
+eligible IDs and metadata, actual HTTPS bytes, whole-table hashes, current guard
+waiters in both orders, reversed audit commit/time order, populated0024 upgrades,
+query deadlines/log isolation and independent private-file HTTPS client walks, including UUID case aliases.
+The historical discussion-closure upgrade explicitly targets0024, retaining its
+whole-inventory equality; the new0024→0025 case checks every old table separately.
+`web/administration-browsing.test.tsx` mounts production ActiveView in StrictMode;
+compiled `administration.spec.ts` covers later records/actions, failed-page focus,
+account switching, held responses, role withdrawal and narrow layout. Existing
+session-authorization tests use new page envelopes; the retained participation
+Chromium recovery monitor follows POST query reads while preserving its exact
+private recovery assertions. Diagnostic changes add only fixed route/spec names
+and the two new test identities; existing numerical runtime/byte/coverage gates stay.
+
+
 `recovery.test.ts` uses ADR-034's separately owned cold-volume installation, real
 HTTPS and native provider versions. Expectations are captured before backup through
 application routes, independently of restore code. Source containers/volumes/network
@@ -592,7 +608,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 158 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 160 collected tests and <17 MiB/candidate. The test count includes
 the isolated recovery journey so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe

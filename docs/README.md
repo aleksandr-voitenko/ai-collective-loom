@@ -11,6 +11,7 @@
 | [Local development decision](adr/019-local-development.md) | Initial local provider choice and reconsideration conditions. |
 | [Application runtime decision](adr/002-application-runtime.md) | Implemented stack, executable contract dialect, validation, and lifecycle boundaries for the foundation. |
 | [Database boundary decision](adr/003-database-boundary.md) | Role/SQL boundary, shared publication and additive synthetic identity/text domain schema. |
+| [Complete administrative browsing](adr/035-complete-administrative-browsing.md) | Additive bounded account, selected-account credential and identity-audit reads, explicit restart semantics and legacy compatibility. |
 | [Identity/admission decision record](adr/004-identity-admission-prototype.md) | Approved requirements separated from six unapproved, executable synthetic policy candidates. |
 | [Transactional publication decision](adr/006-transactional-publication.md) | Executable lock classes, atomic publication, immutable intents and the first generation-fenced search consumer. |
 | [Advisory editing intent](adr/032-advisory-editing-intent.md) | Fixed server expiry, exact owner recovery, bounded coordination and strict publication independence. |

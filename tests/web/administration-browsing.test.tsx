@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict';
+import {afterEach,test,type TestContext} from 'node:test';
+import {randomUUID} from 'node:crypto';
+import {JSDOM} from 'jsdom';
+import {StrictMode} from 'react';
+import {createMemoryRouter} from 'react-router';
+import {RouterProvider} from 'react-router/dom';
+import {Value} from '@sinclair/typebox/value';
+import {ActiveView} from '../../src/web/ParticipationRoutes.js';
+import {Onboarding} from '../../src/contracts/participation.js';
+import {IntentStore,invalidateIdentity,sessionRequest} from '../../src/web/participation-client.js';
+import type {Context} from '../../src/web/participation-state.js';
+const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://loom.example/loom/admin'});
+for(const key of ['window','document','navigator','HTMLElement','MutationObserver','location','localStorage','Event','CustomEvent'] as const)Object.defineProperty(globalThis,key,{value:dom.window[key],configurable:true});
+Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true,writable:true});
+Object.defineProperty(navigator,'locks',{value:{request:async(_name:string,work:()=>unknown)=>work()},configurable:true});
+const {render,screen,fireEvent,cleanup,act}=await import('@testing-library/react');
+afterEach(()=>{cleanup();invalidateIdentity();localStorage.clear();});
+const person=(nickname:string)=>({id:randomUUID(),nickname,kind:'agent',state:'active',role:'participant'});
+const page=(collection:string,items:unknown[],cursor:string|null=null,target:string|null=null)=>({contract:'administration-pages-1',scope:{collection,participant_id:target,order:collection==='audit'?'recorded_at,id':'id',consistency:'restart-on-change'},items,next_cursor:cursor,complete:cursor===null,expires_at:'2090-01-01Z'});
+async function fixture(t:TestContext){
+ const self={participant_id:randomUUID(),credential_id:randomUUID(),nickname:'Admin',kind:'human',role:'administrator',csrf:'fixture'};
+ t.mock.method(globalThis,'fetch',async()=>Response.json(self));await sessionRequest('/api/v1/identity/self');
+ const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});community.settings_version=1;
+ const store=new IntentStore(community.instance_id,self.participant_id),context={self,community,store,refreshCommunity:()=>{}} as Context;
+ const calls:{path:string;body:any;done:boolean;finish:(response:Response)=>void}[]=[];
+ t.mock.method(globalThis,'fetch',(path:string,options?:RequestInit)=>{
+  if(path==='/api/v1/community')return Promise.resolve(Response.json(community));
+  if(path.includes('/admin/search/')||path.includes('/admin/file-text/'))return Promise.resolve(Response.json({}));
+  return new Promise<Response>(finish=>{const call={path,body:options?.body?JSON.parse(String(options.body)):undefined,done:false,finish:(r:Response)=>{call.done=true;finish(r);}};calls.push(call);});
+ });
+ const router=createMemoryRouter([{path:'/loom/*',element:<ActiveView context={context}/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
+ render(<StrictMode><RouterProvider router={router}/></StrictMode>);
+ for(const d of document.querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Participant accounts')d.open=true;
+ const initial=async(items:unknown[],cursor:string|null='account-next')=>act(async()=>{for(const c of calls.filter(c=>!c.done&&c.path.endsWith('/accounts/query')))c.finish(Response.json(page('accounts',items,cursor)));});
+ return {calls,initial,router,store,self};
+}
+test('actual administration host retains failed-page position and focus; retry sends the same continuation and replaces rows',async t=>{
+ const f=await fixture(t),a=person('First account'),b=person('Beyond account');await f.initial([a]);
+ const next=screen.getByRole('button',{name:'Next accounts page'});next.focus();await act(async()=>fireEvent.click(next));
+ const failed=f.calls.at(-1)!;assert.equal(failed.body.cursor,'account-next');
+ await act(async()=>failed.finish(Response.json({error:{code:'service_unavailable',message:'Read unavailable',recovery:{action:'retry_same_request'}}},{status:503})));
+ assert.ok(screen.queryByText('First account · agent · active'));assert.equal(document.activeElement,next);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry accounts page'})));
+ const retry=f.calls.at(-1)!;assert.deepEqual(retry.body,failed.body);
+ await act(async()=>retry.finish(Response.json(page('accounts',[b]))));
+ assert.equal(!!screen.queryByText('First account · agent · active'),false);assert.ok(screen.queryByText('Beyond account · agent · active'));assert.ok(screen.queryByText('End of accounts results for this traversal.'));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Previous accounts page'})));assert.equal(f.calls.at(-1)!.body.cursor,undefined);
+});
+test('account selection keys credential pages; late previous-account data and obsolete lookup results are discarded',async t=>{
+ const f=await fixture(t),a=person('Account A'),b=person('Account B');await f.initial([a,b]);
+ const buttons=screen.getAllByRole('button',{name:'Manage credentials'});
+ await act(async()=>fireEvent.click(buttons[0]!));const first=f.calls.filter(c=>c.path.endsWith('/credentials/query')).at(-1)!;assert.equal(first.body.participant_id,a.id);
+ await act(async()=>fireEvent.click(buttons[1]!));const second=f.calls.filter(c=>c.path.endsWith('/credentials/query')).at(-1)!;assert.equal(second.body.participant_id,b.id);
+ await act(async()=>second.finish(Response.json(page('credentials',[{id:randomUUID(),kind:'agent',state:'revoked',label:'B credential',created_at:'2020Z',expires_at:null,parent_credential_id:null}],null,b.id))));
+ await act(async()=>first.finish(Response.json(page('credentials',[{id:randomUUID(),kind:'agent',state:'active',label:'A stale credential'}],null,a.id))));
+ assert.ok(screen.queryByText(/B credential/));assert.equal(!!screen.queryByText(/A stale credential/),false);
+ const input=screen.getByLabelText('Exact account ID or nickname');await act(async()=>fireEvent.change(input,{target:{value:'old_account'}}));await act(async()=>fireEvent.submit(input.closest('form')!));const lookup=f.calls.at(-1)!;
+ await act(async()=>fireEvent.change(input,{target:{value:'new_account'}}));await act(async()=>lookup.finish(Response.json(person('Stale lookup'))));assert.equal(!!screen.queryByText(/Stale lookup/),false);
+});
+for(const departure of ['role','identity','route'] as const)test(`pending account, lookup, credential and audit pages cannot restore metadata after ${departure} departure`,async t=>{
+ const f=await fixture(t),a=person('Protected account');await f.initial([a]);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+ const held=f.calls.filter(c=>c.path.endsWith('/credentials/query')).at(-1)!;
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh accounts'})));const account=f.calls.at(-1)!;
+ const input=screen.getByLabelText('Exact account ID or nickname');await act(async()=>fireEvent.change(input,{target:{value:'lookup_account'}}));await act(async()=>fireEvent.submit(input.closest('form')!));const lookup=f.calls.at(-1)!;
+ const auditDetails=screen.getByText('Identity administration audit').closest('details')!;
+ await act(async()=>{auditDetails.open=true;fireEvent(auditDetails,new Event('toggle'));});const audit=f.calls.filter(c=>c.path.endsWith('/audit/query')).at(-1)!;assert.ok(audit);
+ if(departure==='role')await act(async()=>account.finish(Response.json({error:{code:'forbidden',message:'Administrator authority withdrawn'}},{status:403})));
+ if(departure==='identity')await act(async()=>invalidateIdentity());
+ if(departure==='route')await act(async()=>f.router.navigate('/loom/help'));
+ await act(async()=>{held.finish(Response.json(page('credentials',[{id:randomUUID(),label:'Late protected credential',kind:'agent',state:'revoked'}])));lookup.finish(Response.json(person('Late lookup')));if(departure!=='role')account.finish(Response.json(page('accounts',[person('Late protected account')])));audit.finish(Response.json(page('audit',[{id:randomUUID(),action:'Late protected audit',recorded_at:'2020Z',target_id:randomUUID(),operation_id:randomUUID(),actor_id:null,actor_credential_id:null,authority:'deployment_recovery'}])));});
+ assert.equal(!!screen.queryByText(/Late protected/),false);assert.equal(!!screen.queryByText(/Late lookup/),false);assert.equal(!!screen.queryByDisplayValue('Protected account'),false);
+});

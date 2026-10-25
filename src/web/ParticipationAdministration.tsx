@@ -13,6 +13,7 @@ import { SearchAdministration } from './Search.js';
 import { FileTextAdministration } from './FileText.js';
 import { ErrorText } from './participation-ui.js';
 import { Admission } from './ParticipationAdmission.js';
+import { IdentityAuditBrowsing } from './AdministrationBrowsing.js';
 
 export function Administration({ context }: { context: Context }) {
   const authority = useAuthorization();
@@ -229,6 +230,7 @@ export function Administration({ context }: { context: Context }) {
         <Settings context={{ ...context, refreshCommunity: refreshCommunityIfCurrent }} />
       )}
       <Admission context={context} />
+      <IdentityAuditBrowsing self={context.self} />
     </>
   );
 }

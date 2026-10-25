@@ -1,5 +1,16 @@
 const failures = {
   invalid_request: [400, 'The request does not match the identity contract.'],
+  invalid_cursor: [
+    400,
+    'This continuation is invalid for this administrator and scope. Restart this collection.',
+  ],
+  cursor_restart: [409, 'The API cursor context changed. Restart this collection.'],
+  cursor_expired: [409, 'This continuation expired. Restart this collection.'],
+  collection_changed: [409, 'This collection changed. Restart to review a fresh traversal.'],
+  page_budget_exceeded: [
+    413,
+    'The next item cannot fit this page budget. Increase max_bytes or request a supported larger budget. Position was not advanced.',
+  ],
   unauthenticated: [401, 'Authentication is required or no longer valid.'],
   forbidden: [403, 'This action requires current administrator authority.'],
   unavailable: [404, 'The requested identity record is unavailable.'],

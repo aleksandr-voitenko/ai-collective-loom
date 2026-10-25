@@ -828,6 +828,11 @@
 .loom-app .admin-card .list-row {
   flex-wrap: wrap;
 }
+.loom-app .admin-card .list-row code,
+.loom-app .admin-card .list-row span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 .loom-app .topic-tabs {
   display: flex;
   gap: 25px;

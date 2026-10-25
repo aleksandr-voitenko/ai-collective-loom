@@ -21,6 +21,7 @@ import {
 } from '../modules/identity/contracts.js';
 import { IdentityError } from '../modules/identity/errors.js';
 import { csrfValue, validCsrf } from '../modules/identity/secrets.js';
+import * as Browsing from '../../contracts/administration.js';
 
 const closed = { additionalProperties: false };
 const Empty = Type.Object({}, closed);
@@ -142,6 +143,47 @@ export async function registerIdentityRoutes(
     (a, b) => admin.reconcile(a, b),
     Type.Union([Result, Type.Object({ operation_state: Type.Literal('not_recorded') }, closed)]),
   );
+  // POST keeps continuations out of URL logs; these operations are read-only.
+  for (const [path, schema, response, action] of [
+    [
+      '/accounts/query',
+      Browsing.AdministrationPageInput,
+      Browsing.AccountPage,
+      (a: ActorContext, b: unknown) => admin.browsing.accounts(a, b),
+    ],
+    [
+      '/credentials/query',
+      Browsing.CredentialPageInput,
+      Browsing.CredentialPage,
+      (a: ActorContext, b: unknown) => admin.browsing.credentials(a, b),
+    ],
+    [
+      '/audit/query',
+      Browsing.AdministrationPageInput,
+      Browsing.IdentityAuditPage,
+      (a: ActorContext, b: unknown) => admin.browsing.audit(a, b),
+    ],
+    [
+      '/accounts/lookup',
+      Browsing.AccountLookupInput,
+      Browsing.AdministrativeAccount,
+      (a: ActorContext, b: unknown) => admin.browsing.lookup(a, b),
+    ],
+  ] as const) {
+    app.post(
+      base + path,
+      {
+        bodyLimit: 4096,
+        schema: {
+          operationId: 'administration_' + path.slice(1).replace('/', '_'),
+          body: schema,
+          querystring: Empty,
+          response: { ...errors, 200: response },
+        },
+      },
+      async (request) => action(await actor(request), request.body),
+    );
+  }
   app.get(
     base + '/self',
     {
@@ -173,6 +215,8 @@ export async function registerIdentityRoutes(
     base + '/accounts',
     {
       schema: {
+        description:
+          'Legacy first-100-row array without continuation. Use POST /identity/accounts/query for complete bounded retrieval.',
         querystring: Empty,
         response: {
           ...errors,
@@ -197,6 +241,8 @@ export async function registerIdentityRoutes(
     base + '/audit',
     {
       schema: {
+        description:
+          'Legacy first-100-row array without continuation. Use POST /identity/audit/query for complete bounded retrieval.',
         querystring: Empty,
         response: {
           ...errors,
@@ -224,6 +270,8 @@ export async function registerIdentityRoutes(
     base + '/credentials',
     {
       schema: {
+        description:
+          'Legacy first-100-row array without continuation. Use POST /identity/credentials/query for complete bounded retrieval.',
         querystring: Type.Object({ participant_id: Uuid }, closed),
         response: {
           ...errors,

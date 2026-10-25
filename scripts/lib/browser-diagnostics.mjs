@@ -8,9 +8,9 @@ import { join, resolve } from 'node:path';
 // Include the isolated recovery journey in the complete browser inventory; retain
 // both byte envelopes and every per-test collection bound.
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
-  steps: 16, tests: 158, bytes: 131072, runBytes: 17 * 1024 * 1024 });
+  steps: 16, tests: 160, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
-export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'files.spec.ts', 'files-text.spec.ts', 'reservations.spec.ts', 'notes.spec.ts', 'recovery.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
+export const files = ['administration.spec.ts', 'participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'files.spec.ts', 'files-text.spec.ts', 'reservations.spec.ts', 'notes.spec.ts', 'recovery.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
   'collector_missing', 'collector_unfinished', 'page_closed_before_capture', 'page_limit', 'context_limit', 'pending_limit', 'byte_limit'];
 export const details = ['none', 'default', 'persistent', 'explicit', 'dom_ready', 'load', 'closed',
@@ -49,6 +49,7 @@ const routePatterns = [
   '/loom/search', '/api/v1/search', '/api/v1/search/status', '/api/v1/search/authors', '/api/v1/admin/search/health', '/api/v1/admin/search/failures', '/api/v1/admin/search/rebuild', '/api/v1/admin/search/retry',
   '/api/v1/runtime', '/api/v1/identity/self', '/api/v1/identity/register/start', '/api/v1/identity/register/finish',
   '/api/v1/identity/signin/start', '/api/v1/identity/signin/finish', '/api/v1/identity/logout',
+  '/api/v1/identity/accounts/query', '/api/v1/identity/accounts/lookup', '/api/v1/identity/credentials/query', '/api/v1/identity/audit/query',
   '/api/v1/identity/accounts', '/api/v1/identity/credentials', '/api/v1/identity/state', '/api/v1/identity/rename',
   '/api/v1/identity/revoke', '/api/v1/identity/reconcile', '/api/v1/identity/audit',
   '/api/v1/community', '/api/v1/community/setup', '/api/v1/community/settings', '/api/v1/areas',

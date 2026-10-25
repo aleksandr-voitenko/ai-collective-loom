@@ -43,3 +43,16 @@ capability class; an individual operator proof/custody ceremony remains unimplem
 Run `npm run test:identity:postgres` with local Docker. It creates/removes only its
 UUID-named tmpfs PostgreSQL container and uses no existing development data.
 Synthetic checks do not approve real enrollment or operator recovery policy.
+
+Complete browsing uses additive `administration-pages-1` read-only POST operations:
+`/identity/accounts/query`, `/identity/credentials/query` (one participant),
+`/identity/audit/query`, and exact `/identity/accounts/lookup`. All recheck current
+administrator/account/credential authority. The old GET arrays remain legacy
+first100-row limited views without continuation. Never use them for full discovery.
+
+Pages cap at25items/32KiB of complete UTF-8 JSON, with independent candidate and
+one-second SQL/lock bounds. Encrypted10-minute process-local cursors bind owner,
+collection/target and version; changes, expiry and restart require explicit refresh.
+No secret, read audit, shared clock or private-content access is added. See
+[ADR-035](../../../../docs/adr/035-complete-administrative-browsing.md), guide20,
+OpenAPI and `scripts/administration-client.mjs` for complete workflows and limits.

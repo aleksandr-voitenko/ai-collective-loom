@@ -48,3 +48,8 @@ Later revocations/deletions/outcomes/checkpoints can be absent; absence is uncer
 Production backup/retention/reconciliation and earlier storage intermittency remain
 separate. An interrupted host can leave owner-private scratch/locks; cleanup must
 prove attempt ownership and never sweep unrelated resources.
+
+`administration-client.mjs` is an independent HTTPS read example (ADR-035), with
+private bounded credential-file admission, exclusive0600 output and one page per
+invocation. Canonical UUID scope/owner checks bind --after-page to the prior output; current server
+authority remains decisive. It sends no mutations and imports no server internals.

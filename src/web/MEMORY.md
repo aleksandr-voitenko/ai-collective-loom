@@ -122,3 +122,14 @@ previews; a relevant cross-tab storage event consults the current journal and ma
 one fresh owner read for a saved or attempted note, including a create committed
 without leaving its draft route. Unsent drafts are not rebased. See focused mounted
 and compiled `notes` tests.
+
+Administration uses `useAdministrationPage` for additive read-only POSTs, passing
+current self for cookie CSRF. It retains one leased page and at most16 earlier
+cursor positions; failed loads keep the page and exact retry continuation. Controls
+use aria-disabled plus busy guards to preserve native focus. Credential components
+are keyed by selected account; lifetime/sequence/identity/authority checks fence
+late rows and post-command refreshes after departure. Exact lookup adds at most one
+leased account; audit is mounted only when deliberately opened. User-entered lookup
+intent stays independent of protected result/selection copies. Existing one-time
+secret leases and exact private command journals retain their prior semantics.
+See ADR-035 and the production-host mounted/compiled administration tests.

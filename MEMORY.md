@@ -13,7 +13,7 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`19`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`20`.
 Advisory Editing intent (ADR-032/migration0022) lives in sibling reservations/:
 exact-base notices, fixed PostgreSQL expiry, optimistic renew/release and private
 owner recovery. Publication remains independent. Browser and direct HTTPS share
@@ -310,6 +310,13 @@ Physical-device and human recovery proof trials, real enrollment, approved limit
 retention and distributed abuse controls remain open; synthetic tests do not complete
 AC45/AC54.
 Identity prototype decisions and verification: Lore-ID `LC-20261012-9JJH`.
+Complete administration browsing uses additive read-only POST query/lookup routes
+(`administration-pages-1`, ADR-035/migration0025). Old GET arrays remain legacy
+first100-row limited views. Fixed private collection versions invalidate keyset
+continuations after committed changes, independent of activity/personal clocks.
+Current authority precedes each page; cursors never grant access or replay secrets.
+See `src/server/modules/identity/MEMORY.md` for consistency, bounds and restart rules.
+
 Integration uses real local dependencies; it is separate and never reported passed
 when unavailable.
 Browser checks use a containing runner and allowlisted failure bundles; raw reporter
