@@ -11,7 +11,7 @@ Shared Changes (ADR-024) queries committed events independently; relevance-ranke
 search is neither shared-history completion nor its resynchronization inventory.
 Sources and intents are immutable inputs.
 
-Typed artifacts, contributions and canonical summaries in `loom-markdown-v1`, `loom-markdown-v2` and `loom-markdown-v3`
+Typed artifacts, contributions and canonical summaries in `loom-markdown-v1`, `loom-markdown-v2`, `loom-markdown-v3` and `loom-markdown-v4`
 are the population (ADR-010). Before migration 0010 the worker detects the absent
 summary companion table and retains the previous typed population for additive
 synthetic upgrade. ADR-021 preserves source title/body indexing across worker

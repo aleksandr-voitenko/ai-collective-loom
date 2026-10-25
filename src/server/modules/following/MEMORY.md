@@ -28,7 +28,7 @@ keeps its definition; a changed definition cannot reuse a completed checkpoint.
 New scope starts labelled retained history. No follows means empty, never implicit
 community-wide scope. Explicit scope never saves a subscription.
 
-Public typed v1/v2/v3 events are classified from exact source/revision fields. Note
+Public typed v1/v2/v3/v4 events are classified from exact source/revision fields. Note
 presence adds a preference match, not another event. One event coalesces overlap;
 eight reasons per row, bounded detail expansion for the remainder. Citing another
 resource does not republish it. Internal actors are excluded; unclassified eligible

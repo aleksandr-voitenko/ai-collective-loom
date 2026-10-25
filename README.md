@@ -82,7 +82,14 @@ approved production capacity or retention policy.
 Participants can explicitly record untyped, related-to, builds-on or contradicts
 references while publishing openings, comments, text artifacts and summaries. Exact revision
 targets, assertion history, source-owned withdrawal and bounded **Referenced by**
-views work independently of indexing. See the [recorded references decision](docs/adr/021-recorded-references.md).
+views work independently of indexing. File-aware v4 references can cite one exact published
+artifact file or opening/comment attachment, from main content or a revision note.
+Select from an exact manifest or paste a supported Loom file link; confirm its
+publication, revision and path. **Referenced by · file** excludes sibling files and
+whole-revision citations. Old drafts/retries retain their exact format and intent;
+older edits of a v4 base require explicit correction. See the
+[exact file reference contract](docs/adr/036-exact-file-references.md) and
+[recorded references decision](docs/adr/021-recorded-references.md).
 
 Participants can publish a discussion summary with an exact, declared set of opening/comment
 revisions. Readers inspect coverage and editors; authorized editors discover gaps

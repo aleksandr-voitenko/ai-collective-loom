@@ -201,7 +201,11 @@ export class ParticipationRetrieval {
       )
     ).rows[0]!;
     // Legacy internal test envelopes are not participant documents.
-    if (!['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(body.content_format))
+    if (
+      !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
+        body.content_format,
+      )
+    )
       throw new RevisionUnavailableError();
     const fields = await hasChangeSchema(tx);
     const mentions = (
@@ -283,7 +287,8 @@ export class ParticipationRetrieval {
       content: {
         ...(body.content_format !== 'loom-markdown-v1'
           ? {
-              format: body.content_format as 'loom-markdown-v2' | 'loom-markdown-v3',
+              format: body.content_format as
+                'loom-markdown-v2' | 'loom-markdown-v3' | 'loom-markdown-v4',
               references: (await revisionReferences(tx, selected)).map(declaration),
             }
           : { format: 'loom-markdown-v1' as const }),
@@ -298,7 +303,7 @@ export class ParticipationRetrieval {
         nickname: m.nickname,
         kind: m.kind,
       })),
-      ...(body.content_format === 'loom-markdown-v3'
+      ...(['loom-markdown-v3', 'loom-markdown-v4'].includes(body.content_format)
         ? {
             change_note: {
               state: (

@@ -279,7 +279,9 @@ export class NotificationWorker {
       if (
         !row?.typed ||
         !row.event ||
-        !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(row.content_format)
+        !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
+          row.content_format,
+        )
       )
         return { kind: 'failure', failure: 'unsupported_source' };
       const entities = (
@@ -308,14 +310,17 @@ export class NotificationWorker {
           : {}),
       } as AuthoredContent;
       const noteRow = (
-        await tx.query<{ content_text: string }>(
-          'SELECT content_text FROM loom.revision_change_notes WHERE revision_id=$1',
+        await tx.query<{
+          content_text: string;
+          content_format: 'loom-markdown-v2' | 'loom-markdown-v4';
+        }>(
+          'SELECT content_text,content_format FROM loom.revision_change_notes WHERE revision_id=$1',
           [claim.revision_id],
         )
       ).rows[0];
       const note: NoteContent | null = noteRow
         ? {
-            format: 'loom-markdown-v2',
+            format: noteRow.content_format,
             text: noteRow.content_text,
             mentions: fields('change_note'),
             references: (await revisionReferences(tx, revision, 'change_note')).map(declaration),
@@ -323,7 +328,7 @@ export class NotificationWorker {
         : null;
       try {
         parseAuthored(content);
-        if (content.format === 'loom-markdown-v3')
+        if (['loom-markdown-v3', 'loom-markdown-v4'].includes(content.format))
           validateChangeFields(content, { change_note: note, change_account: null });
         else if (note || fields('change_note').length) throw new Error('Invalid field owner');
       } catch {

@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { UUID, closed, ReferenceTarget } from './participation.js';
+import { UUID, closed, LegacyReferenceTarget as ReferenceTarget } from './participation.js';
 export const noteContract = 'owner-notes-1';
 export const noteLimits = Object.freeze({
   active: 128,

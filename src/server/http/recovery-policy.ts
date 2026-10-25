@@ -69,6 +69,7 @@ add('retrieval', [
   'GET /api/v1/organization/destinations',
   'GET /api/v1/organization/resources/:id',
   'GET /api/v1/participants',
+  // Resource/revision/file scopes share read-only recovery; failure never settles publication.
   'GET /api/v1/references/incoming',
   'GET /api/v1/references/target',
   'GET /api/v1/resources/:id/editors',

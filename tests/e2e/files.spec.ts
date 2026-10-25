@@ -227,3 +227,88 @@ test('closure refuses prepared discussion files without withdrawing history; exp
  await page.goto(server.origin+'/loom/resource/'+opened.resource_id+'/'+committed.result.revision_id);await expect(page.getByText('Prepared text with exact attachment',{exact:true})).toBeVisible();const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download prepared.txt',exact:true}).click();expect(await readFile((await(await download).path())!)).toEqual(bytes);
  expect((await api(page,'/api/v1/resources/'+opened.resource_id+'/revisions/'+opened.revision_id)).content.text).toBe('Readable original opening');expect((await server.observer.query('SELECT count(*)::int n FROM loom.revisions WHERE resource_id=$1',[opened.resource_id])).rows[0].n).toBe(2);
 });
+
+test('exact file references select a bounded revision, persist main and note intent, publish and navigate scoped incoming pages at narrow width',async({page,context,server})=>{
+  const f=await setup(page,context,server),source=await attachedSource(f,'evidence.txt');
+  const promoted=(await f.admin.call('/api/v1/attachment-promotions',{idempotency_key:randomUUID(),source:{contribution_id:source.resource_id,revision_id:source.revision_id,file_id:source.file.file_id},area_id:f.area,title:'Exact evidence package'})).body;
+  const manifest=(await f.admin.call(`/api/v1/artifacts/${promoted.resource_id}/revisions/${promoted.revision_id}/files`)).body,file=manifest.items[0];
+  const fileLink=`/loom/file/artifact/${promoted.resource_id}/${promoted.revision_id}/${file.file_id}`;
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
+  await page.getByLabel('Title',{exact:true}).fill('Citing exact evidence');await page.getByLabel('Text',{exact:true}).fill('Main file evidence');
+  await page.getByRole('button',{name:'Add reference',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Target ID or Loom link')).toBeFocused();
+  await page.getByLabel('Target ID or Loom link').fill(`/loom/resource/${promoted.resource_id}/${promoted.revision_id}`);
+  await page.getByLabel('Citation scope').selectOption('revision');await page.getByRole('button',{name:'Check target',exact:true}).click();
+  await page.getByRole('button',{name:'Choose a file from this revision',exact:true}).click();
+  await page.getByRole('button',{name:'Select file evidence.txt',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('button',{name:'Use this exact file',exact:true})).toBeFocused();
+  await expect(page.getByRole('group',{name:'Choose reference target'})).toContainText(promoted.revision_id);await expect(page.getByRole('group',{name:'Choose reference target'})).toContainText('evidence.txt');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.keyboard.press('Enter');await expect(page.getByRole('button',{name:'Add reference',exact:true})).toBeFocused();
+  await page.getByLabel('Add a revision change note').check();await page.getByLabel('Change note',{exact:true}).fill('Note cites original attachment');
+  const note=page.getByRole('group',{name:'Revision change note',exact:true});await note.getByRole('button',{name:'Add reference',exact:true}).click();
+  await note.getByLabel('Target ID or Loom link').fill(server.origin+source.file.download_url);await note.getByRole('button',{name:'Check target',exact:true}).click();await note.getByRole('button',{name:'Use this exact file',exact:true}).click();
+  await expect.poll(async()=>(await journal(page,'artifact.create'))?.body.change_note?.references[0]?.target.file_id).toBe(source.file.file_id);
+  const draft=await journal(page,'artifact.create');expect(draft.body.content.format).toBe('loom-markdown-v4');expect(draft.body.content.references[0].target.file_id).toBe(file.file_id);expect(draft.body.change_note.references[0].target.file_id).toBe(source.file.file_id);
+  await page.reload();expect((await journal(page,'artifact.create')).body).toEqual(draft.body);
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+  const published=(await journal(page,'artifact.create')).result;
+  await page.goto(server.origin+`/loom/resource/${published.resource_id}/${published.revision_id}`);await page.getByRole('button',{name:'References',exact:true}).click();
+  await page.locator(`a[href="${fileLink}"]`).click();await expect(page).toHaveURL(server.origin+fileLink);
+  await expect(page.getByRole('link',{name:'Open exact publication',exact:true})).toHaveAttribute('href',`/loom/resource/${promoted.resource_id}/${promoted.revision_id}`);
+  for(let i=0;i<12;i++)expect((await f.admin.call('/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Additional citation '+i,content:{format:'loom-markdown-v4',text:'Exact scope',mentions:[],references:[{...draft.body.content.references[0],reference_id:randomUUID()}]},change_note:null,change_account:null})).status).toBe(201);
+  const pages:string[]=[];await page.route('**/api/v1/references/incoming?**',async route=>{const url=route.request().url();if(url.includes('cursor=')){pages.push(url);if(pages.length===1){await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Temporary page failure'}})});return;}}await route.continue();});
+  await page.getByRole('button',{name:'Referenced by · file',exact:true}).click();await expect(page.getByText(/Containing revision, sibling files/)).toBeVisible();
+  await page.getByRole('button',{name:'Next references',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('button',{name:'Retry reference page',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Next references',exact:true})).toBeFocused();
+  await page.getByRole('button',{name:'Retry reference page',exact:true}).click();await expect(page.getByRole('heading',{name:'Recorded reference results'})).toBeFocused();expect(pages[1]).toBe(pages[0]);
+  await expect(page.getByText('End of this selected reference view.',{exact:true})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect((await server.observer.query('SELECT count(*)::int n FROM loom.reading_states')).rows[0].n).toBe(0);
+});
+
+test('file-aware correction keeps declarations across conflicts, manifest refusals and lost acknowledgement; withdrawal fences late results',async({page,context,server})=>{
+  const f=await setup(page,context,server),source=await attachedSource(f);
+  const base=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Legacy draft base',content:{format:'loom-markdown-v3',text:'Base text',mentions:[],references:[]},change_note:null,change_account:null});
+  await page.goto(server.origin+`/loom/resource/${base.resource_id}?edit=1`);await page.getByLabel('Text',{exact:true}).fill('Preserved attempted text');
+  const ref={reference_id:randomUUID(),target:{kind:'contribution',resource_id:source.resource_id,revision_id:source.revision_id,file_id:source.file.file_id,path:source.file.path},relationship:null,rationale:'Exact attachment intent'};
+  const newer=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:base.resource_id,expected_revision_id:base.revision_id,title:'File-aware competitor',content:{format:'loom-markdown-v4',text:'New base',mentions:[],references:[ref]},change_note:null,change_account:null});
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your draft is preserved.',{exact:true})).toBeVisible();const rejected=await journal(page,'revision.publish');await page.reload();
+  await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Preserved attempted text');
+  await expect.poll(async()=>(await journal(page,'revision.publish')).body.content.references).toEqual([ref]);const corrected=await journal(page,'revision.publish');expect(corrected.key).not.toBe(rejected.key);expect(corrected.body.expected_revision_id).toBe(newer.revision_id);
+  await page.route('**/api/v1/revisions',async route=>{const result=await route.fetch();expect(result.status()).toBe(201);await route.abort('failed');},{times:1});
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Check status',exact:true})).toBeVisible();await page.reload();await page.getByRole('button',{name:'Check status',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();expect((await journal(page,'revision.publish')).body).toEqual(corrected.body);
+  // An older v3 client can omit both the manifest and file declarations. The
+  // actual server returns the manifest refusal first, with no v4 refusal marker.
+  const promoted=await api(page,'/api/v1/attachment-promotions',{idempotency_key:randomUUID(),source:{contribution_id:source.resource_id,revision_id:source.revision_id,file_id:source.file.file_id},area_id:f.area,title:'File-aware package'});
+  // The earlier resource's committed revision journal remains retained. Select
+  // this resource explicitly; localStorage iteration order is not draft identity.
+  const packageJournal=async()=>{
+    const records=await page.evaluate(id=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.intent.v1:')).map(([,value])=>JSON.parse(value)).filter(record=>record.kind==='revision.publish'&&record.body.resource_id===id),promoted.resource_id);
+    expect(records).toHaveLength(1);return records[0];
+  };
+  const packageView=await api(page,'/api/v1/resources/'+promoted.resource_id),manifest={version:packageView.file_set.version,files:packageView.file_set.files};
+  const packageBase=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:promoted.resource_id,expected_revision_id:promoted.revision_id,title:'File-aware package',content:{format:'loom-markdown-v4',text:'Published package',mentions:[],references:[ref]},change_note:null,change_account:null,file_set:manifest});
+  await page.goto(server.origin+`/loom/resource/${promoted.resource_id}?edit=1`);await page.getByLabel('Text',{exact:true}).fill('Older client attempted package prose');
+  await expect.poll(async()=>(await packageJournal()).body.content.text).toBe('Older client attempted package prose');const oldPackage=await packageJournal();
+  await page.goto(server.origin+'/loom');
+  await page.evaluate(key=>{const entry=Object.entries(localStorage).find(([name])=>name.startsWith('loom.intent.v1:')&&name.endsWith(key))!;const record=JSON.parse(entry[1]);record.body.content.format='loom-markdown-v3';record.body.content.references=[];delete record.body.file_set;record.sequence++;localStorage.setItem(entry[0],JSON.stringify(record));},oldPackage.key);
+  await page.goto(server.origin+`/loom/resource/${promoted.resource_id}?edit=1`);await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Older client attempted package prose');
+  const refusedResponse=page.waitForResponse(response=>response.url()===server.origin+'/api/v1/revisions'&&response.request().method()==='POST');
+  await page.getByRole('button',{name:'Publish',exact:true}).click();expect((await(await refusedResponse).json()).error.code).toBe('file_format_required');
+  await expect.poll(async()=>(await journal(page,'revision.publish',oldPackage.key))?.state).toBe('rejected');expect((await journal(page,'revision.publish',oldPackage.key)).required_format).toBeUndefined();
+  await page.reload();await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();
+  await expect.poll(async()=>(await packageJournal()).body.content.references).toEqual([ref]);const repaired=await packageJournal();
+  expect(repaired.key).not.toBe(oldPackage.key);expect(repaired.body.expected_revision_id).toBe(packageBase.revision_id);expect(repaired.body.file_set.files).toHaveLength(1);expect(repaired.body.content.text).toBe('Older client attempted package prose');
+  await page.reload();expect((await journal(page,'revision.publish',repaired.key)).body).toEqual(repaired.body);await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+  const repairedResult=(await journal(page,'revision.publish',repaired.key)).result;expect((await api(page,`/api/v1/resources/${promoted.resource_id}/revisions/${repairedResult.revision_id}`)).content.references).toEqual([ref]);
+  const fileRoute=`/loom/file/contribution/${source.resource_id}/${source.revision_id}/${source.file.file_id}`;
+  await page.goto(server.origin+fileRoute);await expect(page.getByRole('button',{name:'Referenced by · file',exact:true})).toBeVisible();
+  let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});let captured!:()=>void;const ready=new Promise<void>(resolve=>{captured=resolve;});
+  await page.route('**/api/v1/references/incoming?**',async route=>{const response=await route.fetch();captured();await held;await route.fulfill({response});});
+  await page.getByRole('button',{name:'Referenced by · file',exact:true}).click();await ready;
+  const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+source.discussion)).body;expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version})).status).toBe(200);
+  await page.getByRole('button',{name:'Check file status',exact:true}).click();await expect(page.getByRole('button',{name:'Retry protected view',exact:true})).toBeVisible();release();
+  await expect(page.getByRole('heading',{name:'Recorded reference results'})).toHaveCount(0);await expect(page.getByText('Exact attachment intent',{exact:true})).toHaveCount(0);
+  expect((await journal(page,'revision.publish',corrected.key)).body).toEqual(corrected.body);
+});

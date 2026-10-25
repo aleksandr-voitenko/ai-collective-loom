@@ -97,7 +97,7 @@ test('correction requires a rejected attempt and its exact retained comparison b
   for (const current of [undefined, { ...comparison('loom-markdown-v2'), revision_id: 'newer-current' }]) {
     assert.equal(correctDraft({ operation: revision, fields: fields(), record, comparison: current }), undefined);
     assert.deepEqual(draftCorrection({ operation: revision, record, comparison: current }), {
-      comparisonRevision: 'conflict', comparisonReady: false, adoptsBaseReferences: false, requiresComparison: true,
+      comparisonRevision: 'conflict', comparisonReady: false, adoptsBaseReferences: false, adoptsFileReferences: false, requiresComparison: true,
       legacyCorrection: true, legacyFileCorrection: true,
     });
   }
@@ -183,4 +183,55 @@ for (const attempted of [undefined, { version: 'contribution-attachments-v1' as 
       change_note: null, change_account: account, attachment_set: attempted ?? { version: base.attachment_set.version, files: base.attachment_set.files } });
     assert.equal(result.body.file_set, undefined);
   });
+}
+
+
+test('file-aware correction preserves attempted edits, file assertions and uncertain identity', () => {
+  const file = { ...reference, target: { kind: 'artifact' as const, resource_id: 'target', revision_id: 'exact', file_id: 'file', path: 'Report.txt' } };
+  const attempted = fields({ format: 'loom-markdown-v3', references: [reference], note, base: 'original' });
+  const base = comparison('loom-markdown-v4', [file]);
+  const record = rejected('loom-markdown-v3');
+  const before = structuredClone(record);
+  const next = correctDraft({ operation: revision, fields: attempted, record, comparison: base })!;
+  assert.equal(next.fields.format, 'loom-markdown-v4');
+  assert.equal(next.fields.references.length, 2);
+  assert.deepEqual(next.fields.references[1], file);
+  assert.notEqual(next.fields.references[0]!.reference_id, file.reference_id);
+  assert.deepEqual({ ...next.fields.references[0], reference_id: reference.reference_id }, reference);
+  assert.deepEqual(next.body.content, { format: 'loom-markdown-v4', text: attempted.text, mentions: attempted.mentions, references: next.fields.references });
+  assert.deepEqual(record, before);
+  assert.equal(correctDraft({ operation: revision, fields: attempted, record: { ...record, state: 'uncertain' }, comparison: base }), undefined);
+  const noteFile = { ...note, format: 'loom-markdown-v4' as const, references: [file] };
+  assert.equal(buildDraftBody({ operation: revision, fields: fields(), patch: { note: noteFile } }).content.format, 'loom-markdown-v4');
+  assert.equal(buildDraftBody({ operation: revision, fields: fields(), patch: { references: [file] } }).content.format, 'loom-markdown-v4');
+});
+
+test('file-format refusal retains its exact base for correction without changing unrelated v3 rejection behavior',()=>{
+ const attempted=fields({format:'loom-markdown-v3',base:'original',fileSet});
+ const record={state:'rejected' as const,body:buildDraftBody({operation:revision,fields:attempted})};
+ assert.equal(draftCorrection({operation:revision,record,comparison:undefined}).comparisonRevision,undefined);
+ const required={...record,required_format:'loom-markdown-v4' as const};
+ assert.equal(draftCorrection({operation:revision,record:required,comparison:undefined}).comparisonRevision,'original');
+ assert.equal(correctDraft({operation:revision,fields:attempted,record:required,comparison:undefined}),undefined);
+ const next=correctDraft({operation:revision,fields:attempted,record:required,comparison:{...comparison('loom-markdown-v4'),revision_id:'original'}})!;
+ assert.equal(next.fields.format,'loom-markdown-v4');assert.deepEqual(next.body.file_set,fileSet);assert.equal(next.body.expected_revision_id,'original');
+});
+
+for (const resourceKind of ['artifact','contribution'] as const) for (const format of ['loom-markdown-v3','loom-markdown-v4'] as const) {
+ test(`${resourceKind} manifest refusal preserves ${format} intent and adopts only unsupported file citations`,()=>{
+  const operation:ComposerOperation={...revision,resourceKind};
+  const file={...reference,reference_id:'file-reference',target:{kind:'artifact' as const,resource_id:'target',revision_id:'exact',file_id:'file',path:'Report.txt'}};
+  const attempted=fields({format,base:'original',references:[reference]});
+  // The manifest refusal happens before the v4 format check and carries neither
+  // a conflict ID nor a required_format marker in the durable rejected request.
+  const record={state:'rejected' as const,body:buildDraftBody({operation,fields:attempted})};
+  const before=structuredClone(record),manifest={version:resourceKind==='artifact'?'artifact-files-v1' as const:'contribution-attachments-v1' as const,files:[{path:'retained.txt',source:{revision_id:'original',file_id:'retained-file'}}]};
+  const compare={...comparison('loom-markdown-v4',[file]),revision_id:'original',...(resourceKind==='artifact'?{file_set:{...manifest,version:'artifact-files-v1' as const,manifest_url:'/files'}}:{attachment_set:{...manifest,version:'contribution-attachments-v1' as const,manifest_url:'/attachments'}})};
+  const next=correctDraft({operation,fields:attempted,record,comparison:compare})!;
+  assert.equal(next.fields.format,'loom-markdown-v4');
+  assert.deepEqual(next.body.content,{format:'loom-markdown-v4',text:attempted.text,mentions:attempted.mentions,references:format==='loom-markdown-v3'?[reference,file]:[reference]});
+  assert.deepEqual(next.fields.references,format==='loom-markdown-v3'?[reference,file]:[reference]);
+  assert.deepEqual(next.body[resourceKind==='artifact'?'file_set':'attachment_set'],manifest);
+  assert.deepEqual(record,before);
+ });
 }

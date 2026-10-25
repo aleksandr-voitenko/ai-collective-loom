@@ -9,6 +9,8 @@ import {
 import { useQuery, type Context } from './participation-state.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
 import { commandRequest, identityGeneration } from './participation-client.js';
+import { ResolvedTarget, type ResolvedTargetView } from '../contracts/references.js';
+import { ReferenceViews } from './References.js';
 
 export function FileTextControl({
   base,
@@ -54,6 +56,16 @@ export function FileTextPage({
     authority = useAuthorization();
   const cursor = new URLSearchParams(location.search).get('cursor');
   const base = `/api/v1/${kind === 'artifact' ? 'artifacts' : 'contributions'}/${resource}/revisions/${revision}/${kind === 'artifact' ? 'files' : 'attachments'}/${file}`;
+  const publication = useQuery<ResolvedTargetView>(
+    '/api/v1/references/target?' +
+      new URLSearchParams({
+        kind,
+        resource_id: resource,
+        revision_id: revision,
+        file_id: file,
+      }),
+    ResolvedTarget,
+  );
   const query = useQuery<FileTextValue>(
     base + '/text' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''),
     FileTextView,
@@ -117,6 +129,22 @@ export function FileTextPage({
       </p>
       <button onClick={() => void navigate(-1)}>Back</button>{' '}
       <Link to={`/loom/resource/${resource}/${revision}`}>Open exact publication</Link>
+      {publication.data && (
+        <>
+          <p>
+            File: {publication.data.target.path} ·{' '}
+            {publication.data.representation.title ?? 'Contribution'}
+          </p>
+          <Link to={publication.data.context_url}>Owning publication context</Link>
+          <ReferenceViews key={file} target={publication.data.target} />
+        </>
+      )}
+      {publication.error && (
+        <>
+          <p role="alert">{publication.error}</p>
+          <button onClick={publication.refresh}>Retry file context</button>
+        </>
+      )}
       {(query.error || error) && <p role="alert">{query.error || error}</p>}
       {status && <p role="status">{status}</p>}
       {!query.data && !query.error && <p role="status">Checking exact file…</p>}

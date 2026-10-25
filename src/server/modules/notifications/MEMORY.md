@@ -2,8 +2,10 @@
 
 ADR-023 and `src/contracts/guide.ts` define the synthetic scope.
 Implementation decision record: Lore-ID `LC-20261016-V1H5`.
-Migration 0012 is additive; persisted v1/v2/v3 authored fields, publication digests,
+Migration 0012 is additive; persisted v1/v2/v3/v4 authored fields, publication digests,
 events, immutable intents and search progress are inputs, never rewritten.
+V4 main/notes preserve file declarations while only explicit mentions generate
+mention reasons; note reconstruction retains its actual v2/v4 format (ADR-036).
 
 `worker.ts` discovers typed human/agent contribution/artifact/summary revisions in
 resource/ordinal order, plus its independent event-position/intent-ID cursor.

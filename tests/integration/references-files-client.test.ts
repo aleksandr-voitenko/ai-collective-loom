@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {randomUUID} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {readFile,writeFile} from 'node:fs/promises';
+import {fixture,reference} from '../helpers/references.js';
+import {packageText} from '../helpers/file-text.js';
+
+test('independent HTTPS example selects exact membership, journals v4, recovers after process restart and inspects exact incoming scope',{timeout:60000},async t=>{
+  const f=await fixture(t,{files:true}),agent=await f.participant('file_client'),target=await packageText(f);
+  const credential=await f.admin.call('/api/v1/identity/credentials',{idempotency_key:randomUUID(),participant_id:agent.id,kind:'agent',purpose:null,label:'Exact file client',replace_credential_id:null});assert.equal(credential.status,200);
+  await writeFile(f.directory+'/token',credential.body.secret,{mode:0o600});
+  const run=(action:string,args:string[]=[])=>promisify(execFile)(process.execPath,['scripts/file-artifacts-client.mjs','--origin',f.origin,'--credential-file',f.directory+'/token','--ca',f.directory+'/cert.pem','--action',action,...args],{timeout:20000});
+  const exact=['--artifact',target.resource_id,'--revision',target.revision_id];
+  await run('list-files',[...exact,'--output',f.directory+'/manifest.json']);const manifest=JSON.parse(await readFile(f.directory+'/manifest.json','utf8'));assert.equal(manifest.items[0].file_id,target.file.file_id);
+  await run('reference-target',[...exact,'--file-id',target.file.file_id,'--output',f.directory+'/target.json']);const resolved=JSON.parse(await readFile(f.directory+'/target.json','utf8'));
+  assert.deepEqual(resolved.target,{kind:'artifact',resource_id:target.resource_id,revision_id:target.revision_id,file_id:target.file.file_id,path:target.file.path});
+  const refs=[reference(resolved.target,'builds_on','Exact file evidence')];
+  const input={area_id:f.area,title:'Direct file source',content:{format:'loom-markdown-v4',text:'Direct source',mentions:[],references:refs},change_note:{format:'loom-markdown-v4',text:'Why this exact file',mentions:[],references:refs},change_account:null};
+  await writeFile(f.directory+'/input.json',JSON.stringify(input),{mode:0o600});
+  const journal=['--journal',f.directory+'/intent.json'];await run('prepare',[...journal,'--kind','artifact.create','--input',f.directory+'/input.json']);
+  const retained=await readFile(f.directory+'/intent.json','utf8');assert.ok(!retained.includes(credential.body.secret));assert.deepEqual(JSON.parse(retained).body.content,input.content);
+  await assert.rejects(run('lose-response',journal),(e:any)=>e.code===75);await f.restart();
+  const status=JSON.parse((await run('status',journal)).stdout);assert.equal(status.publication_state,'committed');
+  const replay=JSON.parse((await run('send',journal)).stdout);assert.equal(replay.revision_id,status.revision_id);assert.equal(await readFile(f.directory+'/intent.json','utf8'),retained);
+  await run('referenced-by',[...exact,'--file-id',target.file.file_id,'--path',target.file.path,'--output',f.directory+'/incoming.json']);const incoming=JSON.parse(await readFile(f.directory+'/incoming.json','utf8'));
+  assert.equal(incoming.scope,'file');assert.deepEqual(incoming.items.map((r:any)=>r.source_field).sort(),['change_note','main']);assert.ok(incoming.items.every((r:any)=>r.source.revision_id===status.revision_id));
+  await run('download',[...exact,'--file-id',target.file.file_id,'--output',f.directory+'/download']);assert.equal(await readFile(f.directory+'/download','utf8'),'quartzneedle file content');
+});

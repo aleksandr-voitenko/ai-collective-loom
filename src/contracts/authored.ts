@@ -1,12 +1,36 @@
 import MarkdownIt, { type Token } from 'markdown-it';
 import { Value } from '@sinclair/typebox/value';
+import { normalizeFilePath } from './files.js';
 import {
   Content,
   limits,
   type AuthoredContent,
   type NoteContent,
   type ChangeAccountValue,
+  type ReferenceTargetValue,
 } from './participation.js';
+
+export function canonicalReferenceTarget(target: ReferenceTargetValue): ReferenceTargetValue {
+  if (
+    (target.kind === 'discussion' && target.revision_id) ||
+    ((target.file_id !== undefined || target.path !== undefined) &&
+      (!target.file_id ||
+        !target.path ||
+        !target.revision_id ||
+        !['artifact', 'contribution'].includes(target.kind)))
+  )
+    throw new Error(
+      'A file citation requires its publication, revision, contextual file ID and path.',
+    );
+  return {
+    kind: target.kind,
+    resource_id: target.resource_id.toLowerCase(),
+    ...(target.revision_id ? { revision_id: target.revision_id.toLowerCase() } : {}),
+    ...(target.file_id
+      ? { file_id: target.file_id.toLowerCase(), path: normalizeFilePath(target.path!) }
+      : {}),
+  };
+}
 
 // Parse once using the same bounded dialect in browser and server. No raw HTML,
 // image fetches, autolinking, embedded applications, or inferred @name entities.
@@ -46,12 +70,18 @@ export function parseAuthored(content: AuthoredContent): Token[] {
       const target = JSON.stringify([
         ref.target.resource_id.toLowerCase(),
         ref.target.revision_id?.toLowerCase() ?? null,
+        ref.target.file_id?.toLowerCase() ?? null,
       ]);
       const rationale = ref.rationale;
       if (
         ids.has(id) ||
         targets.has(target) ||
         (ref.target.kind === 'discussion' && ref.target.revision_id) ||
+        ((ref.target.file_id !== undefined || ref.target.path !== undefined) &&
+          (!ref.target.file_id ||
+            !ref.target.path ||
+            !ref.target.revision_id ||
+            !['artifact', 'contribution'].includes(ref.target.kind))) ||
         (['builds_on', 'contradicts'].includes(ref.relationship ?? '') && !rationale?.trim()) ||
         (rationale !== null &&
           (!validUnicode(rationale) ||
@@ -59,6 +89,7 @@ export function parseAuthored(content: AuthoredContent): Token[] {
             new TextEncoder().encode(rationale).length > limits.rationaleBytes))
       )
         throw new Error('Invalid or duplicate recorded reference.');
+      if (ref.target.path !== undefined) normalizeFilePath(ref.target.path);
       ids.add(id);
       targets.add(target);
       bytes += new TextEncoder().encode(rationale ?? '').length;
@@ -106,14 +137,18 @@ export function validateChangeFields(
     change_account?: ChangeAccountValue | null;
   },
 ) {
-  if (content.format !== 'loom-markdown-v3') {
+  if (content.format !== 'loom-markdown-v3' && content.format !== 'loom-markdown-v4') {
     if ('change_note' in fields || 'change_account' in fields)
-      throw new Error('Change fields require loom-markdown-v3.');
+      throw new Error('Change fields require loom-markdown-v3 or loom-markdown-v4.');
     return;
   }
   if (!('change_note' in fields) || !('change_account' in fields))
-    throw new Error('V3 requires explicit change_note and change_account, using null when absent.');
+    throw new Error(
+      'V3/v4 requires explicit change_note and change_account, using null when absent.',
+    );
   const note = fields.change_note;
+  if (note?.format === 'loom-markdown-v4' && content.format !== 'loom-markdown-v4')
+    throw new Error('File-aware notes require loom-markdown-v4 publication.');
   const fieldsToParse = note ? [content, note] : [content];
   let tokens = 0;
   const count = (token: Token) => {

@@ -14,8 +14,9 @@ ordinary links. The safe Markdown parser/React renderer retains its HTML boundar
 
 Each declaration has a source-scoped UUID `reference_id`, a target `{kind,
 resource_id, revision_id?}`, nullable `relationship` and nullable `rationale`.
-Kinds are discussion, contribution and artifact. Only contributions/artifacts
-accept an exact revision. A discussion is the container, never an alias for its
+Kinds are discussion, contribution, artifact and summary. Contributions, artifacts
+and summaries accept an exact revision. ADR-036 adds exact file scope for
+artifacts and contributions in v4. A discussion is the container, never an alias for its
 opening; citing an opening explicitly uses its contribution identity. Relations
 are untyped/null, related_to, builds_on and contradicts. The latter two require
 nonblank rationale. No label implies truth, consensus or target authority.
@@ -43,7 +44,7 @@ to infer the editor who removed the declaration.
 An exact operation retry resolves its original outcome without inserting membership
 or reapplying a reference after a later source edit.
 
-An edit against a v2 base must use v2, including an explicit empty list to withdraw
+An edit against a v2 base must use v2 or a later reference-aware format, including an explicit empty list to withdraw
 everything. Old clients receive `reference_format_required` before writing. Local
 intent keeps the exact original format/body/key; opening an old draft never upgrades
 an uncertain request. After definitive rejection only, explicit correction may create
@@ -117,8 +118,8 @@ Outgoing References and incoming Referenced by preserve exact links and bounded
 pages, history/scope labels, unavailable/failed/restart states and response ownership.
 No picker/read/navigation action saves, follows, marks read or publishes anything.
 
-Search supports all three document formats in selection, status, worker and rebuild
-(v3 extends this ADR through ADR-022). Source-authored title/body and current v3 note
+Search supports all four document formats in selection, status, worker and rebuild
+(v3/v4 extend this ADR through ADR-022/036). Source-authored title/body and current v3/v4 note
 text are indexed; rationale is retained/displayed but
 excluded from lexical search. Dynamically resolved target titles/bodies are never
 indexed as source-authored text. This avoids changing the existing body/excerpt
@@ -141,11 +142,18 @@ cover journal correction/reload/restart/stale tabs, exact navigation, late accou
 route responses, keyboard/narrow layouts and development StrictMode. Normal CI,
 full browser and diagnostic checks remain required; record actual results separately.
 ADR-010 extends this same model to summary sources and resource/exact targets.
-Coverage membership itself creates no assertion. Change-note, file/path and
-private-note integration remain open.
+Coverage membership itself creates no assertion. ADR-022 adds change notes;
+ADR-036 adds contextual file references. Private-note backlinks remain excluded.
 Same-machine tests do not establish provider-agent or cross-machine trials, real
 identity/retention/restore policy, production capacity or broad AC completion.
 
 ## Guide 7 extension — ADR-022
 
 Migration 0011 adds source_field (main/change_note) to entity/assertion identity. Main reference IDs retain continuing provenance and withdrawals. Note IDs are local to their owning revision field, newly asserted even if a later note reuses the same UUID. Outgoing/incoming rows identify the field; history distinguishes historical_note. Ordering includes field between source revision and reference UUID. Account coverage alone is not a reference assertion. See [ADR-022](022-authored-change-notes.md) for the complete contract and reconsideration conditions.
+
+## Exact file reference extension
+
+[ADR-036](036-exact-file-references.md) adds explicit v4 recorded references to
+exact published artifact files and contribution attachments, including revision
+notes. It preserves this contract’s independent contextual custody, authorization
+and legacy replay semantics; file-reference discovery needs no extraction worker.

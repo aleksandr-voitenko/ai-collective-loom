@@ -158,7 +158,7 @@ Application grants prevent changing contribution identity/parent/creation order.
 Overview is a normal artifact, with normal revisions and administrator editor lists.
 Config absence/ineligibility is explicit and does not block unrelated participation.
 
-Bodies are exact v1, explicit-reference v2 or change-aware `loom-markdown-v3`,
+Bodies are exact v1, explicit-reference v2, change-aware v3 or file-aware v4,
 16 KiB UTF-8 text plus rationale and 4,096 parsed tokens maximum,
 with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images and
 non-HTTP(S) links do not render as active content. Ordinary links infer nothing.
@@ -349,14 +349,14 @@ retaining the shared 3,840-guard cap; ordinary reference declarations still cap 
 
 `references.ts` provides direct outgoing/incoming reads under REPEATABLE READ,
 current actor and sorted full resource guards. Read races either wait or return
-explicit restart; do not mix snapshots. Incoming resource/exact scopes never
+explicit restart; do not mix snapshots. Incoming resource/revision/file scopes never
 aggregate; default current, explicit history. Candidate scan 100, items max25,
 JSON 4–128 KiB, owner walk32/total guards3840, statement deadline2.5s. Encrypted
 2 KiB/five-minute cursors bind caller, semantics and source/visibility/hierarchy
 boundary; edits/moves/restoration/restart invalidate. No counts or graph scan.
 `web/References.tsx` feeds declarations into the existing durable composer and
 guards picker/page responses by live view, request sequence and identity generation.
-Known IDs/links work without indexing. Rationale is not searched; all three formats'
+Known IDs/links work without indexing. Rationale is not searched; all four formats'
 source title/body remain worker/rebuild eligible. Tests: `test:references:postgres`,
 `web/references.test.tsx` and `e2e/references.spec.ts`.
 
@@ -372,8 +372,9 @@ continuing main assertions. Combined text/rationales 16384 bytes, note4096, comb
 mentions/references16 each and parser tokens4096. Exact note bodies stay separate.
 `web/Changes.tsx` uses current-draft callbacks and stable accessible names. New
 revision drafts omit notes; saved/uncertain attempts preserve their exact fields.
-Correction retains attempted references, including v2→v3 upgrades; only v1 drafts
-adopt comparison-base references. An obsolete account carry requires an explicit
+Correction retains attempted references, including v2→v3 upgrades. For v2/v3 bases,
+only v1 drafts adopt comparison-base references; v4 correction also adopts file
+declarations that older drafts could not represent (ADR-036). An obsolete account carry requires an explicit
 comparison-declaration carry, replacement or removal; the comparison read checks
 source metadata without expanding unavailable members.
 Discovery scans100, returns25, binds scope/history/form/owner and live source epochs;
@@ -486,3 +487,23 @@ The import
 guard and actual component/browser regressions enforce use of the boundary.
 See `web/AuthorizationBoundary.tsx` and ADR-027.
 See `../attention/MEMORY.md` for private choices and complete-feed preservation.
+
+
+Exact-file references (ADR-036, guide21) use v4 main/optional v4 note fields and
+`{kind,resource_id,revision_id,file_id,path}`. `reference-context.ts` checks exact
+published file_contexts owner/revision/path plus prepared upload membership under
+the existing complete guard plan; no new custody guard/native IO occurs in publication.
+The path uses existing NFC policy. Identity includes contextual file ID, never bytes.
+Migration0026 adds nullable target fields, preserves old rows and extends field-local
+uniqueness. Incoming queries constrain target_file_id including NULL, excluding
+sibling/whole-revision/other-context citations; pre0026 legacy reads omit that column.
+Reference cursors hash canonical caller/selection/order to keep maximum path scopes
+within the existing2KiB limit. All source/visibility/hierarchy fences remain.
+Target lookup alone may fill an omitted path from authorized exact membership;
+authored/incoming targets require both and refuse mismatches. Native missing versions
+remain download failures, with no retarget or fallback. Promoted contexts stay independent.
+V4 digests are participation-text-v4/discussion-summary-v3 including manifests;
+old envelope identities stay unchanged. V4 bases reject older edits with
+file_reference_format_required after original outcome recovery. Notes preserve their
+actual v2/v4 format through reads/notification processing. Search, reading and
+summary-source eligibility include v4 without indexing reference target metadata.

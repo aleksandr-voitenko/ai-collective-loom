@@ -4,7 +4,7 @@ import {
   UUID,
   Resource,
   Participant,
-  ReferencedContent,
+  ReferenceNote,
   ExactChangeTarget,
   BudgetInput,
 } from './participation.js';
@@ -33,7 +33,7 @@ export const NoteDetail = Type.Object(
     source_field: Type.Literal('change_note'),
     state: Type.Union([Type.Literal('absent'), Type.Literal('available')]),
     described_scope: Type.Literal('owning_revision_only; no_interval_claim'),
-    content: Type.Union([ReferencedContent, Type.Null()]),
+    content: Type.Union([ReferenceNote, Type.Null()]),
     mentioned_participants: Type.Array(Participant, { maxItems: 16 }),
   },
   closed,

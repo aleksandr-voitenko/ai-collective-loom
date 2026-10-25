@@ -25,7 +25,8 @@ test('populated 0012 upgrade preserves existing data and personal custody; histo
     'notification_signals','personal_deliveries','participant_delivery_clocks'];
   const snapshots=new Map<string,string>();
   const digest=async(table:string)=>{
-    const rows=(await f.observer.query(`SELECT ${table==='resources'?"'{\"lifecycle_version\":1}'::jsonb || ":''}${table==='shared_activity'?"'{\"affected_target_ids\":null}'::jsonb || ":''}to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows;
+    // Add only expected migration defaults; actual values override them, so every old column and new null is checked.
+    const rows=(await f.observer.query(`SELECT ${table==='resources'?"'{\"lifecycle_version\":1}'::jsonb || ":''}${table==='shared_activity'?"'{\"affected_target_ids\":null}'::jsonb || ":''}${table==='revision_references'?"'{\"target_file_id\":null,\"target_path\":null}'::jsonb || ":''}to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows;
     return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
   };
   for(const table of tables)snapshots.set(table,await digest(table));

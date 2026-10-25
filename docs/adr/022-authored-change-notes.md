@@ -17,7 +17,7 @@ is `{revisions:[{kind,resource_id,revision_id}]}` or an explicit whole immediate
 account classification from the new revision. V1/v2 requests accept neither field;
 their canonical payloads and digests are unchanged. New requests use
 `participation-text-v3`, or `discussion-summary-v2` for summary operations. All
-accepted fields enter the digest. Editing a v3 base requires v3, including nulls;
+accepted fields enter the digest. Editing a v3 base requires v3 or v4, including nulls;
 older clients receive `change_format_required` rather than stripping declarations.
 
 A note describes exactly its newly published owning revision, bound by the server.
@@ -94,7 +94,9 @@ attempt's authored note. Starting another revision fetches current authorized ma
 content, carries only existing account/summary declarations, saves a new key/base,
 and then retires the completed record. Failed fetch/save retains the old record.
 Corrections preserve attempted notes and reference edits, including v2→v3 upgrades.
-Only v1 drafts adopt comparison-base references, because v1 cannot represent them.
+For v2/v3 bases, only v1 drafts adopt comparison-base references, because v1
+cannot represent them. ADR-036 adds explicit adoption of file declarations that
+v2/v3 drafts cannot represent when correcting against a v4 base.
 Newly supported metadata is adopted only at explicit new-draft creation.
 An obsolete account carry remains saved until the author explicitly chooses the
 comparison revision's declaration, replacement or removal. Its exact source read
@@ -109,3 +111,10 @@ Record results separately. Notification delivery, Updates, files, private notes,
 reservations, full moderation UI, deployment and provider/cross-machine trials stay
 open. Reconsider these mechanisms for larger workloads, mixed-release browser tabs,
 new target kinds or multiple API processes, preserving exact ownership and replay.
+
+## Exact file reference extension
+
+[ADR-036](036-exact-file-references.md) adds explicit v4 recorded references to
+exact published artifact files and contribution attachments, including revision
+notes. It preserves this contract’s independent contextual custody, authorization
+and legacy replay semantics; file-reference discovery needs no extraction worker.

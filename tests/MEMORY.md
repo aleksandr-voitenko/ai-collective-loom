@@ -608,8 +608,8 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 160 collected tests and <17 MiB/candidate. The test count includes
-the isolated recovery journey so combined coverage captures the complete suite;
+128 KiB/document, 162 collected tests and <17 MiB/candidate. The test count includes
+the isolated recovery and exact-file reference journeys so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
@@ -771,3 +771,18 @@ committed on its original draft route when another tab deletes it. Synthetic
 review screenshots are opt-in `LOOM_NOTES_REVIEW_SCREENS=1` under `/tmp`, outside
 approved diagnostics. Notes extend only the closed diagnostic route/spec inventory
 and its exact test count; byte, event, deadline, worker and coverage gates remain.
+
+
+Exact-file reference acceptance is in integration/references-files*.test.ts (normal
+references glob): native bytes and missing versions, distinct file/whole/copy scopes,
+main/note assertions and history, complete paged sets derived from known publications
+(including filtered hidden-candidate continuation) and cursor invalidation,
+0025→0026 snapshots of every old column, original legacy retries and new v4 bases,
+deterministic HTTPS publication/suppression/revocation ordering, and restarted
+file-artifacts-client HTTPS selection/journal/status/incoming/download.
+Mounted web/file-text tests use actual ActiveView/AuthorizationBoundary for independent
+reference metadata, failed-page retry/focus, and route/account/denial late-response fences.
+Compiled files.spec journeys cover bounded selection, same-instance attachment links,
+main/note journal reload, explicit v4 conflict correction, missing-manifest refusal
+before v4 refusal (preserve both unsupported fields), lost acknowledgement,
+exact navigation, incoming paging failures and390px width. Existing assertions remain.

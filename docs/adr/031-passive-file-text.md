@@ -161,3 +161,10 @@ Reconsider support for a concrete new passive format and its isolation/resource
 tests; reconsider limits with measured workloads and approved capacity/retention.
 Broader parser/origin support, production storage/backup/erasure and cross-machine
 human/provider acceptance require separate decisions and evidence.
+
+## Exact file reference extension
+
+[ADR-036](036-exact-file-references.md) adds explicit v4 recorded references to
+exact published artifact files and contribution attachments, including revision
+notes. It preserves this contract’s independent contextual custody, authorization
+and legacy replay semantics; file-reference discovery needs no extraction worker.

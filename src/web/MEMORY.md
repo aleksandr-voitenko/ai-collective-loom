@@ -60,14 +60,26 @@ hosts, including contribution/summary intents and storage refusal before dispatc
 
 `ParticipationComposer.tsx` coordinates authored drafts, correction and exact retry.
 `composer-draft.ts` derives routes/targets/capabilities from its six-kind caller
-operation union and owns pure draft construction/comparison/correction transitions.
+operation union and owns draft construction/comparison/correction transitions.
 Named draft patches preserve undefined-as-unchanged and explicit null/empty values;
 loaded journal bodies remain opaque; uncertain dispatch sends the retained body unchanged.
 Keep its journal sequencing in `participation-state.tsx`/`participation-client.ts`;
 delayed coverage/account selections use latest-draft callbacks. Explicit correction
 of a rejected v1 draft may adopt the exact comparison revision's references;
 v2-to-v3 correction preserves attempted references (LC-20261016-BA7H).
-Uncertain request bytes remain immutable.
+V4 file-aware correction copies exact comparison file declarations while preserving
+supported attempted edits; a conflicting attempted logical ID receives a fresh copy ID.
+The file assertion keeps its ID for carry-forward. A rejected format requirement is
+retained as journal metadata; unrelated v3 refusals do not force a new comparison.
+Missing-manifest refusal can precede the v4 refusal: correction adopts both missing
+manifest and unsupported file declarations. V4 drafts retain deliberate withdrawals.
+Corrected v4 drafts may retain32 main references locally, but publication is disabled
+above16 and server combined limits stay unchanged. Uncertain request bytes remain immutable.
+`ReferenceFilePicker` extends existing controls with bounded exact manifests; no byte
+preview/download or private action occurs during selection. `FileTextPage` resolves
+file reference context independently of text processing, and Files exposes file-scope
+incoming controls. Whole-view authorization withdraws late target metadata/results;
+failed pages retain prior context and exact cursor, explicit retry focuses the heading.
 
 Contribution composers use `attachment_set` independently of authored format;
 FileEditor keeps explicit opening/reply/edit targets and recoverable partial paths.

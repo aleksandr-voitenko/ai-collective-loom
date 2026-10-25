@@ -139,7 +139,12 @@ export class ReadingProgress {
         ).rows[0];
         if (
           !row ||
-          !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(row.content_format)
+          ![
+            'loom-markdown-v1',
+            'loom-markdown-v2',
+            'loom-markdown-v3',
+            'loom-markdown-v4',
+          ].includes(row.content_format)
         )
           throw new PublicationError('unavailable');
         availability.set(target.revision_id, true);

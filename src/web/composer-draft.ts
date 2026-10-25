@@ -159,7 +159,12 @@ export function buildDraftBody({
     account = fields.account,
     fileSet = fields.fileSet,
   } = patch;
-  const changes = fields.format === 'loom-markdown-v3' || !!note || !!account || !!fileSet;
+  const fileReferences =
+    fields.format === 'loom-markdown-v4' ||
+    note?.format === 'loom-markdown-v4' ||
+    references.some((ref) => !!ref.target.file_id);
+  const changes =
+    fileReferences || fields.format === 'loom-markdown-v3' || !!note || !!account || !!fileSet;
   return {
     ...fixed,
     ...(fields.base ? { expected_revision_id: fields.base } : {}),
@@ -172,18 +177,20 @@ export function buildDraftBody({
       : {}),
     ...(changes ? { change_note: note, change_account: account } : {}),
     content: {
-      ...(changes
-        ? { format: 'loom-markdown-v3' as const, references }
-        : fields.format === 'loom-markdown-v2' || references.length
-          ? { format: 'loom-markdown-v2' as const, references }
-          : { format: 'loom-markdown-v1' as const }),
+      ...(fileReferences
+        ? { format: 'loom-markdown-v4' as const, references }
+        : changes
+          ? { format: 'loom-markdown-v3' as const, references }
+          : fields.format === 'loom-markdown-v2' || references.length
+            ? { format: 'loom-markdown-v2' as const, references }
+            : { format: 'loom-markdown-v1' as const }),
       text,
       mentions,
     },
   };
 }
 
-type CorrectionRecord = Pick<Intent, 'body' | 'state' | 'conflict_revision_id'>;
+type CorrectionRecord = Pick<Intent, 'body' | 'state' | 'conflict_revision_id' | 'required_format'>;
 type ComparisonRevision = Pick<
   RevisionView,
   'revision_id' | 'content' | 'change_account' | 'file_set' | 'attachment_set'
@@ -204,7 +211,10 @@ export function draftCorrection({ operation, record, comparison }: CorrectionInp
   const legacyCorrection =
     record?.state === 'rejected' &&
     (operation.kind === 'revision.publish' || operation.kind === 'summary.revise') &&
-    original?.format !== 'loom-markdown-v3';
+    (original?.format === 'loom-markdown-v1' ||
+      original?.format === 'loom-markdown-v2' ||
+      (original?.format === 'loom-markdown-v3' &&
+        (!!record.conflict_revision_id || record.required_format === 'loom-markdown-v4')));
   // Format refusals have no conflict ID. Their retained expected revision is
   // still the exact comparison base, never a newer fetched current revision.
   const comparisonRevision =
@@ -219,6 +229,13 @@ export function draftCorrection({ operation, record, comparison }: CorrectionInp
     comparisonReady &&
     original?.format === 'loom-markdown-v1' &&
     comparison.content.format !== 'loom-markdown-v1';
+  const adoptsFileReferences =
+    // A missing manifest is checked before authored-format compatibility. Its
+    // correction must preserve the v4 citations too, even without that refusal marker.
+    (legacyCorrection || legacyFileCorrection) &&
+    comparisonReady &&
+    (original?.format === 'loom-markdown-v2' || original?.format === 'loom-markdown-v3') &&
+    comparison.content.format === 'loom-markdown-v4';
   const requiresComparison =
     legacyCorrection ||
     legacyFileCorrection ||
@@ -227,6 +244,7 @@ export function draftCorrection({ operation, record, comparison }: CorrectionInp
     comparisonRevision,
     comparisonReady,
     adoptsBaseReferences,
+    adoptsFileReferences,
     requiresComparison,
     legacyCorrection,
     legacyFileCorrection,
@@ -246,16 +264,34 @@ export function correctDraft(input: CorrectionInput & { fields: DraftFields }) {
   // A correction never enlarges a summary's source claim. The declaration must
   // be chosen again after inspecting the exact comparison revision.
   if (summary) delete body.coverage;
-  // Only v1 lacks references. A v2→v3 correction already contains the author's
-  // attempted additions, edits and withdrawals, which must not be replaced.
+  // Older clients cannot express file declarations. Explicit correction copies
+  // those declarations without replacing supported attempted edits/withdrawals.
+  // If a concurrent revision changed the same assertion to a file, retain its
+  // identity and copy the older attempted declaration with a new identity.
+  const comparisonFileReferences =
+    comparison?.content.format === 'loom-markdown-v4'
+      ? comparison.content.references.filter((ref) => ref.target.file_id)
+      : [];
   const adopted =
     correction.adoptsBaseReferences && comparison?.content.format !== 'loom-markdown-v1'
       ? comparison?.content.references
-      : undefined;
+      : correction.adoptsFileReferences && comparison?.content.format === 'loom-markdown-v4'
+        ? [
+            ...fields.references.map((ref) =>
+              comparisonFileReferences.some(
+                (base) => base.target.file_id && base.reference_id === ref.reference_id,
+              )
+                ? { ...ref, reference_id: crypto.randomUUID() }
+                : ref,
+            ),
+            ...comparisonFileReferences,
+          ]
+        : undefined;
   const account =
-    correction.legacyCorrection && comparison?.content.format === 'loom-markdown-v3'
-      ? comparison.change_account?.state === 'declared'
-        ? { carry_forward_revision_id: comparison.revision_id }
+    !['loom-markdown-v3', 'loom-markdown-v4'].includes(fields.format) &&
+    ['loom-markdown-v3', 'loom-markdown-v4'].includes(comparison?.content.format ?? '')
+      ? comparison?.change_account?.state === 'declared'
+        ? { carry_forward_revision_id: comparison!.revision_id }
         : null
       : fields.account;
   const comparisonFiles = comparison?.file_set ?? comparison?.attachment_set;
@@ -263,13 +299,16 @@ export function correctDraft(input: CorrectionInput & { fields: DraftFields }) {
     correction.legacyFileCorrection && comparisonFiles
       ? { version: comparisonFiles.version, files: comparisonFiles.files }
       : fields.fileSet;
-  const format = fileSet
-    ? 'loom-markdown-v3'
-    : comparison?.content.format === 'loom-markdown-v3' || fields.format === 'loom-markdown-v3'
-      ? 'loom-markdown-v3'
-      : adopted
-        ? 'loom-markdown-v2'
-        : fields.format;
+  const format =
+    comparison?.content.format === 'loom-markdown-v4' || fields.format === 'loom-markdown-v4'
+      ? 'loom-markdown-v4'
+      : fileSet
+        ? 'loom-markdown-v3'
+        : comparison?.content.format === 'loom-markdown-v3' || fields.format === 'loom-markdown-v3'
+          ? 'loom-markdown-v3'
+          : adopted
+            ? 'loom-markdown-v2'
+            : fields.format;
   return {
     fields: {
       ...fields,
@@ -290,10 +329,10 @@ export function correctDraft(input: CorrectionInput & { fields: DraftFields }) {
       ...(correction.comparisonRevision
         ? { expected_revision_id: correction.comparisonRevision }
         : {}),
-      ...(adopted || format === 'loom-markdown-v3'
+      ...(adopted || ['loom-markdown-v3', 'loom-markdown-v4'].includes(format)
         ? { content: { ...body.content, format, references: adopted ?? fields.references } }
         : {}),
-      ...(format === 'loom-markdown-v3'
+      ...(['loom-markdown-v3', 'loom-markdown-v4'].includes(format)
         ? { change_note: fields.note, change_account: account }
         : {}),
     } satisfies DraftBody,

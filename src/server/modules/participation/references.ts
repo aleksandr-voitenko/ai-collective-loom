@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import type { ActorContext } from '../publication/actor.js';
@@ -23,6 +23,7 @@ import {
   type ResolvedTargetView,
 } from '../../../contracts/references.js';
 import type { ReferenceTargetValue, ResourceView } from '../../../contracts/participation.js';
+import { canonicalReferenceTarget } from '../../../contracts/authored.js';
 
 export class ReferenceError extends Error {
   constructor(readonly code: 'references_changed' | 'reference_work_limit') {
@@ -46,11 +47,11 @@ const contextUrl = (source: ResourceView) =>
       ? `/loom/discussion/${source.discussion_id}?focus=${source.resource_id}`
       : `/loom/resource/${source.resource_id}`;
 function canonicalTarget(target: ReferenceTargetValue): ReferenceTargetValue {
-  return {
-    kind: target.kind,
-    resource_id: target.resource_id.toLowerCase(),
-    ...(target.revision_id ? { revision_id: target.revision_id.toLowerCase() } : {}),
-  };
+  try {
+    return canonicalReferenceTarget(target);
+  } catch {
+    throw new PublicationError('invalid_input');
+  }
 }
 async function boundary(tx: SqlTransaction) {
   return (
@@ -131,10 +132,11 @@ export class RecordedReferences {
     return {
       state: 'available',
       target,
-      scope: target.revision_id ? 'revision' : 'resource',
+      scope: target.file_id ? 'file' : target.revision_id ? 'revision' : 'resource',
       representation,
-      browser_url:
-        target.kind === 'discussion'
+      browser_url: target.file_id
+        ? `/loom/file/${target.kind}/${target.resource_id}/${target.revision_id}/${target.file_id}`
+        : target.kind === 'discussion'
           ? `/loom/discussion/${target.resource_id}`
           : `/loom/resource/${target.resource_id}${target.revision_id ? '/' + target.revision_id : ''}`,
       context_url: contextUrl(representation),
@@ -142,10 +144,31 @@ export class RecordedReferences {
   }
   target(actor: ActorContext, input: ReferenceTargetValue) {
     if (!Value.Check(TargetInput, input)) throw new PublicationError('invalid_input');
-    const target = canonicalTarget(input);
+    // Link resolution can supply the contextual identity without a path. Only
+    // this read fills it from membership; authored declarations always include it.
+    const lookup = input.file_id !== undefined && input.path === undefined;
+    if (lookup && (!input.revision_id || !['artifact', 'contribution'].includes(input.kind)))
+      throw new PublicationError('invalid_input');
     return this.run(async (tx) => {
       const authority = await lockActor(tx, actor);
-      await lockReferencePlan(tx, [target.resource_id]);
+      await lockReferencePlan(tx, [input.resource_id.toLowerCase()]);
+      let path = input.path;
+      if (lookup) {
+        // Check owning publication/revision before looking up its immutable member.
+        await referenceTarget(tx, {
+          kind: input.kind,
+          resource_id: input.resource_id.toLowerCase(),
+          revision_id: input.revision_id!.toLowerCase(),
+        });
+        path = (
+          await tx.query<{ path: string }>(
+            `SELECT path FROM loom.file_contexts WHERE id=$1 AND revision_id=$2 AND ${input.kind === 'artifact' ? 'artifact_id' : 'contribution_id'}=$3`,
+            [input.file_id!, input.revision_id!, input.resource_id],
+          )
+        ).rows[0]?.path;
+        if (path === undefined) throw new PublicationError('unavailable');
+      }
+      const target = canonicalTarget({ ...input, ...(path === undefined ? {} : { path }) });
       return fit(await this.resolve(tx, authority, target), 131072);
     });
   }
@@ -177,23 +200,39 @@ export class RecordedReferences {
     return this.run(async (tx) => {
       const actor = await lockActor(tx, actorContext),
         state = await boundary(tx),
-        binding = JSON.stringify([
-          actor.participantId,
-          selection,
-          'source_revision_uuid_then_field_then_reference_uuid',
-        ]);
+        binding = createHash('sha256')
+          .update(
+            JSON.stringify([
+              actor.participantId,
+              selection,
+              'source_revision_uuid_then_field_then_reference_uuid',
+            ]),
+          )
+          .digest('hex');
       const saved = options.cursor ? this.decode(options.cursor) : undefined;
       if (saved && (saved.binding !== binding || saved.boundary !== state))
         throw new ReferenceError('references_changed');
       const after = saved?.after ?? null,
         expires = saved?.expires ?? Date.now() + referenceLimits.cursorSeconds * 1000;
       const incoming = 'target' in selection;
+      // Upgrade fixtures and retained legacy readers may still use a pre-file schema.
+      const fileSchema =
+        incoming &&
+        !!(
+          await tx.query<{ present: boolean }>(
+            "SELECT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='loom.revision_references'::regclass AND attname='target_file_id' AND NOT attisdropped) AS present",
+            [],
+          )
+        ).rows[0]?.present;
+      if (incoming && selection.target.file_id && !fileSchema)
+        throw new PublicationError('unavailable');
       const candidates = (
         await tx.query<ReferenceRow>(
           incoming
             ? `SELECT rr.* FROM loom.revision_references rr
         JOIN loom.resources s ON s.id=rr.source_id
         WHERE rr.target_id=$1 AND rr.target_revision_id IS NOT DISTINCT FROM $2::uuid
+        ${fileSchema ? 'AND rr.target_file_id IS NOT DISTINCT FROM $6::uuid' : ''}
         AND ($3::uuid IS NULL OR (rr.revision_id,rr.source_field,rr.reference_id)>($3::uuid,$4::text,$5::uuid))
         ORDER BY rr.revision_id,rr.source_field,rr.reference_id LIMIT 101`
             : `SELECT rr.* FROM loom.revision_references rr WHERE rr.source_id=$1 AND rr.revision_id=$2
@@ -206,6 +245,7 @@ export class RecordedReferences {
                 after?.[0] ?? null,
                 after?.[1] ?? null,
                 after?.[2] ?? null,
+                ...(fileSchema ? [selection.target.file_id ?? null] : []),
               ]
             : [
                 selection.source,
@@ -236,9 +276,11 @@ export class RecordedReferences {
         items: [],
         direction: incoming ? 'incoming' : 'outgoing',
         scope: incoming
-          ? selection.target.revision_id
-            ? 'revision'
-            : 'resource'
+          ? selection.target.file_id
+            ? 'file'
+            : selection.target.revision_id
+              ? 'revision'
+              : 'resource'
           : 'source_revision',
         ...(incoming
           ? { target: selection.target }

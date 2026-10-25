@@ -104,7 +104,17 @@ export function ChangeNoteEditor({
           <ReferenceEditor
             references={value.references}
             disabled={disabled}
-            onChange={(references) => onChange({ ...value, references })}
+            onChange={(references) =>
+              onChange({
+                ...value,
+                format:
+                  references.some((ref) => ref.target.file_id) ||
+                  value.format === 'loom-markdown-v4'
+                    ? 'loom-markdown-v4'
+                    : 'loom-markdown-v2',
+                references,
+              })
+            }
           />
           <details>
             <summary>Preview change note</summary>

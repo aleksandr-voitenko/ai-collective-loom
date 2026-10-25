@@ -153,8 +153,13 @@ export function Composer({
     account,
     fileSet,
   };
-  const { comparisonRevision, comparisonReady, adoptsBaseReferences, requiresComparison } =
-    draftCorrection({ operation, record, comparison: compare });
+  const {
+    comparisonRevision,
+    comparisonReady,
+    adoptsBaseReferences,
+    adoptsFileReferences,
+    requiresComparison,
+  } = draftCorrection({ operation, record, comparison: compare });
   useEffect(() => {
     setCompare(undefined);
     setComparisonError('');
@@ -257,6 +262,9 @@ export function Composer({
         const next = {
           ...intent,
           state: 'rejected' as const,
+          ...((failure as ApiError).code === 'file_reference_format_required'
+            ? { required_format: 'loom-markdown-v4' as const }
+            : {}),
           ...(revision ? { conflict_revision_id: revision } : {}),
         };
         try {
@@ -325,7 +333,7 @@ export function Composer({
         setFormat(corrected.fields.format);
         setAccount(corrected.fields.account);
         setFileSet(corrected.fields.fileSet);
-        if (adoptsBaseReferences) setReferences(corrected.fields.references);
+        setReferences(corrected.fields.references);
         setCompare(undefined);
         setError('');
       }
@@ -374,7 +382,7 @@ export function Composer({
           ...(latest.kind === 'summary'
             ? { coverage: { carry_forward_revision_id: latest.revision_id } }
             : {}),
-          ...(latest.content.format === 'loom-markdown-v3'
+          ...(['loom-markdown-v3', 'loom-markdown-v4'].includes(latest.content.format)
             ? {
                 change_note: null,
                 change_account:
@@ -418,14 +426,19 @@ export function Composer({
       !references.some(
         (r) =>
           r.target.resource_id === target.resource_id &&
-          r.target.revision_id === target.revision_id,
+          r.target.revision_id === target.revision_id &&
+          !r.target.file_id,
       )
         ? [
             ...references,
             { reference_id: crypto.randomUUID(), target, relationship: null, rationale: null },
           ]
         : references;
-    setFormat('loom-markdown-v3');
+    setFormat(
+      format === 'loom-markdown-v4' || nextNote?.format === 'loom-markdown-v4'
+        ? 'loom-markdown-v4'
+        : 'loom-markdown-v3',
+    );
     setNote(nextNote);
     setAccount(nextAccount);
     setReferences(nextReferences);
@@ -639,7 +652,9 @@ export function Composer({
             disabled={locked}
             onChange={(next) => {
               setReferences(next);
-              if (format !== 'loom-markdown-v3') setFormat('loom-markdown-v2');
+              if (next.some((ref) => ref.target.file_id)) setFormat('loom-markdown-v4');
+              else if (!['loom-markdown-v3', 'loom-markdown-v4'].includes(format))
+                setFormat('loom-markdown-v2');
               void persist({ references: next });
             }}
           />
@@ -721,6 +736,14 @@ export function Composer({
                   Review or remove them before publishing.
                 </p>
               )}
+              {adoptsFileReferences && (
+                <p>
+                  The comparison revision’s exact file references will also be copied. Your
+                  attempted references stay in the draft; a conflicting older assertion is copied
+                  with a new identity. Review the combined list and keep at most 16 before
+                  publishing.
+                </p>
+              )}
               {summaryDiscussion && (
                 <p>
                   A corrected summary draft needs an explicit source declaration. Later material is
@@ -737,6 +760,7 @@ export function Composer({
               className="primary"
               disabled={
                 locked ||
+                references.length > 16 ||
                 filesPending ||
                 (!text.trim() && (!canNote || !fileSet?.files.length)) ||
                 (titleField && !title.trim()) ||

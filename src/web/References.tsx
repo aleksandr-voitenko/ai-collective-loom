@@ -9,19 +9,22 @@ import {
   type ReferencePageView,
   type ReferenceEntryView,
 } from '../contracts/references.js';
+import { ReferenceFilePicker } from './ReferenceFilePicker.js';
 import { identityGeneration, ApiError } from './participation-client.js';
 
 const labels = { related_to: 'Related to', builds_on: 'Builds on', contradicts: 'Contradicts' };
 const targetLabel = (target: ReferenceTargetValue) =>
-  target.kind === 'discussion'
-    ? 'Discussion container'
-    : target.revision_id
-      ? 'Exact revision'
-      : target.kind === 'artifact'
-        ? 'Artifact resource'
-        : target.kind === 'summary'
-          ? 'Summary resource'
-          : 'Contribution resource';
+  target.file_id
+    ? 'Exact published file'
+    : target.kind === 'discussion'
+      ? 'Discussion container'
+      : target.revision_id
+        ? 'Exact revision'
+        : target.kind === 'artifact'
+          ? 'Artifact resource'
+          : target.kind === 'summary'
+            ? 'Summary resource'
+            : 'Contribution resource';
 export function targetFromSelection(
   value: string,
   kind: ReferenceTargetValue['kind'],
@@ -35,6 +38,22 @@ export function targetFromSelection(
     const url = new URL(id, location.origin);
     if (url.origin !== location.origin || url.username || url.password || url.hash)
       throw new Error('Use a Loom link from this instance or a resource ID.');
+    const file =
+      /^\/loom\/file\/(artifact|contribution)\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/?$/i.exec(
+        url.pathname,
+      );
+    const apiFile =
+      /^\/api\/v1\/(artifacts|contributions)\/([0-9a-f-]{36})\/revisions\/([0-9a-f-]{36})\/(?:files|attachments)\/([0-9a-f-]{36})\/(?:download|text(?:\/status)?)$/i.exec(
+        url.pathname,
+      );
+    const exactFile = file ?? apiFile;
+    if (exactFile)
+      return {
+        kind: exactFile[1]!.toLowerCase().startsWith('artifact') ? 'artifact' : 'contribution',
+        resource_id: exactFile[2]!.toLowerCase(),
+        revision_id: exactFile[3]!.toLowerCase(),
+        file_id: exactFile[4]!.toLowerCase(),
+      };
     const match =
       /^\/(?:loom\/resource|api\/v1\/resources)\/([0-9a-f-]{36})(?:\/(?:revisions\/)?([0-9a-f-]{36}))?\/?$/i.exec(
         url.pathname,
@@ -96,12 +115,20 @@ export function ReferenceEditor({
   function open(ref?: ReferenceValue) {
     invalidate();
     setEditing(ref?.reference_id);
-    setValue(ref?.target.resource_id ?? '');
+    setValue(
+      ref?.target.file_id
+        ? `/loom/file/${ref.target.kind}/${ref.target.resource_id}/${ref.target.revision_id}/${ref.target.file_id}`
+        : (ref?.target.resource_id ?? ''),
+    );
     setKind(ref?.target.kind ?? 'artifact');
     setRevision(ref?.target.revision_id ?? '');
     setScope(ref?.target.revision_id ? 'revision' : 'resource');
     setPicker(true);
   }
+  const confirmButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (selected?.target.file_id) confirmButton.current?.focus();
+  }, [selected]);
   useEffect(() => {
     if (picker) input.current?.focus();
   }, [picker]);
@@ -141,7 +168,8 @@ export function ReferenceEditor({
         (r) =>
           r.reference_id !== editing &&
           r.target.resource_id === ref.target.resource_id &&
-          r.target.revision_id === ref.target.revision_id,
+          r.target.revision_id === ref.target.revision_id &&
+          r.target.file_id === ref.target.file_id,
       )
     ) {
       setError(
@@ -165,6 +193,12 @@ export function ReferenceEditor({
         Changes belong to this source and take effect only when you publish. Ordinary links stay
         ordinary links.
       </p>
+      {references.length > 16 && (
+        <p role="alert">
+          This corrected draft preserves {references.length} declarations. Review and remove
+          references until at most 16 remain before publishing.
+        </p>
+      )}
       {references.map((ref, index) => (
         <div className="reference-draft" key={ref.reference_id}>
           <strong>
@@ -173,6 +207,7 @@ export function ReferenceEditor({
           <details>
             <summary>Target details</summary>
             <code>{ref.target.resource_id}</code>
+            {ref.target.path && <p>File: {ref.target.path}</p>}
             {ref.target.revision_id && (
               <p>
                 Revision <code>{ref.target.revision_id}</code>
@@ -272,7 +307,7 @@ export function ReferenceEditor({
                 if (event.target.value === 'discussion') setScope('resource');
               }}
             >
-              <option value="artifact">Text artifact</option>
+              <option value="artifact">Artifact</option>
               <option value="summary">Discussion summary</option>
               <option value="contribution">Opening post or comment</option>
               <option value="discussion">Discussion container</option>
@@ -322,13 +357,40 @@ export function ReferenceEditor({
               </strong>
               <p>
                 {targetLabel(selected.target)} · {selected.representation.area_title}
-                {selected.scope === 'revision'
+                {selected.target.revision_id
                   ? ` · revision ${selected.representation.revision_number}`
                   : ''}
               </p>
-              <button type="button" onClick={confirm}>
-                {selected.scope === 'revision' ? 'Use this exact revision' : 'Use this resource'}
+              {selected.target.path && (
+                <p>
+                  Exact file: <strong>{selected.target.path}</strong>
+                </p>
+              )}
+              <p>
+                Publication <code>{selected.target.resource_id}</code>
+                {selected.target.revision_id && (
+                  <>
+                    {' '}
+                    · Revision <code>{selected.target.revision_id}</code>
+                  </>
+                )}
+              </p>
+              <button type="button" ref={confirmButton} onClick={confirm}>
+                {selected.scope === 'file'
+                  ? 'Use this exact file'
+                  : selected.scope === 'revision'
+                    ? 'Use this exact revision'
+                    : 'Use this resource'}
               </button>
+              {selected.target.revision_id &&
+                !selected.target.file_id &&
+                ['artifact', 'contribution'].includes(selected.target.kind) && (
+                  <ReferenceFilePicker
+                    key={JSON.stringify(selected.target)}
+                    target={selected.target}
+                    onSelect={(result) => setSelected(result)}
+                  />
+                )}
             </div>
           )}
           <button
@@ -366,7 +428,8 @@ function ReferenceItem({ item }: { item: ReferenceEntryView }) {
         {item.declaration.relationship ? labels[item.declaration.relationship] : 'References'} →{' '}
         {item.target.state === 'available' ? (
           <Link to={item.target.browser_url}>
-            {item.target.representation.title ??
+            {item.target.target.path ??
+              item.target.representation.title ??
               'Contribution by ' + item.target.representation.author.nickname}
           </Link>
         ) : (
@@ -473,7 +536,12 @@ export function ReferenceResults({ path }: { path: string }) {
           )}
         </>
       )}
-      <button disabled={busy} onClick={() => void load(null, true)}>
+      <button
+        aria-disabled={busy}
+        onClick={() => {
+          if (!busy) void load(null, true);
+        }}
+      >
         Refresh references
       </button>
       {data && (
@@ -497,8 +565,13 @@ export function ReferenceResults({ path }: { path: string }) {
             Bodies are available through exact links. Other target scopes are excluded.{' '}
             {data.work_budget_reached ? 'This page reached its scan limit.' : ''}
           </p>
-          {!error && data.next_cursor && (
-            <button disabled={busy} onClick={() => void load(data.next_cursor, true)}>
+          {data.next_cursor && (
+            <button
+              aria-disabled={busy || !!error}
+              onClick={() => {
+                if (!busy && !error) void load(data.next_cursor, true);
+              }}
+            >
               Next references
             </button>
           )}
@@ -519,7 +592,9 @@ export function ReferenceViews({
 }) {
   const [view, setView] = useState<'outgoing' | 'incoming' | null>(null),
     [history, setHistory] = useState('current'),
-    [scope, setScope] = useState(target.revision_id ? 'revision' : 'resource'),
+    [scope, setScope] = useState(
+      target.file_id ? 'file' : target.revision_id ? 'revision' : 'resource',
+    ),
     [relationship, setRelationship] = useState('');
   const region = useId();
   const exact = target.revision_id ?? (target.kind !== 'discussion' ? sourceRevision : undefined);
@@ -527,7 +602,8 @@ export function ReferenceViews({
     kind: target.kind,
     resource_id: target.resource_id,
     history,
-    ...(scope === 'revision' && exact ? { revision_id: exact } : {}),
+    ...((scope === 'revision' || scope === 'file') && exact ? { revision_id: exact } : {}),
+    ...(target.file_id ? { file_id: target.file_id, path: target.path! } : {}),
     ...(relationship ? { relationship } : {}),
   });
   const path =
@@ -537,7 +613,13 @@ export function ReferenceViews({
   return (
     <section
       className="reference-views"
-      aria-label={target.kind === 'discussion' ? 'Discussion references' : 'Source references'}
+      aria-label={
+        target.file_id
+          ? 'Exact file references'
+          : target.kind === 'discussion'
+            ? 'Discussion references'
+            : 'Source references'
+      }
     >
       <div className="composer-tools">
         {sourceId && sourceRevision && (
@@ -554,7 +636,8 @@ export function ReferenceViews({
           aria-controls={region}
           onClick={() => setView(view === 'incoming' ? null : 'incoming')}
         >
-          Referenced by{target.kind === 'discussion' ? ' · discussion' : ''}
+          Referenced by
+          {target.file_id ? ' · file' : target.kind === 'discussion' ? ' · discussion' : ''}
         </button>
       </div>
       {view && (
@@ -565,12 +648,19 @@ export function ReferenceViews({
             <>
               <label>
                 Incoming target scope
-                <select value={scope} onChange={(event) => setScope(event.target.value)}>
-                  <option value="resource">
-                    {target.kind === 'discussion' ? 'Discussion container only' : 'Resource only'}
-                  </option>
-                  {exact && <option value="revision">This exact revision only</option>}
-                </select>
+                {target.file_id ? (
+                  <p>
+                    Only this exact file: {target.path}. Containing revision, sibling files and
+                    other publication contexts are excluded.
+                  </p>
+                ) : (
+                  <select value={scope} onChange={(event) => setScope(event.target.value)}>
+                    <option value="resource">
+                      {target.kind === 'discussion' ? 'Discussion container only' : 'Resource only'}
+                    </option>
+                    {exact && <option value="revision">This exact revision only</option>}
+                  </select>
+                )}
               </label>
               <label>
                 Source membership

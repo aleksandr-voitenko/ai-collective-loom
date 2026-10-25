@@ -149,7 +149,7 @@ export class SharedModeration {
     available =
       available &&
       revision?.availability === 'available' &&
-      ['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(
+      ['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
         revision.content_format,
       );
     return {

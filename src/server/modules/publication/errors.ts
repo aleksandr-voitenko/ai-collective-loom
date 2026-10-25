@@ -9,9 +9,12 @@ export type PublicationErrorCode =
   | 'service_unavailable'
   | 'reference_format_required'
   | 'change_format_required'
-  | 'file_format_required';
+  | 'file_format_required'
+  | 'file_reference_format_required';
 
 const messages: Record<PublicationErrorCode, string> = {
+  file_reference_format_required:
+    'This source uses file-aware references. Explicitly correct with loom-markdown-v4, preserving its exact file declarations and explicit change fields; never upgrade an uncertain request.',
   file_format_required:
     'This revision uses files. Supply its complete file_set for an artifact or attachment_set for a contribution, including an explicit empty set when removing files.',
   invalid_input: 'The publication input is unsupported.',

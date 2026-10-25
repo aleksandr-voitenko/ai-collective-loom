@@ -407,3 +407,15 @@ test("legacy unresolved records retain exact request identity when adopting jour
     /changed in another view/,
   );
 });
+
+test('v4 journal preserves exact file declarations and correction metadata while bounded overflow remains draft-only',async()=>{
+ const storage=new JSDOM('',{url:'https://loom.example'}).window.localStorage;
+ const store=new IntentStore('instance','reader',storage,'https://loom.example');
+ const ref={reference_id:crypto.randomUUID(),target:{kind:'artifact',resource_id:crypto.randomUUID(),revision_id:crypto.randomUUID(),file_id:crypto.randomUUID(),path:'cafe\u0301.bin'},relationship:'related_to',rationale:'Exact intent'};
+ const body={content:{format:'loom-markdown-v4',text:'Main',mentions:[],references:[ref]},change_note:{format:'loom-markdown-v4',text:'Note',mentions:[],references:[ref]},change_account:null};
+ const dispatched=await store.prepareDispatch(store.create('file','artifact.create','/api/v1/artifacts',body),body);assert.deepEqual(store.all()[0]!.body.content,body.content);
+ const rejected=await store.settle(dispatched,{state:'rejected',required_format:'loom-markdown-v4'});assert.equal(store.all()[0]!.required_format,'loom-markdown-v4');
+ const references=Array.from({length:32},()=>({...ref,reference_id:crypto.randomUUID(),target:{...ref.target,file_id:crypto.randomUUID()}}));
+ const correction={...body,content:{...body.content,references}};const draft=await store.correct(rejected,correction);assert.deepEqual(store.all()[0]!.body.content,correction.content);
+ await assert.rejects(store.prepareDispatch(draft,correction));assert.equal(store.all()[0]!.state,'draft');assert.deepEqual(store.all()[0]!.body.content,correction.content);
+});

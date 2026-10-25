@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Value } from '@sinclair/typebox/value';
 import * as N from '../contracts/notes.js';
-import { ReferenceTarget, type ReferenceTargetValue } from '../contracts/participation.js';
+import {
+  LegacyReferenceTarget as ReferenceTarget,
+  type ReferenceTargetValue,
+} from '../contracts/participation.js';
 import { useAuthorization, type AuthorizedValue } from './AuthorizationBoundary.js';
 import {
   commandRequest,

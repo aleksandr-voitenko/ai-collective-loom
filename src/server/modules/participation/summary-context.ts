@@ -123,7 +123,9 @@ export function eligibleSource(row: SourceRow) {
   return (
     row.state === 'active' &&
     row.availability === 'available' &&
-    ['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(row.content_format ?? '')
+    ['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
+      row.content_format ?? '',
+    )
   );
 }
 export async function authorizeMember(tx: SqlTransaction, discussion: string, member: Member) {
@@ -145,7 +147,7 @@ export async function authorizeMember(tx: SqlTransaction, discussion: string, me
     )
   ).rows[0];
   if (
-    !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(
+    !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
       row?.content_format ?? '',
     )
   )
