@@ -489,7 +489,8 @@ community and text-participation routes and `/loom` browser views.
 
 These suites do not certify a hosted provider, production security, browser
 usability, or full product acceptance. Signed upload replay, version-specific grants,
-cross-machine trials and coordinated backup/restore require subsequent tests.
+cross-machine trials and production backup/restore require subsequent tests.
+The isolated synthetic cold-recovery rehearsal is documented below.
 The application foundation's Node 24 installation, build/typecheck, browser checks,
 and isolated PostgreSQL/HTTP suite passed on macOS arm64. The full
 [Linux/amd64 push run for `14c4e83`](https://github.com/aleksandr-voitenko/ai-collective-loom/actions/runs/38479478697)
@@ -565,6 +566,86 @@ local output. Browser diagnostics retain their separate validated upload boundar
 The integration job has a 60-minute containing budget for the complete sequential
 run, reporting, and subsequent local-service smoke and persistence checks. It
 retains normal browser deadlines, one worker and zero retries.
+
+## Isolated local backup and recovery
+
+The synthetic cold-recovery tools capture PostgreSQL and native SeaweedFS together,
+including historical native versions and retained private/outcome state. They accept
+only explicitly created disposable recovery installations, never `.env.local`,
+`loom-dev` or implicitly selected development volumes. Node 24.19.0, local Docker,
+GnuPG (`gpg`), Python 3 and OpenSSL are required. Build the release first.
+
+```bash
+npm run app:build
+npm run test:recovery:postgres # populated HTTPS rehearsal plus deterministic failures
+npm run test:e2e -- recovery.spec.ts # compiled browser against new restored storage
+```
+
+These tests use private temporary directories and remove their owned resources.
+The native suite joins the normal coverage/CI path. No backup bytes, fixture keys,
+credentials, private expectations or plaintext scratch files are CI artifacts.
+Existing storage-recreation intermittency remains unresolved.
+
+For an explicitly managed disposable installation:
+
+```bash
+umask 077
+recovery_work="$(mktemp -d /tmp/loom-recovery.XXXXXX)"
+recovery_work="$(cd "$recovery_work" && pwd -P)"
+openssl rand -base64 32 > "$recovery_work/fixture-key"
+npm run recovery -- create --instance "$recovery_work/source"
+# Populate only this synthetic source through its real HTTPS interfaces.
+# Keep client credentials and independent expectations separately in private files.
+npm run recovery -- backup --instance "$recovery_work/source" --backup "$recovery_work/backup" --key-file "$recovery_work/fixture-key"
+npm run recovery -- inspect --backup "$recovery_work/backup" --key-file "$recovery_work/fixture-key"
+npm run recovery -- restore --backup "$recovery_work/backup" --destination "$recovery_work/restored" --key-file "$recovery_work/fixture-key"
+npm run recovery -- verify --instance "$recovery_work/restored" --expectations "$recovery_work/expectations.json"
+npm run recovery -- destroy --instance "$recovery_work/restored"
+npm run recovery -- destroy --instance "$recovery_work/source"
+```
+
+`create` writes configuration and one enrollment ticket into the private source
+directory; it prints no credential. Its compiled HTTPS API and three workers run
+in one supervised container, with database/storage reachable only in that isolated
+namespace. The HTTPS origin is in private `config.json`. No application backup
+endpoint or administrator screen is added.
+Fixture TLS certificates last two days; complete the rehearsal within their validity
+window. Recovery does not rotate credentials or renew their original deadlines.
+
+Backup drains that runtime, verifies provider shutdown, captures whole native
+volumes, encrypts and checks components, then publishes `COMPLETED.json` last.
+Successful capture leaves the source stopped. Failure can leave a partially stopped
+attempt; restart is always explicit. Use
+`npm run recovery -- start --instance "$recovery_work/source"` to resume it.
+Interrupted backups without the completion marker are refused. Inspection checks
+decryption, hashes, archives and compatibility; it does not certify recovery.
+
+Restore requires a new destination directory and creates new volumes/containers,
+with a fresh loopback HTTPS origin. It requires the same Git revision, compiled
+release, migrations, provider/runtime image pins and Docker platform. It neither
+uses source volumes nor initializes replacement buckets. Full database/native
+inventory equality leaves the destination **quarantined** until separate application
+verification succeeds. A failed verification stops its API and never publishes
+`VERIFIED.json`. Keep the source unavailable during verification.
+
+The private expectations file is `loom-recovery-expectations-1`, with the original
+`instance` UUID and a nonempty `reads` array. Each entry has a real `/api/v1/...`
+`path`, optional exact command `body`, private bearer `token`, and independently
+captured `expected: {status, body}`. Non-JSON download bodies are base64. Request
+IDs and newly opened reference-traversal TTLs are process-local; persisted expiry
+timestamps are compared unchanged. The native fixture is an executable example:
+it captures exact history/files/permissions/private outcomes and retained retries
+before backup, then verifies them without source storage. Protect this file like
+credentials and backup data. The compiled-browser rehearsal enrolls a fresh test
+browser at the new origin; it does not adopt an existing journal or session.
+
+These commands recover an isolated historical snapshot. Post-backup revocations,
+note deletions, publications and consumed checkpoints can be absent. Missing
+operation records remain uncertain. Do not reconnect existing clients or treat an
+older snapshot as continuous live service. Production cutover, security/deletion
+reconciliation, rollback fencing, retention/erasure and recovery objectives remain
+separate gates. See [ADR-034](docs/adr/034-isolated-cold-recovery.md) for inventory,
+key custody, consistency, quarantine and interruption constraints.
 
 ## Retained-data limits
 

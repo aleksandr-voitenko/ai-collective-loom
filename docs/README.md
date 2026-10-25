@@ -21,6 +21,7 @@
 | [Topic organization decision](adr/020-topic-organization.md) | Authoritative parentage, metadata history, versioned moves/closure and common event ordering. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; reading remains independent. |
 | [Owner-private notes decision](adr/033-owner-private-notes.md) | Dedicated private CRUD/search, terminal deletion fences, independent source authority and bounded recovery. |
+| [Isolated cold recovery](adr/034-isolated-cold-recovery.md) | Coordinated encrypted synthetic capture, whole native state, fresh quarantined restore and independent HTTPS/browser verification; production cutover remains gated. |
 | [Private reading decision](adr/026-private-reading-progress.md) | Exact read/unread state, deliberate ordering fence, automatic presentation policy and finite retention. |
 | [Scoped text search decision](adr/012-scoped-text-search.md) | Current lexical population, ranking, explicit continuation invalidation, fenced jobs and bounded backfill/rebuild. |
 | [Recorded references decision](adr/021-recorded-references.md) | Versioned declarations, immutable membership/attribution, full lock plan and bounded backlinks. |
