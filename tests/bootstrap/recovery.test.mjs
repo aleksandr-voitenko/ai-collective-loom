@@ -8,11 +8,101 @@ import {
   symlinkSync,
   realpathSync,
   chmodSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { privatePath, start } from '../../scripts/lib/recovery.mjs';
+import { recoveryBundle } from '../../scripts/lib/recovery-bundle.mjs';
+
+function bundleFixture(payload) {
+  const directory = mkdtempSync(join(realpathSync('/tmp'), 'loom-recovery-boundary-'));
+  const path = directory + '/backup',
+    scratch = directory + '/scratch',
+    inspection = directory + '/inspection';
+  for (const selected of [path, scratch, inspection]) mkdirSync(selected, { mode: 0o700 });
+  const archive = directory + '/input.tar';
+  const result = spawnSync('python3', [
+    '-c',
+    `import io,sys,tarfile
+with tarfile.open(sys.argv[1],'w',format=tarfile.USTAR_FORMAT) as archive:
+ member=tarfile.TarInfo('synthetic'); member.size=int(sys.argv[2]); member.mode=0o600
+ archive.addfile(member,io.BytesIO(b'x'*member.size))
+`,
+    archive,
+    String(payload),
+  ]);
+  assert.equal(result.status, 0);
+  const config = directory + '/config.json';
+  writeFileSync(config, '{"synthetic":true}\n', { mode: 0o600 });
+  return {
+    directory,
+    path,
+    scratch,
+    inspection,
+    sources: { postgres: archive, seaweed: archive, config },
+    manifest: { format: 'loom-cold-backup-1', backupId: 'synthetic-size-boundary' },
+    key: randomBytes(32).toString('base64url') + '\n',
+  };
+}
+
+const boundaryBytes = 30 * 1024;
+for (const [name, payload] of [
+  ['tar overhead', boundaryBytes],
+  ['encryption overhead', boundaryBytes - 2048],
+])
+  test('capture refuses ' + name + ' beyond the shared ceiling without completion', () => {
+    const f = bundleFixture(payload);
+    try {
+      const bundle = recoveryBundle({ maxArchiveBytes: boundaryBytes });
+      assert.equal(statSync(f.sources.postgres).size > boundaryBytes, name === 'tar overhead');
+      assert.throws(
+        () => bundle.write(f.path, f.manifest, f.sources, f.key, f.scratch),
+        /bound|python3 operation failed/,
+      );
+      assert.equal(existsSync(f.path + '/COMPLETED.json'), false);
+      if (name === 'encryption overhead')
+        assert.ok(statSync(f.path + '/postgres.gpg').size > boundaryBytes);
+    } finally {
+      rmSync(f.directory, { recursive: true, force: true });
+    }
+  });
+
+test('below-ceiling completed capture is readable under the identical tar and encryption policy', () => {
+  const f = bundleFixture(16 * 1024);
+  try {
+    const bundle = recoveryBundle({ maxArchiveBytes: boundaryBytes });
+    bundle.write(f.path, f.manifest, f.sources, f.key, f.scratch);
+    assert.ok(existsSync(f.path + '/COMPLETED.json'));
+    const captured = bundle.read(f.path, f.key, f.inspection);
+    assert.equal(captured.manifest.backupId, f.manifest.backupId);
+    assert.deepEqual(captured.config, { synthetic: true });
+    for (const name of ['postgres', 'seaweed']) {
+      assert.ok(statSync(f.path + '/' + name + '.gpg').size <= boundaryBytes);
+      assert.deepEqual(
+        readFileSync(f.inspection + '/read-' + name + '.tar'),
+        readFileSync(f.sources[name]),
+      );
+    }
+    writeFileSync(f.path + '/postgres.gpg', Buffer.alloc(boundaryBytes + 1), { mode: 0o600 });
+    assert.throws(
+      () => bundle.read(f.path, f.key, f.inspection),
+      /representation exceeds its bound/,
+    );
+  } finally {
+    rmSync(f.directory, { recursive: true, force: true });
+  }
+});
+
+test('an internal bundle ceiling cannot raise or disable the configured defense', () => {
+  const configured = JSON.parse(readFileSync('config/recovery.json')).maxArchiveBytes;
+  for (const value of [0, -1, Infinity, NaN, 1.5, configured + 1])
+    assert.throws(() => recoveryBundle({ maxArchiveBytes: value }), /invalid backup size ceiling/);
+});
 
 test('a concurrent controller cannot restart a locked instance', async () => {
   const dir = mkdtempSync(join(realpathSync(tmpdir()), 'loom-recovery-lock-'));

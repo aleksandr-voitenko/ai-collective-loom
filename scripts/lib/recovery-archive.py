@@ -3,12 +3,19 @@
 Never extract untrusted archive paths on the host. Emit only ordinary USTAR
 files/directories; reject links, devices, aliases, special modes and sparse files.
 """
+import json
 import pathlib
 import sys
 import tarfile
 
-source, destination = sys.argv[1:]
+source, destination = sys.argv[1:3]
 try:
+    configured = json.loads((pathlib.Path(__file__).resolve().parents[2] / 'config/recovery.json').read_text())['maxArchiveBytes']
+    limit = int(sys.argv[3]) if len(sys.argv) > 3 else configured
+    if not 0 < limit <= configured:
+        raise ValueError('invalid archive ceiling')
+    if pathlib.Path(source).stat().st_size > limit:
+        raise ValueError('archive bound')
     names = set()
     total = 0
     with tarfile.open(source, 'r:') as incoming, tarfile.open(destination, 'w', format=tarfile.USTAR_FORMAT) as outgoing:
@@ -26,13 +33,15 @@ try:
                 raise ValueError('unsafe archive')
             names.add(name)
             total += member.size
-            if total > 1073741824 or len(names) > 100000:
+            if total > limit or len(names) > 100000:
                 raise ValueError('archive bound')
             clean = tarfile.TarInfo(name)
             clean.type = tarfile.DIRTYPE if member.isdir() else tarfile.REGTYPE
             clean.size, clean.mode = member.size, member.mode
             clean.uid, clean.gid, clean.mtime = member.uid, member.gid, member.mtime
             outgoing.addfile(clean, incoming.extractfile(member) if member.isfile() else None)
+    if pathlib.Path(destination).stat().st_size > limit:
+        raise ValueError('archive bound')
     if not names:
         raise ValueError('empty archive')
 except Exception:

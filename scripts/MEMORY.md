@@ -22,6 +22,13 @@ the repository or approved CI artifacts. Fixed diagnostics cannot include raw
 provider/SQL/GPG errors. Completion is last, after integrity checks; source restart
 is explicit. `recovery-archive.py` uses stdlib tar validation and re-emits ordinary
 USTAR before new-volume extraction, rejecting links and unsafe paths/types/modes.
+`recovery-bundle.mjs` shares capture's final admission with inspection/restore.
+The unchanged 1 GiB ceiling bounds payload, raw/normalized tar and ciphertext
+separately; headers/padding/encryption overhead consume that representation's
+allowance. JSON stays capped at 16 MiB. Completion follows the reader's actual
+decryption, hash, metadata and archive admission, not only an encryption roundtrip.
+Internal test ceilings may tighten the configured bound, never raise it; no CLI
+or environment override selects a different runtime policy.
 
 Restore preflight precedes destination creation; directories/resources must be new.
 Restoration inventory equality establishes quarantine integrity, not usability.

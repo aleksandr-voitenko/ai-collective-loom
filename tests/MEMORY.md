@@ -15,6 +15,10 @@ custody outside the repo. Register source cleanup immediately after instance cre
 including when later fixture population fails. Never print private expectation bodies.
 `recovery.spec.ts` uses the unchanged compiled-browser runner and a fresh restored
 origin/enrollment; its context closes before disposable providers are removed.
+The bootstrap bundle boundary cases use actual USTAR/GnuPG and one shared smaller
+ceiling on both writer and reader. Cover tar overhead, ciphertext overhead, absent
+completion on refusal and successful below-limit capture/inspection. Keep these
+independent of native fixture size; runtime limits and restore defenses stay intact.
 
 `reservations*.test.ts` covers native PostgreSQL/HTTPS advisory overlap, original
 versus current recovery, source/editor/credential withdrawal, real lock waiters in

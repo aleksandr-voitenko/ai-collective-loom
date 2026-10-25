@@ -98,6 +98,17 @@ into new empty volumes. No archive is extracted onto the host. Existing destinat
 directories/resources and overlap with either the backup or original source path
 are refused.
 
+`recovery-bundle.mjs` shares capture's final component admission with the
+inspection/restore reader. The configured 1 GiB ceiling bounds member payload,
+raw/normalized archives and encrypted components separately; tar headers/padding
+and GnuPG overhead count against the representation being checked. JSON metadata
+remains capped at 16 MiB. No allowance is raised to accommodate encoding overhead.
+Check actual encoded size, roundtrip integrity, metadata and normalized archives
+before publishing completion, so a completed capture is within its own reader's
+size contract. Focused real tar/GnuPG regressions use one explicitly smaller
+ceiling for capture and inspection; the internal bundle interface permits
+tightening the configured ceiling only.
+
 Destinations receive new containers, volumes, bridge, origin and process state.
 Initial status is quarantined. Full database-row/native-version inventory equality
 establishes physical restoration integrity, not application usability. A separate

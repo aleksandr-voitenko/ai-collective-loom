@@ -619,6 +619,11 @@ attempt; restart is always explicit. Use
 `npm run recovery -- start --instance "$recovery_work/source"` to resume it.
 Interrupted backups without the completion marker are refused. Inspection checks
 decryption, hashes, archives and compatibility; it does not certify recovery.
+The existing 1 GiB ceiling applies separately to member payload, each raw/normalized
+tar and each encrypted component (including the manifest). Tar padding and encryption
+overhead consume that allowance; 1 GiB of payload is not an admitted backup size.
+JSON metadata also retains its 16 MiB limit. Capture must pass the reader's component
+admission and decryption checks before publishing its completion marker.
 
 Restore requires a new destination directory and creates new volumes/containers,
 with a fresh loopback HTTPS origin. It requires the same Git revision, compiled

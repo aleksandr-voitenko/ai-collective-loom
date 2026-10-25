@@ -23,9 +23,11 @@ import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { localDockerEndpoint } from './local-config.mjs';
 import { readMigrations, migrationSql } from './migrations.mjs';
+import { recoveryBundle } from './recovery-bundle.mjs';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
 const policy = JSON.parse(readFileSync(join(root, 'config/recovery.json')));
+const bundle = recoveryBundle({ validateManifest: validateRelease });
 const label = 'org.loom.recovery-attempt';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const fail = (code) => {
@@ -179,6 +181,7 @@ function release() {
     'scripts/lib/recovery-runtime.mjs',
     'scripts/lib/recovery.mjs',
     'scripts/lib/recovery-archive.py',
+    'scripts/lib/recovery-bundle.mjs',
     'scripts/recovery.mjs',
     'infra/postgres/start.sh',
     'infra/postgres/10-roles.sh',
@@ -630,29 +633,6 @@ function keyMaterial(path) {
     fail('a separate random fixture key is required');
   return key + '\n';
 }
-function crypt(mode, input, output, key, scratch) {
-  const args = [
-    '--no-options',
-    '--homedir',
-    scratch,
-    '--batch',
-    '--yes',
-    '--no-symkey-cache',
-    '--pinentry-mode',
-    'loopback',
-    '--passphrase-fd',
-    '0',
-    '--output',
-    output,
-  ];
-  run(
-    'gpg',
-    mode === 'encrypt'
-      ? [...args, '--symmetric', '--cipher-algo', 'AES256', '--compress-algo', 'none', input]
-      : [...args, '--decrypt', input],
-    { input: key },
-  );
-}
 function archive(d, volume, output) {
   owned(d, 'volume', volume);
   docker([
@@ -676,9 +656,6 @@ function archive(d, volume, output) {
     '/capture/' + output.split('/').at(-1),
     '.',
   ]);
-}
-function normalizeArchive(input, output) {
-  run('python3', [join(root, 'scripts/lib/recovery-archive.py'), input, output]);
 }
 function validateRelease(manifest) {
   if (
@@ -768,50 +745,17 @@ export async function backup(d, path, keyFile, { fault } = {}) {
       processLocal:
         'HTTP admissions, in-flight IO, worker processes, rate windows and nonpersisted cursors restart; no client journal adoption',
     };
+    const sources = {};
     for (const [name, volume] of [
       ['postgres', n.pgVolume],
       ['seaweed', n.s3Volume],
     ]) {
-      const raw = join(scratch, name + '.tar'),
-        clean = join(scratch, name + '-checked.tar');
-      archive(d, volume, raw);
-      normalizeArchive(raw, clean);
-      const encrypted = join(path, name + '.gpg');
-      crypt('encrypt', clean, encrypted, key, scratch);
-      const roundtrip = join(scratch, name + '-roundtrip.tar');
-      crypt('decrypt', encrypted, roundtrip, key, scratch);
-      if (hash(readFileSync(roundtrip)) !== hash(readFileSync(clean))) fail('capture integrity');
-      manifest.components[name] = {
-        file: name + '.gpg',
-        sha256: hash(readFileSync(encrypted)),
-        plainSha256: hash(readFileSync(clean)),
-      };
+      sources[name] = join(scratch, name + '.tar');
+      archive(d, volume, sources[name]);
     }
-    const config = join(scratch, 'config.json');
-    json(config, configuration(d));
-    crypt('encrypt', config, join(path, 'config.gpg'), key, scratch);
-    const checkedConfig = join(scratch, 'checked-config.json');
-    crypt('decrypt', join(path, 'config.gpg'), checkedConfig, key, scratch);
-    if (hash(readFileSync(checkedConfig)) !== hash(readFileSync(config)))
-      fail('configuration capture integrity');
-    manifest.components.config = {
-      file: 'config.gpg',
-      sha256: hash(readFileSync(join(path, 'config.gpg'))),
-      plainSha256: hash(readFileSync(config)),
-    };
-    const manifests = join(scratch, 'manifest.json');
-    json(manifests, manifest);
-    crypt('encrypt', manifests, join(path, 'manifest.gpg'), key, scratch);
-    const checkedManifest = join(scratch, 'checked-manifest.json');
-    crypt('decrypt', join(path, 'manifest.gpg'), checkedManifest, key, scratch);
-    if (hash(readFileSync(checkedManifest)) !== hash(readFileSync(manifests)))
-      fail('manifest capture integrity');
-    if (fault === 'before-completion') fail('injected backup interruption');
-    // Last publication only. No completed marker can exist on any earlier failure.
-    json(join(path, 'COMPLETED.json'), {
-      format: policy.format,
-      manifestSha256: hash(readFileSync(join(path, 'manifest.gpg'))),
-    });
+    sources.config = join(scratch, 'config.json');
+    json(sources.config, configuration(d));
+    bundle.write(path, manifest, sources, key, scratch, { fault });
     return {
       backupId: manifest.backupId,
       status: 'backup-created-and-integrity-checked',
@@ -825,37 +769,7 @@ export async function backup(d, path, keyFile, { fault } = {}) {
 function unpackBackup(path, keyFile, scratch) {
   if (inside(path, keyFile)) fail('key custody must be separate');
   privatePath(path);
-  const key = keyMaterial(keyFile),
-    marker = readJson(join(path, 'COMPLETED.json'));
-  const encrypted = join(path, 'manifest.gpg');
-  if (marker.format !== policy.format || marker.manifestSha256 !== hash(readFileSync(encrypted)))
-    fail('incomplete or corrupted manifest');
-  const target = join(scratch, 'manifest.json');
-  crypt('decrypt', encrypted, target, key, scratch);
-  const manifest = readJson(target);
-  validateRelease(manifest);
-  if (
-    JSON.stringify(Object.keys(manifest.components).sort()) !==
-    JSON.stringify(['config', 'postgres', 'seaweed'])
-  )
-    fail('missing backup component');
-  for (const name of ['config', 'postgres', 'seaweed']) {
-    const component = manifest.components[name],
-      file = join(path, name + '.gpg');
-    if (
-      component.file !== name + '.gpg' ||
-      !lstatSync(file).isFile() ||
-      lstatSync(file).isSymbolicLink() ||
-      lstatSync(file).size > policy.maxArchiveBytes ||
-      hash(readFileSync(file)) !== component.sha256
-    )
-      fail('corrupted component');
-    const plain = join(scratch, name === 'config' ? 'config.json' : name + '.tar');
-    crypt('decrypt', file, plain, key, scratch);
-    if (hash(readFileSync(plain)) !== component.plainSha256) fail('component integrity');
-    if (name !== 'config') normalizeArchive(plain, join(scratch, name + '-checked.tar'));
-  }
-  const c = readJson(join(scratch, 'config.json'));
+  const { manifest, config: c } = bundle.read(path, keyMaterial(keyFile), scratch);
   if (!c.passwords?.POSTGRES_PASSWORD || !c.storage?.secretAccessKey || !c.tls?.key)
     fail('configuration prerequisite missing');
   return { manifest, c };
