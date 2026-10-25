@@ -1,5 +1,25 @@
 # Browser test diagnostics
 
+`recovery.test.ts` uses ADR-034's separately owned cold-volume installation, real
+HTTPS and native provider versions. Expectations are captured before backup through
+application routes, independently of restore code. Source containers/volumes/network
+are removed before restore verification. Compare every table/native version before
+workers resume; afterward preserve authoritative hashes and notification keys/epoch,
+allowing only explicitly classified derived progress. Later source note deletion,
+credential revocation and publication are intentionally absent from the snapshot.
+Faults cover incomplete capture, interrupted restore, corruption/missing components,
+wrong/missing key, schema/manifest incompatibility, overwrite refusal and missing
+exact native version with a surviving alternative. Bootstrap tests reject archive
+traversal, links, devices, aliases and special modes. All material is private temporary
+custody outside the repo. Register source cleanup immediately after instance creation,
+including when later fixture population fails. Never print private expectation bodies.
+`recovery.spec.ts` uses the unchanged compiled-browser runner and a fresh restored
+origin/enrollment; its context closes before disposable providers are removed.
+The bootstrap bundle boundary cases use actual USTAR/GnuPG and one shared smaller
+ceiling on both writer and reader. Cover tar overhead, ciphertext overhead, absent
+completion on refusal and successful below-limit capture/inspection. Keep these
+independent of native fixture size; runtime limits and restore defenses stay intact.
+
 `reservations*.test.ts` covers native PostgreSQL/HTTPS advisory overlap, original
 versus current recovery, source/editor/credential withdrawal, real lock waiters in
 both orders, independent client credential replacement, populated0021 preservation,
@@ -52,8 +72,13 @@ diagnostics; all per-test/candidate byte bounds and normal execution gates remai
 `test:files:postgres` discovers `integration/files*.test.ts` in normal coverage
 stage accounting. `helpers/file-storage.ts` owns fresh UUID-named SeaweedFS volumes
 and credentials using the compose image pin, checks native bucket versioning, then
-tests stop/start/recreation without setup. Fix the allocated host port before
-provisioning: Docker changes an ephemeral port across start. Never reuse dev data.
+tests stop/start/recreation without setup. A persistent network-namespace anchor
+owns the loopback port while the native provider stops/starts/recreates; never
+remove an initial provider merely to rebind its ephemeral port. The real-listener
+regression takes that released port before the old fixture's second launch. Its
+beforeProviderStart barrier checks ownership during startup/recreation, and failed
+startup/normal cleanup must release the port. Readiness deadlines/retries and
+browser policies remain unchanged. Never reuse dev data.
 Exact-byte assertions cover snapshots, reuse, overwrite/lost finalization response,
 expiry, both cleanup orderings, owner/global byte and retained-identity frontiers,
 lost staging/database acknowledgements, page budgets and missing exact versions.
@@ -567,8 +592,8 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 157 collected tests and <17 MiB/candidate. The test count includes
-the discussion closure journeys so combined coverage captures the complete suite;
+128 KiB/document, 158 collected tests and <17 MiB/candidate. The test count includes
+the isolated recovery journey so combined coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.

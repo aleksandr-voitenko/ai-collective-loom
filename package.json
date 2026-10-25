@@ -60,7 +60,9 @@
     "test:coverage": "node scripts/check-runtime.mjs && node --import tsx tests/coverage/verify.ts",
     "test:files:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/files*.test.ts",
     "test:reservations:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/reservations*.test.ts",
-    "test:notes:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/notes*.test.ts"
+    "test:notes:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/notes*.test.ts",
+    "recovery": "node scripts/recovery.mjs",
+    "test:recovery:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/recovery.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1154.0",

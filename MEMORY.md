@@ -173,6 +173,12 @@ production limits, retained-data operations and cross-machine validation remain
 gates. There is no default administrator or identity-header bypass. Agent memory
 and model execution stay external; signed grants, complex conversion/extraction and
 other derived workers stay gated. Supported literal UTF-8 processing is ADR-031.
+ADR-034 adds explicitly managed synthetic cold backup and quarantined same-release
+restore, with whole PostgreSQL/SeaweedFS state and independent HTTPS/browser checks.
+No dev stack selection, live rollback, cutover or journal adoption is authorized.
+Production retention/restore approval and post-backup revocation/deletion
+reconciliation remain gates. Commands are in README; ownership, encryption and
+native-state constraints are in `scripts/MEMORY.md`.
 See root README retained-data limits, ADR-011/015/016/017 and
 `src/server/modules/participation/MEMORY.md` for the implemented subset.
 The supplied UI v0.6 is preserved under `docs/design/ui-v0.6/`; it guides presentation,

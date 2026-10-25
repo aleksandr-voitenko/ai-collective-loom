@@ -5,12 +5,12 @@ import { join, resolve } from 'node:path';
 
 // This is a closed vocabulary, not a secret-pattern scrubber. Never add free text
 // (including reporter titles/errors/attachments) to an approved document.
-// Include three discussion-closure journeys in the complete browser inventory; retain
+// Include the isolated recovery journey in the complete browser inventory; retain
 // both byte envelopes and every per-test collection bound.
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
-  steps: 16, tests: 157, bytes: 131072, runBytes: 17 * 1024 * 1024 });
+  steps: 16, tests: 158, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
-export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'files.spec.ts', 'files-text.spec.ts', 'reservations.spec.ts', 'notes.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
+export const files = ['participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'files.spec.ts', 'files-text.spec.ts', 'reservations.spec.ts', 'notes.spec.ts', 'recovery.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
   'collector_missing', 'collector_unfinished', 'page_closed_before_capture', 'page_limit', 'context_limit', 'pending_limit', 'byte_limit'];
 export const details = ['none', 'default', 'persistent', 'explicit', 'dom_ready', 'load', 'closed',

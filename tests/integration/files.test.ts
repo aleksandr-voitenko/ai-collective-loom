@@ -12,6 +12,41 @@ import {normalizeFileSet,normalizeFilePath,fileLimits} from '../../src/contracts
 import {barrier,bounded} from '../helpers/search-races.js';
 import type {QueryResultRow} from 'pg';
 import {actorFromVerifiedIdentity} from '../../src/server/modules/publication/actor.js';
+import {createServer} from 'node:net';
+
+test('native storage fixture owns its port throughout startup and provider recreation',async t=>{
+  const contenders:ReturnType<typeof createServer>[]=[];
+  t.after(async()=>{for(const server of contenders)if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));});
+  const claim=async(endpoint:string)=>{
+    const server=createServer();contenders.push(server);
+    const result=await new Promise<string>(resolve=>{
+      server.once('error',(error:NodeJS.ErrnoException)=>resolve(error.code??'unknown'));
+      server.listen(Number(new URL(endpoint).port),'127.0.0.1',()=>resolve('bound'));
+    });
+    if(result!=='bound')assert.equal(result,'EADDRINUSE');
+  };
+  let native:Awaited<ReturnType<typeof isolatedFileStorage>>;
+  try{native=await isolatedFileStorage({beforeProviderStart:claim});}
+  catch(error){assert.equal(contenders.some(server=>server.listening),false,'Another socket acquired the fixture port during setup');throw error;}
+  t.after(native.close);
+  const endpoint=native.storage.configuration.endpoint;
+  await native.stop();await claim(endpoint);await native.start();await native.recreate();
+  assert.equal(native.storage.configuration.endpoint,endpoint);
+  assert.equal(contenders.some(server=>server.listening),false,'Another socket acquired the fixture port during provider recreation');
+  await native.storage.check();
+  await native.close();
+  const released=createServer();
+  await new Promise<void>((resolve,reject)=>{released.once('error',reject);released.listen(Number(new URL(endpoint).port),'127.0.0.1',resolve);});
+  await new Promise<void>(resolve=>released.close(()=>resolve()));
+});
+
+test('native storage fixture releases its port when provider startup fails',async()=>{
+  const failure=new Error('Injected provider startup failure');let endpoint='';
+  await assert.rejects(isolatedFileStorage({beforeProviderStart:async(value)=>{endpoint=value;throw failure;}}),error=>error===failure);
+  const released=createServer();
+  await new Promise<void>((resolve,reject)=>{released.once('error',reject);released.listen(Number(new URL(endpoint).port),'127.0.0.1',resolve);});
+  await new Promise<void>(resolve=>released.close(()=>resolve()));
+});
 
 const text=(value:string)=>({format:'loom-markdown-v3' as const,text:value,mentions:[],references:[]});
 const sha=(value:Uint8Array)=>createHash('sha256').update(value).digest('hex');
