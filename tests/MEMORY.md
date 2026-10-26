@@ -288,8 +288,10 @@ the first dispatch, capture the newer available response, suppress the source, t
 deliver the older refusal before releasing the pending success on every applicable
 host. Request freshness must never suppress same-identity revocation, including across recovery.
 The real Following case holds old list/mute responses through all five paths and
-suppresses/restores their common parent. Credential tests hold the intended request
-before revocation so independent discussion reads cannot remove its button first.
+suppresses/restores their common parent. Full-host source suppression and both
+attention/Following credential tests hold the intended request before changing
+authority: background discussion Saved/Reading reads can withdraw its button first.
+Require the held native refusal, then assert withdrawal, focus and exact recovery.
 Keep one interception handler across Following/attention and shared-view phases: explicitly
 arm each barrier, assert it was entered, then await its completion. Do not expire
 and reinstall the last route between a lost response and the next held request.
