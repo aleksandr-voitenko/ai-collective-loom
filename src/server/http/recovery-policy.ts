@@ -12,6 +12,9 @@ function add(policy: ParticipationRecoveryPolicy, routes: readonly Route[]) {
 // Use Fastify's registered method/template, never a request-path prefix. The
 // contract inventory requires an explicit policy for every participation route.
 add('retrieval', [
+  'GET /api/v1/admin/participation-rates',
+  'POST /api/v1/admin/participation-rates/status',
+  'POST /api/v1/admin/participation-rates/audit',
   'POST /api/v1/identity/accounts/query',
   'POST /api/v1/identity/credentials/query',
   'POST /api/v1/identity/audit/query',
@@ -135,6 +138,7 @@ add('revision-retrieval', [
 // though they do not publish shared content. Read-only status routes above cannot
 // establish a new mutation outcome or settle the original command's uncertainty.
 add('mutation', [
+  'POST /api/v1/admin/participation-rates/state',
   'POST /api/v1/me/notes/create',
   'POST /api/v1/me/notes/update',
   'POST /api/v1/me/notes/delete',

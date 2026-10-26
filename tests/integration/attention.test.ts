@@ -84,7 +84,7 @@ test('dismiss E before delayed N; frozen group excludes later revisions and deli
 
 test('atomic overlapping dismiss/restore in both orders rejects stale choices and never changes independent state',{timeout:90000},async t=>{
   const f=await fixture(t),r=await f.participant('attention_atomic'),a=await f.artifact(),b=await f.artifact(),x=shared(await f.event(a.revision_id)),y=shared(await f.event(b.revision_id));
-  const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' AND tablename NOT LIKE 'attention_%' ORDER BY tablename")).rows.map(v=>v.tablename as string);
+  const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' AND tablename NOT LIKE 'attention_%' AND tablename <> 'participation_rate_windows' ORDER BY tablename")).rows.map(v=>v.tablename as string);
   const digest=async(name:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT to_jsonb(t) row FROM loom.${name} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const name of tables)before.set(name,await digest(name));
   const k1=command([x,y]);await f.dismiss(r.client,k1);await f.dismiss(r.client,command([x],false,1));

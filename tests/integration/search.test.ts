@@ -10,7 +10,7 @@ import { SearchWorker } from '../../src/server/modules/search/worker.js';
 
 const content=(text:string)=>({format:'loom-markdown-v1',text,mentions:[]});
 test('current scoped lexical search through HTTPS and native worker recovery',{timeout:240000},async t=>{
-  const server=await syntheticServer();const worker=new NativeSearchWorker(server.configuration);
+  const server=await syntheticServer({workloadRates:true});const worker=new NativeSearchWorker(server.configuration);
   t.after(async()=>{await worker.stop();await server.close();});
   const cert=await readFile(server.directory+'/cert.pem','utf8'),admin=httpClient(server.origin,cert);await admin.enroll(server.ticket);
   async function account(nickname:string,kind:'human'|'agent'){

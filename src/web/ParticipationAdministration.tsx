@@ -1,3 +1,4 @@
+import { ParticipationRates } from './ParticipationRates.js';
 import { useState } from 'react';
 import { useLocation } from 'react-router';
 import {
@@ -140,6 +141,7 @@ export function Administration({ context }: { context: Context }) {
           <button onClick={context.refreshCommunity}>Refresh administration</button>
         </div>
       )}
+      <ParticipationRates context={context} />
       <SearchAdministration context={context} />
       <FileTextAdministration context={context} />
       <ErrorText error={error} />

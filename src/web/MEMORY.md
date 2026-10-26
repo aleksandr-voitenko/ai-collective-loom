@@ -145,3 +145,17 @@ leased account; audit is mounted only when deliberately opened. User-entered loo
 intent stays independent of protected result/selection copies. Existing one-time
 secret leases and exact private command journals retain their prior semantics.
 See ADR-035 and the production-host mounted/compiled administration tests.
+
+## Temporary participation throttling
+
+`temporarily_throttled` retains session, authorized content and exact intent/uncertainty;
+never add it to definitive rejection or withdrawal lists. Discovery throttling retains
+identity with explicit Retry. `ParticipationRates.tsx` uses the existing journal for
+versioned policy commands/status and a leased audit view. No automatic retry/re-key.
+Mounted composer, shell and policy tests plus compiled administration cases cover
+reload/lost acknowledgement and original/current policy recovery. See ADR-038.
+
+Local drafts on the Participation guide offers explicit publication status without
+opening an ordinary source read. A confirmed journal remains retained with its exact
+command; throttled, missing or failed status keeps uncertainty. Late responses after
+navigation/identity change cannot settle the journal.

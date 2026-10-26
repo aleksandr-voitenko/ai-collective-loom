@@ -50,6 +50,7 @@ test('every registered participation route has a recovery policy and 500/503 rea
   // This expectation is independent of the server catalogue. Status reads do
   // not repeat the command, while preparation/cleanup/ceremonies change state.
   const mutations = new Set([
+    'admin/participation-rates/state',
     'me/notes/create', 'me/notes/update', 'me/notes/delete',
     'editing-intent/announce', 'editing-intent/renew', 'editing-intent/release',
     'admin/moderation/state', 'admin/notifications/reconcile', 'admin/notifications/retry',

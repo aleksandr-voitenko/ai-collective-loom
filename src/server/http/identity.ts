@@ -1,3 +1,6 @@
+import type { Transactions } from '../db/postgres.js';
+import { admitRequest } from '../modules/rates/accounting.js';
+import { participationRateRoute } from './rate-policy.js';
 import { ParticipationError } from '../../contracts/participation.js';
 import { Type, type TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -67,6 +70,7 @@ function cookies(request: FastifyRequest) {
 export async function registerIdentityRoutes(
   app: FastifyInstance,
   options: {
+    database: Transactions;
     administration: IdentityAdministration;
     authentication: IdentityAuthentication;
   },
@@ -86,7 +90,7 @@ export async function registerIdentityRoutes(
     )
       throw new IdentityError('invalid_proof');
   });
-  async function actor(request: FastifyRequest) {
+  async function resolveActor(request: FastifyRequest) {
     const session = cookies(request)['__Host-loom-session'];
     const authorization = request.headers.authorization;
     if (session && authorization) throw new IdentityError('unauthenticated');
@@ -111,6 +115,25 @@ export async function registerIdentityRoutes(
         ))
     )
       throw new IdentityError('invalid_proof');
+    return resolved;
+  }
+  const admissions = new WeakMap<FastifyRequest, Promise<void>>();
+  async function actor(request: FastifyRequest) {
+    const resolved = await resolveActor(request);
+    const category = participationRateRoute(request.method, request.routeOptions.url);
+    if (!category || category === 'excluded') throw new IdentityError('service_unavailable');
+    // Transfers authenticate before accepting bytes and again in their handler.
+    // Keep both current-authority checks, but admit the HTTP request only once.
+    let admission = admissions.get(request);
+    if (!admission) {
+      admission = admitRequest(
+        options.database,
+        resolved,
+        category === 'publication' ? 'ordinary_requests' : category,
+      );
+      admissions.set(request, admission);
+    }
+    await admission;
     return resolved;
   }
   function command(

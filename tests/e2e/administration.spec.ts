@@ -2,8 +2,48 @@ import { test, expect } from '../helpers/browser-fixtures.js';
 import { setup } from '../helpers/change-browser.js';
 import { populateAdministration, administrationTarget } from '../helpers/administration.js';
 import type { Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { journal } from '../helpers/change-browser.js';
 const click=(page:Page,name:string)=>page.getByRole('button',{name,exact:true}).click();
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return{promise,release};}
+
+test('administrator rate controls retain a lost decision through reload and recover original versus current policy',async({page,context,server})=>{
+ await server.observer.query('UPDATE loom.participation_rate_policy SET ordinary_requests=120,new_publications=20,recovery_control=60 WHERE id=1');
+ const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
+ await page.goto(server.origin+'/loom/admin');await click(page,'Inspect participation limits');await expect(page.getByText(/Current policy version 1/)).toBeVisible();
+ await page.setViewportSize({width:390,height:844});await page.getByLabel(/Ordinary requests per minute/).fill('7');
+ await expect.poll(async()=>(await journal(page,'participation.rates'))?.body.ordinary_requests).toBe(7);
+ await page.route('**/api/v1/admin/participation-rates/state',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
+ await click(page,'Save participation limits');await expect(page.getByRole('button',{name:'Check limits status'})).toBeEnabled();
+ const uncertain=await journal(page,'participation.rates');expect(uncertain.state).toBe('uncertain');
+ const current=(await f.admin.call('/api/v1/admin/participation-rates')).body;
+ expect((await f.admin.call('/api/v1/admin/participation-rates/state',{idempotency_key:randomUUID(),expected_version:current.version,ordinary_requests:8,new_publications:20,recovery_control:60})).status).toBe(200);
+ await page.reload();await expect(page.getByRole('button',{name:'Check limits status'})).toBeVisible();expect((await journal(page,'participation.rates')).body).toEqual(uncertain.body);
+ const status=page.getByRole('button',{name:'Check limits status'});await status.focus();await page.keyboard.press('Enter');await expect(page.getByText(/Recorded policy version 2; current version at recovery 3/)).toBeVisible();
+ expect(await journal(page,'participation.rates')).toBeUndefined();await click(page,'Inspect rate policy audit');await expect(page.getByText(/Version 3: 8 ordinary/)).toBeVisible();
+ expect((await f.admin.call('/api/v1/admin/participation-rates')).body.ordinary_requests).toBe(8);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('compiled composer preserves a committed lost response through temporary throttling and reload without rekeying',async({page,context,server})=>{
+ const f=await setup(page,context,server),policyPath='/api/v1/admin/participation-rates';
+ const set=async(ordinary:number)=>{const current=(await f.admin.call(policyPath)).body;expect((await f.admin.call(policyPath+'/state',{idempotency_key:randomUUID(),expected_version:current.version,ordinary_requests:ordinary,new_publications:1,recovery_control:120})).status).toBe(200);};
+ await set(120);await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
+ await page.getByLabel('Title',{exact:true}).fill('Throttle recovery artifact');await page.getByLabel('Text',{exact:true}).fill('Keep the exact browser command.');
+ await expect.poll(async()=>(await journal(page,'artifact.create'))?.body.content.text).toBe('Keep the exact browser command.');
+ const sent:string[]=[];
+ await page.route('**/api/v1/artifacts',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}sent.push(route.request().postData()!);const response=await route.fetch();expect(response.status()).toBe(201);await route.abort('failed');},{times:1});
+ await click(page,'Publish');await expect(page.getByRole('button',{name:'Check status',exact:true})).toBeEnabled();const uncertain=await journal(page,'artifact.create');expect(uncertain.state).toBe('uncertain');
+ await set(1);await click(page,'Retry same publication');await expect(page.getByText(/Temporary participation limit/)).toBeVisible();
+ expect((await journal(page,'artifact.create')).body).toEqual(uncertain.body);await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Keep the exact browser command.');
+ await page.reload();expect((await journal(page,'artifact.create')).body).toEqual(uncertain.body);expect((await journal(page,'artifact.create')).state).toBe('uncertain');
+ await page.goto(server.origin+'/loom/help');await expect(page.getByRole('button',{name:'Check publication status',exact:true})).toBeEnabled();
+ expect((await page.request.get(server.origin+'/api/v1/areas')).status()).toBe(429);
+ await click(page,'Check publication status');await expect(page.getByText('Publication confirmed. Your exact local record is retained.',{exact:true})).toBeVisible();
+ const confirmed=await journal(page,'artifact.create');expect(confirmed.body).toEqual(uncertain.body);expect(confirmed.key).toBe(uncertain.key);
+ expect((await server.observer.query("SELECT used FROM loom.participation_rate_windows WHERE participant_id=$1 AND category='new_publications'",[f.person])).rows[0].used).toBe(1);
+ expect((await server.observer.query("SELECT count(*)::int n FROM loom.idempotency_records WHERE participant_id=$1 AND operation_kind='artifact.create'",[f.person])).rows[0].n).toBe(1);
+});
 async function begin(page:Page,context:Parameters<typeof setup>[1],server:Parameters<typeof setup>[2]){
  const f=await setup(page,context,server);
  await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);

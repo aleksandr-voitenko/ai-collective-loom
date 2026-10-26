@@ -213,6 +213,8 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       'unavailable',
       'invalid_request',
       'revision_conflict',
+      'rate_policy_conflict',
+      'rate_policy_capacity',
       'forbidden',
       'nickname_conflict',
       'credential_limit',

@@ -26,6 +26,9 @@ export async function recoveryFixture(
     );
     return r.body;
   };
+  // The cold-recovery corpus and its independent clients use an explicit finite
+  // workload policy, captured/restored with its original audit and accounting.
+  await accepted(admin, '/api/v1/admin/participation-rates/state', {idempotency_key:randomUUID(),expected_version:1,ordinary_requests:6000,new_publications:600,recovery_control:1200});
   await accepted(admin, '/api/v1/community/setup', {
     idempotency_key: randomUUID(),
     community_name: 'Recovery rehearsal',

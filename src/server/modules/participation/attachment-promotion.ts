@@ -1,3 +1,4 @@
+import { admitPublication, chargeRate } from '../rates/accounting.js';
 import { randomUUID } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import {
@@ -55,6 +56,7 @@ export class AttachmentPromotion {
             throw new PublicationError('idempotency_conflict');
           return result(saved, 'replayed');
         }
+        const allowance = await admitPublication(tx, actor.participantId);
         await fileGuard(tx);
         await admitFilePublication(tx, actor.participantId, 1);
         await lockReferencePlan(tx, [input.source.contribution_id, input.area_id]);
@@ -96,6 +98,7 @@ export class AttachmentPromotion {
           actor.participantId,
         ]);
         const chain = await lockContext(tx, artifact, 'publication', ['artifact']);
+        await chargeRate(tx, allowance);
         return commitRevision(
           tx,
           actor,

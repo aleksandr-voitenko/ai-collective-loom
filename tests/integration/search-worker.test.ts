@@ -101,7 +101,7 @@ test('populated upgrade, durable discovery and atomically fenced search outputs'
 });
 
 test('native worker expiry and process loss around the real output COMMIT',{timeout:120000},async t=>{
-  const f=await isolatedPublicationPostgres();t.after(f.close);
+  const f=await isolatedPublicationPostgres({workloadRates:true});t.after(f.close);
   const admin=await f.participant('administrator'),source=await f.resource(admin.participantId),search=new TextSearch(f.database),worker=new SearchWorker(f.database);
   const revision=randomUUID();await f.database.transaction(async tx=>{
     await tx.query('INSERT INTO loom.artifacts VALUES ($1)',[source.resourceId]);

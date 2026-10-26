@@ -33,7 +33,7 @@ export const test = diagnosticTest.extend<{ server: Awaited<ReturnType<typeof sy
   },
   server: async ({ diagnostics }, use) => {
     diagnostics.phase('server_starting');
-    const server = await syntheticServer();
+    const server = await syntheticServer({workloadRates:true});
     diagnostics.setOrigin(server.origin);
     diagnostics.observeServer(server.app.server);
     diagnostics.phase('server_ready');
@@ -48,7 +48,7 @@ export { expect };
 
 export const fileTest=test.extend<{server:Awaited<ReturnType<typeof syntheticServer>>}>({
   server:async({diagnostics},use)=>{
-    diagnostics.phase('server_starting');const server=await syntheticServer({files:true});
+    diagnostics.phase('server_starting');const server=await syntheticServer({files:true,workloadRates:true});
     diagnostics.setOrigin(server.origin);diagnostics.observeServer(server.app.server);diagnostics.phase('server_ready');
     try{await use(server);}finally{diagnostics.phase('server_closing');await server.close();diagnostics.phase('server_closed');}
   },

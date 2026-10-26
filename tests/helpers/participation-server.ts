@@ -20,6 +20,7 @@ export async function syntheticServer(
     logger?: Parameters<typeof createApplication>[0]['logger'];
     files?:boolean;
     throughMigration?: number;
+    workloadRates?: boolean;
     transactionWrapper?: (database: Transactions) => Transactions;
     beforeListen?: (origin: string) => Promise<void>;
   } = {},
@@ -59,6 +60,9 @@ export async function syntheticServer(
     }
   };
   try {
+    // Explicit bulk-test policy, not the synthetic preview default. Every request
+    // still passes accounting; tests of rate behavior use smaller supported limits.
+    if (options.workloadRates) await fixture.observer.query('UPDATE loom.participation_rate_policy SET ordinary_requests=6000,new_publications=600,recovery_control=1200 WHERE id=1');
     if(options.files)fileFixture=await isolatedFileStorage();
     const listener = await reserve(options.port ?? 0);
     const port = (listener.address() as AddressInfo).port;

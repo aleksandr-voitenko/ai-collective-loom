@@ -13,7 +13,12 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`21`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`22`.
+Participation rates (ADR-038/migration0027) use one versioned administrator policy
+and PostgreSQL participant/category windows. Request admission is separate from
+committed publication allowance; exact replay never charges publication twice.
+Defaults120/20/60 per60s are synthetic candidates. Read rates/MEMORY.md before
+changing accounting, policy controls or route categories. Existing capacities remain.
 Advisory Editing intent (ADR-032/migration0022) lives in sibling reservations/:
 exact-base notices, fixed PostgreSQL expiry, optimistic renew/release and private
 owner recovery. Publication remains independent. Browser and direct HTTPS share

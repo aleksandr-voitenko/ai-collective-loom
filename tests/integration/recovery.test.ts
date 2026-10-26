@@ -125,11 +125,12 @@ test(
         .status,
       200,
     );
-    assert.equal(
-      JSON.stringify(inventory(restored)),
-      JSON.stringify(before),
-      'Verification must preserve every captured table and native version',
-    );
+    const verified = inventory(restored), rateTable = 'loom.participation_rate_windows';
+    // Restore compared every captured byte. The verifier validates only its bounded
+    // read charges; these three additional probes also admit ordinary/control reads.
+    assert.equal(verified.tables[rateTable].publicationSha256, before.tables[rateTable].publicationSha256);
+    assert.deepEqual({...verified,tables:{...verified.tables,[rateTable]:before.tables[rateTable]}},before,
+      'Verification must preserve every prior table, policy/decision and native version');
     // Same native worker programs resume; existing signals and source/private rows cannot multiply.
     docker(['stop', '--time', '60', restored.id + '-runtime']);
     await serve(restored, { workers: true });
@@ -148,7 +149,7 @@ test(
       if (expected.classification === 'authoritative-captured') {
         assert.equal(
           JSON.stringify(after.tables[table]),
-          JSON.stringify(expected),
+          JSON.stringify(table===rateTable?verified.tables[rateTable]:expected),
           'Authoritative state changed: ' + table,
         );
       }

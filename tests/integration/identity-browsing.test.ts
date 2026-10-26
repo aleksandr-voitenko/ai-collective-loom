@@ -16,11 +16,13 @@ import { actorFromVerifiedIdentity } from '../../src/server/modules/publication/
 import { AdministrationBrowsing } from '../../src/server/modules/identity/browsing.js';
 import { opaqueToken } from '../../src/server/modules/identity/secrets.js';
 import { barrier, bounded, blockedBy } from '../helpers/search-races.js';
+import { workloadRates } from '../helpers/rates.js';
 const base='/api/v1/identity/';
 async function setup(t: TestContext, populated=true) {
   const server=await syntheticServer();t.after(()=>server.close());
   const cert=await readFile(server.directory+'/cert.pem','utf8'),admin=httpClient(server.origin,cert);
   const self=await admin.enroll(server.ticket);
+  await workloadRates(server,admin);
   if(populated) await populateAdministration(server);
   return {server,admin,self,cert};
 }
@@ -38,7 +40,7 @@ async function all(client:ReturnType<typeof httpClient>,collection:string,extra:
   for(let n=0;n<200;n++) { const result=await page(client,collection,{...extra,limit:7,...(cursor?{cursor}:{})});items.push(...result.items);if(result.complete)return items;cursor=result.next_cursor; }
   throw new Error('Traversal did not complete within its fixture bound');
 }
-test('complete eligible ID sets and metadata through HTTPS; legacy views stay limited; reads change no tables',async t=>{
+test('complete eligible ID sets and metadata through HTTPS; legacy views stay limited; reads preserve domain state',async t=>{
  const {server,admin,self,cert}=await setup(t);
  const agent=opaqueToken('agent'),agentId=randomUUID();
  await server.observer.query("INSERT INTO loom.participants(id,state,role,kind,nickname) VALUES($1,'active','administrator','agent','bearer_admin')",[agentId]);
@@ -179,7 +181,7 @@ test('audit commit order rather than timestamp/UUID determines invalidation, wit
 });
 test('populated additive upgrade preserves all old table bytes and exact issuance replay identities',async t=>{
  const server=await syntheticServer({throughMigration:24});t.after(()=>server.close());
- const cert=await readFile(server.directory+'/cert.pem','utf8'),admin=httpClient(server.origin,cert);await admin.enroll(server.ticket);await populateAdministration(server);
+ const cert=await readFile(server.directory+'/cert.pem','utf8'),admin=httpClient(server.origin,cert);await admin.enroll(server.ticket);await workloadRates(server,admin);await populateAdministration(server);
  const body={idempotency_key:randomUUID(),participant_id:administrationTarget,kind:'agent',purpose:null,label:'Upgrade replay',replace_credential_id:null};
  const issued=await admin.call(base+'credentials',body);assert.equal(issued.status,200);
  const before=await administrationSnapshot(server);await server.migrate();
@@ -212,7 +214,7 @@ test('serialized responses and actual logs exclude secrets, verifiers and privat
   if(sql.startsWith('SELECT version::text')){if(fail)throw new Error(secretCanary);if(slow)await tx.query('SELECT pg_sleep(2)',[]);}
   return tx.query(sql,args);
  }}))})});t.after(()=>server.close());
- const cert=await readFile(server.directory+'/cert.pem','utf8'),admin=httpClient(server.origin,cert),self=await admin.enroll(server.ticket);await populateAdministration(server);
+ const cert=await readFile(server.directory+'/cert.pem','utf8'),admin=httpClient(server.origin,cert),self=await admin.enroll(server.ticket);await workloadRates(server,admin);await populateAdministration(server);
  await server.observer.query('INSERT INTO loom.note_owners(participant_id,identities,active) VALUES($1,1,1)',[self.participant_id]);
  await server.observer.query('INSERT INTO loom.private_notes(participant_id,id,version,title,body,links) VALUES($1,$2,1,$3,$3,$4)',[self.participant_id,randomUUID(),privateCanary,JSON.stringify([])]);
  const before=await administrationSnapshot(server),responses:string[]=[];

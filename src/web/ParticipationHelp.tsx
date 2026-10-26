@@ -1,14 +1,65 @@
 import { promotionLabel } from './AttachmentPromotion.js';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { exportDrafts } from './participation-client.js';
+import {
+  exportDrafts,
+  commandRequest,
+  identityGeneration,
+  type Intent,
+} from './participation-client.js';
+import { Reconciled } from '../contracts/participation.js';
+import type { Static } from '@sinclair/typebox';
 import { type Context, useQuery, intentUrl } from './participation-state.js';
 import { ErrorText } from './participation-ui.js';
 
 export function Help({ context }: { context: Context }) {
   const { data, error } = useQuery<{ text: string }>('/api/v1/guide');
   const [failure, setFailure] = useState('');
+  const [busy, setBusy] = useState(false),
+    [status, setStatus] = useState('');
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
   const [, refresh] = useState(0);
+  async function check(record: Intent) {
+    if (busy) return;
+    const owner = identityGeneration();
+    const current = () => live.current && owner === identityGeneration();
+    setBusy(true);
+    setFailure('');
+    setStatus('');
+    try {
+      const result = await commandRequest<Static<typeof Reconciled>>(
+        record.kind.startsWith('summary.')
+          ? '/api/v1/summaries/status'
+          : '/api/v1/operations/status',
+        {
+          self: context.self,
+          body: { operation_kind: record.kind, idempotency_key: record.key },
+          schema: Reconciled,
+        },
+      );
+      if (!current()) return;
+      if ('publication_state' in result) {
+        await context.store.settle(record, { state: 'committed', result });
+        if (current()) {
+          refresh((n) => n + 1);
+          setStatus('Publication confirmed. Your exact local record is retained.');
+        }
+      } else
+        setStatus(
+          'Confirmation is still unavailable; the earlier attempt may still commit. Keep the exact command.',
+        );
+    } catch (error) {
+      if (current()) setFailure((error as Error).message);
+    } finally {
+      if (current()) setBusy(false);
+    }
+  }
   return (
     <>
       <h1>Participation guide</h1>
@@ -27,6 +78,11 @@ export function Help({ context }: { context: Context }) {
           Signing out clears these records; export them first if needed.
         </p>
         <button onClick={() => exportDrafts(context.store)}>Export drafts</button>
+        <p>
+          Check an uncertain publication here without reopening its source. Temporary limits and
+          unrecorded status do not settle an earlier attempt.
+        </p>
+        {status && <p role="status">{status}</p>}
         <p>
           Saved-item recovery shares this local storage bound and export, but is managed separately
           in <Link to="/loom/saved">Saved items</Link>.
@@ -48,6 +104,21 @@ export function Help({ context }: { context: Context }) {
                   : ''}{' '}
                 · {record.state} · {new Date(record.created_at).toLocaleString()}
               </Link>
+              {record.state === 'uncertain' &&
+                [
+                  'discussion.create',
+                  'reply.create',
+                  'artifact.create',
+                  'revision.publish',
+                  'community.setup',
+                  'attachment.promote',
+                  'summary.create',
+                  'summary.revise',
+                ].includes(record.kind) && (
+                  <button aria-disabled={busy} onClick={() => void check(record)}>
+                    Check publication status
+                  </button>
+                )}
               {record.state !== 'uncertain' && (
                 <button
                   onClick={() =>

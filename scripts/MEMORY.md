@@ -33,7 +33,11 @@ or environment override selects a different runtime policy.
 Restore preflight precedes destination creation; directories/resources must be new.
 Restoration inventory equality establishes quarantine integrity, not usability.
 Separate HTTPS verification compares independent private expectations and every
-table/version before VERIFIED. Notification recovery keys/epochs/visibility are
+table/version before VERIFIED. ADR-038's only post-restore exception is bounded
+ordinary/control charges from its own authenticated requests: compare participant/
+category counts and legal window expiry within observed DB time. Publication counts,
+policy/decisions and all prior state stay exact; physical restore compares every row.
+Do not skip admission or reset counters to make verification pass. Notification recovery keys/epochs/visibility are
 authoritative inside mixed progress state. All tables are captured; only known
 derived state may advance when unchanged compiled workers resume. Do not clear
 private fences, clock/notification identities, outcomes or recovery custody.
@@ -63,3 +67,8 @@ Parallel verification (ADR-037) is owned by `lib/coverage/MEMORY.md` and
 `coverage-ci.mjs`. The original local coverage command stays sequential; hosted
 jobs use isolated workspaces and a shared validated numeric evidence protocol.
 Never rebuild or replace browser diagnostics in a checkout running collection.
+
+Guide22 participation throttling: `participation-client.mjs` keeps the exact private
+journal on `temporarily_throttled`, prints caller-safe wait guidance, and `status`
+does not add an ordinary content fetch. Never loop/re-key after this response.
+Saved/file examples accept guide22 without changing their prior contracts.

@@ -16,7 +16,7 @@ import { NativeSearchWorker } from '../../scripts/lib/native-search-worker.js';
 const content = (text: string) => ({ format: 'loom-markdown-v1', text, mentions: [] });
 
 test('claim updates cannot revive ownership after expiry while waiting for a job lock', { timeout: 30000 }, async t => {
-  const f = await isolatedPublicationPostgres(); t.after(f.close);
+  const f = await isolatedPublicationPostgres({workloadRates:true}); t.after(f.close);
   const admin = await f.participant('administrator');
   await new ParticipationPublications(f.database).publish(admin.actor, 'community.setup', {
     idempotency_key: randomUUID(), community_name: 'Lease race', ordinary_area_name: 'General',
@@ -90,7 +90,7 @@ test('populated 0007 upgrade preserves jobs and recovers previously skipped inte
 });
 
 test('simultaneous bounded claims have distinct owners and no duplicate jobs', { timeout: 30000 }, async t => {
-  const f = await isolatedPublicationPostgres(); t.after(f.close);
+  const f = await isolatedPublicationPostgres({workloadRates:true}); t.after(f.close);
   const admin = await f.participant('administrator'), publications = new ParticipationPublications(f.database);
   await publications.publish(admin.actor, 'community.setup', { idempotency_key: randomUUID(), community_name: 'Concurrent claims',
     ordinary_area_name: 'General', proposal_area_name: 'Feedback', overview: content('Overview') });
@@ -114,7 +114,7 @@ test('simultaneous bounded claims have distinct owners and no duplicate jobs', {
 });
 
 test('native process loss during unfinished rebuild resumes both discovery cursors', { timeout: 120000 }, async t => {
-  const f = await isolatedPublicationPostgres(); t.after(f.close);
+  const f = await isolatedPublicationPostgres({workloadRates:true}); t.after(f.close);
   const admin = await f.participant('administrator'), publications = new ParticipationPublications(f.database);
   await publications.publish(admin.actor, 'community.setup', { idempotency_key: randomUUID(), community_name: 'Interrupted rebuild',
     ordinary_area_name: 'General', proposal_area_name: 'Feedback', overview: content('Overview') });
@@ -178,7 +178,7 @@ test('native process loss during unfinished rebuild resumes both discovery curso
 });
 
 test('unsupported intents survive revision collisions and a split event-discovery page', { timeout: 60000 }, async t => {
-  const f = await isolatedPublicationPostgres(); t.after(f.close);
+  const f = await isolatedPublicationPostgres({workloadRates:true}); t.after(f.close);
   const admin = await f.participant('administrator'), publications = new ParticipationPublications(f.database);
   await publications.publish(admin.actor, 'community.setup', { idempotency_key: randomUUID(), community_name: 'Intent recovery',
     ordinary_area_name: 'General', proposal_area_name: 'Feedback', overview: content('Retained overview') });
