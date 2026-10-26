@@ -13,6 +13,11 @@ Plans bind tested commit, base, run attempt, runtime/platform, all repository in
 hashes and full dist hashes. Each job regenerates the plan after building and
 rechecks inputs/build after measurement. Job labels may differ; authority does not.
 Rerun the whole workflow, not only failed jobs, because attempts cannot mix evidence.
+Hosted browser dependency setup selects the runner's existing Ubuntu archive and
+security HTTPS mirrors, excluding the slow Azure HTTP mirror. Keep suites, signing
+keys and the complete Playwright dependency install unchanged; do not extend job
+budgets to absorb package-mirror delays. The setup requires the runner's mirror-file
+source configuration and changes only its disposable VM, never local development.
 
 `portable.mjs` is the explicit approved numeric transport boundary. Closed fields
 contain indices into the verified plan, numeric V8 trees, numeric source mapping

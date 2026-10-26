@@ -31,6 +31,11 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Use Ubuntu HTTPS archives for browser dependencies
+        run: |
+          # Slow Azure mirror transfers exhausted the unchanged checks budget.
+          grep -Fq 'mirror+file:/etc/apt/apt-mirrors.txt' /etc/apt/sources.list.d/ubuntu.sources
+          printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser-diagnostics
       - run: npm run coverage:ci -- prepare
@@ -98,6 +103,11 @@ jobs:
           path: coverage/ci-input
       - name: Prepare browser diagnostic status
         run: node scripts/prepare-browser-diagnostics.mjs
+      - name: Use Ubuntu HTTPS archives for browser dependencies
+        run: |
+          # Keep the same signed packages and full Playwright dependency install.
+          grep -Fq 'mirror+file:/etc/apt/apt-mirrors.txt' /etc/apt/sources.list.d/ubuntu.sources
+          printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
       - run: npx playwright install --with-deps chromium
       - run: npm run coverage:ci -- collect browser-${{ matrix.group }}
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
