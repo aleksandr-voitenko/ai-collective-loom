@@ -93,3 +93,27 @@ test('production file boundaries reject held success after denial, repeated rest
     await page.goto(url);await expect(page.getByLabel('Literal file text')).toHaveText('heldpreviewneedle');await hold();await page.getByRole('button',{name:'Sign out',exact:true}).click();release!();await expect(page.getByRole('button',{name:'Sign in with passkey',exact:true})).toBeVisible();await expect(page.getByLabel('Literal file text')).toHaveCount(0);
   }finally{release?.();await worker.stop();}
 });
+
+test('Operational health observes a stopped file worker independently and refreshes after native resume',async({page,context,server})=>{
+ const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
+ const worker=new NativeSearchWorker(server.configuration,'file-text',server.fileFixture!.storage.configuration);
+ try{
+  await worker.start();await worker.observeUntil(async()=>(await f.admin.call('/api/v1/admin/operational-health')).body.files.value?.worker.state==='recent');await worker.stop();
+  const bytes=Buffer.from('Exact original retained through inspection'),member=await prepareText(f.admin,{kind:'area',resource_id:f.area},'inspection.txt',bytes);
+  const publication=await f.admin.call('/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'File worker observation',content:{format:'loom-markdown-v3',text:'',mentions:[],references:[]},change_note:null,change_account:null,file_set:{version:'artifact-files-v1',files:[member]}});expect(publication.status).toBe(201);
+  expect((await f.admin.call('/health/ready')).status).toBe(200);
+  await page.goto(server.origin+'/loom/admin');await page.getByText('Operational health',{exact:true}).click();
+  const file=page.getByRole('region',{name:'File indexing health'});await expect(file).toContainText('Undiscovered contexts: true');
+  await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('not established');
+  await worker.start();await worker.observeUntil(async()=>(await f.admin.call('/api/v1/admin/operational-health')).body.files.value?.jobs.complete===1);await worker.stop();
+  const refresh=page.getByRole('button',{name:'Refresh operational health'});await refresh.focus();await page.keyboard.press('Enter');await expect(file).toContainText('1 complete jobs');await expect(file).toContainText('Undiscovered contexts: false');
+  await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('not established');
+  const result=publication.body,files=(await f.admin.call(`/api/v1/artifacts/${result.resource_id}/revisions/${result.revision_id}/files`)).body;
+  expect((await f.admin.call(files.items[0].download_url)).body).toBe(bytes.toString());expect((await f.admin.call('/api/v1/resources/'+result.resource_id)).body.revision_id).toBe(result.revision_id);
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  if(process.env.LOOM_OPERATIONS_REVIEW_SCREENS==='1'){
+   const {mkdir}=await import('node:fs/promises');await mkdir('/tmp/loom-review-evidence/operations',{recursive:true});
+   await page.screenshot({path:'/tmp/loom-review-evidence/operations/operational-health-narrow.png',fullPage:true});
+  }
+ }finally{await worker.stop();}
+});

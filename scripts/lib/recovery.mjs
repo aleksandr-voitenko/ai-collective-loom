@@ -24,6 +24,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { localDockerEndpoint } from './local-config.mjs';
 import { readMigrations, migrationSql } from './migrations.mjs';
 import { recoveryBundle } from './recovery-bundle.mjs';
+import { normalizeVerifierObservations } from './recovery-observations.mjs';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
 const policy = JSON.parse(readFileSync(join(root, 'config/recovery.json')));
@@ -922,7 +923,15 @@ async function verifyApplication(d, expectationsPath) {
     await serveRuntime(d);
     const startTime = Date.parse(sql(d, 'SELECT clock_timestamp()'));
     const admissions = new Map(),
-      identities = new Map();
+      identities = new Map(), observations = new Map();
+    const {operationFamily} = await import('../../dist/server/modules/operations/collector.js');
+    const {outcomeCodes} = await import('../../dist/contracts/operations.js');
+    const record = (result, template) => {
+      const error=result.body?.error, family=operationFamily(template);
+      if (family && outcomeCodes.includes(error?.code) && !error?.forbidden_reason &&
+          result.status >= 400 && result.status <= 599 && typeof error.request_id === 'string')
+        observations.set(error.request_id,{family,code:error.code,status:result.status});
+    };
     const add = (participant, category) => {
       const key = participant + ':' + category;
       admissions.set(key, (admissions.get(key) ?? 0) + 1);
@@ -939,6 +948,7 @@ async function verifyApplication(d, expectationsPath) {
           undefined,
           token,
         );
+        record(self, '/api/v1/identity/self');
         if (self.status === 401) identities.set(token, null);
         else {
           if (self.status !== 200 || typeof self.body?.participant_id !== 'string')
@@ -960,21 +970,26 @@ async function verifyApplication(d, expectationsPath) {
           new RegExp('^' + template.replace(/:[^/]+/g, '[^/]+') + '$').test(pathname)
         );
       });
+      if (route) record(result, route[0].split(' ')[1]);
       if (identities.get(entry.token) && route && route[1] !== 'excluded')
         add(
           identities.get(entry.token),
           route[1] === 'publication' ? 'ordinary_requests' : route[1],
         );
     }
+    // Graceful close drains the bounded asynchronous collector before comparison.
+    docker(['stop', '--time', '60', names(d).runtime]);
     const after = inventory(d);
     const endTime = Date.parse(sql(d, 'SELECT clock_timestamp()'));
-    if (!verificationStatePreserved(manifest.inventory, after, admissions, startTime, endTime))
+    if (!verificationStatePreserved(manifest.inventory, after, admissions, startTime, endTime, observations))
       fail('verification changed retained state');
+    await serveRuntime(d);
     setStatus(d, 'verified-isolated-snapshot');
     json(join(d.path, 'VERIFIED.json'), {
       format: 'loom-isolated-verification-1',
       backupId: manifest.backupId,
       reads: expectations.reads.length,
+      observedRequests: [...observations].map(([request_id, fields]) => ({request_id, ...fields})),
     });
     return { status: d.status, requests: expectations.reads.length, cutover: false };
   } catch (error) {
@@ -987,10 +1002,13 @@ async function verifyApplication(d, expectationsPath) {
     throw error;
   }
 }
-/** Full inventory equality except bounded charges for this verifier's authenticated
- * requests. All other participants/categories, publication counters and policy stay exact. */
-export function verificationStatePreserved(before, after, admissions, startTime, endTime) {
+/** Full inventory equality except bounded authenticated read charges and identified
+ * verifier observations. All other participants, domain rows and policy stay exact. */
+export function verificationStatePreserved(before, after, admissions, startTime, endTime, observations = new Map()) {
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return false;
+  const tables = normalizeVerifierObservations(before.tables, after.tables, observations, startTime, endTime);
+  if (!tables) return false;
+  after = {...after, tables};
   const table = 'loom.participation_rate_windows',
     original = before.tables[table],
     current = after.tables[table];

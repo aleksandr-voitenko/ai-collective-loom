@@ -481,6 +481,7 @@ export async function recoveryFixture(
     source,
     c,
     admin,
+    adminToken: adminBearer.secret,
     alice,
     bob,
     first,

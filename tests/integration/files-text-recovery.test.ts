@@ -9,7 +9,7 @@ import {FileTextWorker} from '../../src/server/modules/search/file-worker.js';
 import {NativeSearchWorker} from '../../scripts/lib/native-search-worker.js';
 import {barrier,bounded} from '../helpers/search-races.js';
 import {prepareText} from '../helpers/file-text.js';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {fileLimits} from '../../src/contracts/files.js';
 
 test('native storage loss, retry exhaustion, exact-version refusal and derived capacity stay honest',{timeout:120000},async t=>{
@@ -49,6 +49,7 @@ test('native storage loss, retry exhaustion, exact-version refusal and derived c
 
 test('a stalled exact native download returns bounded storage failure without resetting HTTPS',{timeout:120000},async t=>{
   const f=await fixture(t,{files:true}),p=await packageText(f),storage=f.fileFixture!.storage;
+  const expectedObservations=new Map(),startedAt=Date.now();
   const before=await sourceSnapshot(f),read=storage.read.bind(storage),entered=barrier(),aborted=barrier(),prepared=barrier(),release=barrier();let calls=0;
   storage.read=async(...args)=>{
     if(++calls===2){const bytes=await read(...args);prepared.release();await release.promise;return bytes;}
@@ -66,13 +67,29 @@ test('a stalled exact native download returns bounded storage failure without re
     for(const response of await pending){
       assert.equal(response.status,503);assert.equal(response.body.error.code,'file_storage_unavailable');
       assert.equal(response.body.error.recovery.action,'retry_same_request');
+      expectedObservations.set(response.body.error.request_id,{family:'participation',code:'file_storage_unavailable',status:503});
       assert.equal(response.headers['content-type'],'application/json; charset=utf-8');
       assert.ok(!JSON.stringify(response.body).includes('quartzneedle'),'A late verified buffer cannot replace the deadline failure');
     }
     assert.ok(Date.now()-started<fileLimits.transferMs+2000,'The existing transfer deadline still bounds the response');
     release.release();await bounded(aborted.promise);assert.equal(calls,2,'Do not replay either native read');
   }finally{release.release();storage.read=read;}
-  assert.deepEqual(await sourceSnapshot(f),before);
+  // Only this test's actual storage refusals may add diagnostic metadata. Keep
+  // every domain/worker/custody row in the original exact comparison.
+  for(let n=0;n<100;n++){
+    const page=await f.admin.call('/api/v1/admin/operational-health/outcomes',{});
+    if(page.body.items.some((r:any)=>expectedObservations.has(r.request_id)))break;
+    await new Promise(r=>setTimeout(r,25));
+  }
+  const after=await sourceSnapshot(f),names=['operational_capture','operational_observations'];
+  const inventory=(snapshot:Record<string,unknown>)=>Object.fromEntries(names.map(name=>{
+    const observationRows=snapshot[name] as {row:string}[];
+    return ['loom.'+name,{classification:'observational-captured',rows:observationRows.length,sha256:createHash('sha256').update(JSON.stringify(observationRows)).digest('hex'),observationRows}];
+  }));
+  const {normalizeVerifierObservations}=await import('../../scripts/lib/recovery-observations.mjs');
+  assert.ok((after.operational_observations as unknown[]).length>0);
+  assert.deepEqual(normalizeVerifierObservations(inventory(before),inventory(after),expectedObservations,startedAt,Date.now()),inventory(before));
+  assert.deepEqual({...after,operational_capture:before.operational_capture,operational_observations:before.operational_observations},before);
   assert.equal((await f.admin.call(p.base+'/text')).body.processing,'not_discovered');
   assert.deepEqual((await f.admin.call(p.file.download_url)).body,'quartzneedle file content','The failed transfers release admission for an explicit exact later read');
 });

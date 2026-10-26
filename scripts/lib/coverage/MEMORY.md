@@ -26,6 +26,11 @@ As in sequential normalization, a direct JavaScript load may lack a map supplied
 by another stage. Absence does not conflict with or erase a map; every supplied
 projection for the same script must still match exactly. The transport regression
 compares both stage orders and rejects a conflicting map separated by a plain load.
+Playwright entry points preload tsx; root `build.external` leaves application,
+script and compiled-module imports to that loader instead of transforming them
+again. Native and browser fixture hosts must supply identical maps for the same
+source URL. The real measurement probe imports an application module through both
+hosts and exercises the unchanged map-consistency guard before full collection.
 Browser exports retain per-test entry order and merge only once centrally.
 `inputs.mjs` remains the pinned c8 normalization/source identity boundary, and
 `report.mjs` shares denominator/gates/report publication between both command paths.

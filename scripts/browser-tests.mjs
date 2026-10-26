@@ -11,7 +11,7 @@ if (process.argv.length === 2) {
 prepare();
 const privateOutput = join(root, 'private-playwright');
 mkdirSync(privateOutput, { recursive: true, mode: 0o700 });
-const child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', ...process.argv.slice(2), '--output', privateOutput], {
+const child = spawn(process.execPath, ['--import', 'tsx', 'node_modules/@playwright/test/cli.js', 'test', ...process.argv.slice(2), '--output', privateOutput], {
   // Playwright 1.64 still writes error-context even with tracing disabled. Keep
   // all raw reporter output private and ephemeral, never part of the candidate.
   env: { ...process.env, PLAYWRIGHT_NO_COPY_PROMPT: '1' }, stdio: ['ignore', 'pipe', 'pipe'],

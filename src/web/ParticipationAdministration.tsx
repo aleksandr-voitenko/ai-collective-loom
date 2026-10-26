@@ -1,3 +1,4 @@
+import { OperationalHealth } from './OperationalHealth.js';
 import { FileLimits } from './FileLimits.js';
 import { ParticipationRates } from './ParticipationRates.js';
 import { useState } from 'react';
@@ -142,6 +143,7 @@ export function Administration({ context }: { context: Context }) {
           <button onClick={context.refreshCommunity}>Refresh administration</button>
         </div>
       )}
+      <OperationalHealth context={context} />
       <ParticipationRates context={context} />
       <FileLimits context={context} />
       <SearchAdministration context={context} />

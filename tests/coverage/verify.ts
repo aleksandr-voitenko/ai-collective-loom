@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
+import { pathToFileURL } from 'node:url';
 import { chromium, type BrowserContext, type TestInfo } from '@playwright/test';
 import { build } from 'vite';
 import { BrowserCoverage } from '../helpers/browser-coverage.js';
@@ -43,6 +44,21 @@ writeFileSync(join(root,'run-node.ts'),"import assert from 'node:assert/strict';
 const info = { testId:'coverage-measurement-probe',repeatEachIndex:0,retry:0 } as TestInfo;
 let server: ReturnType<typeof createServer> | undefined;
 try {
+  // Native suites and Playwright fixture hosts import the same application files.
+  // Their generated coordinates must agree before any V8 counters can be merged.
+  const sharedSource='src/server/modules/participation/file-storage.ts';
+  const sharedImport=`import { FileStorage } from ${JSON.stringify(pathToFileURL(join(repo,sharedSource)).href)};`;
+  const nativeHost=spawnSync(process.execPath,['--enable-source-maps','--import','tsx','--input-type=module','-e',sharedImport],{
+    cwd:repo,env:{...process.env,NODE_V8_COVERAGE:join(root,'native-host-raw')},encoding:'utf8',timeout:30_000,
+  });
+  assert.equal(nativeHost.status,0,'Native application import must execute');
+  writeFileSync(join(root,'host.spec.ts'),`${sharedImport}\nimport { test, expect } from '@playwright/test';\ntest('application import',()=>expect(typeof FileStorage).toBe('function'));\n`);
+  writeFileSync(join(root,'playwright.config.ts'),`import config from ${JSON.stringify(pathToFileURL(join(repo,'playwright.config.ts')).href)};\nexport default {...config,testDir:'.',testMatch:'host.spec.ts',reporter:'list'};\n`);
+  const browserHost=spawnSync(process.execPath,['--enable-source-maps','--import','tsx','node_modules/@playwright/test/cli.js','test','--config',join(root,'playwright.config.ts'),'--list'],{
+    cwd:repo,env:{...process.env,NODE_V8_COVERAGE:join(root,'browser-host-raw')},encoding:'utf8',timeout:30_000,
+  });
+  assert.equal(browserHost.status,0,'Playwright application import must execute');
+  await nodeCoverage(repo,[sharedSource],[join(root,'native-host-raw'),join(root,'browser-host-raw')],join(root,'host-normalized'),false);
   const node = spawnSync(process.execPath,['--enable-source-maps','--import','tsx',join(root,'run-node.ts')],{
     cwd:repo,env:{ ...process.env,NODE_V8_COVERAGE:join(root,'node-raw') },encoding:'utf8',timeout:30_000,
   });

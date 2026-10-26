@@ -166,3 +166,11 @@ Snapshots never authorize admission or locally block retained retries. Quota err
 retain drafts/exact attempts; only definitive first refusals allow explicit correction.
 The four fields use exact bytes/counts and separate over-limit usage. No file bytes
 or credentials enter journals; ordinary file reselection/digest checks remain.
+
+Operational health (ADR-040) mounts on demand in Administration and performs explicit
+protected reads only. `OperationalHealth.tsx` displays independent source observations,
+unknown/unavailable states, safe failure references and incomplete request samples.
+`useBoundedAdministrationPage` shares existing one-page/16-position history, exact
+failed-page retry/focus and authority/request/route fences with account/audit browsing.
+No polling, automatic worker recovery or private collection query is introduced.
+The response catalogue classifies all five operational routes as protected reads.

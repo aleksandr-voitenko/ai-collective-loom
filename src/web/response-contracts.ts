@@ -1,3 +1,4 @@
+import { OperationalHealth } from '../contracts/operations.js';
 import type { TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../contracts/participation.js';
@@ -114,6 +115,34 @@ function add(
   }
 }
 
+add(
+  [
+    'POST /api/v1/admin/operational-health/authored/failures',
+    'POST /api/v1/admin/operational-health/files/failures',
+    'POST /api/v1/admin/operational-health/activity/failures',
+  ],
+  'read',
+  identityErrors,
+  affirmed('Bounded closed operational job references without source contents.'),
+);
+add(
+  ['GET /api/v1/admin/operational-health'],
+  'read',
+  identityErrors,
+  classified(OperationalHealth, [], {
+    'authored.state': 'Operational source availability; no source authorization claim.',
+    'files.state': 'Operational source availability; no source authorization claim.',
+    'activity.state': 'Operational source availability; no source authorization claim.',
+    'uploads.state': 'Operational source availability; no source authorization claim.',
+    'authored.value.coverage.indexing': 'Independent derived processing availability.',
+  }),
+);
+add(
+  ['POST /api/v1/admin/operational-health/outcomes'],
+  'read',
+  identityErrors,
+  affirmed('Content-free operational samples, under current administrator authority.'),
+);
 add(
   ['POST /api/v1/admin/file-limits/state', 'POST /api/v1/admin/file-limits/status'],
   'receipt',

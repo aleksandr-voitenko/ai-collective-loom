@@ -13,8 +13,21 @@ export function useAdministrationPage<T>(
   self: Self,
   participantId?: string,
 ) {
+  return useBoundedAdministrationPage<AdministrationPageView<T>>(
+    '/api/v1/identity/' + collection + '/query',
+    self,
+    participantId,
+  );
+}
+
+type BoundedPage = { items: unknown[]; next_cursor: string | null; complete: boolean };
+export function useBoundedAdministrationPage<P extends BoundedPage>(
+  path: string,
+  self: Self,
+  participantId?: string,
+) {
   const authority = useAuthorization();
-  const [result, setResult] = useState<AuthorizedValue<AdministrationPageView<T>>>();
+  const [result, setResult] = useState<AuthorizedValue<P>>();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   const sequence = useRef(0),
@@ -39,18 +52,15 @@ export function useAdministrationPage<T>(
       setBusy(true);
       setError('');
       try {
-        const value = await authority.readAuthorized<AdministrationPageView<T>>(
-          '/api/v1/identity/' + collection + '/query',
-          {
-            signal: signal.signal,
-            self,
-            body: {
-              limit: 25,
-              ...(participantId ? { participant_id: participantId } : {}),
-              ...(cursor ? { cursor } : {}),
-            },
+        const value = await authority.readAuthorized<P>(path, {
+          signal: signal.signal,
+          self,
+          body: {
+            limit: 25,
+            ...(participantId ? { participant_id: participantId } : {}),
+            ...(cursor ? { cursor } : {}),
           },
-        );
+        });
         if (
           attempt !== sequence.current ||
           owner !== identityGeneration() ||
@@ -78,7 +88,7 @@ export function useAdministrationPage<T>(
         if (attempt === sequence.current) setBusy(false);
       }
     },
-    [authority, collection, participantId, self],
+    [authority, path, participantId, self],
   );
   useEffect(() => {
     live.current = true;
@@ -120,7 +130,7 @@ export function AdministrationPageControls({
   page,
   name,
 }: {
-  page: ReturnType<typeof useAdministrationPage<unknown>>;
+  page: ReturnType<typeof useBoundedAdministrationPage<BoundedPage>>;
   name: string;
 }) {
   return (

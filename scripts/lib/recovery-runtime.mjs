@@ -85,6 +85,10 @@ async function inventory() {
         ? 'rebuildable-derived-captured'
         : 'authoritative-captured',
     };
+    if (schemaname === 'loom' && ['operational_capture','operational_observations'].includes(tablename)) {
+      tables[schemaname + '.' + tablename].classification = 'observational-captured';
+      tables[schemaname + '.' + tablename].observationRows = rows;
+    }
     if (schemaname === 'loom' && tablename === 'participation_rate_windows') {
       // Capture all counters exactly. Application verification may subsequently
       // charge its own reads; publication allowance must remain byte-identical.
