@@ -148,6 +148,30 @@ accept `--limit 1` through `25` and `--cursor` with the previous page's
 10,000 decisions; new commands then stop, including restoration, while exact
 recovery and inspection remain available. Production retention remains unapproved.
 
+Administrators can open **Operational health** in Administration for read-only upload,
+indexing, activity-recovery, conflict and permission-denial observations. Explicit
+Refresh and bounded details keep readiness, recorded heartbeat, discovery, processing,
+capacity and sampled request outcomes separate. Unknown/unavailable sources never
+mean healthy or zero. No new repair or automatic response is performed.
+
+Only allowlisted operational metadata is sampled: no private content, queries, file
+paths/bytes, credentials or personal collections. The finite24-hour window retains
+at most1024 samples, with admitted capture capped at10/sec and explicit incomplete
+coverage/loss. A sample is an observed attempt, never proof of commit or rollback.
+Expired idle slots remain physically bounded until later capture; existing product
+records are never pruned. These are synthetic limits. See
+[ADR-040](docs/adr/040-operational-health.md) and release guide24.
+
+```bash
+node scripts/operational-health-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --collection health --output health.json
+node scripts/operational-health-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --collection outcomes --limit 12 --output outcomes-1.json
+node scripts/operational-health-client.mjs --origin https://localhost:PORT --ca cert.pem --credential-file credential.txt --collection outcomes --after-page outcomes-1.json --output outcomes-2.json
+```
+
+Use authored/files/activity for bounded job-failure details. Every invocation checks
+current administrator authority through HTTPS. Apply migration0029 with this release;
+`npm run test:operations:postgres` exercises isolated operational acceptance.
+
 Administrators can inspect and change **Participation rate limits** in Administration
 or through `/api/v1/admin/participation-rates`. One versioned community policy applies
 per stable participant across credentials and sessions, with three fixed 60-second
@@ -648,6 +672,10 @@ must stay unchanged through report publication. Incomplete runs replace reports
 with a fixed failure status; completed measurements that miss a gate retain their
 reports and fail. `npm run test:coverage` exercises the real merge and lifecycle
 boundaries. Compiler/converter changes require probe and denominator review.
+Browser fixture hosts use the same tsx loader as native suites for application
+imports; Playwright transforms the test files. Conflicting generated maps for one
+source still fail measurement, and the real compiler-boundary probe checks this
+before collecting the complete suite.
 
 Branches are V8 source ranges, not all logical condition combinations or races.
 Different compiler ranges remain distinct; killed Node processes may lose unflushed

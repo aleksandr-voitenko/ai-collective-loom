@@ -43,8 +43,37 @@ for(const kind of ['area','discussion','artifact','overview'] as const)test(`aut
     await page.getByText('Routine attention',{exact:true}).click();
     await expect(control.getByRole('button',{name:'Unmute routine updates'})).toHaveAttribute('aria-disabled','false');
   }
-  await server.database.transaction(tx=>tx.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[id]));
-  await control.getByRole('button',{name:'Refresh mute state'}).click();
+  const followingBase='/api/v1/me/following/private',pattern=/\/api\/v1\/me\/(?:attention|following)\//;
+  const hold=(path:string)=>({path,entered:false,release:barrier(),finished:barrier()});
+  let armed:ReturnType<typeof hold>|undefined,loseMutation:'attention'|'following'|undefined,captured=0;
+  // Do not expire/reinstall the last interception route between fault and hold.
+  // Each phase explicitly arms one request and waits for handler completion.
+  const handler=async(route:Route)=>{
+    const path=new URL(route.request().url()).pathname;
+    if(loseMutation&&path===(loseMutation==='attention'?endpoint+'/mutes/state':followingBase+'/state')){
+      const mutation=loseMutation;loseMutation=undefined;
+      if(mutation==='following')await route.fetch();
+      await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic response loss',...(mutation==='attention'?{operation_outcome:'unknown'}:{})}})});return;
+    }
+    const held=armed;
+    if(!held||held.entered||held.path!==path){await route.continue();return;}
+    held.entered=true;captured++;
+    try{await held.release.promise;await route.continue();}finally{held.finished.release();}
+  };
+  await page.route(pattern,handler);
+  try{
+  const suppressed=hold(previews);armed=suppressed;
+  try{
+    // Dispatch while the control is still authorized. Background Saved/Reading
+    // reads may withdraw this host as soon as suppression commits.
+    await control.getByRole('button',{name:'Refresh mute state'}).click();
+    await expect.poll(()=>suppressed.entered).toBe(true);
+    await server.database.transaction(tx=>tx.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[id]));
+    const refused=page.waitForResponse(r=>r.url().endsWith(previews));
+    suppressed.release.release();
+    expect((await (await refused).json()).items.find((v:any)=>v.target.resource_id===id).source.state).toBe('unavailable');
+    await suppressed.finished.promise;
+  }finally{suppressed.release.release();armed=undefined;}
   await expect(page.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
   if(kind==='artifact'||kind==='discussion')await expect(page.getByText(kind==='artifact'?'Original target text':'Protected opening body',{exact:true})).toHaveCount(0);
   if(kind==='overview'){
@@ -61,13 +90,18 @@ for(const kind of ['area','discussion','artifact','overview'] as const)test(`aut
     const change=control.getByRole('button',{name:/^(Mute|Unmute) routine updates$/});
     await expect(change).toHaveAttribute('aria-disabled','false');
     if(path==='status'||path==='retry'){
-      await page.route('**'+endpoint+'/mutes/state',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic response loss',operation_outcome:'unknown'}})}),{times:1});
+      loseMutation='attention';
       await change.click();await expect(control.getByRole('button',{name:'Check attention outcome'})).toBeVisible();
     }
     const active=(await server.observer.query("SELECT id FROM loom.participant_credentials WHERE participant_id=$1 AND state='active'",[f.person])).rows.map(r=>r.id);
-    await server.database.transaction(tx=>tx.query("UPDATE loom.participant_credentials SET state='revoked' WHERE id=ANY($1::uuid[])",[active]));
     const action=path==='lookup'?'Refresh mute state':path==='status'?'Check attention outcome':path==='retry'?'Retry same attention change':await change.textContent();
-    await control.getByRole('button',{name:action!,exact:true}).click();
+    const routePath=endpoint+(path==='status'?'/status':'/mutes/'+(path==='lookup'?'lookup':'state')),held=hold(routePath);armed=held;
+    try{
+      await control.getByRole('button',{name:action!,exact:true}).click();
+      await expect.poll(()=>held.entered).toBe(true);
+      await server.database.transaction(tx=>tx.query("UPDATE loom.participant_credentials SET state='revoked' WHERE id=ANY($1::uuid[])",[active]));
+      const refused=page.waitForResponse(r=>r.url().endsWith(routePath)&&r.status()>=400);held.release.release();await refused;await held.finished.promise;
+    }finally{held.release.release();armed=undefined;}
     await expect(page.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Sign in with passkey',exact:true})).toBeVisible();
     const retained=await intents(page);
@@ -85,28 +119,10 @@ for(const kind of ['area','discussion','artifact','overview'] as const)test(`aut
     }
   }
   const followControl=page.locator('[data-follow-target]');
-  const followingBase='/api/v1/me/following/private',pattern='**'+followingBase+'/*';
-  const hold=(path:string)=>({path,entered:false,release:barrier(),finished:barrier()});
-  let armed:ReturnType<typeof hold>|undefined,loseMutation=false,captured=0;
-  // Do not expire/reinstall the last interception route between fault and hold.
-  // Each phase explicitly arms one request and waits for handler completion.
-  const handler=async(route:Route)=>{
-    const path=new URL(route.request().url()).pathname;
-    if(loseMutation&&path===followingBase+'/state'){
-      loseMutation=false;await route.fetch();
-      await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic response loss'}})});return;
-    }
-    const held=armed;
-    if(!held||held.entered||held.path!==path){await route.continue();return;}
-    held.entered=true;captured++;
-    try{await held.release.promise;await route.continue();}finally{held.finished.release();}
-  };
-  await page.route(pattern,handler);
-  try{
   for(const path of ['lookup','state','status','retry'] as const){
     const change=followControl.getByRole('button',{name:/^(Unfollow|Follow)$/});await expect(change).toBeEnabled();
     if(path==='status'||path==='retry'){
-      loseMutation=true;
+      loseMutation='following';
       await change.click();await expect(followControl.getByRole('button',{name:'Check follow status'})).toBeVisible();
     }
     const active=(await server.observer.query("SELECT id FROM loom.participant_credentials WHERE participant_id=$1 AND state='active'",[f.person])).rows.map(r=>r.id);
@@ -131,7 +147,7 @@ for(const kind of ['area','discussion','artifact','overview'] as const)test(`aut
       await expect.poll(()=>journal(page,'following.set')).toBeUndefined();
     }
   }
-  expect(captured).toBe(4);
+  expect(captured).toBe(9);
   }finally{armed?.release.release();await page.unroute(pattern,handler);}
 });
 const intents=(page:Page)=>page.evaluate(()=>Object.entries(localStorage).filter(([k])=>k.startsWith('loom.attention:')&&k.includes(':intent:')).map(([k,v])=>({key:k,...JSON.parse(v)})));

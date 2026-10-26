@@ -113,7 +113,7 @@ export async function runBrowserBatches({ config, files, expectedPlan } = {}) {
   }
   prepare();
   try {
-    const discovered = await execute(['node_modules/@playwright/test/cli.js', 'test', ...configArgs,
+    const discovered = await execute(['--import', 'tsx', 'node_modules/@playwright/test/cli.js', 'test', ...configArgs,
       '--list', '--reporter', resolve('tests/helpers/browser-inventory-reporter.ts'), '--output', join(scratch, 'discovery')], true);
     assert.equal(discovered, 0, 'Browser discovery failed');
     const discoveredPlan = readDocument(planPath);

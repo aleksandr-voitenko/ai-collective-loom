@@ -13,6 +13,11 @@ Plans bind tested commit, base, run attempt, runtime/platform, all repository in
 hashes and full dist hashes. Each job regenerates the plan after building and
 rechecks inputs/build after measurement. Job labels may differ; authority does not.
 Rerun the whole workflow, not only failed jobs, because attempts cannot mix evidence.
+Hosted browser dependency setup selects the runner's existing Ubuntu archive and
+security HTTPS mirrors, excluding the slow Azure HTTP mirror. Keep suites, signing
+keys and the complete Playwright dependency install unchanged; do not extend job
+budgets to absorb package-mirror delays. The setup requires the runner's mirror-file
+source configuration and changes only its disposable VM, never local development.
 
 `portable.mjs` is the explicit approved numeric transport boundary. Closed fields
 contain indices into the verified plan, numeric V8 trees, numeric source mapping
@@ -26,6 +31,11 @@ As in sequential normalization, a direct JavaScript load may lack a map supplied
 by another stage. Absence does not conflict with or erase a map; every supplied
 projection for the same script must still match exactly. The transport regression
 compares both stage orders and rejects a conflicting map separated by a plain load.
+Playwright entry points preload tsx; root `build.external` leaves application,
+script and compiled-module imports to that loader instead of transforming them
+again. Native and browser fixture hosts must supply identical maps for the same
+source URL. The real measurement probe imports an application module through both
+hosts and exercises the unchanged map-consistency guard before full collection.
 Browser exports retain per-test entry order and merge only once centrally.
 `inputs.mjs` remains the pinned c8 normalization/source identity boundary, and
 `report.mjs` shares denominator/gates/report publication between both command paths.

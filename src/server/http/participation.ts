@@ -1,3 +1,4 @@
+import { registerOperations } from './operations.js';
 import { registerFilePolicy } from './file-policy.js';
 import { registerRates } from './rates.js';
 import { ThrottledError } from '../modules/rates/accounting.js';
@@ -313,6 +314,7 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
 export async function registerParticipation(app: FastifyInstance, services: ParticipationServices) {
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
+  registerOperations(app, services.database, actor, !!services.fileStorage);
   registerRates(app, services.database, actor);
   registerFilePolicy(app, services.database, actor);
   registerFiles(app, services.database, actor, services.fileStorage);

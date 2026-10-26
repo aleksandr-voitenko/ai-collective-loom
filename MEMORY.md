@@ -13,7 +13,12 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`23`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`24`.
+Operational health (ADR-040/migration0029) composes existing administrator sources
+with bounded content-free request samples. Read-only HTTPS/browser inspection keeps
+readiness, worker observations, discovery, processing, capacity and request outcomes
+separate. See `src/server/modules/operations/MEMORY.md` for privacy, loss and bounds;
+observations never settle command uncertainty or authorize repair.
 Participation rates (ADR-038/migration0027) use one versioned administrator policy
 and PostgreSQL participant/category windows. Request admission is separate from
 committed publication allowance; exact replay never charges publication twice.

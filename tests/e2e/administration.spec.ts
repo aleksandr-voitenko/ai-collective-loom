@@ -126,3 +126,37 @@ test('compiled administration discards held credentials on account switch, and h
  accountsRelease.release();await expect(page.getByText('browse_target · agent · active',{exact:true})).toHaveCount(0);
  await page.getByRole('link',{name:'Participation guide',exact:true}).click();await expect(page.getByRole('heading',{name:/Participation guide/})).toBeVisible();await expect(page.getByText(/History 1 Ω/)).toHaveCount(0);
 });
+
+test('operational health keeps failed-page focus and fences held observations after authority withdrawal',async({page,context,server})=>{
+ const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
+ const {NativeSearchWorker}=await import('../../scripts/lib/native-search-worker.js');const worker=new NativeSearchWorker(server.configuration);
+ try {
+  await worker.start();await worker.observeUntil(async()=>(await f.admin.call('/api/v1/admin/operational-health')).body.authored.value?.coverage.coverage==='current_supported_text');await worker.stop();
+  const input={idempotency_key:randomUUID(),area_id:f.area,title:'Operational publication',content:{format:'loom-markdown-v1',text:'Published while worker stopped',mentions:[]}};
+  const publication=await f.admin.call('/api/v1/artifacts',input);expect(publication.status).toBe(201);
+  for(let i=0;i<70;i++){
+   await new Promise(r=>setTimeout(r,120));expect((await f.admin.call('/api/v1/artifacts',{...input,title:'Changed retry'})).status).toBe(409);
+   if((await server.observer.query('SELECT count(*)::int n FROM loom.operational_observations')).rows[0].n>=28)break;
+  }
+  expect((await server.observer.query('SELECT count(*)::int n FROM loom.operational_observations')).rows[0].n).toBeGreaterThanOrEqual(28);
+  await page.goto(server.origin+'/loom/admin');await page.getByText('Operational health',{exact:true}).click();
+  await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('not established');
+  const refresh=page.getByRole('button',{name:'Refresh operational health'});await refresh.focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('not established');
+  await worker.start();await worker.observeUntil(async()=>(await f.admin.call('/api/v1/admin/operational-health')).body.authored.value?.coverage.coverage==='current_supported_text');await worker.stop();
+  await refresh.click();await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('current supported text');
+  expect((await f.admin.call('/api/v1/resources/'+publication.body.resource_id)).body.revision_id).toBe(publication.body.revision_id);
+  await page.getByText('Inspect request outcomes',{exact:true}).click();await expect(page.getByRole('button',{name:'Next outcomes page'})).toHaveAttribute('aria-disabled','false');
+  const next=page.getByRole('button',{name:'Next outcomes page'});let failedBody:unknown;
+  await page.route('**/api/v1/admin/operational-health/outcomes',async route=>{failedBody=route.request().postDataJSON();await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic observation failure',request_id:randomUUID(),recovery:{action:'retry_same_request'}}})});},{times:1});
+  await next.focus();await page.keyboard.press('Enter');await expect(page.getByRole('button',{name:'Retry outcomes page'})).toBeVisible();await expect(next).toBeFocused();
+  await expect(page.getByText(/Previous outcomes page is stale/)).toBeVisible();
+  let retryBody:unknown;await page.route('**/api/v1/admin/operational-health/outcomes',async route=>{retryBody=route.request().postDataJSON();await route.continue();},{times:1});
+  await click(page,'Retry outcomes page');await expect(page.getByText('End of outcomes results for this traversal.')).toBeVisible();expect(retryBody).toEqual(failedBody);
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const held=barrier(),release=barrier();await page.route('**/api/v1/admin/operational-health',async route=>{const response=await route.fetch();held.release();await release.promise;await route.fulfill({response});},{times:1});
+  await refresh.click();await held.promise;await server.observer.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[f.person]);
+  try{await click(page,'Refresh outcomes');await expect(page.getByText('idempotency conflict',{exact:true})).toHaveCount(0);}finally{release.release();}
+  await expect(page.getByRole('region',{name:'Authored indexing health'})).toHaveCount(0);
+ } finally {await worker.stop();}
+});

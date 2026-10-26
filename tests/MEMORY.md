@@ -288,8 +288,10 @@ the first dispatch, capture the newer available response, suppress the source, t
 deliver the older refusal before releasing the pending success on every applicable
 host. Request freshness must never suppress same-identity revocation, including across recovery.
 The real Following case holds old list/mute responses through all five paths and
-suppresses/restores their common parent. Credential tests hold the intended request
-before revocation so independent discussion reads cannot remove its button first.
+suppresses/restores their common parent. Full-host source suppression and both
+attention/Following credential tests hold the intended request before changing
+authority: background discussion Saved/Reading reads can withdraw its button first.
+Require the held native refusal, then assert withdrawal, focus and exact recovery.
 Keep one interception handler across Following/attention and shared-view phases: explicitly
 arm each barrier, assert it was entered, then await its completion. Do not expire
 and reinstall the last route between a lost response and the next held request.
@@ -546,9 +548,12 @@ counters and browser captures still use the existing coverage directories/merger
 `bootstrap/browser-batches.test.mjs` exercises the real worker exits, interruption,
 failure/canary containment, per-process Node flushes and aggregate integrity.
 Every nested probe, including failure/invalid/interrupted runs, owns its coverage
-directory. Never mix its Playwright-transformed application imports into the
-enclosing Node suite's tsx collection; the unchanged map-consistency guard rejects
-those incompatible generated coordinates. The real browser stage stays separate.
+directory; intentional failures must not contribute counters to enclosing suites.
+Normal Playwright entry points preload tsx and the root configuration excludes
+application/scripts/dist imports from Playwright transformation. Shared modules
+must use identical generated coordinates in native and browser fixture hosts;
+`coverage/verify.ts` checks this through both actual compilers and the unchanged
+map-consistency guard. The real browser stage keeps its own raw directory.
 The HTTPS fixture keeps a TCP listener before freezing the identity origin and
 passes that server through Fastify's listen call. Cleanup ownership transfers on
 the HTTPS listening event; closing the original server afterward closes HTTPS too.
@@ -611,7 +616,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 164 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 166 collected tests and <17 MiB/candidate. The test count includes
 the isolated recovery and exact-file reference journeys so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
@@ -811,3 +816,14 @@ cover durable policy intent, quota refusal, admitted recovery and leased usage.
 Cold fixtures retain an attributable exhausted policy/decision and compare exact
 status/replay/audit plus denied new admission after restore. No new authoritative
 state is excluded, and browser diagnostic bounds/allowlists remain unchanged.
+
+Operational diagnostics acceptance lives in `integration/operations.test.ts` (ADR-040):
+real HTTP refusals, native failure/timeout boundaries, independent compiled workers,
+finite collection/paging, authority races, populated0028 upgrade and standalone client.
+The elapsed46s worker-stop trial differs from explicitly edited expiry/capacity fixtures.
+`administration-browsing.test.tsx` holds health/outcome responses across host fences;
+compiled administration/files-text journeys retain failed-page focus and independently
+resume authored/file workers. Optional LOOM_OPERATIONS_REVIEW_SCREENS=1 curates synthetic
+narrow evidence under `/tmp/loom-review-evidence/operations`, outside diagnostic uploads.
+Cold recovery validates identified verifier samples after initial exact restoration;
+`bootstrap/recovery-accounting.test.mjs` rejects unrelated changes and uncorrelated samples.

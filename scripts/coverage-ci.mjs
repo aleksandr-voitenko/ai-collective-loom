@@ -37,7 +37,7 @@ async function build() {
 }
 async function discover(scratch) {
   const path = join(scratch, 'browser-plan.json');
-  await command([process.execPath, 'node_modules/@playwright/test/cli.js', 'test', '--list', '--reporter',
+  await command([process.execPath, '--import', 'tsx', 'node_modules/@playwright/test/cli.js', 'test', '--list', '--reporter',
     join(repo, 'tests/helpers/browser-inventory-reporter.ts'), '--output', join(scratch, 'discovery')], { LOOM_BROWSER_PLAN: path }, true);
   const plan = readEvidence(path, 128 * 1024); checked(plan, validPlan); return plan;
 }

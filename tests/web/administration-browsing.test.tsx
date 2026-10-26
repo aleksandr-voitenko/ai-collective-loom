@@ -72,3 +72,23 @@ for(const departure of ['role','identity','route'] as const)test(`pending accoun
  await act(async()=>{held.finish(Response.json(page('credentials',[{id:randomUUID(),label:'Late protected credential',kind:'agent',state:'revoked'}])));lookup.finish(Response.json(person('Late lookup')));if(departure!=='role')account.finish(Response.json(page('accounts',[person('Late protected account')])));audit.finish(Response.json(page('audit',[{id:randomUUID(),action:'Late protected audit',recorded_at:'2020Z',target_id:randomUUID(),operation_id:randomUUID(),actor_id:null,actor_credential_id:null,authority:'deployment_recovery'}])));});
  assert.equal(!!screen.queryByText(/Late protected/),false);assert.equal(!!screen.queryByText(/Late lookup/),false);assert.equal(!!screen.queryByDisplayValue('Protected account'),false);
 });
+
+for(const departure of ['role','identity','route'] as const)test(`operational pages retain exact failed position and fence late health/outcomes after ${departure}`,async t=>{
+ const f=await fixture(t);await f.initial([]);
+ const open=async(label:string)=>act(async()=>{const d=screen.getByText(label,{exact:true}).closest('details')!;d.open=true;fireEvent(d,new Event('toggle'));});
+ await open('Operational health');
+ const health=f.calls.filter(c=>c.path==='/api/v1/admin/operational-health').at(-1)!;assert.ok(health);
+ await open('Inspect request outcomes');
+ const root=f.calls.filter(c=>c.path.endsWith('/operational-health/outcomes')).at(-1)!;
+ const result=(code:string,cursor:string|null)=>({items:[{position:'30',request_id:randomUUID(),observed_at:'2026-10-27',family:'publication',code,status:409}],next_cursor:cursor,complete:!cursor,observed_at:'2026-10-27',window_start:'2026-10-26',oldest_retained_at:'2026-10-27',coverage:'incomplete_sample',consistency:'live_retained_window',process_dropped:0,process_collection_failed:false,max_records:1024,max_response_bytes:32768});
+ await act(async()=>root.finish(Response.json(result('revision_conflict','30'))));
+ const next=screen.getByRole('button',{name:'Next outcomes page'});next.focus();await act(async()=>fireEvent.click(next));const failed=f.calls.at(-1)!;
+ await act(async()=>failed.finish(Response.json({error:{code:'service_unavailable',message:'Temporary observation failure'}},{status:503})));
+ assert.ok(screen.queryByText('revision conflict'));assert.equal(document.activeElement,next);assert.ok(screen.queryByText(/Previous outcomes page is stale/));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry outcomes page'})));const retry=f.calls.at(-1)!;assert.deepEqual(retry.body,failed.body);
+ if(departure==='role')await act(async()=>health.finish(Response.json({error:{code:'forbidden',message:'Current administrator authority required'}},{status:403})));
+ if(departure==='identity')await act(async()=>invalidateIdentity());
+ if(departure==='route')await act(async()=>f.router.navigate('/loom/help'));
+ await act(async()=>retry.finish(Response.json(result('idempotency_conflict',null))));
+ assert.equal(!!screen.queryByText('revision conflict'),false);assert.equal(!!screen.queryByText('idempotency conflict'),false);
+});

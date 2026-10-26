@@ -12,6 +12,11 @@ function add(policy: ParticipationRecoveryPolicy, routes: readonly Route[]) {
 // Use Fastify's registered method/template, never a request-path prefix. The
 // contract inventory requires an explicit policy for every participation route.
 add('retrieval', [
+  'POST /api/v1/admin/operational-health/authored/failures',
+  'POST /api/v1/admin/operational-health/files/failures',
+  'POST /api/v1/admin/operational-health/activity/failures',
+  'GET /api/v1/admin/operational-health',
+  'POST /api/v1/admin/operational-health/outcomes',
   'GET /api/v1/file-limits',
   'GET /api/v1/admin/file-limits',
   'POST /api/v1/admin/file-limits/status',

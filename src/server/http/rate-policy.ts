@@ -114,6 +114,11 @@ add('publication', [
 ]);
 
 add('recovery_control', [
+  'POST /api/v1/admin/operational-health/authored/failures',
+  'POST /api/v1/admin/operational-health/files/failures',
+  'POST /api/v1/admin/operational-health/activity/failures',
+  'GET /api/v1/admin/operational-health',
+  'POST /api/v1/admin/operational-health/outcomes',
   'GET /api/v1/admin/file-text/health',
   'GET /api/v1/admin/moderation/audit',
   'GET /api/v1/admin/moderation/resources/:id',
