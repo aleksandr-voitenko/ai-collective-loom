@@ -22,6 +22,10 @@ Node and browser V8 ranges must merge BEFORE source remapping. Independently map
 each shard and exact-merging source ranges changes branch population; do not use it.
 Premerging group-local V8 also changes c8's incremental block/function flags. Keep
 individual process measurements, original stage order and lexical process order.
+As in sequential normalization, a direct JavaScript load may lack a map supplied
+by another stage. Absence does not conflict with or erase a map; every supplied
+projection for the same script must still match exactly. The transport regression
+compares both stage orders and rejects a conflicting map separated by a plain load.
 Browser exports retain per-test entry order and merge only once centrally.
 `inputs.mjs` remains the pinned c8 normalization/source identity boundary, and
 `report.mjs` shares denominator/gates/report publication between both command paths.

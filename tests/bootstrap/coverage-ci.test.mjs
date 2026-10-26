@@ -94,6 +94,33 @@ test('function export removes names and preserves only validated numeric range t
   assert.deepEqual(decodeFunctions(encoded,20),[{functionName:'',isBlockCoverage:true,ranges:[{startOffset:0,endOffset:20,count:1}]}]);
   for(const changed of [[],[[true,[[0,21,1]]]],[[true,[[0,20,-1]]]],[[true,[[0,20,1],[2,10,1],[5,15,1]]]],[[true,[]]],[[true,[[0,20,1]],'canary']]])assert.throws(()=>decodeFunctions(changed,20));
 });
+test('plain and mapped JavaScript stages preserve sequential coverage without hiding conflicting maps', async t => {
+  const f=fixture(t),path=join(f.repo,'scripts/example.mjs'),url=new URL('file://'+path).href;
+  const source=readFileSync(path,'utf8'),raws=['plain','mapped'].map(name=>join(f.repo,name));
+  for(const [index,raw] of raws.entries()){
+    mkdirSync(raw);
+    const data={result:[{scriptId:'0',url,functions:[{functionName:'answer',isBlockCoverage:true,
+      ranges:[{startOffset:0,endOffset:24,count:index+1}]}]}]};
+    if(index)data['source-map-cache']={[url]:{lineLengths:source.split('\n').map(line=>line.length),
+      data:{version:3,names:[],sources:[url],sourcesContent:[source],mappings:'AAAA'}}};
+    writeEvidence(join(raw,`coverage-${index+1}-1000-0.json`),data);
+  }
+  const {exportNode}=await import('../../scripts/lib/coverage/portable.mjs');
+  const {nodeCoverage}=await import('../../scripts/lib/coverage/inputs.mjs');
+  const groups=await Promise.all(raws.map((raw,index)=>exportNode(f.repo,f.plan,[raw],join(f.repo,'export-'+index))));
+  assert.equal(groups[0][0].scripts[0].projection,null);
+  assert.ok(groups[1][0].scripts[0].projection);
+  const measured=map=>Object.fromEntries(Object.entries(map).map(([name,file])=>[name,{statementMap:file.statementMap,s:file.s,branchMap:file.branchMap,b:file.b}]));
+  for(const reverse of [false,true]){
+    const ordered=reverse?[...groups].reverse():groups;
+    const directories=importNode(f.repo,f.plan,ordered,join(f.repo,'import-'+reverse));
+    const actual=await nodeCoverage(f.repo,f.plan.inputs.sources,directories,join(f.repo,'actual-'+reverse),false);
+    const expected=await nodeCoverage(f.repo,f.plan.inputs.sources,reverse?[...raws].reverse():raws,join(f.repo,'expected-'+reverse),false);
+    assert.deepEqual(measured(actual),measured(expected));
+  }
+  const changed=structuredClone(groups[1]);changed[0].scripts[0].projection.mappings[0][0][3]=1;
+  assert.throws(()=>importNode(f.repo,f.plan,[groups[1],groups[0],changed],join(f.repo,'conflict')),/Inconsistent/);
+});
 test('required final gate rejects failed, cancelled, skipped, missing and foreign dependencies',()=>{
   const success={checks:'success',native:'success',browser:'success',storage:'success'};requireJobs(success);
   for(const name of Object.keys(success))for(const status of ['failure','cancelled','skipped',''])assert.throws(()=>requireJobs({...success,[name]:status}));

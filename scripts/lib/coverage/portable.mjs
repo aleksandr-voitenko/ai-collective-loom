@@ -181,8 +181,14 @@ export function importNode(repo, plan, stages, directory) {
     groups.forEach((stage, groupIndex) => {
       validateNode(repo, plan, [stage]);
       const metadata = stage.scripts.map(record => {
-        const name = names[record.script], p = record.projection, hash = digest(JSON.stringify(p)), key = name + ':' + record.instance;
-        assert.ok(!signatures.has(key) || signatures.get(key) === hash, 'Inconsistent generated mapping across jobs'); signatures.set(key, hash);
+        const name = names[record.script], p = record.projection, key = name + ':' + record.instance;
+        // Match collectNodeCoverage: a direct JavaScript load supplies no map,
+        // while another stage may supply one. Absence must neither conflict with
+        // nor erase a supplied map; two supplied maps must still agree exactly.
+        if (p) {
+          const hash = digest(JSON.stringify(p));
+          assert.ok(!signatures.has(key) || signatures.get(key) === hash, 'Inconsistent generated mapping across jobs'); signatures.set(key, hash);
+        }
         const path = name === '@vite-config' ? join(repo, 'node_modules/.vite-temp/vite.config.ts.portable-' + record.instance + '.mjs') : join(repo, name), url = pathToFileURL(path).href;
         const length = p ? p.lengths.reduce((n, size) => n + size + 1, 0) : readFileSync(path, 'utf8').length;
         const cache = p ? { lineLengths: p.lengths, data: { version: 3, names: [],
