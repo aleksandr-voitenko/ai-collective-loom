@@ -570,7 +570,8 @@ Never hold requests, route barriers, Web Locks or sockets for diagnostics.
 
 Only `browser-diagnostics/approved/*.json` may be uploaded as browser diagnostics.
 Combined coverage separately publishes authored source and numeric reports from
-`coverage/approved/`; never upload raw counters, maps, logs or browser profiles.
+`coverage/approved/`; CI also exchanges the validated numeric projection described
+in ADR-037. Never upload raw counters, maps, logs or browser profiles.
 `helpers/browser-coverage.ts` samples before navigation/disposal without changing
 test deadlines or holding application requests. `tests/coverage/verify.ts` guards
 real Node/browser branch merging, unmapped cold code and safe disposal. The collector
@@ -608,8 +609,8 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 160 collected tests and <17 MiB/candidate. The test count includes
-the isolated recovery journey so combined coverage captures the complete suite;
+128 KiB/document, 162 collected tests and <17 MiB/candidate. The test count includes
+the isolated recovery and exact-file reference journeys so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
@@ -623,10 +624,14 @@ suite still uses actual HTTPS, virtual WebAuthn and disposable PostgreSQL.
 
 CI uses an immutable upload action, an always-running validator and an explicit
 upload-ready output, with three-day retention and no continue-on-error.
-The integration job's 60-minute containing budget includes complete sequential
-coverage, reporting, smoke and persistence; it does not change individual test
-deadlines, one worker or zero retries. Check hosted total duration when suite
-growth makes that budget insufficient; preserve every suite and gate.
+Hosted CI now uses four native and four whole-spec browser groups (ADR-037),
+with independent smoke/persistence and an always-running final `local-integration`
+gate. Each group keeps fresh spec processes, individual deadlines, one worker and
+zero retries. `bootstrap/coverage-ci.test.mjs` rejects incomplete/foreign evidence,
+changed provenance, malformed numeric projections and unsuccessful dependencies.
+The real `coverage/verify.ts` probes compare sequential and distributed Node/browser
+normalization. See `scripts/lib/coverage/MEMORY.md` for the numeric transport boundary.
+Missing groups never reduce the denominator or authorize a passing report.
 The manual `verify_failure_upload` input runs the probe configuration after the
 normal browser suite; expect a failed step/run and a successful approved upload.
 It defaults off and never applies to push/PR runs. Contract: `LC-20261014-3D4P`.
@@ -771,3 +776,18 @@ committed on its original draft route when another tab deletes it. Synthetic
 review screenshots are opt-in `LOOM_NOTES_REVIEW_SCREENS=1` under `/tmp`, outside
 approved diagnostics. Notes extend only the closed diagnostic route/spec inventory
 and its exact test count; byte, event, deadline, worker and coverage gates remain.
+
+
+Exact-file reference acceptance is in integration/references-files*.test.ts (normal
+references glob): native bytes and missing versions, distinct file/whole/copy scopes,
+main/note assertions and history, complete paged sets derived from known publications
+(including filtered hidden-candidate continuation) and cursor invalidation,
+0025→0026 snapshots of every old column, original legacy retries and new v4 bases,
+deterministic HTTPS publication/suppression/revocation ordering, and restarted
+file-artifacts-client HTTPS selection/journal/status/incoming/download.
+Mounted web/file-text tests use actual ActiveView/AuthorizationBoundary for independent
+reference metadata, failed-page retry/focus, and route/account/denial late-response fences.
+Compiled files.spec journeys cover bounded selection, same-instance attachment links,
+main/note journal reload, explicit v4 conflict correction, missing-manifest refusal
+before v4 refusal (preserve both unsupported fields), lost acknowledgement,
+exact navigation, incoming paging failures and390px width. Existing assertions remain.

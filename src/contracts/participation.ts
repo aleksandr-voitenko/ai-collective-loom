@@ -1,8 +1,8 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { FileSet, AttachmentSet } from './files.js';
+import { FileSet, AttachmentSet, FilePath } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '20';
+export const guideRevision = '21';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -23,7 +23,7 @@ export const UUID = Type.String({
 });
 export const NullableId = Type.Union([UUID, Type.Null()]);
 export const Title = Type.String({ minLength: 1, maxLength: 160 });
-export const ReferenceTarget = Type.Object(
+export const LegacyReferenceTarget = Type.Object(
   {
     kind: Type.Union([
       Type.Literal('discussion'),
@@ -35,6 +35,18 @@ export const ReferenceTarget = Type.Object(
     revision_id: Type.Optional(UUID),
   },
   closed,
+);
+export const ReferenceTarget = Type.Object(
+  {
+    ...LegacyReferenceTarget.properties,
+    file_id: Type.Optional(UUID),
+    path: Type.Optional(FilePath),
+  },
+  {
+    ...closed,
+    description:
+      'File declarations require artifact/contribution kind, exact revision, contextual file_id and matching canonical path. Only reference target lookup may resolve an omitted path.',
+  },
 );
 export const Relationship = Type.Union([
   Type.Null(),
@@ -53,6 +65,10 @@ export const ReferenceDeclaration = Type.Object(
 );
 export type ReferenceTargetValue = Static<typeof ReferenceTarget>;
 export type ReferenceValue = Static<typeof ReferenceDeclaration>;
+// Older formats remain closed to file declarations, including on exact retries.
+export const LegacyReferenceDeclaration = Type.Unsafe<ReferenceValue>(
+  Type.Object({ ...ReferenceDeclaration.properties, target: LegacyReferenceTarget }, closed),
+);
 export const LegacyContent = Type.Object(
   {
     format: Type.Literal('loom-markdown-v1'),
@@ -74,7 +90,7 @@ export const ReferencedContent = Type.Object(
   {
     ...LegacyContent.properties,
     format: Type.Literal('loom-markdown-v2'),
-    references: Type.Array(ReferenceDeclaration, { maxItems: limits.references }),
+    references: Type.Array(LegacyReferenceDeclaration, { maxItems: limits.references }),
   },
   closed,
 );
@@ -87,12 +103,41 @@ export const ChangeContent = Type.Object(
   {
     ...closed,
     description:
-      'V3 publication requests require explicit top-level change_note and change_account (null when absent). V1/v2 requests reject those fields. Combined authored fields retain the 16384 UTF-8 byte ceiling.',
+      'V3/v4 publication requests require explicit top-level change_note and change_account (null when absent). V1/v2 requests reject those fields. Combined authored fields retain the 16384 UTF-8 byte ceiling.',
   },
 );
-export const Content = Type.Union([LegacyContent, ReferencedContent, ChangeContent]);
+export const FileReferencedContent = Type.Object(
+  {
+    ...ChangeContent.properties,
+    format: Type.Literal('loom-markdown-v4'),
+    references: Type.Array(ReferenceDeclaration, { maxItems: limits.references }),
+  },
+  closed,
+);
+export const Content = Type.Union([
+  LegacyContent,
+  ReferencedContent,
+  ChangeContent,
+  FileReferencedContent,
+]);
 export type AuthoredContent = Static<typeof Content>;
-export type NoteContent = Static<typeof ReferencedContent>;
+export const ReferenceNote = Type.Union([
+  Type.Object(
+    {
+      ...ReferencedContent.properties,
+      text: Type.String({ minLength: 1, maxLength: limits.noteBytes }),
+    },
+    closed,
+  ),
+  Type.Object(
+    {
+      ...FileReferencedContent.properties,
+      text: Type.String({ minLength: 1, maxLength: limits.noteBytes }),
+    },
+    closed,
+  ),
+]);
+export type NoteContent = Static<typeof ReferenceNote>;
 export const ExactChangeTarget = Type.Object(
   {
     kind: Type.Union([
@@ -115,22 +160,7 @@ export const ChangeAccount = Type.Union([
 ]);
 export type ChangeAccountValue = Static<typeof ChangeAccount>;
 export const changeFields = {
-  change_note: Type.Optional(
-    Type.Union([
-      Type.Object(
-        {
-          ...ReferencedContent.properties,
-          text: Type.String({ minLength: 1, maxLength: limits.noteBytes }),
-        },
-        {
-          ...closed,
-          description:
-            'Revision-owned note, at most 4096 UTF-8 bytes including rationales; only artifacts and summaries.',
-        },
-      ),
-      Type.Null(),
-    ]),
-  ),
+  change_note: Type.Optional(Type.Union([ReferenceNote, Type.Null()])),
   change_account: Type.Optional(Type.Union([ChangeAccount, Type.Null()])),
 };
 const attempt = { idempotency_key: UUID };

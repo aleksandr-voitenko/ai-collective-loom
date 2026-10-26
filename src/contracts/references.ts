@@ -39,7 +39,7 @@ export const ResolvedTarget = Type.Object(
   {
     state: Type.Literal('available'),
     target: ReferenceTarget,
-    scope: Type.Union([Type.Literal('resource'), Type.Literal('revision')]),
+    scope: Type.Union([Type.Literal('resource'), Type.Literal('revision'), Type.Literal('file')]),
     representation: Resource,
     browser_url: Type.String(),
     context_url: Type.String(),
@@ -86,6 +86,7 @@ export const ReferencePage = Type.Object(
       Type.Literal('source_revision'),
       Type.Literal('resource'),
       Type.Literal('revision'),
+      Type.Literal('file'),
     ]),
     source_id: Type.Optional(UUID),
     source_revision_id: Type.Optional(UUID),

@@ -96,3 +96,10 @@ second cleanup system. Reconsider these choices for new owner kinds, measured ca
 requirements, approved production retention, or general cross-publication reuse.
 No preview/extraction, summary attachments, batch promotion, narrower moderation,
 published deletion, deployment or existing development-data migration is included.
+
+## Exact file reference extension
+
+[ADR-036](036-exact-file-references.md) adds explicit v4 recorded references to
+exact published artifact files and contribution attachments, including revision
+notes. It preserves this contract’s independent contextual custody, authorization
+and legacy replay semantics; file-reference discovery needs no extraction worker.

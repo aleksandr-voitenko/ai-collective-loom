@@ -7,13 +7,13 @@ import {resolve,dirname} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 
 const refusalCodes=new Set(['file_storage_unavailable','file_capacity','file_not_prepared','file_expired','file_mismatch','file_busy',
-  'file_format_required','invalid_input','invalid_request','invalid_search','search_changed','search_work_limit','response_budget_too_small','unauthenticated','unavailable','forbidden','revision_conflict','idempotency_conflict','retryable','service_unavailable']);
+  'file_format_required','file_reference_format_required','reference_format_required','change_format_required','references_changed','reference_work_limit','invalid_input','invalid_request','invalid_search','search_changed','search_work_limit','response_budget_too_small','unauthenticated','unavailable','forbidden','revision_conflict','idempotency_conflict','retryable','service_unavailable']);
 class RequestRefused extends Error {
   constructor(code,outcome){super();this.receipt={error:{code,...(['unknown','rejected'].includes(outcome)?{operation_outcome:outcome}:{})}};}
 }
 
 async function main(){
-  const options=new Map(),allowed=['--origin','--credential-file','--ca','--journal','--action','--kind','--input','--bytes','--artifact','--contribution','--revision','--file-id','--output','--cursor'];
+  const options=new Map(),allowed=['--origin','--credential-file','--ca','--journal','--action','--kind','--input','--bytes','--artifact','--contribution','--revision','--file-id','--output','--cursor','--path','--prefix','--history','--relationship'];
   for(let i=2;i<process.argv.length;i+=2){if(!allowed.includes(process.argv[i])||!process.argv[i+1]||options.has(process.argv[i]))throw new Error();options.set(process.argv[i],process.argv[i+1]);}
   const origin=new URL(options.get('--origin'));
   if(origin.protocol!=='https:'||origin.pathname!=='/'||origin.username||origin.password||origin.search||origin.hash)throw new Error();
@@ -37,11 +37,26 @@ async function main(){
       }catch(error){reject(error);}});
     });req.on('error',reject);req.setTimeout(15000,()=>req.destroy(new Error()));req.end(bytes);
   });}
-  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15','16','17','18','19','20'].includes(community.guide_revision))throw new Error();
+  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15','16','17','18','19','20','21'].includes(community.guide_revision))throw new Error();
   const scope={origin:origin.origin,instance_id:community.instance_id,participant_id:self.participant_id},action=options.get('--action');
   async function retain(path,value){const handle=await open(resolve(path),'wx',0o600);try{await handle.writeFile(value);await handle.sync();}finally{await handle.close();}
     const dir=await open(dirname(resolve(path)),'r');try{await dir.sync();}finally{await dir.close();}}
   const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if(['list-files','reference-target','referenced-by'].includes(action)){
+    const contribution=options.has('--contribution');if(contribution===options.has('--artifact'))throw new Error();
+    const resource=options.get(contribution?'--contribution':'--artifact'),revision=options.get('--revision');
+    if(!uuid.test(resource??'')||!uuid.test(revision??''))throw new Error();
+    let path;
+    if(action==='list-files')path=`/api/v1/${contribution?'contributions':'artifacts'}/${resource}/revisions/${revision}/${contribution?'attachments':'files'}?`+new URLSearchParams({prefix:options.get('--prefix')??'',...(options.has('--cursor')?{cursor:options.get('--cursor')}:{})});
+    else{
+      const file=options.get('--file-id');if(!uuid.test(file??''))throw new Error();
+      const target={kind:contribution?'contribution':'artifact',resource_id:resource,revision_id:revision,file_id:file,...options.has('--path')?{path:options.get('--path')}: {}};
+      if(action==='referenced-by'&&!target.path)throw new Error();
+      path='/api/v1/references/'+(action==='reference-target'?'target':'incoming')+'?'+new URLSearchParams({...target,...(action==='referenced-by'?{history:options.get('--history')??'current',...(options.has('--relationship')?{relationship:options.get('--relationship')}:{}),...(options.has('--cursor')?{cursor:options.get('--cursor')}:{})}:{})});
+    }
+    const result=await call(path);await retain(options.get('--output'),JSON.stringify(result)+'\n');
+    console.log(JSON.stringify({scope:result.scope,items:result.items?.length,complete:result.complete,next_cursor:result.next_cursor}));return;
+  }
   if(action==='files-search'){
     const raw=await readFile(options.get('--input'),'utf8');if(Buffer.byteLength(raw)>4096)throw new Error();
     const input=JSON.parse(raw);if(options.has('--cursor'))input.cursor=options.get('--cursor');

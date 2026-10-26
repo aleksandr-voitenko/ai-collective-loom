@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { FileTextControl } from './FileText.js';
+import { ReferenceViews } from './References.js';
 import {
   FilePage,
   AttachmentPage,
@@ -533,6 +534,15 @@ export function FileBrowser({
                   base={item.download_url.slice(0, -'/download'.length)}
                   path={item.path}
                   browser={`/loom/file/${contribution ? 'contribution' : 'artifact'}/${contribution ?? artifact}/${revision}/${item.file_id}`}
+                />
+                <ReferenceViews
+                  target={{
+                    kind: contribution ? 'contribution' : 'artifact',
+                    resource_id: (contribution ?? artifact)!,
+                    revision_id: revision,
+                    file_id: item.file_id,
+                    path: item.path,
+                  }}
                 />
                 {contribution && (
                   <Link

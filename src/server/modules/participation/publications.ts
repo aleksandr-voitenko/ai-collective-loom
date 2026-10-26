@@ -25,7 +25,12 @@ import {
   type NoteContent,
   type ChangeAccountValue,
 } from '../../../contracts/participation.js';
-import { parseAuthored, validUnicode, validateChangeFields } from '../../../contracts/authored.js';
+import {
+  parseAuthored,
+  validUnicode,
+  validateChangeFields,
+  canonicalReferenceTarget,
+} from '../../../contracts/authored.js';
 import { lockAttempt } from '../../application/attempt.js';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import { identityOf, type ActorContext } from '../publication/actor.js';
@@ -139,13 +144,13 @@ function prepare(kind: string, value: unknown) {
       field.references = field.references
         .map((ref) => ({
           reference_id: ref.reference_id.toLowerCase(),
-          target: {
-            kind: ref.target.kind,
-            resource_id: ref.target.resource_id.toLowerCase(),
-            ...(ref.target.revision_id
-              ? { revision_id: ref.target.revision_id.toLowerCase() }
-              : {}),
-          },
+          target: (() => {
+            try {
+              return canonicalReferenceTarget(ref.target);
+            } catch {
+              throw new PublicationError('invalid_input');
+            }
+          })(),
           relationship: ref.relationship,
           rationale: ref.rationale,
         }))
@@ -193,19 +198,24 @@ function prepare(kind: string, value: unknown) {
       throw new PublicationError('invalid_input');
   }
   const { idempotency_key: _key, ...semantic } = input;
-  const version = input.attachment_set
-    ? 'contribution-attachments-v1'
-    : input.file_set
-      ? 'artifact-files-v1'
-      : content.format === 'loom-markdown-v3'
-        ? kind.startsWith('summary.')
-          ? 'discussion-summary-v2'
-          : 'participation-text-v3'
-        : kind.startsWith('summary.')
-          ? 'discussion-summary-v1'
-          : content.format === 'loom-markdown-v2'
-            ? 'participation-text-v2'
-            : participationSemanticVersion;
+  const version =
+    content.format === 'loom-markdown-v4'
+      ? kind.startsWith('summary.')
+        ? 'discussion-summary-v3'
+        : 'participation-text-v4'
+      : input.attachment_set
+        ? 'contribution-attachments-v1'
+        : input.file_set
+          ? 'artifact-files-v1'
+          : content.format === 'loom-markdown-v3'
+            ? kind.startsWith('summary.')
+              ? 'discussion-summary-v2'
+              : 'participation-text-v3'
+            : kind.startsWith('summary.')
+              ? 'discussion-summary-v1'
+              : content.format === 'loom-markdown-v2'
+                ? 'participation-text-v2'
+                : participationSemanticVersion;
   return { input, content, version, digest: digestRequest(kind, semantic, version) };
 }
 async function outcome(tx: SqlTransaction, participant: string, kind: string, key: string) {
@@ -478,7 +488,12 @@ export class ParticipationPublications {
               [resource.current_revision_id],
             )
           ).rows[0]!;
-          if (old.content_format === 'loom-markdown-v3' && content.format !== 'loom-markdown-v3')
+          if (old.content_format === 'loom-markdown-v4' && content.format !== 'loom-markdown-v4')
+            throw new PublicationError('file_reference_format_required');
+          if (
+            old.content_format === 'loom-markdown-v3' &&
+            !['loom-markdown-v3', 'loom-markdown-v4'].includes(content.format)
+          )
             throw new PublicationError('change_format_required');
           if (old.content_format === 'loom-markdown-v2' && content.format === 'loom-markdown-v1')
             throw new PublicationError('reference_format_required');

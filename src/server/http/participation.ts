@@ -69,6 +69,7 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
       invalid_input: 400,
       reference_format_required: 409,
       change_format_required: 409,
+      file_reference_format_required: 409,
       file_format_required: 409,
       invalid_actor: 401,
       unavailable: 404,

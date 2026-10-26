@@ -244,7 +244,9 @@ export class SearchWorker {
       if (
         !row ||
         !row.typed ||
-        !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(row.format)
+        !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
+          row.format,
+        )
       )
         return { kind: 'failure', failure: 'unsupported_source' };
       if (row.bytes > 16384) return { kind: 'failure', failure: 'source_limit' };

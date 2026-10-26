@@ -149,3 +149,24 @@ for (const mode of ['success', 'failure', 'invalid', 'interrupt']) {
     assert.equal(existsSync(resolve('browser-diagnostics/private-playwright')), false);
   });
 }
+
+test('a CI group runs complete selected files in fresh processes and rejects changed discovery', { timeout: 60_000 }, async t => {
+  const f = fixture(t), journal = join(f.root, 'selected.jsonl');
+  for (const mismatch of [false, true]) {
+    const environment = { ...process.env, LOOM_DIAGNOSTICS_KEEP: 'all', LOOM_BATCH_PROBE_MODE: 'success', LOOM_BATCH_PROBE_OUTPUT: journal,
+      NODE_V8_COVERAGE: join(f.root, 'selected-coverage-' + mismatch) };
+    delete environment.LOOM_COVERAGE_OUTPUT;
+    const args = { config: 'tests/diagnostics/batches/playwright.config.ts', files: ['participation.spec.ts'], ...(mismatch ? { expectedPlan: f.plan } : {}) };
+    const child = spawn(process.execPath, ['--input-type=module', '-e',
+      "import {runBrowserBatches} from './scripts/lib/browser-batches.mjs'; process.exitCode=await runBrowserBatches(" + JSON.stringify(args) + ');'],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = ''; child.stdout.on('data', value => { output += value; }); child.stderr.on('data', value => { output += value; });
+    const code = await new Promise((done, reject) => { child.once('error', reject); child.once('close', done); });
+    assert.equal(code, mismatch ? 1 : 0); assert.equal(output.includes('LOOM_BATCH_SECRET_CANARY_7jQv39'), false);
+    assert.deepEqual(readFileSync(journal, 'utf8').trim().split('\n').map(line => JSON.parse(line).batch), [1], 'Mismatched discovery must not execute another test');
+    if (!mismatch) {
+      const run = JSON.parse(readFileSync(resolve('browser-diagnostics/approved/run.json')));
+      assert.equal(run.planned, 1); assert.equal(run.tests[0].test.file, 'participation.spec.ts');
+    }
+  }
+});

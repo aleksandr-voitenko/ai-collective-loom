@@ -9,6 +9,8 @@ import {
   ReferenceDeclaration,
   ExactChangeTarget,
   ReferencedContent,
+  FileReferencedContent,
+  LegacyReferenceDeclaration,
   UUID,
   closed,
 } from '../contracts/participation.js';
@@ -32,6 +34,7 @@ import { observeRequestFailure, observeSourceDenial } from './authorization-coor
 const DraftNote = Type.Union([
   Type.Null(),
   Type.Object({ ...ReferencedContent.properties, text: Type.String() }, closed),
+  Type.Object({ ...FileReferencedContent.properties, text: Type.String() }, closed),
 ]);
 const DraftAccount = Type.Union([
   Type.Null(),
@@ -201,6 +204,7 @@ export function isDefinitiveRejection(error: unknown, wasUncertain: boolean) {
       'invalid_input',
       'reference_format_required',
       'change_format_required',
+      'file_reference_format_required',
       'file_format_required',
       'file_not_prepared',
       'file_expired',
@@ -249,6 +253,7 @@ export interface Intent {
   created_at: string;
   result?: CommittedView;
   conflict_revision_id?: string;
+  required_format?: 'loom-markdown-v4';
   blocked_by?: string;
   editing_intent_release?: Editing.IntentResultView;
   note_receipt?: Notes.NoteResultView;
@@ -326,13 +331,26 @@ export class IntentStore {
         const authored = field as { format?: string; references?: unknown };
         if (
           (authored.format === 'loom-markdown-v1' && authored.references !== undefined) ||
-          (['loom-markdown-v2', 'loom-markdown-v3'].includes(authored.format ?? '') &&
-            (!Array.isArray(authored.references) ||
-              authored.references.length > 16 ||
-              !authored.references.every((ref) => Value.Check(ReferenceDeclaration, ref)))) ||
-          !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(
+          (['loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
             authored.format ?? '',
-          )
+          ) &&
+            (!Array.isArray(authored.references) ||
+              authored.references.length >
+                (record.state === 'draft' && authored.format === 'loom-markdown-v4' ? 32 : 16) ||
+              !authored.references.every((ref) =>
+                Value.Check(
+                  authored.format === 'loom-markdown-v4'
+                    ? ReferenceDeclaration
+                    : LegacyReferenceDeclaration,
+                  ref,
+                ),
+              ))) ||
+          ![
+            'loom-markdown-v1',
+            'loom-markdown-v2',
+            'loom-markdown-v3',
+            'loom-markdown-v4',
+          ].includes(authored.format ?? '')
         )
           throw new Error(
             'This authored recovery format is unsupported. Export the exact record before continuing.',
@@ -388,15 +406,15 @@ export class IntentStore {
         (record.body.content ?? record.body.overview) as { format?: string } | undefined
       )?.format;
       if (
-        contentFormat === 'loom-markdown-v3' &&
+        ['loom-markdown-v3', 'loom-markdown-v4'].includes(contentFormat ?? '') &&
         (!('change_note' in record.body) || !('change_account' in record.body))
       )
         throw new Error(
-          'V3 recovery requires both explicit change fields. Preserve the original journal.',
+          'V3/v4 recovery requires both explicit change fields. Preserve the original journal.',
         );
       if (
         contentFormat &&
-        contentFormat !== 'loom-markdown-v3' &&
+        !['loom-markdown-v3', 'loom-markdown-v4'].includes(contentFormat) &&
         ('change_note' in record.body || 'change_account' in record.body)
       )
         throw new Error(
@@ -514,6 +532,19 @@ export class IntentStore {
     });
   }
   prepareDispatch(record: Intent, visibleBody: Record<string, unknown>): Promise<Intent> {
+    const content = visibleBody.content as { format?: string; references?: unknown[] } | undefined;
+    if (
+      record.state === 'draft' &&
+      content?.format === 'loom-markdown-v4' &&
+      Array.isArray(content.references) &&
+      content.references.length > 16
+    )
+      return Promise.reject(
+        new Error(
+          'Review the combined file-reference draft and keep at most 16 declarations before publishing.',
+        ),
+      );
+
     // Autosave may have failed. The first dispatch must durably capture the
     // visible form; retries must ignore form state and retain the frozen request.
     return this.save({
@@ -739,7 +770,7 @@ export class IntentStore {
   settle(
     record: Intent,
     outcome: { state: 'committed' | 'rejected' } & Partial<
-      Pick<Intent, 'result' | 'conflict_revision_id'>
+      Pick<Intent, 'result' | 'conflict_revision_id' | 'required_format'>
     >,
   ): Promise<Intent> {
     return this.locked(() => {
@@ -758,6 +789,7 @@ export class IntentStore {
         ...(outcome.conflict_revision_id
           ? { conflict_revision_id: outcome.conflict_revision_id }
           : {}),
+        ...(outcome.required_format ? { required_format: outcome.required_format } : {}),
         sequence: current.sequence + 1,
       });
     });

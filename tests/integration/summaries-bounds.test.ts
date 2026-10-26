@@ -28,7 +28,8 @@ test('pre-summary populated upgrade preserves text, declarations, Saved, placeme
   // Migration 0011 adds explicit empty note projections and main-field provenance; every old column remains compared.
   for(const row of before.search_documents as Record<string,unknown>[])Object.assign(row,{note_text:'',note_document:''});
   for(const row of before.revision_mentions as Record<string,unknown>[])Object.assign(row,{source_field:'main'});
-  for(const row of before.revision_references as Record<string,unknown>[])Object.assign(row,{source_field:'main'});
+  // Migration 0026 adds no inferred file target; every old reference value remains compared.
+  for(const row of before.revision_references as Record<string,unknown>[])Object.assign(row,{source_field:'main',target_file_id:null,target_path:null});
 await f.migrate();await f.migrate();assert.deepEqual(await snapshot(),before);
   for(const table of ['summaries','summary_preparations','summary_coverage_sets','summary_coverage_members'])assert.equal((await f.observer.query(`SELECT count(*)::int n FROM loom.${table}`)).rows[0].n,0);
   assert.equal((await f.admin.call('/api/v1/artifacts',body)).body.revision_id,source.body.revision_id);

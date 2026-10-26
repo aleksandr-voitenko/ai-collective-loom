@@ -86,7 +86,9 @@ export function sharedCategories(
   if (row.kind === 'organization.changed') return ['structural'];
   if (
     row.kind !== 'revision.published' ||
-    !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(row.content_format ?? '')
+    !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
+      row.content_format ?? '',
+    )
   )
     return;
   const category =

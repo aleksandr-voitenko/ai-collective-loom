@@ -14,6 +14,8 @@ export interface ReferenceRow {
   target_kind: ReferenceTargetValue['kind'];
   target_id: string;
   target_revision_id: string | null;
+  target_file_id?: string | null;
+  target_path?: string | null;
   relationship: ReferenceValue['relationship'];
   rationale: string | null;
   origin_revision_id: string;
@@ -26,6 +28,7 @@ export function declaration(row: ReferenceRow): ReferenceValue {
       kind: row.target_kind,
       resource_id: row.target_id,
       ...(row.target_revision_id ? { revision_id: row.target_revision_id } : {}),
+      ...(row.target_file_id ? { file_id: row.target_file_id, path: row.target_path! } : {}),
     },
     relationship: row.relationship,
     rationale: row.rationale,
@@ -147,8 +150,26 @@ export async function referenceTarget(tx: SqlTransaction, target: ReferenceTarge
       [selected],
     )
   ).rows[0]?.content_format;
-  if (!['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3'].includes(format ?? ''))
+  if (
+    !['loom-markdown-v1', 'loom-markdown-v2', 'loom-markdown-v3', 'loom-markdown-v4'].includes(
+      format ?? '',
+    )
+  )
     throw new PublicationError('unavailable');
+  if (target.file_id) {
+    // Published membership is immutable. Its owning guards already precede this
+    // exact lookup; citing it neither takes custody nor touches native storage.
+    const member = (
+      await tx.query<{ path: string }>(
+        `SELECT f.path FROM loom.file_contexts f JOIN loom.file_uploads u ON u.id=f.upload_id
+       WHERE f.id=$1 AND f.revision_id=$2
+         AND f.${target.kind === 'artifact' ? 'artifact_id' : 'contribution_id'}=$3
+         AND u.state='prepared' AND u.final_version IS NOT NULL`,
+        [target.file_id, selected, source.id],
+      )
+    ).rows[0];
+    if (!member || member.path !== target.path) throw new PublicationError('unavailable');
+  }
   return { source, revision: selected };
 }
 

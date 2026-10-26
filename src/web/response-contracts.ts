@@ -328,6 +328,8 @@ add(
   sourceErrors,
   classified(C.Page, ['items[].state']),
 );
+// File targets retain this same source/metadata boundary: authored declaration
+// text does not authorize resolved target metadata after withdrawal.
 add(
   ['GET /api/v1/references/incoming', 'GET /api/v1/resources/{id}/revisions/{revision}/references'],
   'read',

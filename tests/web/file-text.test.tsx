@@ -106,3 +106,30 @@ test('an expired exact text cursor offers a fresh first page without substitutin
   const m=mount(t,route+'?cursor=expired');await m.answer(base+'/text?cursor=expired',{error:{code:'search_changed',message:'This text page changed or expired'}},409);
   await act(async()=>fireEvent.click(screen.getByRole('link',{name:'First text page'})));await m.answer(base+'/text',value());assert.ok(screen.getByLabelText('Literal file text'));assert.equal(m.router.state.location.pathname,route);
 });
+
+function resolvedFile(){return {state:'available',target:{kind:'artifact',resource_id:id,revision_id:revision,file_id:file,path:'nested/chapter.txt'},scope:'file',browser_url:route,context_url:'/loom/resource/'+id,representation:{resource_id:id,revision_id:revision,kind:'artifact',title:'Exact file owner',revision_number:'1',author:person,publisher:person,created_at:'2026-10-23T00:00:00Z',area_id:randomUUID(),area_title:'General',discussion_id:null,parent_id:null,can_edit:false,publication_open:true,full_content_url:`/api/v1/resources/${id}/revisions/${revision}`}};}
+const targetQuery='/api/v1/references/target?'+new URLSearchParams({kind:'artifact',resource_id:id,revision_id:revision,file_id:file});
+const incomingQuery='/api/v1/references/incoming?'+new URLSearchParams({kind:'artifact',resource_id:id,history:'current',revision_id:revision,file_id:file,path:'nested/chapter.txt',limit:'12'});
+function fileReferences(next:string|null=null){return {items:[],direction:'incoming',scope:'file',target:resolvedFile().target,history:'current',relationship:null,order:'source_revision_uuid_then_field_then_reference_uuid',omitted_detail:'bodies; unrelated_target_scopes',next_cursor:next,complete:!next,work_budget_reached:!!next,limit:12,max_response_bytes:131072,expires_at:'2030-01-01T00:00:00Z'};}
+
+test('production exact-file host resolves references independently of preview health and retains failed page position/focus',async t=>{
+  const m=mount(t);await m.answer(targetQuery,resolvedFile());await m.answer(base+'/text',{error:{code:'service_unavailable',message:'Preview unavailable'}},503);
+  assert.equal(screen.getByRole('link',{name:'Open exact publication'}).getAttribute('href'),`/loom/resource/${id}/${revision}`);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Referenced by · file'})));await m.answer(incomingQuery,fileReferences('exact-next'));
+  assert.ok(screen.getByText(/Containing revision, sibling files/));
+  const next=screen.getByRole('button',{name:'Next references'});next.focus();await act(async()=>fireEvent.click(next));
+  await m.answer(incomingQuery+'&cursor=exact-next',{error:{code:'service_unavailable',message:'Temporary page failure'}},503);assert.equal(document.activeElement,next);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry reference page'})));await m.answer(incomingQuery+'&cursor=exact-next',fileReferences());
+  assert.equal(document.activeElement,screen.getByRole('heading',{name:'Recorded reference results'}));assert.ok(screen.getByText('No recorded references in this scope.'));
+  assert.equal(m.calls.filter(c=>/download|me\/|file-uploads/.test(c.path)).length,0);
+});
+for(const departure of ['route','identity','denial'] as const)test('production exact-file metadata and incoming successes cannot restore withdrawn '+departure+' authority',async t=>{
+  const m=mount(t);await m.answer(targetQuery,resolvedFile());await m.answer(base+'/text',value());
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Referenced by · file'})));
+  const late=m.calls.filter(c=>c.path===incomingQuery);
+  if(departure==='route')await act(async()=>m.router.navigate('/other'));
+  else if(departure==='identity')await act(async()=>invalidateIdentity());
+  else{await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check file status'})));await m.answer(base+'/text/status',{error:{code:'unavailable',message:'Source unavailable'}},404);}
+  await act(async()=>late.forEach(c=>c.finish(Response.json(fileReferences()))));
+  assert.equal(screen.queryByText('No recorded references in this scope.'),null);assert.equal(screen.queryByRole('button',{name:'Referenced by · file'}),null);
+});

@@ -2,6 +2,7 @@ name: Bootstrap and application checks
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -13,10 +14,13 @@ on:
 permissions:
   contents: read
 
+env:
+  COVERAGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+
 jobs:
   checks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -27,17 +31,27 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser-diagnostics
+      - run: npm run coverage:ci -- prepare
       - name: Check bootstrap JavaScript syntax
         run: find scripts tests/bootstrap tests/integration -name '*.mjs' -print0 | xargs -0 -n 1 node --check
       - run: bash -n infra/postgres/10-roles.sh && bash -n infra/postgres/start.sh
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-checks
+          path: coverage/ci-export/*.json
+          if-no-files-found: error
+          retention-days: 3
 
-  local-integration:
+  native:
     needs: checks
     runs-on: ubuntu-24.04
-    # Budget the complete sequential coverage run, reporting, smoke and persistence.
-    # Individual test deadlines, worker count and retries remain in their runners.
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -47,30 +61,53 @@ jobs:
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-checks
+          path: coverage/ci-input
+      - run: npm run coverage:ci -- collect native-${{ matrix.group }}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-native-${{ matrix.group }}
+          path: coverage/ci-export/*.json
+          if-no-files-found: error
+          retention-days: 3
+
+  browser:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-checks
+          path: coverage/ci-input
       - name: Prepare browser diagnostic status
         run: node scripts/prepare-browser-diagnostics.mjs
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run dev:init
-      - run: npm run dev:doctor
-      - run: npm run dev:up
-      - run: npm run app:build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser-diagnostics
-      - name: Combined coverage and regression suites
-        id: coverage
-        env:
-          COVERAGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
-        run: npm run coverage
-      - name: Preserve line and branch coverage reports
-        if: always() && steps.coverage.outputs.ready == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+      - run: npm run coverage:ci -- collect browser-${{ matrix.group }}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
-          path: coverage/approved/
+          name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-browser-${{ matrix.group }}
+          path: coverage/ci-export/*.json
           if-no-files-found: error
           retention-days: 3
       - name: Exercise controlled browser failure before upload
-        if: github.event_name == 'workflow_dispatch' && inputs.verify_failure_upload
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_failure_upload && matrix.group == 0
         run: npm run test:e2e -- --config tests/diagnostics/playwright.config.ts
       - name: Validate browser diagnostic upload candidate
         id: browser_diagnostics
@@ -80,10 +117,28 @@ jobs:
         if: always() && steps.browser_diagnostics.outputs.ready == 'true'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: browser-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          name: browser-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-browser-${{ matrix.group }}
           path: browser-diagnostics/approved/*.json
           if-no-files-found: error
           retention-days: 3
+
+  storage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run dev:init
+      - run: npm run dev:doctor
+      - run: npm run dev:up
+      - run: npm run app:build
       - run: npm run test:integration
       - run: npm run test:persistence
       - name: Show local image IDs
@@ -92,3 +147,40 @@ jobs:
       - name: Stop the ephemeral runner's local services
         if: always()
         run: npm run dev:down
+
+  # Keep the existing required check name. A failed/cancelled/skipped dependency
+  # must run this gate and fail, never leave a successful partial measurement.
+  local-integration:
+    if: always()
+    needs: [checks, native, browser, storage]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-*
+          merge-multiple: true
+          path: coverage/ci-input
+      - name: Complete inventory and combined coverage gates
+        id: coverage
+        if: always()
+        env:
+          LOOM_CI_RESULTS: '{"checks":"${{ needs.checks.result }}","native":"${{ needs.native.result }}","browser":"${{ needs.browser.result }}","storage":"${{ needs.storage.result }}"}'
+        run: npm run coverage:ci -- report
+      - name: Preserve line and branch coverage reports
+        if: always() && steps.coverage.outputs.ready == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}-local-integration
+          path: coverage/approved/
+          if-no-files-found: error
+          retention-days: 3

@@ -13,7 +13,7 @@ export async function combinedReport(repo, runRoot, record, output) {
   verifyManifest(repo, record.inputs);
   assert.deepEqual(record.stages.map(s => s.name), record.expectedStages, 'Every suite is required');
   assert.ok(record.stages.every(s => s.code === 0), 'Failed suite cannot produce passing coverage');
-  const sources = record.inputs.sources, eligible = new Set(sources);
+  const sources = record.inputs.sources;
   const node = await nodeCoverage(repo, sources, record.stages.filter(s => s.name !== 'chromium').map(s => s.raw), join(runRoot, 'normalized-node'), true);
   const browserNode = await nodeCoverage(repo, sources, [record.stages.at(-1).raw], join(runRoot, 'normalized-browser-node'), false);
   const assetsRoot = join(repo, 'dist/web/assets');
@@ -23,7 +23,14 @@ export async function combinedReport(repo, runRoot, record, output) {
   assert.deepEqual(Object.fromEntries([...assets].map(([name, value]) => [name, value.sha256])), record.assets, 'Browser build changed during collection');
   const browserRun = JSON.parse(readFileSync(join(repo, 'browser-diagnostics/approved/run.json'), 'utf8'));
   const captures = readCaptures(join(runRoot, 'browser'), browserRun, assets);
-  const pages = captures.flatMap(c => c.pages), entries = pages.flatMap(p => p.entries), browserMaps = [];
+  const pages = captures.flatMap(c => c.pages);
+  const { browser, mappedSources } = await mappedBrowserCoverage(repo, record, pages.flatMap(p => p.entries), assets);
+  return reportCoverage(repo, record, output, [node, browserNode, browser], {
+    tests: captures.length, pages: pages.length, snapshots: pages.reduce((n,p)=>n+p.captures,0), mappedSources: mappedSources.size });
+}
+
+export async function mappedBrowserCoverage(repo, record, entries, assets) {
+  const assetsRoot = join(repo, 'dist/web/assets'), eligible = new Set(record.inputs.sources), browserMaps = [];
   const mappedSources = new Set();
   for (const asset of assets.keys()) {
     const selected = entries.filter(entry => entry.asset === asset); assert.ok(selected.length, 'An application bundle was not observed');
@@ -37,8 +44,15 @@ export async function combinedReport(repo, runRoot, record, output) {
     browserMaps.push(Object.fromEntries(Object.entries(files).filter(([path]) => eligible.has(relative(repo, path)))));
   }
   const browser = mergeExact(...browserMaps);
-  for (const input of [node, browserNode, browser]) canonicalizeLocations(input, path => readFileSync(path, 'utf8'));
-  const map = createCoverageMap(mergeExact(node, browserNode, browser));
+  canonicalizeLocations(browser, path => readFileSync(path, 'utf8'));
+  return { browser, mappedSources };
+}
+
+export function reportCoverage(repo, record, output, measurements, browserStats) {
+  verifyManifest(repo, record.inputs);
+  const sources = record.inputs.sources;
+  for (const input of measurements) canonicalizeLocations(input, path => readFileSync(path, 'utf8'));
+  const map = createCoverageMap(mergeExact(...measurements));
   assert.deepEqual(map.files().sort(), sources.map(name => join(repo, name)).sort());
   const files = {}, groups = {};
   for (const path of map.files()) {
@@ -65,7 +79,7 @@ export async function combinedReport(repo, runRoot, record, output) {
   const changed = changedLineCoverage(repo, record.base, files), gates = evaluateGates(groups.application, changed, baseline);
   const summary = { schema: 'loom-combined-coverage-1', method: baseline.method, status: gates.every(g => g.passed) ? 'passed' : 'failed',
     head: record.inputs.head, base: record.base, groups, changed, gates, baseline,
-    browser: { tests: captures.length, pages: pages.length, snapshots: pages.reduce((n,p)=>n+p.captures,0), mappedSources: mappedSources.size },
+    browser: browserStats,
     stages: record.stages.map(({ name, code }) => ({ name, code })),
     limits: ['Branches are V8 source ranges; distinct compiler ranges remain separate. They do not enumerate all logical conditions or races.',
       'Only mapped browser source lines contribute. Tree-shaken code receives no inferred browser hits.',

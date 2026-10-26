@@ -13,7 +13,7 @@ Current implementation includes an opt-in **synthetic participation** slice on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`20`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`21`.
 Advisory Editing intent (ADR-032/migration0022) lives in sibling reservations/:
 exact-base notices, fixed PostgreSQL expiry, optimistic renew/release and private
 owner recovery. Publication remains independent. Browser and direct HTTPS share
@@ -129,15 +129,17 @@ Guarded revision-only failures preserve
 independently authorized history; unclassified source/history denials revoke.
 No source/delivery clock or worker effects. See
 `src/server/modules/attention/MEMORY.md`.
-Recorded references (ADR-021) use explicit `loom-markdown-v2` declarations from
+Recorded references (ADR-021/036) use explicit v2–v4 declarations from
 openings/comments/text artifacts/summaries; old v1 bytes/digests remain unchanged. Immutable
 memberships/withdrawals commit with the source, keeping exact targets and separate
 assertion/change/withdrawal attribution. Direct bounded backlinks use current
-eligibility, explicit resource/exact and current/history scopes, sorted guards and
-restartable snapshot pages. Search supports all three formats' source title/body and current revision notes;
+eligibility, explicit resource/revision/file and current/history scopes, sorted guards and
+restartable snapshot pages. Search supports all four formats' source title/body and current revision notes;
 rationale is displayed but not searched. See ADR-021
 and the participation memory. Exact artifact revisions also cover file-bearing
-artifacts; file-path assertions and private-note integration remain open.
+artifacts; v4 adds exact contextual file/path targets for artifact files and
+contribution attachments, preserving old format/digest/replay semantics. Private-note
+backlinks remain excluded. See ADR-036 for correction and membership rules.
 Discussion summaries (ADR-010) add optional canonical identity, explicit editors,
 immutable exact source declarations, bounded preparation/comparison/maintenance,
 and current authority across API/browser recovery. Coverage is an author claim,
@@ -324,7 +326,9 @@ output/attachments are not approved artifacts. See `tests/MEMORY.md` for collect
 `npm run coverage` combines Node/JSDOM, all PostgreSQL suites and Chromium client
 execution. Application gates enforce 90% changed lines, 85% branches and exact
 no-decline line/branch baseline ratios. Tooling is reported separately. See
-root README Coverage and `scripts/lib/coverage/` for source-map invariants and approved reports.
+root README Coverage and `scripts/lib/coverage/MEMORY.md` for source-map invariants,
+parallel CI evidence and approved reports. ADR-037 splits hosted collection while
+retaining sequential local coverage and the complete final `local-integration` gate.
 `test:integration` includes failed-migration rollback and signed GET probes;
 expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.

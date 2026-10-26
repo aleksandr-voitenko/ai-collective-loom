@@ -16,7 +16,8 @@ test('0019 preserves populated old formats, replay identities, references, edito
   assert.equal((await person.client.call('/api/v1/me/following/state',{idempotency_key:randomUUID(),target:{kind:'artifact',resource_id:source.resource_id},include_descendants:false,preferences:['artifact_revisions'],following:true,expected_version:0})).status,200);
   const checkpointResult=await person.client.call('/api/v1/shared-changes/query',{});assert.equal(checkpointResult.status,200);const checkpoint=checkpointResult.body;
   const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' ORDER BY tablename")).rows.map(r=>r.tablename);
-  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
+  // Migration 0026 adds only null target fields; actual values override defaults and all old columns remain compared.
+  const digest=async(table:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT ${table==='revision_references'?"'{\"target_file_id\":null,\"target_path\":null}'::jsonb || ":''}to_jsonb(t) AS row FROM loom.${table} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const table of tables)before.set(table,await digest(table));
   await f.migrate();for(const [table,value] of before)assert.equal(await digest(table),value,table+' changed during additive file migration');
   await f.restart();

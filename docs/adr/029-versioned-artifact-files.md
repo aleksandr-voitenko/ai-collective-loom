@@ -121,3 +121,10 @@ pages, passive handling and private-state independence. Exercise real HTTPS with
 replacement credentials, production Chromium and mounted StrictMode. Register new
 native tests in the normal coverage/CI path without changing gates or baselines.
 Record actual execution separately; this ADR is a contract, not passing evidence.
+
+## Exact file reference extension
+
+[ADR-036](036-exact-file-references.md) adds explicit v4 recorded references to
+exact published artifact files and contribution attachments, including revision
+notes. It preserves this contract’s independent contextual custody, authorization
+and legacy replay semantics; file-reference discovery needs no extraction worker.

@@ -20,8 +20,8 @@ export async function insertReferences(
   for (const ref of references)
     await tx.query(
       `INSERT INTO loom.revision_references
-    (source_id,revision_id,reference_id,target_kind,target_id,target_revision_id,relationship,rationale,origin_revision_id,assertion_revision_id${field === 'change_note' ? ',source_field' : ''})
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10${field === 'change_note' ? ",'change_note'" : ''})`,
+    (source_id,revision_id,reference_id,target_kind,target_id,target_revision_id,relationship,rationale,origin_revision_id,assertion_revision_id${field === 'change_note' ? ',source_field' : ''}${ref.target.file_id ? ',target_file_id,target_path' : ''})
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10${field === 'change_note' ? ",'change_note'" : ''}${ref.target.file_id ? ',$11,$12' : ''})`,
       [
         source,
         revision,
@@ -33,6 +33,7 @@ export async function insertReferences(
         ref.rationale,
         ref.origin_revision_id ?? revision,
         ref.assertion_revision_id ?? revision,
+        ...(ref.target.file_id ? [ref.target.file_id, ref.target.path!] : []),
       ],
     );
   const fields = base ? await hasChangeSchema(tx) : false;

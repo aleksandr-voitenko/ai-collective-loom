@@ -104,3 +104,35 @@ test('known target selection never fetches arbitrary links and keeps resource an
   assert.throws(()=>targetFromSelection('https://other.example/loom/resource/'+id,'artifact','resource',''),/this instance/);
   assert.throws(()=>targetFromSelection('/loom/discussion/'+id,'discussion','revision',revision),/supported resource/);
 });
+
+for (const kind of ['artifact','contribution'] as const) test(kind+' file picker retains exact failed manifest position, navigates folders and rechecks membership before confirmation',async t=>{
+  const {calls}=mount(t,true),target=resolved(),fileId=randomUUID();
+  target.target.kind=kind;target.representation.kind=kind;
+  const file={kind:'file',file_id:fileId,path:'folder/report.bin',size:0,sha256:'0'.repeat(64),media_type:'application/octet-stream',type_evidence:'declared',download_url:'/exact/download'};
+  const manifest=(prefix:string,items:unknown[],cursor:string|null=null)=>({...kind==='artifact'?{artifact_id:target.target.resource_id}:{contribution_id:target.target.resource_id,discussion_id:randomUUID(),contributor_id:randomUUID(),revision_publisher_id:randomUUID()},revision_id:target.target.revision_id,prefix,items,next_cursor:cursor,complete:!cursor,availability:'declared_not_probed',max_response_bytes:131072});
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Add reference'})));
+  await act(async()=>{fireEvent.change(screen.getByLabelText('Target ID or Loom link'),{target:{value:target.browser_url}});fireEvent.change(screen.getByLabelText('Citation scope'),{target:{value:'revision'}});});
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check target'})));await act(async()=>calls.at(-1)!.finish(Response.json(target)));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Choose a file from this revision'})));assert.ok(calls.at(-1)!.path.endsWith((kind==='artifact'?'/files':'/attachments')+'?prefix='));
+  await act(async()=>calls.at(-1)!.finish(Response.json(manifest('',[{kind:'folder',path:'folder'}]))));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Open folder folder'})));await act(async()=>calls.at(-1)!.finish(Response.json(manifest('folder',[file],'position-2'))));
+  const next=screen.getByRole('button',{name:'Next files'});next.focus();await act(async()=>fireEvent.click(next));const failed=calls.at(-1)!.path;
+  await act(async()=>calls.at(-1)!.finish(Response.json({error:{code:'service_unavailable',message:'Temporary manifest failure'}},{status:503})));assert.equal(document.activeElement,next);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry file selection page'})));assert.equal(calls.at(-1)!.path,failed);
+  await act(async()=>calls.at(-1)!.finish(Response.json(manifest('folder',[file]))));assert.equal(document.activeElement,screen.getByRole('heading',{name:'Published files in this exact revision'}));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Parent folder'})));await act(async()=>calls.at(-1)!.finish(Response.json(manifest('',[file]))));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Select file folder/report.bin'})));assert.ok(calls.at(-1)!.path.includes('file_id='+fileId));
+  await act(async()=>calls.at(-1)!.finish(Response.json({error:{code:'service_unavailable',message:'Membership check failed'}},{status:503})));assert.ok(screen.getByText('Membership check failed'));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Select file folder/report.bin'})));
+  const selected={...target,target:{...target.target,file_id:fileId,path:file.path},scope:'file',browser_url:`/loom/file/artifact/${target.target.resource_id}/${target.target.revision_id}/${fileId}`};
+  await act(async()=>calls.at(-1)!.finish(Response.json(selected)));assert.equal(document.activeElement,screen.getByRole('button',{name:'Use this exact file'}));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Use this exact file'})));assert.deepEqual(JSON.parse(screen.getByRole('status').textContent!)[0].target,selected.target);
+  assert.equal(calls.filter(c=>c.path.includes('download')||c.path.includes('/text')).length,0);
+});
+
+test('file link parsing binds context and rejects external or incomplete identities',()=>{
+  const resource=randomUUID(),revision=randomUUID(),file=randomUUID();
+  const expected={kind:'contribution',resource_id:resource,revision_id:revision,file_id:file};
+  for(const path of [`/loom/file/contribution/${resource}/${revision}/${file}`,`/api/v1/contributions/${resource}/revisions/${revision}/attachments/${file}/download`,`/api/v1/contributions/${resource}/revisions/${revision}/attachments/${file}/text/status`])assert.deepEqual(targetFromSelection(path,'artifact','resource',''),expected);
+  assert.throws(()=>targetFromSelection(`https://other.example/loom/file/contribution/${resource}/${revision}/${file}`,'artifact','resource',''),/this instance/);
+});

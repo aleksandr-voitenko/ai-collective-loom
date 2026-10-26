@@ -109,8 +109,11 @@ export class ChangeNotes {
       const view = await this.reads.resource(tx, actor, source, revision);
       if (!['artifact', 'summary'].includes(view.kind)) throw new PublicationError('unavailable');
       const note = (
-        await tx.query<{ content_text: string }>(
-          'SELECT content_text FROM loom.revision_change_notes WHERE source_id=$1 AND revision_id=$2',
+        await tx.query<{
+          content_text: string;
+          content_format: 'loom-markdown-v2' | 'loom-markdown-v4';
+        }>(
+          'SELECT content_text,content_format FROM loom.revision_change_notes WHERE source_id=$1 AND revision_id=$2',
           [source, revision],
         )
       ).rows[0];
@@ -135,7 +138,7 @@ export class ChangeNotes {
         described_scope: 'owning_revision_only; no_interval_claim',
         content: note
           ? {
-              format: 'loom-markdown-v2',
+              format: note.content_format,
               text: note.content_text,
               mentions: mentions.map((m) => ({ token: m.token, participant_id: m.participant_id })),
               references: (await revisionReferences(tx, revision, 'change_note')).map(declaration),
