@@ -1,5 +1,7 @@
 export type PublicationErrorCode =
   | 'temporarily_throttled'
+  | 'file_policy_conflict'
+  | 'file_policy_capacity'
   | 'rate_policy_conflict'
   | 'rate_policy_capacity'
   | 'invalid_input'
@@ -17,6 +19,10 @@ export type PublicationErrorCode =
 
 const messages: Record<PublicationErrorCode, string> = {
   temporarily_throttled: 'Temporary participation limit. Retain the exact request and retry later.',
+  file_policy_conflict:
+    'The file policy changed. Inspect its current version before explicitly correcting the saved decision.',
+  file_policy_capacity:
+    'The retained file policy decision capacity is exhausted. Inspection and exact recovery remain available.',
   rate_policy_conflict:
     'The participation policy changed. Inspect its current version before explicitly preparing a new decision.',
   rate_policy_capacity:

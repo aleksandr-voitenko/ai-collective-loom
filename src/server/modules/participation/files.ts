@@ -1,3 +1,4 @@
+import { admissionPolicy, fileUsage } from './file-accounting.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import {
@@ -82,30 +83,18 @@ export class ArtifactFiles {
           return uploadStatus(row);
         }
         await authorizeUpload(tx, actor, input.target);
-        const counts = (
-          await tx.query<{
-            total: string;
-            owned: string;
-            active: string;
-            bytes: string;
-            owner_bytes: string;
-          }>(
-            `SELECT count(*)::text AS total,
-        count(*) FILTER(WHERE participant_id=$1)::text AS owned,
-        count(*) FILTER(WHERE participant_id=$1 AND state IN ('waiting','uploading','staged','finalizing','quarantined') AND reserved)::text AS active,
-        coalesce(sum(size*2) FILTER(WHERE reserved),0)::text AS bytes,
-        coalesce(sum(size*2) FILTER(WHERE reserved AND participant_id=$1),0)::text AS owner_bytes FROM loom.file_uploads`,
-            [actor.participantId],
-          )
-        ).rows[0]!;
-        if (
-          Number(counts.total) >= fileLimits.sessions ||
-          Number(counts.owned) >= fileLimits.ownerSessions ||
-          Number(counts.active) >= fileLimits.active ||
-          Number(counts.bytes) + input.size * 2 > fileLimits.communityBytes ||
-          Number(counts.owner_bytes) + input.size * 2 > fileLimits.ownerBytes
-        )
+        const policy = await admissionPolicy(tx);
+        const counts = await fileUsage(tx, actor.participantId);
+        if (counts.total >= fileLimits.sessions || counts.owned >= fileLimits.ownerSessions)
           throw new FileError('file_capacity');
+        if (input.size > policy.max_file_bytes) throw new FileError('file_size_limit');
+        if (counts.unfinished + 1 > policy.max_unfinished_uploads)
+          throw new FileError('file_unfinished_capacity');
+        if (
+          counts.bytes + input.size * 2 > policy.community_reserved_bytes ||
+          counts.ownerBytes + input.size * 2 > policy.participant_reserved_bytes
+        )
+          throw new FileError('file_reserved_capacity');
         const id = randomUUID();
         await tx.query(
           `INSERT INTO loom.file_uploads(id,participant_id,idempotency_key,request_digest,target_kind,target_id,path,size,sha256,media_type)

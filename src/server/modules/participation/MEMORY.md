@@ -40,8 +40,10 @@ silently erase a file-aware base. Historical revisions remain immutable.
 ADR-029 and contracts/files.ts define conservative limits: 4 MiB/file,16 entries,
 32 MiB/package,16 KiB manifest,512 UTF-8 bytes/path and8 segments. Paths use NFC
 and ASCII-case collision checks, explicitly not universal Unicode case folding.
-Four unfinished uploads/owner,128 identities/owner,4096/global; staging+final
-reservations64 MiB/owner,256 MiB/global include abandoned attempts. Handles expire
+ADR-039/migration0028 makes new file size, unfinished count and reserved bytes
+prospectively adjustable, with unchanged defaults/maxima4 MiB,4,64 MiB/owner,
+256 MiB/community. Fixed128 identities/owner,4096/global remain. Staging+final
+reservations include abandoned attempts. Handles expire
 at24h, byte admission1h; published versions have no TTL. Native work15s, lease120s.
 Cleanup claims at most8 expired unassociated uploads under the same guard, then
 deletes exact versions outside SQL. Quarantine remains reserved and retries after
@@ -515,3 +517,20 @@ Publication resolves committed replay before new-publication reservation, reserv
 before domain guards, and charges immediately before `commitRevision`. A durable
 file refusal does not charge. Rate locks must never appear after the shared clock.
 HTTP request accounting is separately committed, including for domain refusals.
+
+## Prospective file admission
+
+`file-accounting.ts` queries the existing upload ledger under custody15; no new
+ledger or native scan. `file-policy.ts` uses attempt→actor→custody15 for versioned
+admin commands; admission resolves exact identity/digest before dynamic checks.
+Policy edits never reset usage or expiry. Original uploader owns shared physical
+reservations; reuse/promotion still allocate only independent logical contexts.
+The exact unfinished predicate remains reserved waiting/uploading/staged/finalizing/
+quarantined; prepared and cleaning are excluded. Expiry alone releases nothing.
+Guide23/ADR-039 describe four independent positive controls, unchanged hard wire
+ceilings, 10000 retained decisions, caller-only status and bounded audit.
+Own snapshot GET file-limits has policy/version/time/own aggregates only; admin adds
+community aggregate. All use bounded recovery/control routes without source reads.
+HTTP409 quota codes have no refill promise; fixed file_capacity and temporary rates
+retain their distinct contracts. A missing/invalid policy row fails closed; historical
+pre0028 fixtures alone use original defaults. Cold inventories compare new state exactly.

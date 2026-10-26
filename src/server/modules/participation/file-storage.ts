@@ -14,6 +14,9 @@ export class FileError extends Error {
   constructor(
     readonly code:
       | 'file_storage_unavailable'
+      | 'file_size_limit'
+      | 'file_reserved_capacity'
+      | 'file_unfinished_capacity'
       | 'file_capacity'
       | 'file_not_prepared'
       | 'file_expired'
@@ -25,6 +28,12 @@ export class FileError extends Error {
       {
         file_storage_unavailable:
           'The exact stored file is unavailable. Retain the operation and retry explicitly.',
+        file_size_limit:
+          'This new file exceeds the current file-size policy. Keep the draft and inspect file limits.',
+        file_reserved_capacity:
+          'Reserved file-byte capacity is exhausted. Keep the exact attempt and inspect file limits. Waiting alone does not free storage.',
+        file_unfinished_capacity:
+          'The unfinished-upload allowance is exhausted. Keep the exact attempt and inspect your uploads and file limits.',
         file_capacity:
           'The synthetic file capacity was reached. Recovery and inspection remain available.',
         file_not_prepared: 'Every declared file must be prepared before publication.',

@@ -128,3 +128,11 @@ Record actual execution separately; this ADR is a contract, not passing evidence
 exact published artifact files and contribution attachments, including revision
 notes. It preserves this contract’s independent contextual custody, authorization
 and legacy replay semantics; file-reference discovery needs no extraction worker.
+
+## Configurable file admission
+
+[ADR-039](039-configurable-file-admission.md) adds prospective administrator file
+admission limits using existing custody and original-owner reservations. Fixed
+safeguards, exact contexts, authority and recovery remain. Policy and decisions are
+authoritative cold-recovery state; only PR29 request charges retain their existing
+verification allowance.

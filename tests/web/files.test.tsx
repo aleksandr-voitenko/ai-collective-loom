@@ -127,3 +127,15 @@ test('StrictMode upload selection, omission, cleanup and identity changes preser
   await act(async()=>calls[0]!.finish(Response.json({removed:1,quarantined:0})));assert.match(screen.getByRole('alert').textContent!,/removed: 1/);assert.equal(c.store.all().length,2);
   await act(async()=>{invalidateIdentity();});assert.equal(screen.queryByRole('button',{name:'Keep file selection'}),null);
 });
+
+for(const departure of ['route','identity','authority'] as const)test('effective file usage ignores a stale response after '+departure,async t=>{
+  const c=context(),target=randomUUID(),{calls,router}=mount(t,c,target,true);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Inspect my file limits'})));
+  await waitFor(()=>assert.ok(calls.some(call=>call.path==='/api/v1/file-limits')));
+  const policyCalls=calls.filter(call=>call.path==='/api/v1/file-limits');
+  if(departure==='route')await act(async()=>router.navigate('/other'));
+  else if(departure==='identity')await act(async()=>{invalidateIdentity();});
+  else await act(async()=>calls.filter(call=>call.path!== '/api/v1/file-limits').forEach(call=>call.finish(Response.json({error:{code:'forbidden',message:'Current authority withdrawn'}},{status:403}))));
+  await act(async()=>policyCalls.forEach(call=>call.finish(Response.json({policy:{version:9,max_file_bytes:1,max_unfinished_uploads:1,participant_reserved_bytes:1,community_reserved_bytes:1},observed_at:'2026-10-26T00:00:00Z',own:{reserved_bytes:987,unfinished_uploads:2,reserved_bytes_over_limit:true,unfinished_uploads_over_limit:true}}))));
+  assert.equal(screen.queryByText(/Your reserved file bytes: 987/),null);assert.equal(screen.queryByText(/Policy version 9/),null);
+});
