@@ -25,8 +25,8 @@ export async function populateAdministration(server: Awaited<ReturnType<typeof s
   }
   return {accountIds,credentialIds,auditIds,target:administrationTarget};
 }
-export async function administrationSnapshot(server: Awaited<ReturnType<typeof syntheticServer>>) {
-  const tables = (await server.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' ORDER BY tablename")).rows;
+export async function administrationSnapshot(server: Pick<Awaited<ReturnType<typeof syntheticServer>>, 'observer'>) {
+  const tables = (await server.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' AND tablename <> 'participation_rate_windows' ORDER BY tablename")).rows;
   const result: Record<string,string> = {};
   for (const {tablename} of tables) {
     const data = await server.observer.query(`SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]')::text AS data FROM loom."${tablename}" t`);

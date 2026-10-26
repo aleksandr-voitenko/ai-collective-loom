@@ -11,7 +11,7 @@ import { localDockerEndpoint } from '../../scripts/lib/local-config.mjs';
 import { migrationSql, readMigrations } from '../../scripts/lib/migrations.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-export async function isolatedPublicationPostgres(options: { throughMigration?: number } = {}) {
+export async function isolatedPublicationPostgres(options: { throughMigration?: number; workloadRates?: boolean } = {}) {
   const name = 'loom-publication-test-' + randomUUID();
   const passwords = {
     POSTGRES_PASSWORD: randomBytes(32).toString('hex'),
@@ -61,6 +61,10 @@ export async function isolatedPublicationPostgres(options: { throughMigration?: 
     control = new pg.Client({ ...configuration, user: 'postgres', password: passwords.POSTGRES_PASSWORD });
     await control.connect();
     const db = database, observer = control;
+    // Bulk publication fixtures select permitted limits explicitly. Defaults remain
+    // unchanged for previews/rate tests, and historical schemas have no policy yet.
+    if(options.workloadRates && (await observer.query("SELECT to_regclass('loom.participation_rate_policy') AS present")).rows[0].present)
+      await observer.query('UPDATE loom.participation_rate_policy SET ordinary_requests=6000,new_publications=600,recovery_control=1200 WHERE id=1');
     async function participant(role = 'participant') {
       const participantId = randomUUID(), credentialId = randomUUID();
       await db.transaction(async tx => {

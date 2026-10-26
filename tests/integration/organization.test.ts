@@ -53,7 +53,7 @@ test('organization over actual HTTPS, current identities and isolated PostgreSQL
   let loseKey='',rollback=false;
   let hold:{exclusive:boolean;entered:ReturnType<typeof barrier>;release:ReturnType<typeof barrier>;attempted:ReturnType<typeof barrier>}|undefined;
   let holding=false;
-  const server=await syntheticServer({transactionWrapper:database=>({transaction:async work=>{
+  const server=await syntheticServer({workloadRates:true,transactionWrapper:database=>({transaction:async work=>{
     let key='';
     const result=await database.transaction(tx=>work({query:async <Row extends QueryResultRow>(sql:string,values:readonly unknown[])=>{
       const structure=sql.includes('pg_advisory_xact_lock') && values[0]===0x4c4f4f4d && values[1]===1;
@@ -301,7 +301,7 @@ test('organization over actual HTTPS, current identities and isolated PostgreSQL
 });
 
 test('synthetic area, subtree and retained-decision caps refuse new work without losing exact recovery', {timeout:120000},async t=>{
-  const server=await syntheticServer();t.after(server.close);
+  const server=await syntheticServer({workloadRates:true});t.after(server.close);
   const admin=httpClient(server.origin,await readFile(server.directory+'/cert.pem','utf8'));await admin.enroll(server.ticket);
   const command={idempotency_key:randomUUID(),kind:'area.create',parent_id:null,title:'Bounded root',description:'Synthetic capacity fixture',expected_hierarchy_version:0};
   const created=await admin.call(changes,command);assert.equal(created.status,200);const root=created.body.current.resource_id;

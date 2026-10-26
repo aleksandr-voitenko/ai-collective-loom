@@ -38,6 +38,7 @@
 | [Passive file text and Files search](adr/031-passive-file-text.md) | Explicit UTF-8 formats, exact bounded previews, independent processing and current contextual lexical search. |
 | [Parallel verification](adr/037-parallel-verification.md) | Complete isolated CI groups, source-bound numeric evidence and unchanged coverage gates. |
 | [UI v0.6 reference](design/ui-v0.6/README.md) | Unchanged supplied prototype, design notes and screenshots; adopted subset and feature gates. |
+| [Participation rate limits decision](adr/038-participation-rate-limits.md) | Participant accounting, policy edits and recovery-safe temporary throttling. |
 
 Repository development instructions are in root `AGENTS.md`; product/interface
 behavior remains governed by v0.9. Architecture mechanisms, configuration defaults,

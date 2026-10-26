@@ -23,6 +23,7 @@ import { ActiveView } from './ParticipationRoutes.js';
 import { SignIn } from './ParticipationSignIn.js';
 
 export function ParticipationApp() {
+  const [discoveryThrottled, setDiscoveryThrottled] = useState(false);
   const location = useLocation(),
     navigate = useNavigate();
   const [self, setSelf] = useState<Self | null>(),
@@ -37,6 +38,7 @@ export function ParticipationApp() {
     mobileButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const changed = () => {
+      setDiscoveryThrottled(false);
       setSelf(undefined);
       setCommunity(undefined);
       setSignout(false);
@@ -67,10 +69,18 @@ export function ParticipationApp() {
           setCommunity(info);
           setError('');
           setUnavailable(false);
+          setDiscoveryThrottled(false);
         }
       })
       .catch((failure) => {
         if (active && failure.name !== 'AbortError') {
+          if (failure instanceof ApiError && failure.code === 'temporarily_throttled') {
+            // A temporary admission refusal supplies no evidence of session or
+            // content authority loss. Retain existing views and exact journals.
+            setDiscoveryThrottled(true);
+            setError(failure.message);
+            return;
+          }
           setSelf(null);
           if (failure instanceof ApiError && failure.code === 'not_found') {
             setUnavailable(true);
@@ -355,6 +365,9 @@ export function ParticipationApp() {
         </header>
         <main id="loom-main" className="page">
           <ErrorText error={error} />
+          {discoveryThrottled && (
+            <button onClick={() => setEpoch((n) => n + 1)}>Retry community discovery</button>
+          )}
           {unavailable ? (
             <Link to="/status">Check service status</Link>
           ) : storageError ? (
@@ -365,7 +378,11 @@ export function ParticipationApp() {
               }
             />
           ) : self === undefined ? (
-            <p role="status">Opening your community…</p>
+            <p role="status">
+              {discoveryThrottled
+                ? 'Community discovery is temporarily delayed. Your local drafts have not been cleared.'
+                : 'Opening your community…'}
+            </p>
           ) : !self ? (
             <SignIn
               onSignedIn={() => {

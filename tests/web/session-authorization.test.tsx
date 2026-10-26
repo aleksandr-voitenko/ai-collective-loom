@@ -397,3 +397,20 @@ test(`production setup: ${path} settlement leaves reauthorization to an explicit
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh configuration'})));
  assert.ok(screen.queryByRole('button',{name:'Save configuration'}));
 });
+
+for(const initialThrottle of [false,true])test('shell temporary discovery throttling preserves session and journals without automatic retries: '+initialThrottle,async t=>{
+ const {Onboarding}=await import('../../src/contracts/participation.js');const instance=randomUUID();
+ const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});community.settings_version=1;
+ const store=new IntentStore(instance,self.participant_id);const saved=await store.prepareDispatch(store.create('retained','reply.create','/api/v1/replies',{text:'Exact saved intent'}),{text:'Exact saved intent'});
+ let throttled=initialThrottle,probes=0;
+ t.mock.method(globalThis,'fetch',async(url:string)=>{if(url==='/api/v1/identity/self'){probes++;return throttled?Response.json({error:{code:'temporarily_throttled',message:'Wait before community discovery.'}},{status:429}):Response.json(self);}if(url==='/api/v1/community')return Response.json(community);if(url==='/api/v1/guide')return Response.json({text:'Retained authorized guide'});throw new Error(url);});
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/help']});t.after(()=>router.dispose());
+ await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
+ if(!initialThrottle){assert.ok(screen.queryByText('Retained authorized guide'));throttled=true;await act(async()=>router.navigate('/loom/help?again=1'));}
+ assert.equal(!!screen.queryByRole('button',{name:'Sign in with passkey'}),false,'Throttling must not render a signed-out shell');
+ assert.ok(screen.queryByRole('button',{name:'Retry community discovery'}));assert.deepEqual(store.all(),[saved]);
+ if(!initialThrottle){assert.ok(screen.queryByText('Retained authorized guide'));assert.ok(screen.queryAllByRole('button',{name:'Sign out'}).length);}
+ const calls=probes;await act(async()=>Promise.resolve());assert.equal(probes,calls);
+ throttled=false;await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry community discovery'})));
+ assert.ok(screen.queryByText('Retained authorized guide'));assert.equal(!!screen.queryByRole('button',{name:'Retry community discovery'}),false);assert.deepEqual(store.all(),[saved]);
+});

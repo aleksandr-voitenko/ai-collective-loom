@@ -114,6 +114,23 @@ function add(
   }
 }
 
+add(
+  ['POST /api/v1/admin/participation-rates/state', 'POST /api/v1/admin/participation-rates/status'],
+  'receipt',
+  identityErrors,
+  affirmed(
+    'Private rate-policy receipt; role loss withdraws administrator metadata, never exact command custody.',
+  ),
+);
+add(
+  ['GET /api/v1/admin/participation-rates', 'POST /api/v1/admin/participation-rates/audit'],
+  'read',
+  identityErrors,
+  affirmed(
+    'Administrator policy and attributable decisions; no participant usage or source content.',
+  ),
+);
+
 // This catalogue is closed by method and endpoint, independently of a caller's
 // optional validation schema. The contract test compares it with actual routes
 // and requires an explicit meaning for every unavailable field in each response.

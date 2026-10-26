@@ -72,8 +72,9 @@ while its persisted cursor key, recovery epoch and visibility fence are compared
 separately. Nothing is discarded or reset. Workers resume their existing fenced
 protocols; no general rebuild or new retry policy is introduced.
 
-HTTP admissions, in-flight IO, processes, process-local cursors, ephemeral rate
-windows and browser journals are not server backup state. New reference traversals
+In-flight HTTP admissions/IO, processes, process-local cursors, authentication-start
+throttle windows and browser journals are not server backup state. ADR-038 participation
+policy, decisions and PostgreSQL accounting windows are captured without reset. New reference traversals
 receive new short-lived traversal expiry; persisted upload, preparation, session
 and editing-notice deadlines remain their original database timestamps.
 
@@ -114,7 +115,16 @@ Initial status is quarantined. Full database-row/native-version inventory equali
 establishes physical restoration integrity, not application usability. A separate
 verify command requires independently captured authenticated HTTPS expectations
 for the original instance. It checks exact reads/downloads, original/current private
-outcomes, exact retries and unchanged full inventories before publishing VERIFIED.
+outcomes and exact retries before publishing VERIFIED. ADR-038 adds one narrow
+post-restore exception: the verifier's own ordinary/control request charges. Each
+credential is checked through HTTPS self (itself charged); the explicit route map
+bounds charges by authenticated participant/category and request count. Inventory
+comparison refuses other participants, decrements, deleted rows, premature resets,
+starts outside the verification's database-time interval, overcharges and any
+publication-budget change. Policy, decisions, all prior tables and native versions
+still compare exactly. Physical restore still compares the entire captured inventory,
+including every rate row. No bypass, reset or automatic retry is available; an
+exhausted verification budget leaves quarantine rather than claiming success.
 Only request IDs and a new reference traversal's ephemeral TTL are excluded from
 response equality. No persisted expiry is excluded. Failures stop the verifier API
 and leave a failed quarantine status, with no success marker. Source processes must

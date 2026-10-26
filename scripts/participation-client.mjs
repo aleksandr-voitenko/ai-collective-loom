@@ -87,7 +87,7 @@ async function call(path, body) {
             if (incoming.statusCode >= 400) {
               fail(
                 new Error(
-                  `HTTP ${incoming.statusCode}: ${value.error?.code ?? "unknown"}. Keep the existing journal.`,
+                  `HTTP ${incoming.statusCode}: ${value.error?.code ?? "unknown"}. ${value.error?.code === "temporarily_throttled" && Number.isInteger(value.error.retry_after_seconds) ? "Wait at least " + value.error.retry_after_seconds + " seconds, then explicitly retry or check status. " : ""}Keep the existing journal.`,
                 ),
               );
               return;
@@ -269,7 +269,7 @@ async function main() {
         "No recorded outcome yet; the original request can still commit.",
       );
   }
-  if (journal.result) {
+  if (journal.result && action !== "status") {
     const exact = await call(
       `/api/v1/resources/${journal.result.resource_id}/revisions/${journal.result.revision_id}`,
     );
@@ -285,7 +285,7 @@ async function main() {
         "Retained publication differs from the saved semantic request.",
       );
   }
-  if(journal.result&&journal.body.content.format==="loom-markdown-v3"){
+  if(action!=="status"&&journal.result&&journal.body.content.format==="loom-markdown-v3"){
     let cursor=null;const observed=[];
     do{const view=await call(`/api/v1/resources/${journal.result.resource_id}/revisions/${journal.result.revision_id}/change-coverage?limit=16`+(cursor?"&cursor="+encodeURIComponent(cursor):""));
       if(view.unknown)throw new Error("Described material is now unavailable; retain the journal without replacing its exact set.");

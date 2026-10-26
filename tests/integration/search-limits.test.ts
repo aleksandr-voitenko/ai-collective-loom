@@ -15,7 +15,7 @@ const content=(text:string)=>({format:'loom-markdown-v1',text,mentions:[]});
 
 test('search expiry, unsupported work, disclosure-safe failure and independent capacity limits',{timeout:120000},async t=>{
   let timedQuery=false;
-  const server=await syntheticServer({transactionWrapper:database=>({transaction:work=>database.transaction(tx=>work({query:async<Row extends QueryResultRow>(sql:string,values:readonly unknown[])=>{
+  const server=await syntheticServer({workloadRates:true,transactionWrapper:database=>({transaction:work=>database.transaction(tx=>work({query:async<Row extends QueryResultRow>(sql:string,values:readonly unknown[])=>{
     if(timedQuery&&sql.includes('SELECT e.id,e.search_kind'))await tx.query('SELECT pg_sleep(10)',[]);
     return tx.query<Row>(sql,values);
   }}))})});
@@ -92,7 +92,7 @@ test('synthetic preview supervises terminal worker stop/start while HTTPS stays 
   child.stderr.resume();
   t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await closed;});
   const line=(prefix:string)=>new Promise<string>((resolve,reject)=>{
-    const timer=setTimeout(()=>{listeners.delete(check);reject(new Error('Preview control deadline'));},15000);
+    const timer=setTimeout(()=>{listeners.delete(check);reject(new Error('Preview control deadline: '+prefix));},15000);
     const check=()=>{const index=lines.findIndex(value=>value.startsWith(prefix));if(index>=0){clearTimeout(timer);listeners.delete(check);resolve(lines.splice(index,1)[0]!);}};
     listeners.add(check);check();
   });

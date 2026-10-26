@@ -1,3 +1,5 @@
+import { registerRates } from './rates.js';
+import { ThrottledError } from '../modules/rates/accounting.js';
 import { registerFiles } from './files.js';
 import { FileError, type FileStorage } from '../modules/participation/file-storage.js';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -66,6 +68,9 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
     message = error.message;
     current = error.current_revision_id;
     status = {
+      temporarily_throttled: 429,
+      rate_policy_conflict: 409,
+      rate_policy_capacity: 429,
       invalid_input: 400,
       reference_format_required: 409,
       change_format_required: 409,
@@ -267,12 +272,19 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
   const policy = participationRecoveryPolicy(request.method, request.routeOptions.url);
   const retrieval = policy === 'retrieval' || policy === 'revision-retrieval';
   if (retrieval && status >= 500) action = 'retry_same_request';
+  if (error instanceof ThrottledError) {
+    action = 'wait_then_retry_same_request';
+    reply.header('retry-after', String(error.retryAfter));
+  }
   return reply.code(status).send({
     error: {
       code,
       message,
       request_id: request.id,
       recovery: { action },
+      ...(error instanceof ThrottledError
+        ? { retry_after_seconds: error.retryAfter, rate_category: error.category }
+        : {}),
       ...(error instanceof PublicationClosedError
         ? { forbidden_reason: 'publication_closed' }
         : {}),
@@ -295,6 +307,7 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
 export async function registerParticipation(app: FastifyInstance, services: ParticipationServices) {
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
+  registerRates(app, services.database, actor);
   registerFiles(app, services.database, actor, services.fileStorage);
   registerSavedItems(app, services.database, actor);
   registerReading(app, services.database, actor);

@@ -34,7 +34,7 @@ export async function suppressFileOwner(f:FileFixture,id:string,suppressed=true)
   const result=await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed,expected_version:state.version});assert.equal(result.status,200,JSON.stringify(result.body));
 }
 export async function sourceSnapshot(f:FileFixture){
-  const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' AND tablename NOT LIKE 'file_text_%' ORDER BY tablename")).rows;
+  const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' AND tablename NOT LIKE 'file_text_%' AND tablename <> 'participation_rate_windows' ORDER BY tablename")).rows;
   const result:Record<string,unknown>={};
   for(const {tablename} of tables)result[tablename]=(await f.observer.query(`SELECT row_to_json(t)::text AS row FROM loom."${tablename}" t ORDER BY 1`)).rows;
   return result;

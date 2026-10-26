@@ -507,3 +507,11 @@ old envelope identities stay unchanged. V4 bases reject older edits with
 file_reference_format_required after original outcome recovery. Notes preserve their
 actual v2/v4 format through reads/notification processing. Search, reading and
 summary-source eligibility include v4 without indexing reference target metadata.
+
+## Participation rates
+
+ADR-038 and sibling `../rates/MEMORY.md` own request/publication accounting.
+Publication resolves committed replay before new-publication reservation, reserves
+before domain guards, and charges immediately before `commitRevision`. A durable
+file refusal does not charge. Rate locks must never appear after the shared clock.
+HTTP request accounting is separately committed, including for domain refusals.

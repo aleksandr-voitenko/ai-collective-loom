@@ -18,6 +18,7 @@ import {
 import type { DatabaseHealth } from '../db/postgres.js';
 import { classifyError, safeFailure } from './errors.js';
 import { registerParticipation, type ParticipationServices } from './participation.js';
+import { participationRateRoute } from './rate-policy.js';
 
 export async function createApplication(options: {
   database: DatabaseHealth;
@@ -112,6 +113,42 @@ export async function createApplication(options: {
       },
     },
     convertConstToEnum: true,
+    transform: ({ schema, url, route }) => {
+      const method = Array.isArray(route.method) ? route.method[0]! : route.method;
+      const category = options.participation && participationRateRoute(method, url);
+      const responses = schema.response as Record<string, Record<string, unknown>> | undefined;
+      const response = category && category !== 'excluded' && responses?.['429'];
+      return {
+        schema: category
+          ? {
+              ...schema,
+              'x-participation-rate-category': category,
+              ...(response
+                ? {
+                    response: {
+                      ...responses,
+                      429: {
+                        ...response,
+                        description:
+                          'Temporary throttling uses temporarily_throttled and wait_then_retry_same_request. Preserve the exact command and any earlier uncertainty. Other capacity errors remain distinct.',
+                        headers: {
+                          'Retry-After': {
+                            type: 'integer',
+                            minimum: 1,
+                            maximum: 60,
+                            description:
+                              'Minimum seconds to wait for temporarily_throttled; no reservation or promise of admission.',
+                          },
+                        },
+                      },
+                    },
+                  }
+                : {}),
+            }
+          : schema,
+        url,
+      };
+    },
   });
   for (const schema of [LiveResponse, ReadyResponse, RuntimeResponse, ErrorResponse])
     app.addSchema(schema);

@@ -29,3 +29,13 @@ errors; replacement credentials still require current authority on every request
 whole-table noninterference, populated upgrades, actual HTTPS and PostgreSQL waiters.
 Browser page lifetime/focus and private recovery constraints live in web memory.
 The standalone administration-client.mjs saves one0600 metadata page per invocation.
+
+Authenticated HTTP handlers additionally admit through `../rates/accounting.ts`
+after channel/CSRF validation. Identity and administrator operations use the bounded
+recovery/control category; ceremonies keep the existing authentication throttle.
+Stable participant IDs share rate budgets across sessions/credentials. ADR-038 owns
+policy defaults/ranges; this does not replace identity caps or current authority.
+
+Transfer hooks and handlers reauthenticate through the same actor boundary. A
+request-owned admission promise charges once without caching or skipping current
+authority checks; never count repeated verification as another HTTP request.

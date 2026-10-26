@@ -85,6 +85,16 @@ async function inventory() {
         ? 'rebuildable-derived-captured'
         : 'authoritative-captured',
     };
+    if (schemaname === 'loom' && tablename === 'participation_rate_windows') {
+      // Capture all counters exactly. Application verification may subsequently
+      // charge its own reads; publication allowance must remain byte-identical.
+      tables[schemaname + '.' + tablename].publicationSha256 = hash(
+        JSON.stringify(rows.filter(({ row }) => JSON.parse(row).category === 'new_publications')),
+      );
+      tables[schemaname + '.' + tablename].requestWindows = rows
+        .map(({ row }) => JSON.parse(row))
+        .filter((row) => row.category !== 'new_publications');
+    }
     if (schemaname === 'loom' && tablename === 'notification_state') {
       const progress = [
         'source_after',

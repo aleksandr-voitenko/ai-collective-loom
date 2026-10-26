@@ -5,10 +5,10 @@ import { join, resolve } from 'node:path';
 
 // This is a closed vocabulary, not a secret-pattern scrubber. Never add free text
 // (including reporter titles/errors/attachments) to an approved document.
-// Include the isolated recovery and two exact-file reference journeys; retain
-// both byte envelopes and every per-test collection bound.
+// Include isolated recovery, exact-file references and participation-rate journeys;
+// retain both byte envelopes and every per-test collection bound.
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
-  steps: 16, tests: 162, bytes: 131072, runBytes: 17 * 1024 * 1024 });
+  steps: 16, tests: 164, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
 export const files = ['administration.spec.ts', 'participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'files.spec.ts', 'files-text.spec.ts', 'reservations.spec.ts', 'notes.spec.ts', 'recovery.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
@@ -21,6 +21,7 @@ export const controlNames = ['save_discussion', 'unsave_discussion', 'sign_in', 
 export const controlLabels = ['Save discussion', 'Unsave discussion', 'Sign in with passkey', 'Create passkey', 'Reply',
   'Check saved status', 'Retry same change', 'Retry collection', 'Sign out', 'Confirm move', 'Save topic', 'Check organization status', 'Retry same organization change', 'Search shared text', 'Refresh search', 'Add reference', 'Check target', 'Refresh references'];
 const routePatterns = [
+  '/api/v1/admin/participation-rates', '/api/v1/admin/participation-rates/state', '/api/v1/admin/participation-rates/status', '/api/v1/admin/participation-rates/audit',
   '/loom/notes', '/loom/notes/new', '/loom/notes/:id', '/api/v1/me/notes/create', '/api/v1/me/notes/update', '/api/v1/me/notes/delete', '/api/v1/me/notes/status', '/api/v1/me/notes/query', '/api/v1/me/notes/:id', '/api/v1/me/notes/:id/sources',
   '/loom/editing-intent', '/api/v1/editing-intent/announce', '/api/v1/editing-intent/renew', '/api/v1/editing-intent/release', '/api/v1/editing-intent/status', '/api/v1/editing-intent/resources/:id',
   '/loom/file/artifact/:id/:id/:id', '/loom/file/contribution/:id/:id/:id',

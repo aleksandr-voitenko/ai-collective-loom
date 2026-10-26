@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { TestContext } from 'node:test';
 import { syntheticServer } from './participation-server.js';
+import { workloadRates } from './rates.js';
 import { httpClient } from './participation-http.js';
 import type { ReferenceValue, ReferenceTargetValue } from '../../src/contracts/participation.js';
 
@@ -13,10 +14,11 @@ export const reference = (target:ReferenceTargetValue,relationship:ReferenceValu
 export const incoming = (target:ReferenceTargetValue,options:Record<string,string>={}) => '/api/v1/references/incoming?'+new URLSearchParams({...target,...options});
 export const outgoing = (source:{resource_id:string;revision_id:string},options:Record<string,string>={}) =>
   `/api/v1/resources/${source.resource_id}/revisions/${source.revision_id}/references?`+new URLSearchParams(options);
-export async function fixture(t:TestContext,options:Parameters<typeof syntheticServer>[0]={}) {
+export async function fixture(t:TestContext,options:Parameters<typeof syntheticServer>[0]&{rateLimits?:'defaults'|'workload'}={}) {
   const server=await syntheticServer(options);t.after(server.close);
   const cert=await readFile(server.directory+'/cert.pem','utf8'),admin=httpClient(server.origin,cert);
   await admin.enroll(server.ticket);
+  if(options.rateLimits!=='defaults')await workloadRates(server,admin);
   const setup=await admin.call('/api/v1/community/setup',{idempotency_key:randomUUID(),community_name:'Reference tests',ordinary_area_name:'General',proposal_area_name:'Proposals',overview:plain('Overview')});
   assert.equal(setup.status,201,JSON.stringify(setup.body));
   const areas=(await admin.call('/api/v1/areas')).body.items,area=areas.find((r:any)=>r.title==='General').id as string,other=areas.find((r:any)=>r.title==='Proposals').id as string;

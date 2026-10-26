@@ -11,7 +11,7 @@ import { barrier, bounded, blockedBy } from '../helpers/search-races.js';
 const content = (text: string) => ({ format: 'loom-markdown-v1', text, mentions: [] });
 
 test('search author discovery follows readable publications rather than account state', { timeout: 60000 }, async t => {
-  const server = await syntheticServer(); t.after(server.close);
+  const server = await syntheticServer({workloadRates:true}); t.after(server.close);
   const certificate = await readFile(server.directory + '/cert.pem', 'utf8'), admin = httpClient(server.origin, certificate);
   await admin.enroll(server.ticket);
   assert.equal((await admin.call('/api/v1/community/setup', { idempotency_key: randomUUID(), community_name: 'Author discovery',
@@ -78,7 +78,7 @@ test('search pages serialize current source eligibility and credential revocatio
   function pause(match: Match, phase: Gate['phase']) {
     const next: Gate = { match, phase, entered: barrier<number>(), release: barrier() }; gate = next; return next;
   }
-  const server = await syntheticServer({ transactionWrapper: database => ({ transaction: work => database.transaction(tx => work({
+  const server = await syntheticServer({ workloadRates:true, transactionWrapper: database => ({ transaction: work => database.transaction(tx => work({
     query: async <Row extends QueryResultRow>(sql: string, values: readonly unknown[]) => {
       if (watcher?.match(sql, values)) {
         const selected = watcher; watcher = undefined;

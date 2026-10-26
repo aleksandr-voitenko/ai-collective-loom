@@ -2,7 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { FileSet, AttachmentSet, FilePath } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '21';
+export const guideRevision = '22';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -479,6 +479,14 @@ export const ParticipationError = Type.Object(
         current_revision_id: Type.Optional(NullableId),
         unavailable_scope: Type.Optional(Type.Literal('revision')),
         forbidden_reason: Type.Optional(Type.Literal('publication_closed')),
+        retry_after_seconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 60 })),
+        rate_category: Type.Optional(
+          Type.Union([
+            Type.Literal('ordinary_requests'),
+            Type.Literal('new_publications'),
+            Type.Literal('recovery_control'),
+          ]),
+        ),
         minimum_response_bytes: Type.Optional(Type.Integer()),
         operation_outcome: Type.Optional(
           Type.Union([Type.Literal('unknown'), Type.Literal('rejected')]),

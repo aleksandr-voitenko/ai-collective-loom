@@ -1,3 +1,4 @@
+import { admitPublication, chargeRate } from '../rates/accounting.js';
 import {
   normalizeFileSet,
   type AttachmentSetValue,
@@ -274,6 +275,7 @@ export class ParticipationPublications {
             throw new PublicationError('idempotency_conflict');
           return result(saved, 'replayed');
         }
+        const allowance = await admitPublication(tx, actor.participantId);
         for (const mention of [...content.mentions, ...(input.change_note?.mentions ?? [])]) {
           const found = await tx.query(
             "SELECT id FROM loom.participants WHERE id=$1 AND state='active' AND kind IN ('human','agent')",
@@ -712,6 +714,7 @@ export class ParticipationPublications {
               input.attachment_set,
             )
           : undefined;
+        await chargeRate(tx, allowance);
         return commitRevision(
           tx,
           actor,

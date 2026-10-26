@@ -189,10 +189,13 @@ test('opposite cross-referencing source edits acquire complete ordered guards wi
     if(active&&sql==='SELECT opening_id FROM loom.discussions WHERE id=ANY($1::uuid[])'){if(++entered===2)gate.release();await bounded(release.promise);}
     return tx.query<Row>(sql,values);
   }}))})});
-  const a=await f.artifact(f.admin,'Cross A'),b=await f.artifact(f.admin,'Cross B');
+  // Distinct participants reach the resource-plan barrier concurrently; one
+  // participant's publication allowance now deliberately serializes its commands.
+  const alice=await f.participant('cross_alice'),bob=await f.participant('cross_bob');
+  const a=await f.artifact(alice.client,'Cross A'),b=await f.artifact(bob.client,'Cross B');
   active=true;const pending=Promise.all([
-    f.revise(f.admin,a,'Cross A',[reference({kind:'artifact',resource_id:b.resource_id,revision_id:b.revision_id})]),
-    f.revise(f.admin,b,'Cross B',[reference({kind:'artifact',resource_id:a.resource_id,revision_id:a.revision_id})]),
+    f.revise(alice.client,a,'Cross A',[reference({kind:'artifact',resource_id:b.resource_id,revision_id:b.revision_id})]),
+    f.revise(bob.client,b,'Cross B',[reference({kind:'artifact',resource_id:a.resource_id,revision_id:a.revision_id})]),
   ]);
   try{await bounded(gate.promise);}finally{release.release();}
   const [ar,br]=await pending;

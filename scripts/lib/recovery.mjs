@@ -797,8 +797,7 @@ export async function restore(path, destination, keyFile, { fault } = {}) {
   prerequisites();
   privatePath(destination, { newPath: true });
   privatePath(path);
-  if (inside(path, destination) || inside(destination, path))
-    fail('backup destination overlap');
+  if (inside(path, destination) || inside(destination, path)) fail('backup destination overlap');
   const scratch = mkdtempSync(join(tmpdir(), 'loom-recovery-restore-'));
   let d;
   try {
@@ -921,13 +920,55 @@ async function verifyApplication(d, expectationsPath) {
         fail('source must be unavailable');
     }
     await serveRuntime(d);
+    const startTime = Date.parse(sql(d, 'SELECT clock_timestamp()'));
+    const admissions = new Map(),
+      identities = new Map();
+    const add = (participant, category) => {
+      const key = participant + ':' + category;
+      admissions.set(key, (admissions.get(key) ?? 0) + 1);
+    };
+    const { participationRateRoutes } = await import('../../dist/server/http/rate-policy.js');
+    // Validate each credential through the actual API. This extra control read
+    // is itself charged; no verifier bypass or counter reset is permitted.
+    for (const { token } of expectations.reads)
+      if (!identities.has(token)) {
+        const self = await httpsCall(
+          c.origin,
+          c.tls.cert,
+          '/api/v1/identity/self',
+          undefined,
+          token,
+        );
+        if (self.status === 401) identities.set(token, null);
+        else {
+          if (self.status !== 200 || typeof self.body?.participant_id !== 'string')
+            fail('verification identity unavailable');
+          identities.set(token, self.body.participant_id);
+          add(self.body.participant_id, 'recovery_control');
+        }
+      }
     for (const [index, entry] of expectations.reads.entries()) {
       const result = await httpsCall(c.origin, c.tls.cert, entry.path, entry.body, entry.token);
       if (!isDeepStrictEqual(comparable(result, entry.path), entry.expected))
         fail('application expectation ' + (index + 1) + ' differs');
+      const method = entry.body === undefined ? 'GET' : 'POST';
+      const pathname = new URL(entry.path, c.origin).pathname;
+      const route = [...participationRateRoutes].find(([key]) => {
+        const [verb, template] = key.split(' ');
+        return (
+          method === verb &&
+          new RegExp('^' + template.replace(/:[^/]+/g, '[^/]+') + '$').test(pathname)
+        );
+      });
+      if (identities.get(entry.token) && route && route[1] !== 'excluded')
+        add(
+          identities.get(entry.token),
+          route[1] === 'publication' ? 'ordinary_requests' : route[1],
+        );
     }
     const after = inventory(d);
-    if (JSON.stringify(after) !== JSON.stringify(manifest.inventory))
+    const endTime = Date.parse(sql(d, 'SELECT clock_timestamp()'));
+    if (!verificationStatePreserved(manifest.inventory, after, admissions, startTime, endTime))
       fail('verification changed retained state');
     setStatus(d, 'verified-isolated-snapshot');
     json(join(d.path, 'VERIFIED.json'), {
@@ -945,6 +986,67 @@ async function verifyApplication(d, expectationsPath) {
     }
     throw error;
   }
+}
+/** Full inventory equality except bounded charges for this verifier's authenticated
+ * requests. All other participants/categories, publication counters and policy stay exact. */
+export function verificationStatePreserved(before, after, admissions, startTime, endTime) {
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return false;
+  const table = 'loom.participation_rate_windows',
+    original = before.tables[table],
+    current = after.tables[table];
+  if (!original || !current) return isDeepStrictEqual(before, after);
+  if (
+    current.publicationSha256 !== original.publicationSha256 ||
+    current.classification !== original.classification ||
+    Object.keys(current).sort().join() !== Object.keys(original).sort().join()
+  )
+    return false;
+  const prior = new Map(
+    original.requestWindows.map((row) => [row.participant_id + ':' + row.category, row]),
+  );
+  const next = new Map(
+    current.requestWindows.map((row) => [row.participant_id + ':' + row.category, row]),
+  );
+  if (
+    next.size !== current.requestWindows.length ||
+    [...prior.keys()].some((key) => !next.has(key))
+  )
+    return false;
+  if (current.rows - original.rows !== next.size - prior.size) return false;
+  for (const [key, row] of next) {
+    const old = prior.get(key),
+      allowed = admissions.get(key) ?? 0;
+    if (isDeepStrictEqual(row, old)) continue;
+    if (
+      !allowed ||
+      !['ordinary_requests', 'recovery_control'].includes(row.category) ||
+      !Number.isSafeInteger(row.used) ||
+      row.used < 1 ||
+      row.used > 6000
+    )
+      return false;
+    // No extra row fields may escape comparison through this narrow exception.
+    if (Object.keys(row).sort().join() !== 'category,participant_id,used,window_started_at')
+      return false;
+    const started = Date.parse(row.window_started_at);
+    if (old && row.window_started_at === old.window_started_at) {
+      if (
+        startTime >= Date.parse(old.window_started_at) + 60000 ||
+        row.used < old.used ||
+        row.used - old.used > allowed
+      )
+        return false;
+    } else if (
+      !Number.isFinite(started) ||
+      started < startTime ||
+      started > endTime ||
+      row.used > allowed ||
+      (old && started - Date.parse(old.window_started_at) < 60000)
+    )
+      return false;
+  }
+  const normalized = { ...after, tables: { ...after.tables, [table]: original } };
+  return isDeepStrictEqual(before, normalized);
 }
 export function comparable(result, path = '') {
   const copy = structuredClone(result);

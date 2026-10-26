@@ -148,6 +148,30 @@ accept `--limit 1` through `25` and `--cursor` with the previous page's
 10,000 decisions; new commands then stop, including restoration, while exact
 recovery and inspection remain available. Production retention remains unapproved.
 
+Administrators can inspect and change **Participation rate limits** in Administration
+or through `/api/v1/admin/participation-rates`. One versioned community policy applies
+per stable participant across credentials and sessions, with three fixed 60-second
+windows: ordinary requests (default 120, range 1–6000), new shared publications
+(20, 1–600), and recovery/control requests (60, 10–1200). These are synthetic preview
+candidates, **not approved production sizing**. Policy edits preserve usage and
+window starts; counts survive API restarts. Concurrent edits require the current
+version; exact replay and attributable audit retain the original decision.
+
+A temporary limit returns `429 temporarily_throttled` and `Retry-After`. Keep the
+exact command, draft and uncertainty; explicitly check status or retry after waiting.
+A committed publication replay never spends another publication allowance. Ordinary
+exhaustion leaves separately bounded reconciliation and administrator capacity.
+The browser retains journals across reload without automatic retry or sign-out.
+Local drafts in the Participation guide can check publication status without
+reopening its source; confirmation retains the exact command.
+The independent `scripts/participation-client.mjs` follows the same contract, including
+status recovery without a content read. Upload/storage ceilings and existing work
+limits are unchanged. Apply migration 0027 with this release; accounting uses at most
+three reusable rows per retained participant. Policy history retains at most 10,000
+decisions, then refuses new edits while inspection/recovery remain available. See
+[ADR-038](docs/adr/038-participation-rate-limits.md) and release guide 22 for mapping,
+expiry, authorization, exclusions and recovery details.
+
 For the isolated browser preview, run `npm run app:synthetic` after installing
 dependencies, Node 24.19.0, OpenSSL and Docker. The launcher prints the local HTTPS
 URL, certificate path and private one-time
@@ -687,7 +711,11 @@ release, migrations, provider/runtime image pins and Docker platform. It neither
 uses source volumes nor initializes replacement buckets. Full database/native
 inventory equality leaves the destination **quarantined** until separate application
 verification succeeds. A failed verification stops its API and never publishes
-`VERIFIED.json`. Keep the source unavailable during verification.
+`VERIFIED.json`. Keep the source unavailable during verification. Participation rate
+windows are captured/restored exactly. Verification remains subject to those limits;
+its own bounded ordinary/control read charges are validated separately, while
+publication allowance, policy, decisions, all prior state and native versions remain
+unchanged. Exhausted capacity leaves verification quarantined; no counters are reset.
 
 The private expectations file is `loom-recovery-expectations-1`, with the original
 `instance` UUID and a nonempty `reads` array. Each entry has a real `/api/v1/...`
@@ -711,7 +739,7 @@ key custody, consistency, quarantine and interruption constraints.
 ## Retained-data limits
 
 Real participant data remains unapproved. Before enabling it, approve and exercise
-operator custody and human identity recovery, workload/abuse limits, release and
+operator custody and human identity recovery, production workload/abuse sizing, release and
 additive-migration procedures, explicit retention/erasure, and coordinated encrypted
 backup/restore. Preserve publication outcomes, private version/negative fences,
 notification identities, recovery epochs and key custody together. Ordinary

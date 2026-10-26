@@ -19,8 +19,10 @@ and the two new test identities; existing numerical runtime/byte/coverage gates 
 `recovery.test.ts` uses ADR-034's separately owned cold-volume installation, real
 HTTPS and native provider versions. Expectations are captured before backup through
 application routes, independently of restore code. Source containers/volumes/network
-are removed before restore verification. Compare every table/native version before
-workers resume; afterward preserve authoritative hashes and notification keys/epoch,
+are removed before restore verification. Physical restore compares every row/version.
+ADR-038 permits only validated verifier request charges afterward; bootstrap probes
+reject overcharge, foreign owners, resets/deletes and policy/publication/source changes.
+Before workers resume, retain the post-probe rate counters as their immutable baseline; afterward preserve authoritative hashes and notification keys/epoch,
 allowing only explicitly classified derived progress. Later source note deletion,
 credential revocation and publication are intentionally absent from the snapshot.
 Faults cover incomplete capture, interrupted restore, corruption/missing components,
@@ -609,7 +611,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 162 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 164 collected tests and <17 MiB/candidate. The test count includes
 the isolated recovery and exact-file reference journeys so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
@@ -791,3 +793,10 @@ Compiled files.spec journeys cover bounded selection, same-instance attachment l
 main/note journal reload, explicit v4 conflict correction, missing-manifest refusal
 before v4 refusal (preserve both unsupported fields), lost acknowledgement,
 exact navigation, incoming paging failures and390px width. Existing assertions remain.
+
+## Rate accounting regression fixtures
+
+See `src/server/modules/rates/MEMORY.md` and ADR-038 for small-budget rate cases.
+Bulk reference-derived fixtures use `helpers/rates.ts`; browser and direct native
+bulk fixtures explicitly select permitted workload limits. Defaults remain synthetic.
+Domain snapshots exclude only rate windows; all prior domain state remains checked.

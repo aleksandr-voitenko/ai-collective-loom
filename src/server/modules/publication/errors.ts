@@ -1,4 +1,7 @@
 export type PublicationErrorCode =
+  | 'temporarily_throttled'
+  | 'rate_policy_conflict'
+  | 'rate_policy_capacity'
   | 'invalid_input'
   | 'invalid_actor'
   | 'unavailable'
@@ -13,6 +16,11 @@ export type PublicationErrorCode =
   | 'file_reference_format_required';
 
 const messages: Record<PublicationErrorCode, string> = {
+  temporarily_throttled: 'Temporary participation limit. Retain the exact request and retry later.',
+  rate_policy_conflict:
+    'The participation policy changed. Inspect its current version before explicitly preparing a new decision.',
+  rate_policy_capacity:
+    'The retained policy decision capacity is exhausted. Existing decisions and inspection remain available.',
   file_reference_format_required:
     'This source uses file-aware references. Explicitly correct with loom-markdown-v4, preserving its exact file declarations and explicit change fields; never upgrade an uncertain request.',
   file_format_required:

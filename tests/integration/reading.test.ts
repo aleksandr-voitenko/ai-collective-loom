@@ -20,7 +20,7 @@ test('selective exact progress preserves Saved, old revisions, summaries and all
   const saved={idempotency_key:randomUUID(),target:{kind:'revision',...target(x)},saved:true,expected_version:0};
   assert.equal((await reader.client.call('/api/v1/me/saved-items/state',saved)).status,200);
   await f.follow(reader.client,f.settings('discussion',d.id));await f.drain();
-  const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' AND tablename NOT LIKE 'reading_%' ORDER BY tablename")).rows.map(r=>r.tablename as string);
+  const tables=(await f.observer.query("SELECT tablename FROM pg_tables WHERE schemaname='loom' AND tablename NOT LIKE 'reading_%' AND tablename <> 'participation_rate_windows' ORDER BY tablename")).rows.map(r=>r.tablename as string);
   const digest=async(name:string)=>createHash('sha256').update(JSON.stringify((await f.observer.query(`SELECT to_jsonb(t) row FROM loom.${name} t ORDER BY to_jsonb(t)::text`)).rows)).digest('hex');
   const before=new Map<string,string>();for(const name of tables)before.set(name,await digest(name));
   assert.ok((await lookup(reader.client,[x,y,reply,summary,d.opening])).every(i=>!i.read&&i.version===0));

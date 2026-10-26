@@ -94,6 +94,9 @@ test('oversized busy groups and too many groups stop preparation explicitly with
   const started=performance.now(),large=await capacity({selection:'complete'});
   assert.ok((await f.observer.query('SELECT count(*)::int n FROM loom.updates_members WHERE view_id=$1',[large.traversal.id])).rows[0].n<=500);
   assert.equal((await reader.client.call('/api/v1/me/updates/query',{cursor:large.next_cursor})).body.error.code,'updates_capacity');
+  // These independent bulk populations represent successive rate windows; the
+  // existing 500-member/256-group work limits still apply to the complete history.
+  await f.observer.query("UPDATE loom.participation_rate_windows SET window_started_at=clock_timestamp()-interval '61 seconds' WHERE participant_id=$1 AND category='new_publications'",[f.administratorId]);
   for(let n=0;n<257;n++)await f.artifact(f.admin,'Capacity group '+n);
   await capacity({scope:{kind:'explicit',definition:f.settings('area',f.area,false,['artifact_revisions'])},selection:'complete'});
   t.diagnostic(JSON.stringify({synthetic_reply_members:501,synthetic_artifact_groups:257,elapsed_ms:Math.round(performance.now()-started),outcome:'explicit_capacity_no_checkpoint'}));

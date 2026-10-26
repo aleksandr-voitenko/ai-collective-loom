@@ -19,6 +19,22 @@ for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'MutationOb
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true, writable: true });
 const { render, screen, fireEvent, cleanup, act } = await import('@testing-library/react');
 afterEach(() => { cleanup(); localStorage.clear(); });
+
+for (const uncertain of [false,true]) test('temporary throttle retains composer command and reload recovery: '+uncertain,async t=>{
+  const area=randomUUID(),body={area_id:area,title:'Throttle draft',content:authored('Keep these exact authored bytes')};
+  const f=await fixture(t,{kind:'artifact.create',areaId:area},'/api/v1/artifacts',body,uncertain);
+  const first=await f.request(uncertain?'Retry same publication':'Publish');
+  const exact=first.raw;
+  await f.answer(first,failure('temporarily_throttled','Wait 17 seconds; keep the exact request.',429));
+  assert.equal(f.record().state,'uncertain');assert.deepEqual(f.record().body,{...body,idempotency_key:f.original.key});
+  assert.equal(!!screen.queryByRole('button',{name:'Prepare corrected submission'}),false);
+  f.remount();assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value,body.content.text);
+  const status=await f.request('Check status');await f.answer(status,failure('temporarily_throttled','Recovery capacity temporarily full.',429));
+  assert.equal(f.record().state,'uncertain');
+  const retry=await f.request('Retry same publication');assert.equal(retry.raw,exact);
+  await f.answer(retry,Response.json({publication_state:'committed',idempotency:'replayed',operation_id:randomUUID(),resource_id:randomUUID(),revision_id:randomUUID()}),true);
+  assert.equal(f.record().state,'committed');f.assertIndependent();
+});
 const authored = (text: string) => ({ format: 'loom-markdown-v1' as const, text, mentions: [] });
 const failure = (code: string, message: string, status = 503, rejected = false) => Response.json({ error: {
   code, message, ...(rejected ? { operation_outcome: 'rejected' } : {}),
