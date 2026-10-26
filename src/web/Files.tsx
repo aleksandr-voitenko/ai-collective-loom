@@ -1,3 +1,4 @@
+import { EffectiveFileLimits } from './FileLimits.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { FileTextControl } from './FileText.js';
@@ -234,10 +235,12 @@ export function FileEditor({
     >
       <h3>{version === 'artifact-files-v1' ? 'Files' : 'Attachments'}</h3>
       <p className="fineprint">
-        Up to 16 files, 4 MiB each. Supported published UTF-8 files have bounded text previews and
-        search. Paths use relative folders. Prepared files expire after 24 hours; uncertain
-        publications must be reconciled first.
+        Up to 16 files, with a fixed 4 MiB safety ceiling per file; current admission limits may be
+        lower. Supported published UTF-8 files have bounded text previews and search. Paths use
+        relative folders. Prepared files expire after 24 hours; uncertain publications must be
+        reconciled first.
       </p>
+      <EffectiveFileLimits />
       {error && <p role="alert">{error}</p>}
       {(value?.files ?? []).map((member, index) => (
         <div className="file-row" key={index}>

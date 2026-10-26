@@ -192,7 +192,7 @@ test('native quotas serialize concurrent reservations; byte, transfer, page and 
   await assert.rejects(f.files.create(f.admin.actor,{...prepared.input,path:'changed'}),{code:'idempotency_conflict'});
   const reservations=await Promise.allSettled(Array.from({length:6},()=>f.files.create(f.admin.actor,{...prepared.input,idempotency_key:randomUUID()})));
   assert.equal(reservations.filter(r=>r.status==='fulfilled').length,fileLimits.active);
-  assert.ok(reservations.filter(r=>r.status==='rejected').every(r=>r.reason.code==='file_capacity'));
+  assert.ok(reservations.filter(r=>r.status==='rejected').every(r=>r.reason.code==='file_unfinished_capacity'));
   assert.equal((await f.observer.query("SELECT count(*)::int AS n FROM loom.file_uploads WHERE state='waiting'")).rows[0].n,4);
   assert.equal((await f.files.find(f.admin.actor,prepared.input.idempotency_key) as {state:string}).state,'prepared');
   assert.deepEqual(await f.files.find(f.other.actor,prepared.input.idempotency_key),{operation_state:'not_recorded'});
@@ -308,7 +308,7 @@ test('retained identity, owner/community byte and cleanup batch frontiers preser
   const input=(size=1)=>({idempotency_key:randomUUID(),target:{kind:'area' as const,resource_id:f.area},path:'quota',size,sha256:sha(Buffer.alloc(size)),media_type:'application/octet-stream'});
   await seed(f.admin.participantId,8,fileLimits.fileBytes);await seed(f.admin.participantId,1,0);
   const race=await Promise.allSettled([f.files.create(f.admin.actor,input()),f.files.create(f.admin.actor,input())]);
-  assert.ok(race.every(r=>r.status==='rejected'&&r.reason.code==='file_capacity'));
+  assert.ok(race.every(r=>r.status==='rejected'&&r.reason.code==='file_reserved_capacity'));
   assert.equal((await f.observer.query('SELECT sum(size*2)::text AS bytes FROM loom.file_uploads WHERE reserved')).rows[0].bytes,String(fileLimits.ownerBytes));
   assert.deepEqual(await f.files.cleanup(f.admin.actor),{removed:8,quarantined:0});
   assert.equal((await f.observer.query('SELECT count(*)::int AS n FROM loom.file_uploads WHERE reserved')).rows[0].n,1);
@@ -316,7 +316,7 @@ test('retained identity, owner/community byte and cleanup batch frontiers preser
   await seed(f.admin.participantId,fileLimits.ownerSessions-9,0,false);
   await assert.rejects(f.files.create(f.admin.actor,input(0)),{code:'file_capacity'});
   for(let i=0;i<4;i++){const owner=await f.participant();await seed(owner.participantId,8,fileLimits.fileBytes);}
-  await assert.rejects(f.files.create(f.other.actor,input()),{code:'file_capacity'});
+  await assert.rejects(f.files.create(f.other.actor,input()),{code:'file_reserved_capacity'});
   const empty=input(0),zero=await f.files.create(f.other.actor,empty);
   await f.files.upload(f.other.actor,zero.upload_id,Buffer.alloc(0));assert.equal((await f.files.finalize(f.other.actor,zero.upload_id)).state,'prepared');
   const count=(await f.observer.query('SELECT count(*)::int AS n FROM loom.file_uploads')).rows[0].n;

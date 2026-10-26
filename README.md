@@ -384,6 +384,41 @@ validation. See [ADR-033](docs/adr/033-owner-private-notes.md), release guide 18
 generated OpenAPI. `npm run test:notes:postgres` runs disposable native acceptance,
 upgrade, concurrency and independent-client checks in the normal coverage path.
 
+## File upload and storage limits
+
+Administration offers **File upload and storage limits** for one community policy.
+The defaults and initial maxima are 4 MiB per new file, 4 unfinished uploads per
+participant, 64 MiB reserved bytes per participant, and 256 MiB community reserved
+bytes. Byte inputs are exact integers; 1 MiB = 1,048,576 bytes. Each newly admitted
+upload reserves twice its declared length for staging and final storage.
+
+Changes affect new upload identities. Accepted retries, original expiry, historical
+files and current authority retain their existing rules. Lowering below usage shows
+an over-limit state and preserves the full reservation. It deletes nothing. Reuse
+and promotion keep independent contexts without charging the same physical upload
+again. Waiting alone does not free byte capacity; existing eligible cleanup removes
+only expired, unassociated uploads after native removal is established.
+
+The composer offers **Inspect my file limits**. Direct clients use authenticated
+`GET /api/v1/file-limits`; administrator inspect/update/status/audit use
+`/api/v1/admin/file-limits`. Inspection is a bounded snapshot, and only administrators
+receive community usage. Controls use separate recovery/control request capacity.
+Storage refusal has distinct codes and no rate-style refill time. Preserve exact
+attempts and drafts; policy changes never authorize automatic re-keying or re-upload.
+
+The independent `scripts/file-artifacts-client.mjs` supports `inspect-limits`,
+`admin-limits`, and `file-policy-audit` with a new private `--output` file. Prepare
+`--kind file.policy` from the guide23 fields, then use `send`, `lose-response` or
+`status` with the same journal. For uploads, `admit`/`lose-admission-response` stop
+after admission; `send --bytes FILE` later completes the same retained intent.
+No bytes or credentials enter the journal. All existing transport, manifest,
+retained-identity, logical-context and processing safeguards remain fixed.
+
+See [ADR-039](docs/adr/039-configurable-file-admission.md), guide23 and generated
+OpenAPI for fields, attribution, finite decision capacity and compatibility.
+This is a synthetic configurable mechanism; production sizing, deployment,
+retention, eviction, overrides and higher ceilings remain separate work.
+
 ## Design documents
 
 Start with the [documentation index](docs/README.md). The

@@ -6,7 +6,7 @@ import {readFile,open} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 
-const refusalCodes=new Set(['file_storage_unavailable','file_capacity','file_not_prepared','file_expired','file_mismatch','file_busy',
+const refusalCodes=new Set(['file_storage_unavailable','file_size_limit','file_reserved_capacity','file_unfinished_capacity','file_policy_conflict','file_policy_capacity','temporarily_throttled','file_capacity','file_not_prepared','file_expired','file_mismatch','file_busy',
   'file_format_required','file_reference_format_required','reference_format_required','change_format_required','references_changed','reference_work_limit','invalid_input','invalid_request','invalid_search','search_changed','search_work_limit','response_budget_too_small','unauthenticated','unavailable','forbidden','revision_conflict','idempotency_conflict','retryable','service_unavailable']);
 class RequestRefused extends Error {
   constructor(code,outcome){super();this.receipt={error:{code,...(['unknown','rejected'].includes(outcome)?{operation_outcome:outcome}:{})}};}
@@ -37,11 +37,17 @@ async function main(){
       }catch(error){reject(error);}});
     });req.on('error',reject);req.setTimeout(15000,()=>req.destroy(new Error()));req.end(bytes);
   });}
-  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15','16','17','18','19','20','21','22'].includes(community.guide_revision))throw new Error();
+  const self=await call('/api/v1/identity/self'),community=await call('/api/v1/community');if(community.profile!=='synthetic'||!['14','15','16','17','18','19','20','21','22','23'].includes(community.guide_revision))throw new Error();
   const scope={origin:origin.origin,instance_id:community.instance_id,participant_id:self.participant_id},action=options.get('--action');
   async function retain(path,value){const handle=await open(resolve(path),'wx',0o600);try{await handle.writeFile(value);await handle.sync();}finally{await handle.close();}
     const dir=await open(dirname(resolve(path)),'r');try{await dir.sync();}finally{await dir.close();}}
   const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if(['inspect-limits','admin-limits','file-policy-audit'].includes(action)){
+    const path=action==='inspect-limits'?'/api/v1/file-limits':'/api/v1/admin/file-limits'+(action==='file-policy-audit'?'/audit':'');
+    const input=action==='file-policy-audit'?(options.has('--input')?JSON.parse(await readFile(options.get('--input'),'utf8')):{}):undefined;
+    const result=await call(path,input);await retain(options.get('--output'),JSON.stringify(result)+'\n');
+    console.log(JSON.stringify({policy_version:result.policy?.version,items:result.items?.length,next_before_version:result.next_before_version}));return;
+  }
   if(['list-files','reference-target','referenced-by'].includes(action)){
     const contribution=options.has('--contribution');if(contribution===options.has('--artifact'))throw new Error();
     const resource=options.get(contribution?'--contribution':'--artifact'),revision=options.get('--revision');
@@ -78,7 +84,7 @@ async function main(){
     await retain(options.get('--output'),bytes);console.log(JSON.stringify({bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}));return;
   }
   if(action==='prepare'){
-    const kind=options.get('--kind');if(!['file.upload','artifact.create','revision.publish','discussion.create','reply.create','attachment.promote'].includes(kind))throw new Error();
+    const kind=options.get('--kind');if(!['file.policy','file.upload','artifact.create','revision.publish','discussion.create','reply.create','attachment.promote'].includes(kind))throw new Error();
     const raw=await readFile(options.get('--input'),'utf8');if(Buffer.byteLength(raw)>131072)throw new Error();
     const body=JSON.parse(raw);if(!body||typeof body!=='object'||Array.isArray(body)||'idempotency_key' in body)throw new Error();
     const journal={version:1,...scope,kind,body:{...body,idempotency_key:randomUUID()}};
@@ -86,14 +92,19 @@ async function main(){
     if(await readFile(options.get('--journal'),'utf8')!==bytes)throw new Error();
     console.log(JSON.stringify({operation_key:journal.body.idempotency_key}));return;
   }
-  if(!['send','status','lose-response'].includes(action))throw new Error();
+  if(!['send','status','lose-response','admit','lose-admission-response'].includes(action))throw new Error();
   const raw=await readFile(options.get('--journal'),'utf8');if(Buffer.byteLength(raw)>132096)throw new Error();
   const journal=JSON.parse(raw);if(journal.version!==1||Object.entries(scope).some(([k,v])=>journal[k]!==v)||!uuid.test(journal.body?.idempotency_key??''))throw new Error();
+  if(['admit','lose-admission-response'].includes(action)&&journal.kind!=='file.upload')throw new Error();
   let result;
   if(journal.kind==='file.upload'){
     if(action==='status')result=await call('/api/v1/file-uploads/status',{idempotency_key:journal.body.idempotency_key});
     else{
       result=await call('/api/v1/file-uploads',journal.body);
+      if(['admit','lose-admission-response'].includes(action)){
+        if(action==='lose-admission-response'){console.log(JSON.stringify({test:'acknowledgement_discarded'}));process.exitCode=75;return;}
+        console.log(JSON.stringify(result));return;
+      }
       if(['waiting','uploading'].includes(result.state)){
         const bytes=await readFile(options.get('--bytes'));
         if(bytes.length!==journal.body.size||createHash('sha256').update(bytes).digest('hex')!==journal.body.sha256.toLowerCase())throw new Error();
@@ -101,6 +112,8 @@ async function main(){
       }
       if(result.state!=='prepared')result=await call(`/api/v1/file-uploads/${result.upload_id}/finalize`,{});
     }
+  }else if(journal.kind==='file.policy'){
+    result=await call('/api/v1/admin/file-limits/'+(action==='status'?'status':'state'),action==='status'?{idempotency_key:journal.body.idempotency_key}:journal.body);
   }else{
     const path={'artifact.create':'/api/v1/artifacts','revision.publish':'/api/v1/revisions','discussion.create':'/api/v1/discussions','reply.create':'/api/v1/replies','attachment.promote':'/api/v1/attachment-promotions'}[journal.kind];if(!path)throw new Error();
     result=await call(action==='status'?'/api/v1/operations/status':path,action==='status'?{operation_kind:journal.kind,idempotency_key:journal.body.idempotency_key}:journal.body);

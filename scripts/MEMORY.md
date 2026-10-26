@@ -72,3 +72,10 @@ Guide22 participation throttling: `participation-client.mjs` keeps the exact pri
 journal on `temporarily_throttled`, prints caller-safe wait guidance, and `status`
 does not add an ordinary content fetch. Never loop/re-key after this response.
 Saved/file examples accept guide22 without changing their prior contracts.
+
+Guide23 extends file-artifacts-client with own/admin limits and bounded audit output,
+file.policy prepare/send/status/lost-response, and upload admit/lost-admission-response.
+The latter stops before bytes and rejects policy/publication journals before command
+dispatch; later send uses the same fsynced metadata and supplied bytes.
+Recovery captures policy/decisions and rejects new admissions under exhaustion
+without relaxing authoritative inventory equality or the PR29 charge allowance.

@@ -1,3 +1,4 @@
+import { registerFilePolicy } from './file-policy.js';
 import { registerRates } from './rates.js';
 import { ThrottledError } from '../modules/rates/accounting.js';
 import { registerFiles } from './files.js';
@@ -69,6 +70,8 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
     current = error.current_revision_id;
     status = {
       temporarily_throttled: 429,
+      file_policy_conflict: 409,
+      file_policy_capacity: 409,
       rate_policy_conflict: 409,
       rate_policy_capacity: 429,
       invalid_input: 400,
@@ -88,8 +91,11 @@ export function participantError(error: unknown, request: FastifyRequest, reply:
     code = error.code;
     message = error.message;
     status = code === 'file_storage_unavailable' ? 503 : code === 'file_capacity' ? 429 : 409;
-    action =
-      code === 'file_expired'
+    action = ['file_size_limit', 'file_unfinished_capacity', 'file_reserved_capacity'].includes(
+      code,
+    )
+      ? 'retain_draft_and_inspect_file_limits'
+      : code === 'file_expired'
         ? 'retain_draft_and_reconcile'
         : code === 'file_mismatch'
           ? 'reselect_original_bytes'
@@ -308,6 +314,7 @@ export async function registerParticipation(app: FastifyInstance, services: Part
   const actor = await registerIdentityRoutes(app, services);
   app.setErrorHandler(participantError);
   registerRates(app, services.database, actor);
+  registerFilePolicy(app, services.database, actor);
   registerFiles(app, services.database, actor, services.fileStorage);
   registerSavedItems(app, services.database, actor);
   registerReading(app, services.database, actor);

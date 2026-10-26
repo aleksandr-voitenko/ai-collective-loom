@@ -115,6 +115,27 @@ function add(
 }
 
 add(
+  ['POST /api/v1/admin/file-limits/state', 'POST /api/v1/admin/file-limits/status'],
+  'receipt',
+  identityErrors,
+  affirmed(
+    'Private file policy receipt; current role governs recovery without authorizing cached usage.',
+  ),
+);
+add(
+  [
+    'GET /api/v1/file-limits',
+    'GET /api/v1/admin/file-limits',
+    'POST /api/v1/admin/file-limits/audit',
+  ],
+  'read',
+  identityErrors,
+  affirmed(
+    'Current file policy and owner aggregates; only administrators may read community aggregates and audit.',
+  ),
+);
+
+add(
   ['POST /api/v1/admin/participation-rates/state', 'POST /api/v1/admin/participation-rates/status'],
   'receipt',
   identityErrors,

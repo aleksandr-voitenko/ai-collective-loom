@@ -37,6 +37,40 @@ test('file-only package publishes nested paths, downloads passive exact bytes an
   await page.goto(server.origin+`/loom/resource/${first.resource_id}/${first.revision_id}`);
   await expect(page.getByRole('button',{name:'Open folder chapters',exact:true})).toBeVisible();
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  // Prospective limits preserve a new draft on refusal and an admitted upload on recovery.
+  const fileJournal=(path:string)=>page.evaluate(path=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.intent.v1:')).map(([,value])=>JSON.parse(value)).find(record=>record.kind==='file.upload'&&record.body.path===path),path);
+  const updatePolicy=async(patch:Record<string,number>)=>{const {version,...limits}=(await f.admin.call('/api/v1/admin/file-limits')).body.policy;expect((await f.admin.call('/api/v1/admin/file-limits/state',{...limits,...patch,expected_version:version,idempotency_key:randomUUID()})).status).toBe(200);};
+  await updatePolicy({max_file_bytes:1});
+  await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
+  await page.getByRole('button',{name:'Write another',exact:true}).click();
+  await page.getByLabel('Title',{exact:true}).fill('Quota draft');await page.getByLabel('Text',{exact:true}).fill('Preserved authored text');
+  const small=Buffer.from('12345');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'quota.txt',mimeType:'text/plain',buffer:small});
+  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
+  await page.getByRole('button',{name:'Upload and prepare quota.txt',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('exceeds the current file-size policy');
+  const rejected=await fileJournal('quota.txt');expect(rejected.state).toBe('rejected');
+  await page.reload();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Preserved authored text');
+  expect((await journal(page,'file.upload',rejected.key)).body).toEqual(rejected.body);
+  await page.getByRole('button',{name:'Remove rejected upload',exact:true}).click();
+  await updatePolicy({max_file_bytes:10});
+  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
+  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
+  let discarded!:(status:number)=>void;const admissionDiscarded=new Promise<number>(resolve=>{discarded=resolve;});
+  await page.route('**/api/v1/file-uploads',async route=>{const response=await route.fetch();await route.abort('failed');discarded(response.status());},{times:1});
+  await page.getByRole('button',{name:'Upload and prepare admitted.txt',exact:true}).click();
+  expect(await admissionDiscarded).toBe(201);
+  await expect.poll(async()=>(await fileJournal('admitted.txt'))?.state).toBe('uncertain');
+  const savedUpload=await fileJournal('admitted.txt');
+  await updatePolicy({max_file_bytes:1,participant_reserved_bytes:1,community_reserved_bytes:1});await page.reload();
+  expect((await journal(page,'file.upload',savedUpload.key)).body).toEqual(savedUpload.body);
+  await page.getByRole('button',{name:'Inspect my file limits',exact:true}).click();await expect(page.getByText(/Over the byte allowance/)).toBeVisible();
+  await page.getByLabel('Reselect original admitted.txt',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
+  await page.getByRole('button',{name:'Upload and prepare admitted.txt',exact:true}).click();await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
+  expect((await journal(page,'artifact.create')).body.content.text).toBe('Preserved authored text');
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+  await page.goto(server.origin+`/loom/resource/${first.resource_id}/${first.revision_id}`);await page.getByRole('button',{name:'Open folder chapters',exact:true}).click();
+  const historical=page.waitForEvent('download');await page.getByRole('button',{name:'Download chapters/café #?%.html',exact:true}).click();expect(await readFile((await (await historical).path())!)).toEqual(bytes);
+
 });
 
 test('file edits reject stale tabs and source withdrawal preserves exact upload recovery and unrelated drafts',async({page,context,server})=>{

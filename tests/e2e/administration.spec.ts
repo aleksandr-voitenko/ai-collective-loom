@@ -23,6 +23,42 @@ test('administrator rate controls retain a lost decision through reload and reco
  expect(await journal(page,'participation.rates')).toBeUndefined();await click(page,'Inspect rate policy audit');await expect(page.getByText(/Version 3: 8 ordinary/)).toBeVisible();
  expect((await f.admin.call('/api/v1/admin/participation-rates')).body.ordinary_requests).toBe(8);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ // File policy uses the same production administration host and durable journal.
+ const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'File upload and storage limits',exact:true})});
+ await panel.getByRole('button',{name:'Inspect file limits',exact:true}).click();
+ await expect(panel.getByText(/Current policy version 1/)).toBeVisible();
+ await panel.getByLabel('Maximum newly admitted file size (bytes)').fill('8');
+ await expect.poll(async()=>(await journal(page,'file.policy'))?.body.max_file_bytes).toBe(8);
+ await page.route('**/api/v1/admin/file-limits/state',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
+ await panel.getByRole('button',{name:'Save file limits',exact:true}).click();
+ await expect(panel.getByRole('button',{name:'Check limits status',exact:true})).toBeEnabled();
+ const fileIntent=await journal(page,'file.policy');expect(fileIntent.state).toBe('uncertain');
+ const updateFile=async(patch:Record<string,number>)=>{const {version,...limits}=(await f.admin.call('/api/v1/admin/file-limits')).body.policy;expect((await f.admin.call('/api/v1/admin/file-limits/state',{...limits,...patch,expected_version:version,idempotency_key:randomUUID()})).status).toBe(200);};
+ await updateFile({max_file_bytes:9});await page.reload();
+ await expect(panel.getByRole('button',{name:'Check limits status',exact:true})).toBeVisible();
+ expect((await journal(page,'file.policy')).body).toEqual(fileIntent.body);
+ await panel.getByRole('button',{name:'Check limits status',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(panel.getByText(/Recorded policy version 2; current version at recovery 3/)).toBeVisible();
+ await panel.getByLabel('Maximum newly admitted file size (bytes)').fill('10');
+ await expect.poll(async()=>(await journal(page,'file.policy'))?.body.max_file_bytes).toBe(10);
+ await updateFile({max_file_bytes:11});await panel.getByRole('button',{name:'Save file limits',exact:true}).click();
+ await expect(panel.getByRole('button',{name:'Prepare corrected limits',exact:true})).toBeVisible();
+ const conflict=await journal(page,'file.policy');await page.reload();expect((await journal(page,'file.policy')).body).toEqual(conflict.body);
+ await panel.getByRole('button',{name:'Refresh file limits',exact:true}).click();await expect(panel.getByText(/Current policy version 4/)).toBeVisible();
+ await panel.getByRole('button',{name:'Prepare corrected limits',exact:true}).click();
+ await expect.poll(async()=>(await journal(page,'file.policy'))?.state).toBe('draft');
+ expect((await journal(page,'file.policy')).key).not.toBe(conflict.key);
+ await panel.getByRole('button',{name:'Save file limits',exact:true}).click();await expect(panel.getByText(/Recorded policy version 5/)).toBeVisible();
+ await panel.getByRole('button',{name:'Inspect file policy audit',exact:true}).click();await expect(panel.getByText(/Version 5: maximum file 10 bytes/)).toBeVisible();
+ const heldPolicy=barrier(),releasePolicy=barrier();
+ await page.route('**/api/v1/admin/file-limits',async route=>{const response=await route.fetch();heldPolicy.release();await releasePolicy.promise;await route.fulfill({response});},{times:1});
+ await panel.getByRole('button',{name:'Refresh file limits',exact:true}).click();await heldPolicy.promise;
+ await server.observer.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[f.person]);
+ try{await panel.getByRole('button',{name:'Inspect file policy audit',exact:true}).click();await expect(panel.getByText(/Current policy version/)).toHaveCount(0);}finally{releasePolicy.release();}
+ await expect(panel.getByText(/Current policy version/)).toHaveCount(0);await expect(panel.getByText(/Community reserved file bytes/)).toHaveCount(0);
+
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+
 });
 
 test('compiled composer preserves a committed lost response through temporary throttling and reload without rekeying',async({page,context,server})=>{

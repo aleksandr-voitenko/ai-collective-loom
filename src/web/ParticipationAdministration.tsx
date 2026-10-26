@@ -1,3 +1,4 @@
+import { FileLimits } from './FileLimits.js';
 import { ParticipationRates } from './ParticipationRates.js';
 import { useState } from 'react';
 import { useLocation } from 'react-router';
@@ -142,6 +143,7 @@ export function Administration({ context }: { context: Context }) {
         </div>
       )}
       <ParticipationRates context={context} />
+      <FileLimits context={context} />
       <SearchAdministration context={context} />
       <FileTextAdministration context={context} />
       <ErrorText error={error} />

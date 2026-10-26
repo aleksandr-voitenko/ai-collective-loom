@@ -373,6 +373,14 @@ export async function recoveryFixture(
     suppressed: true,
     expected_version: moderation.version,
   });
+  const filePolicyCommand = {idempotency_key: randomUUID(), expected_version: 1,
+    max_file_bytes: 1, max_unfinished_uploads: 1, participant_reserved_bytes: 1, community_reserved_bytes: 1};
+  const policyAdministrator = await accepted(admin, '/api/v1/identity/accounts', {idempotency_key:randomUUID(), nickname:'recovery_policy',kind:'agent',role:'administrator'});
+  const adminBearer = await accepted(admin, '/api/v1/identity/credentials', {
+    idempotency_key: randomUUID(), participant_id: policyAdministrator.participant_id,
+    kind: 'agent', purpose: null, label: 'Policy recovery verifier', replace_credential_id: null,
+  });
+  await accepted(httpClient(c.origin,c.tls.cert,adminBearer.secret), '/api/v1/admin/file-limits/state', filePolicyCommand);
   const unknownKey = randomUUID();
   const reads: any[] = [];
   async function expectRead(token: string, path: string, body?: unknown, status = 200) {
@@ -381,6 +389,13 @@ export async function recoveryFixture(
     reads.push({ token, path, ...(body === undefined ? {} : { body }), expected });
     return expected;
   }
+  await expectRead(adminBearer.secret, '/api/v1/admin/file-limits/status', {idempotency_key:filePolicyCommand.idempotency_key});
+  await expectRead(adminBearer.secret, '/api/v1/admin/file-limits/state', filePolicyCommand);
+  await expectRead(adminBearer.secret, '/api/v1/admin/file-limits/audit', {});
+  await expectRead(alice.token, '/api/v1/file-uploads', {
+    idempotency_key: randomUUID(), target:{kind:'area',resource_id:area}, path:'quota-refused.txt',
+    size:2, sha256:createHash('sha256').update('xx').digest('hex'), media_type:'text/plain',
+  },409);
   for (const revision of [first, second, opening, opening2, nested, nested2, summary, promoted])
     await expectRead(
       alice.token,

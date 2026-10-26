@@ -170,3 +170,11 @@ still present. Archive attacks are in the normal bootstrap suite.
 Actual commands and results are reported separately. Passing this local rehearsal
 does not repair the previously observed storage-recreation intermittency, certify
 a managed provider or complete the production operational acceptance gate.
+
+## Configurable file admission
+
+[ADR-039](039-configurable-file-admission.md) adds prospective administrator file
+admission limits using existing custody and original-owner reservations. Fixed
+safeguards, exact contexts, authority and recovery remain. Policy and decisions are
+authoritative cold-recovery state; only PR29 request charges retain their existing
+verification allowance.

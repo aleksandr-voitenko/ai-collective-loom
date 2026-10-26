@@ -143,3 +143,7 @@ initial artifact set. Existing native-version lifetime guards cover both owners;
 no old upload/version, outcome or source row is rewritten. Populated upgrade tests
 compare every old column and retained traversal semantics in disposable fixtures.
 See [ADR-030](../docs/adr/030-contribution-attachments-and-promotion.md).
+
+Migration `0028_file_admission_policy.sql` adds one versioned prospective policy and
+immutable attributable decisions. Defaults equal existing hard maxima; no upload,
+context, prior outcome or usage is rewritten. See [ADR-039](../docs/adr/039-configurable-file-admission.md).

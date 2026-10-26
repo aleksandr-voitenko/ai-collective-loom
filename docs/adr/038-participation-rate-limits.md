@@ -127,3 +127,11 @@ workload budgets instead of changing preview defaults or disabling admission.
 Production sizing/deployment and historical publication/recovery retention remain
 outside this decision. Revisit policy sizing and retained decision capacity before
 approving real workloads.
+
+## Configurable file admission
+
+[ADR-039](039-configurable-file-admission.md) adds prospective administrator file
+admission limits using existing custody and original-owner reservations. Fixed
+safeguards, exact contexts, authority and recovery remain. Policy and decisions are
+authoritative cold-recovery state; only PR29 request charges retain their existing
+verification allowance.

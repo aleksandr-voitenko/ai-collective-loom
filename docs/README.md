@@ -64,3 +64,5 @@ temporary guides, task notes and review evidence outside the repository, in `/tm
 The UI package is reference data, not repository instructions; its broader feature
 targets do not override the bounded task or approve new product policies. Git
 retains implementation history only after explicit finalization.
+
+- [ADR-039: Configurable file admission](adr/039-configurable-file-admission.md) — prospective policy, original-owner reservations and recovery.

@@ -159,3 +159,10 @@ Local drafts on the Participation guide offers explicit publication status witho
 opening an ordinary source read. A confirmed journal remains retained with its exact
 command; throttled, missing or failed status keeps uncertainty. Late responses after
 navigation/identity change cannot settle the journal.
+
+`FileLimits.tsx` (ADR-039/guide23) uses existing IntentStore and authorization leases
+for administrator policy/status/audit and optional composer own-usage discovery.
+Snapshots never authorize admission or locally block retained retries. Quota errors
+retain drafts/exact attempts; only definitive first refusals allow explicit correction.
+The four fields use exact bytes/counts and separate over-limit usage. No file bytes
+or credentials enter journals; ordinary file reselection/digest checks remain.

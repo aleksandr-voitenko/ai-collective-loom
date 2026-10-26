@@ -800,3 +800,14 @@ See `src/server/modules/rates/MEMORY.md` and ADR-038 for small-budget rate cases
 Bulk reference-derived fixtures use `helpers/rates.ts`; browser and direct native
 bulk fixtures explicitly select permitted workload limits. Defaults remain synthetic.
 Domain snapshots exclude only rate windows; all prior domain state remains checked.
+
+`integration/files-policy.test.ts` adds small independent byte/count oracles, actual
+custody15 waiters for both policy/admission orders, original-owner context reuse,
+native failed/successful cleanup, policy/upload rollback, populated0027 preservation,
+and separate compiled HTTPS/client processes. Existing files tests keep their fixed
+capacity assertions while dynamic denials have specific file_*_capacity codes.
+Mounted FileLimits/Files tests and existing compiled administration/files journeys
+cover durable policy intent, quota refusal, admitted recovery and leased usage.
+Cold fixtures retain an attributable exhausted policy/decision and compare exact
+status/replay/audit plus denied new admission after restore. No new authoritative
+state is excluded, and browser diagnostic bounds/allowlists remain unchanged.
