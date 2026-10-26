@@ -595,12 +595,33 @@ Different compiler ranges remain distinct; killed Node processes may lose unflus
 counters. Function coverage is outside this report. Coverage complements assertions
 and review; it does not prove correctness or privacy.
 
-CI uploads only authored source and numeric reports from `coverage/approved/`,
-with three-day retention. Raw counters, maps, profiles and logs remain ignored
-local output. Browser diagnostics retain their separate validated upload boundary.
-The integration job has a 60-minute containing budget for the complete sequential
-run, reporting, and subsequent local-service smoke and persistence checks. It
-retains normal browser deadlines, one worker and zero retries.
+CI runs checks, four groups of native suites, four groups of whole browser specs,
+and isolated smoke/persistence verification. The final `local-integration` check
+requires every job and the complete execution inventory before applying the same
+combined coverage gates. Whole specs retain fresh processes, normal deadlines,
+one worker and zero retries. Push validation runs on `main`; pull requests and
+manual runs retain complete validation without duplicate feature-branch push runs.
+
+`npm run coverage:ci -- prepare` records the source/build hashes, complete inventory
+and checks evidence. `collect native-0` through `native-3` and `collect browser-0`
+through `browser-3` run their planned groups in **separate checkouts/runners**.
+`report` requires all nine evidence documents plus the plan in `coverage/ci-input`,
+the same `COVERAGE_BASE_SHA`, and successful checks/native/browser/storage results
+in `LOOM_CI_RESULTS`. Failed-job retries require rerunning the whole workflow:
+evidence from different run attempts cannot be mixed. The ordinary local
+`npm run coverage` remains sequential and needs no artifact exchange.
+
+CI exchanges only validated plans and bounded numeric evidence from
+`coverage/ci-export/*.json`, with three-day retention. Numeric range/mapping
+projections preserve individual process samples and the original merge order before
+remapping; they contain no source text, function names, runtime URLs or raw capture
+documents. Final authored-source and numeric
+reports remain in `coverage/approved/`. Raw counters, maps, profiles and logs stay
+private local output. Browser diagnostics retain their separate validated upload
+boundary. See [parallel verification](docs/adr/037-parallel-verification.md) for
+identity, completeness, bounds and failure handling. Checks, storage and aggregation
+have 15-minute budgets; each native/browser group has 30 minutes. These containing
+budgets do not alter individual test deadlines or permit partial results.
 
 ## Isolated local backup and recovery
 

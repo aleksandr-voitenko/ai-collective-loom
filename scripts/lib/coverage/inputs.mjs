@@ -34,7 +34,7 @@ export function verifyManifest(repo, before) {
     assert.equal(after.hashes[path], hash, 'Input changed during collection: ' + path);
   }
 }
-export async function nodeCoverage(repo, sources, rawDirectories, normalized, all) {
+export async function collectNodeCoverage(repo, sources, rawDirectories, normalized, all) {
   mkdirSync(normalized, { recursive: true });
   assert.equal(readdirSync(normalized).length, 0, 'Never mix stale coverage inputs');
   const eligible = new Set(sources.map(path => join(repo, path))), loaded = new Set(), mapped = new Set(), maps = new Map();
@@ -76,8 +76,14 @@ export async function nodeCoverage(repo, sources, rawDirectories, normalized, al
   // c8's final Istanbul merge infers hits from enclosing ranges when tsx and tsc
   // map different generated scripts to one source. Use its pinned V8 normalization
   // and cold-file discovery, then exact-location merging for every compiler pair.
-  const processCoverage = await report._getMergedProcessCovAsync(), inputs = [];
+  const processCoverage = await report._getMergedProcessCovAsync();
   assert.ok(processCoverage?.result.length, 'No normalized Node coverage');
+  return { report, processCoverage, eligible };
+}
+
+export async function nodeCoverage(repo, sources, rawDirectories, normalized, all) {
+  const { report, processCoverage, eligible } = await collectNodeCoverage(repo, sources, rawDirectories, normalized, all);
+  const inputs = [];
   for (const script of processCoverage.result) {
     const path = resolve(script.url);
     const converter = convert(path, report.wrapperLength, report._getSourceMap(script), source => !eligible.has(source));

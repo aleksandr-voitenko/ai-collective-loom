@@ -10,6 +10,7 @@ import { build } from 'vite';
 import { BrowserCoverage } from '../helpers/browser-coverage.js';
 import { remap, readCaptures } from '../../scripts/lib/coverage/browser.mjs';
 import { mergeExact, canonicalizeLocations } from '../../scripts/lib/coverage/merge.mjs';
+import { exportNode, importNode, compactBrowser, expandBrowser } from '../../scripts/lib/coverage/portable.mjs';
 import { nodeCoverage, digest } from '../../scripts/lib/coverage/inputs.mjs';
 
 const require = createRequire(import.meta.url);
@@ -126,9 +127,26 @@ try {
   for(const map of [directMap,compiledMap,nodeMap]) canonicalizeLocations(map,(path:string)=>readFileSync(path,'utf8'));
   const branches=(map:any)=>Object.entries(map[fixture].branchMap).map(([id,branch]:[string,any])=>({ key:JSON.stringify([branch.type,branch.locations]),hits:map[fixture].b[id] })).sort((a,b)=>a.key.localeCompare(b.key));
   assert.deepEqual(branches(nodeMap),branches(mergeExact(directMap,compiledMap)),'Node variants must not inherit enclosing branch hits');
+  // A distributed round trip must preserve the merged V8 range population,
+  // including different compiler coordinates, before source remapping.
+  const portablePlan = { inputs: { sources: ['src/fixture.ts'], hashes: { 'src/fixture.ts': digest(readFileSync(fixture)) } },
+    build: { 'dist/server/fixture.js': digest(readFileSync(join(root,'dist/server/fixture.js'))) } };
+  const portable = await Promise.all(['node-raw','compiled-raw'].map((name,index) => exportNode(root, portablePlan,
+    [join(root,name)], join(root,'portable-export-'+index))));
+  const imported = importNode(root,portablePlan,portable,join(root,'portable-import'));
+  const transported = await nodeCoverage(root,['src/fixture.ts'],imported,join(root,'portable-normalized'),true);
+  assert.deepEqual(branches(transported),branches(nodeMap),'Portable compiler ranges must match sequential normalization');
+  assert.deepEqual(createCoverageMap(transported).fileCoverageFor(fixture).getLineCoverage(),createCoverageMap(nodeMap).fileCoverageFor(fixture).getLineCoverage());
+  for(const forbidden of ['choose','uncalled','sourceContent','file:','http:','fixture.ts']) assert.ok(!JSON.stringify(portable).includes(forbidden),'Portable counters contain no authored/runtime text');
   const browserMaps=[];
   for(const asset of assets.keys()) {
     const { files }=await remap(join(assetsRoot,asset),entries.filter(e=>e.asset===asset));
+    const split = [entries.filter((_,i)=>i%2===0), entries.filter((_,i)=>i%2===1)]
+      .flatMap(group => expandBrowser(compactBrowser(group,assets),assets));
+    const roundtrip = await remap(join(assetsRoot,asset),split.filter(e=>e.asset===asset));
+    assert.ok(roundtrip.files[fixture] && files[fixture]);
+    assert.deepEqual(roundtrip.files[fixture].b, files[fixture].b, 'Browser groups merge before source mapping');
+    assert.deepEqual(roundtrip.files[fixture].s, files[fixture].s);
     browserMaps.push({ [fixture]:files[fixture] });
   }
   const browserMap=mergeExact(...browserMaps);

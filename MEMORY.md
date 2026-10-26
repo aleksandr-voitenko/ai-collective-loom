@@ -326,7 +326,9 @@ output/attachments are not approved artifacts. See `tests/MEMORY.md` for collect
 `npm run coverage` combines Node/JSDOM, all PostgreSQL suites and Chromium client
 execution. Application gates enforce 90% changed lines, 85% branches and exact
 no-decline line/branch baseline ratios. Tooling is reported separately. See
-root README Coverage and `scripts/lib/coverage/` for source-map invariants and approved reports.
+root README Coverage and `scripts/lib/coverage/MEMORY.md` for source-map invariants,
+parallel CI evidence and approved reports. ADR-037 splits hosted collection while
+retaining sequential local coverage and the complete final `local-integration` gate.
 `test:integration` includes failed-migration rollback and signed GET probes;
 expiry checks record UTC timing and use a bounded retry window only for a
 still-successful GET. They do not retry unrelated failures or log bearer URLs.

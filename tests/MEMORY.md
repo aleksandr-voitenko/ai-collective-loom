@@ -570,7 +570,8 @@ Never hold requests, route barriers, Web Locks or sockets for diagnostics.
 
 Only `browser-diagnostics/approved/*.json` may be uploaded as browser diagnostics.
 Combined coverage separately publishes authored source and numeric reports from
-`coverage/approved/`; never upload raw counters, maps, logs or browser profiles.
+`coverage/approved/`; CI also exchanges the validated numeric projection described
+in ADR-037. Never upload raw counters, maps, logs or browser profiles.
 `helpers/browser-coverage.ts` samples before navigation/disposal without changing
 test deadlines or holding application requests. `tests/coverage/verify.ts` guards
 real Node/browser branch merging, unmapped cold code and safe disposal. The collector
@@ -623,10 +624,14 @@ suite still uses actual HTTPS, virtual WebAuthn and disposable PostgreSQL.
 
 CI uses an immutable upload action, an always-running validator and an explicit
 upload-ready output, with three-day retention and no continue-on-error.
-The integration job's 60-minute containing budget includes complete sequential
-coverage, reporting, smoke and persistence; it does not change individual test
-deadlines, one worker or zero retries. Check hosted total duration when suite
-growth makes that budget insufficient; preserve every suite and gate.
+Hosted CI now uses four native and four whole-spec browser groups (ADR-037),
+with independent smoke/persistence and an always-running final `local-integration`
+gate. Each group keeps fresh spec processes, individual deadlines, one worker and
+zero retries. `bootstrap/coverage-ci.test.mjs` rejects incomplete/foreign evidence,
+changed provenance, malformed numeric projections and unsuccessful dependencies.
+The real `coverage/verify.ts` probes compare sequential and distributed Node/browser
+normalization. See `scripts/lib/coverage/MEMORY.md` for the numeric transport boundary.
+Missing groups never reduce the denominator or authorize a passing report.
 The manual `verify_failure_upload` input runs the probe configuration after the
 normal browser suite; expect a failed step/run and a successful approved upload.
 It defaults off and never applies to push/PR runs. Contract: `LC-20261014-3D4P`.

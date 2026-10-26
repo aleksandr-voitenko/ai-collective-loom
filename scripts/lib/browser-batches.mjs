@@ -80,7 +80,7 @@ export function publishBrowserBatches(directory, plan, batches) {
 
 // Full runs use this boundary. Focused CLI commands retain the original runner.
 // Config is also used by the isolated runner regression fixtures.
-export async function runBrowserBatches({ config } = {}) {
+export async function runBrowserBatches({ config, files, expectedPlan } = {}) {
   const scratch = mkdtempSync(join(tmpdir(), 'loom-browser-batches-'));
   const planPath = join(scratch, 'plan.json'), configArgs = config ? ['--config', config] : [];
   const batches = [];
@@ -116,7 +116,15 @@ export async function runBrowserBatches({ config } = {}) {
     const discovered = await execute(['node_modules/@playwright/test/cli.js', 'test', ...configArgs,
       '--list', '--reporter', resolve('tests/helpers/browser-inventory-reporter.ts'), '--output', join(scratch, 'discovery')], true);
     assert.equal(discovered, 0, 'Browser discovery failed');
-    const plan = readDocument(planPath), groups = browserBatches(plan);
+    const discoveredPlan = readDocument(planPath);
+    if (expectedPlan) assert.deepEqual(discoveredPlan, expectedPlan, 'Browser discovery changed');
+    if (files) {
+      assert.equal(new Set(files).size, files.length, 'Duplicate selected spec');
+      const known = new Set(browserBatches(discoveredPlan).map(group => group[0].file));
+      assert.ok(files.length && files.every(file => known.has(file)), 'Unknown selected spec');
+    }
+    const plan = files ? { ...discoveredPlan, tests: discoveredPlan.tests.filter(test => files.includes(test.file)) } : discoveredPlan;
+    const groups = browserBatches(plan);
     let invalid = false;
     for (const [index, expected] of groups.entries()) {
       if (interrupted) break;

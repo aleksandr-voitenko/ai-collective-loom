@@ -58,3 +58,8 @@ authority remains decisive. It sends no mutations and imports no server internal
 using existing contextual IDs/path and bounded cursor outputs. It remains an independent
 HTTPS client; no server imports, automatic format upgrades, credentials in journals or
 implicit download. Existing prepare/send/status/lost-response actions retain v4 intent.
+
+Parallel verification (ADR-037) is owned by `lib/coverage/MEMORY.md` and
+`coverage-ci.mjs`. The original local coverage command stays sequential; hosted
+jobs use isolated workspaces and a shared validated numeric evidence protocol.
+Never rebuild or replace browser diagnostics in a checkout running collection.
