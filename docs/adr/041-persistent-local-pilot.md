@@ -64,6 +64,16 @@ The running API and workers receive application/storage configuration, not deplo
 bootstrap/recovery capabilities. Participants receive only ordinary participant
 credentials through the existing administration UI/API.
 
+The controller finalizes both ticket handoffs in the maintenance container: after
+the selected runtime exclusively creates the 0600 file, it transfers the open inode
+to the private output directory's UID/GID and flushes it. The host then verifies
+private ownership and readability before reporting delivery. This remains compatible
+with already-selected release images and respects Docker Desktop UID translation;
+running the entire helper under the host UID would not provide that compatibility.
+Permissions are never broadened and secrets never pass through command arguments
+or console output. Failed/uncertain delivery retains the existing explicit recovery
+contract rather than issuing another ticket automatically.
+
 The operator must control this private directory and verify the intended human
 before handing out an enrollment/recovery ticket. This is a single-operator trial
 custody procedure, not proof of an external person's identity or production recovery

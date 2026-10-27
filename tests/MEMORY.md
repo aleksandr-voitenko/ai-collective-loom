@@ -24,6 +24,12 @@ has four explicit pilot journeys, unchanged deadlines and zero retries. Register
 before initialization and close browser contexts before deleting owned providers.
 Permission fault fixtures set their modes explicitly so a private caller umask cannot
 remove the intended unsafe-permission condition.
+The ticket-custody case requires a non-root Linux operator and checks initial and
+administrator-recovery files for host ownership, 0600, actual owner reads and denial
+to a different container UID through a direct read-only file mount. It also enrolls
+both tickets over verified HTTPS, checks same-identity recovery/session revocation,
+unchanged ticket bytes after restart, and secret-free CLI/owned-service log output.
+Mac runs cover delivery/recovery but do not stand in for Linux UID enforcement.
 
 Pilot acceptance records independent exact HTTPS outcomes/files/private reads, then
 compares ordinary stop/start/container replacement and isolated encrypted recovery.

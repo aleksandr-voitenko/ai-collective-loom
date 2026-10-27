@@ -867,6 +867,13 @@ Do not give participants `config.json`, provider credentials or deployment recov
 material. Sessions expire after 8 hours, challenges after 5 minutes and agent credentials
 after 90 days; revocation still takes effect. Ordinary starts never renew credentials.
 
+Initial and recovery tickets are delivered as owner-readable 0600 files. The
+controller checks host ownership and readability before reporting success, including
+on non-root Linux hosts; do not use `sudo` or broaden file permissions to read them.
+If an older Linux installation produced an unreadable ticket, use the updated
+checkout's explicit `recover-administrator` command below. It preserves the account
+and writes a new private recovery ticket without reinitializing the community.
+
 TLS uses `$pilot_path/ca.pem`. Inspect that certificate, then **manually** trust
 this installation's CA in your login Keychain if you choose to trust it:
 

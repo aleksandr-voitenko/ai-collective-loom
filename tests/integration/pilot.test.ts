@@ -2,7 +2,8 @@ import { expiredLeaf } from '../helpers/pilot-certificate.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync, cpSync, unlinkSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync, existsSync, cpSync, unlinkSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   pilotFixture,
@@ -18,6 +19,121 @@ import {
 } from '../helpers/pilot.js';
 import { docker, replace } from '../../scripts/lib/pilot-files.mjs';
 import { httpsCall } from '../../scripts/lib/recovery.mjs';
+
+test(
+  'pilot enrollment tickets remain owner-only through initialization and administrator recovery',
+  { timeout: 240000 },
+  async (t) => {
+    // Linux CI must exercise a real non-root host operator, not mask bind-mount
+    // ownership with root access or Docker Desktop's host-file translation.
+    if (process.platform === 'linux') assert.notEqual(process.getuid!(), 0);
+    const outputs: string[] = [];
+    let f: any;
+    t.after(async () => {
+      await f?.close();
+    });
+    f = await pilotFixture(
+      (fixture) => {
+        f = fixture;
+      },
+      undefined,
+      ({ stdout, stderr }) => {
+        outputs.push(stdout, stderr);
+      },
+    );
+    const d = f.instance();
+    function ticketAt(path: string) {
+      const stat = lstatSync(path);
+      assert.ok(stat.isFile() && !stat.isSymbolicLink());
+      assert.equal(stat.uid, process.getuid!(), 'ticket belongs to the host operator');
+      assert.equal(stat.gid, lstatSync(f.path).gid, 'ticket retains host custody group');
+      assert.equal(stat.mode & 0o777, 0o600);
+      assert.equal(stat.nlink, 1);
+      const bytes = readFileSync(path, 'utf8');
+      const ticket = JSON.parse(bytes);
+      assert.ok(typeof ticket.ticket === 'string' && ticket.ticket.length > 20);
+      if (process.platform === 'linux') {
+        // Mount the file directly, so denial proves 0600 protects the ticket
+        // independently of its private parent directories. No secret is printed.
+        const stranger = stat.uid === 65534 ? 65533 : 65534;
+        const result = docker([
+          'run',
+          '--rm',
+          '--name',
+          d.id + '-ticket-permissions',
+          '--label',
+          'org.loom.kind=acceptance',
+          '--label',
+          'org.loom.test-owner=' + f.testOwner,
+          '--label',
+          'org.loom.instance=' + d.id,
+          '--label',
+          'org.loom.local-pilot=' + d.owner,
+          '--network',
+          'none',
+          '--read-only',
+          '--cap-drop',
+          'ALL',
+          '--security-opt',
+          'no-new-privileges',
+          '--user',
+          stranger + ':' + stranger,
+          '--mount',
+          `type=bind,src=${path},dst=/ticket,readonly`,
+          d.release.images.node,
+          'node',
+          '-e',
+          "try { require('node:fs').readFileSync('/ticket'); process.exit(2); } catch (e) { process.exit(e.code === 'EACCES' ? 0 : 3); }",
+        ]);
+        assert.equal(result, '');
+      }
+      return { bytes, ...ticket };
+    }
+    const initialPath = join(f.path, 'enrollment/enrollment.json');
+    const initial = ticketAt(initialPath);
+    const { httpClient } = await import('../helpers/participation-http.js');
+    const c = f.config(),
+      admin = httpClient(c.origin, c.tls.ca);
+    const human = await admin.enroll(initial.ticket);
+    assert.equal(human.participant_id, initial.administratorId);
+    const recovery = await f.command('recover-administrator', { 'confirm-instance': d.id });
+    const replacement = ticketAt(recovery.enrollment);
+    assert.equal(replacement.administratorId, human.participant_id);
+    assert.ok(replacement.ticket !== initial.ticket, 'recovery is a new one-time issuance');
+    assert.ok(readFileSync(initialPath, 'utf8') === initial.bytes, 'initial ticket is untouched');
+    const recovered = httpClient(c.origin, c.tls.ca);
+    assert.equal((await recovered.enroll(replacement.ticket)).participant_id, human.participant_id);
+    assert.equal((await admin.call('/api/v1/identity/self')).status, 401);
+    await f.command('restart');
+    assert.ok(readFileSync(recovery.enrollment, 'utf8') === replacement.bytes);
+    assert.equal(f.instance().release.image, d.release.image, 'handoff preserves the selected image');
+    for (const service of [
+      'anchor',
+      'postgres',
+      's3',
+      'api',
+      'search',
+      'notifications',
+      'file-text',
+    ]) {
+      owned(d, 'container', name(d, service));
+      const logs = spawnSync('docker', ['logs', '--tail', '100', name(d, service)], {
+        encoding: 'utf8',
+        timeout: 10000,
+        maxBuffer: 128 * 1024,
+      });
+      assert.ok(!logs.error && logs.status === 0, 'bounded owned-container logs available');
+      outputs.push(logs.stdout, logs.stderr);
+      if (['api', 'search', 'notifications', 'file-text'].includes(service))
+        await f.command('logs', { service });
+    }
+    for (const ticket of [initial.ticket, replacement.ticket])
+      assert.ok(
+        outputs.every((output) => !output.includes(ticket)),
+        'ticket absent from command output and logs',
+      );
+  },
+);
 
 // Actual CLI, immutable compiled image, real providers, default policy and real TLS.
 // Each teardown is gated by both acceptance owner and exact installation identity.

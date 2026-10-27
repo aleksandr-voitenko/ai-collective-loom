@@ -121,6 +121,12 @@ the CA/origin. Normal bootstrap writes a private one-time ticket once. Explicit
 same-administrator recovery uses the existing audited service; uncertain delivery
 requires replacement, never secret replay. Recovery from partial initialization
 requires complete existing material and checks whether bootstrap already committed.
+Enrollment delivery is finalized by the controller's maintenance wrapper, including
+when the selected immutable image predates the ownership fix. It transfers only the
+new exclusive ticket inode to the mounted private output directory's UID/GID, keeps
+0600, flushes metadata, and checks host-owner readability before reporting success.
+Do not pass the host UID blindly through Docker Desktop's UID translation, widen
+permissions, replay a ticket, or give runtime services deployment custody.
 
 `pilot-recovery.mjs` is a narrow owner-validated adapter over the same bundle/archive,
 `native-inventory.mjs`, and HTTPS verifier as ADR-034. Pilot verifier categories and

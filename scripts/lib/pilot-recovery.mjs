@@ -527,6 +527,7 @@ export async function maintenance(action, options) {
         fail(
           'bootstrap exists but ticket delivery is uncertain; run recover-administrator explicitly',
         );
+      readPrivateText(d.enrollmentLocation ?? join(output, 'enrollment.json'), 4096);
       helper(d, 'ready');
       d.state = 'ready';
       replace(join(d.path, 'instance.json'), d);

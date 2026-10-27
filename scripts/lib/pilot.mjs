@@ -23,6 +23,7 @@ import {
   run,
   docker,
   privatePath,
+  readPrivateText,
   readJson,
   json,
   replace,
@@ -457,9 +458,36 @@ export function sql(d, query, migrate = false) {
     },
   );
 }
+// Keep the handoff in the controller so recovery also works with already-selected
+// releases. The immutable runtime creates the ticket exclusively; only afterward
+// does this wrapper transfer its open inode to the mounted custody directory's
+// owner. Passing the host UID would be wrong under Docker Desktop UID translation.
+const enrollmentHandoff = `
+try {
+  const fs = await import('node:fs');
+  const directory = fs.statSync('/output');
+  if (!directory.isDirectory() || (directory.mode & 0o777) !== 0o700) throw new Error();
+  await import('./scripts/lib/pilot-runtime.mjs');
+  const fd = fs.openSync('/output/enrollment.json', fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const file = fs.fstatSync(fd);
+    if (!file.isFile() || file.nlink !== 1 || (file.mode & 0o777) !== 0o600 || file.size > 4096) throw new Error();
+    fs.fchownSync(fd, directory.uid, directory.gid);
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+} catch {
+  process.stderr.write('{"event":"pilot_runtime_failed","phase":"ticket-handoff"}\\n');
+  process.exit(1);
+}
+`;
 export function helper(d, mode, { operator = false, output } = {}) {
   owned(d, 'container', name(d, 'anchor'));
-  return docker([
+  if (output) {
+    privatePath(output);
+    if (!operator || !['provision', 'recover'].includes(mode) || !lstatSync(output).isDirectory())
+      fail('invalid enrollment output custody');
+  }
+  const result = docker([
     ...maintenanceArgs(d),
     '--network',
     'container:' + name(d, 'anchor'),
@@ -468,10 +496,13 @@ export function helper(d, mode, { operator = false, output } = {}) {
     ...(operator ? ['--mount', `type=bind,src=${d.path},dst=/operator,readonly`] : []),
     ...(output ? ['--mount', `type=bind,src=${output},dst=/output`] : []),
     d.release.image,
-    'node',
-    'scripts/lib/pilot-runtime.mjs',
-    mode,
+    ...(output
+      ? ['node', '--input-type=module', '-e', enrollmentHandoff, 'pilot-ticket', mode]
+      : ['node', 'scripts/lib/pilot-runtime.mjs', mode]),
   ]);
+  // A successful container exit alone does not establish delivery to the operator.
+  if (output) readPrivateText(join(output, 'enrollment.json'), 4096);
+  return result;
 }
 export function inventory(d) {
   return JSON.parse(helper(d, 'inventory', { operator: true }));

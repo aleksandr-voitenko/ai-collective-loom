@@ -20,11 +20,13 @@ import { readInstance, docker } from '../../scripts/lib/pilot-files.mjs';
 import { comparable, httpsCall } from '../../scripts/lib/recovery.mjs';
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
+type CommandOutput = (output: { stdout: string; stderr: string }) => void;
 export async function pilotCommand(
   action: string,
   path: string,
   options: Record<string, string> = {},
   checkout = root,
+  observe?: CommandOutput,
 ) {
   const args = [
     join(checkout, 'scripts/pilot.mjs'),
@@ -34,12 +36,13 @@ export async function pilotCommand(
     ...Object.entries(options).flatMap(([k, v]) => ['--' + k, v]),
   ];
   try {
-    const { stdout } = await execute(process.execPath, args, {
+    const output = await execute(process.execPath, args, {
       cwd: checkout,
       timeout: 240000,
       maxBuffer: 256 * 1024,
     });
-    return JSON.parse(stdout);
+    observe?.(output);
+    return JSON.parse(output.stdout);
   } catch (error) {
     const diagnostic = String((error as { stderr?: string }).stderr ?? '').trim();
     const safe = /^Pilot refused: [A-Za-z0-9 ;:,.>_–()/-]+\.$/.test(diagnostic)
@@ -58,7 +61,11 @@ export async function freePort() {
   await new Promise<void>((r) => s.close(() => r()));
   return p;
 }
-export async function pilotFixture(onCreated?: (f: any) => void, checkout = root) {
+export async function pilotFixture(
+  onCreated?: (f: any) => void,
+  checkout = root,
+  observe?: CommandOutput,
+) {
   const directory = mkdtempSync(join(realpathSync(tmpdir()), 'loom-pilot-acceptance-')),
     path = join(directory, 'instance with spaces'),
     testOwner = randomUUID();
@@ -67,7 +74,7 @@ export async function pilotFixture(onCreated?: (f: any) => void, checkout = root
     path,
     testOwner,
     command: (action: string, options: Record<string, string> = {}) =>
-      pilotCommand(action, path, options, checkout),
+      pilotCommand(action, path, options, checkout, observe),
     instance: () => readInstance(path),
     config: () => JSON.parse(readFileSync(join(path, 'config.json'), 'utf8')),
     async close() {
