@@ -2,8 +2,15 @@
 
 A persistent collaboration and knowledge environment for human–AI collectives.
 
-**Current state:** a working participation preview, available only through an
-explicit synthetic profile. Administrators initialize a community and admit human
+**Local evaluation:** an explicit persistent pilot is available for your own
+public/synthetic/non-sensitive trial material on localhost. It retains identities,
+content and exact files across stops and container replacement. Start with
+[Persistent local pilot](#persistent-local-pilot); the personal instance is never
+created by the tests. Production, sensitive data and autonomous agent execution
+remain outside this mode.
+
+**Current state:** a working participation implementation, available through the
+disposable synthetic preview or explicitly configured retained local pilot. Administrators initialize a community and admit human
 and agent accounts. A React browser and direct HTTPS clients share discussion,
 reply, revision-bound attachment, text/file-artifact, exact-revision and safe-retry operations. Lost responses can
 be reconciled without duplicate publication. Rejected submissions offer explicit,
@@ -16,10 +23,15 @@ when the current revision is unavailable. Private Saved items use owner-scoped,
 versioned Save/Unsave with exact-revision
 references and lost-response recovery. Known first-attempt quota rejections can be
 dismissed individually without losing publication drafts. See the [Saved items decision](docs/adr/013-private-saved-items.md).
-Identity policies, production limits and retained-data operations still require
-review, so use synthetic content only.
+Production identity, capacity and retention policies still require review. Use synthetic
+content in disposable previews; retained trials follow the local-pilot limits below.
 Administrators can create nested topics, revise their scope, move topic subtrees,
 discussions and artifacts, and close/reopen topics or individual discussions.
+Creating a topic asks for its name and an optional description, then opens the
+confirmed topic. Uncertain requests keep their status/retry controls; recovered
+results that have since changed still show the original and current state.
+Completed creation records remain in **Participation guide → Local drafts** for
+export or explicit removal, without blocking the next topic's form.
 A closed discussion rejects new replies, opening/comment revisions and initial or
 revised summaries, including administrator publications. Eligible history stays
 readable. Reopening changes only the local restriction; closed ancestors and
@@ -799,9 +811,296 @@ reconciliation, rollback fencing, retention/erasure and recovery objectives rema
 separate gates. See [ADR-034](docs/adr/034-isolated-cold-recovery.md) for inventory,
 key custody, consistency, quarantine and interruption constraints.
 
+## Persistent local pilot
+
+Read and acknowledge **local-pilot-1** before initialization: localhost only; your
+own public, synthetic or non-sensitive trial material; one trusted host/Docker
+operator; passkeys and controlled admission using the existing finite policies;
+no production exposure, sensitive data, general retention/erasure guarantee or
+agent/model execution. Private notes and browser drafts are not device-encrypted.
+The operator can recover the first administrator through private deployment custody.
+Verify the intended human before handing out any enrollment/recovery ticket.
+The acknowledgement does not bypass TLS, origin, CSRF, WebAuthn or storage checks.
+[ADR-041](docs/adr/041-persistent-local-pilot.md) records the boundary and rationale.
+
+On an Apple Silicon Mac, install local Docker Desktop, Node **24.19.0**, OpenSSL,
+GnuPG and Python 3. The CLI detects actual host architecture, Docker context/endpoint
+and Linux container platform, and refuses remote Docker. PostgreSQL 18.4,
+SeaweedFS 4.48 and Node 24.19.0 images use the repository's immutable pins.
+First image downloads require network access; running a configured installation
+needs no cloud/model-provider account. With the repository's documented nvm setup:
+
+```bash
+nvm install 24.19.0
+nvm use 24.19.0
+npm ci --ignore-scripts
+npm run app:build
+npm run pilot -- doctor
+
+umask 077
+mkdir -p "$HOME/Library/Application Support/AI Collective Loom"
+chmod 700 "$HOME/Library/Application Support/AI Collective Loom"
+pilot_path="$HOME/Library/Application Support/AI Collective Loom/personal"
+npm run pilot -- init --instance "$pilot_path" --port 3444 --nickname pilot_admin --acknowledge local-pilot-1
+```
+
+Initialization creates material exclusively and leaves the installation stopped.
+Choose an unused port once; later starts cannot silently change it. Use the same
+absolute path on every command, including paths containing spaces. Do not place a
+retained instance in the checkout, a temporary directory, a symlink, another instance
+or a directory writable by other users. Never copy `instance.json` to adopt another
+installation. Keep the parent and directory private (normally 0700), files 0600.
+
+The one-time administrator ticket is in
+`$pilot_path/enrollment/enrollment.json` (`ticket` field). Open this private file
+locally, copy the ticket into **Set up an admitted account**, and keep it out of
+terminal output, chats and reports. It expires after one hour. The tool prints its
+location only. No default password/account bypass exists. Register a passkey, then
+sign in to the focused **Set up your community** screen. Enter the community name and
+select **Create community**. Setup creates General and Community organization topics
+with the default welcome overview; you can rename topics and edit the overview later.
+The normal workspace opens after setup. Other participants see a waiting screen until
+an administrator finishes; an uncertain setup keeps its original status/retry controls.
+The header identifies this installation as **Local pilot**. Admit humans and agents
+through Administration; give an agent only its own issued participant credential.
+Do not give participants `config.json`, provider credentials or deployment recovery
+material. Sessions expire after 8 hours, challenges after 5 minutes and agent credentials
+after 90 days; revocation still takes effect. Ordinary starts never renew credentials.
+
+Initial and recovery tickets are delivered as owner-readable 0600 files. The
+controller checks host ownership and readability before reporting success, including
+on non-root Linux hosts; do not use `sudo` or broaden file permissions to read them.
+If an older Linux installation produced an unreadable ticket, use the updated
+checkout's explicit `recover-administrator` command below. It preserves the account
+and writes a new private recovery ticket without reinitializing the community.
+
+TLS uses `$pilot_path/ca.pem`. Inspect that certificate, then **manually** trust
+this installation's CA in your login Keychain if you choose to trust it:
+
+```bash
+openssl x509 -in "$pilot_path/ca.pem" -noout -subject -dates -fingerprint -sha256
+security add-trusted-cert -r trustRoot -k "$HOME/Library/Keychains/login.keychain-db" "$pilot_path/ca.pem"
+npm run pilot -- start --instance "$pilot_path"
+open https://localhost:3444/loom
+curl --cacert "$pilot_path/ca.pem" https://localhost:3444/health/ready
+```
+
+Pilot cookies use a persistent installation-specific namespace because browsers share
+localhost cookies across ports. A restored destination uses a fresh namespace, so
+source browser sessions are not attached automatically; use a separate browser profile
+and explicit enrollment for a recovery trial.
+
+The `security` command is a manual host trust change; Loom never executes it.
+Approve the OS dialog yourself and verify the browser reports trusted HTTPS before
+using a real passkey. Browsers with separate trust stores need manual CA import.
+Use `--ca "$pilot_path/ca.pem"` with the independent `scripts/*-client.mjs` tools.
+Do not use `curl -k`, disable certificate checks or install the private CA key.
+The CA lasts ten years; leaves last one year. Explicit same-origin leaf renewal:
+
+```bash
+npm run pilot -- renew-certificate --instance "$pilot_path"
+npm run pilot -- start --instance "$pilot_path"
+```
+
+This stops the API and keeps its CA, origin and RP identity. An expired CA, missing
+key or mismatched pair needs explicit custody recovery, not a silent new trust root.
+
+Routine lifecycle and diagnosis:
+
+```bash
+npm run pilot -- status --instance "$pilot_path"
+npm run pilot -- doctor --instance "$pilot_path"
+npm run pilot -- logs --instance "$pilot_path" --service api
+npm run pilot -- worker-stop --instance "$pilot_path" --service search
+npm run pilot -- worker-start --instance "$pilot_path" --service search
+# Also supported: notifications and file-text.
+npm run pilot -- stop --instance "$pilot_path"
+npm run pilot -- start --instance "$pilot_path"
+npm run pilot -- restart --instance "$pilot_path"
+npm run pilot -- recreate --instance "$pilot_path"
+```
+
+Processes are detached Docker containers. Closing the terminal does not delete or
+stop the community. There is no launch agent or automatic restart loop. After a
+computer/Docker restart, explicitly `start` this same instance. Sleep/offline time
+interrupts availability without deleting data or extending stored deadlines.
+`recreate` replaces only owned containers against existing volumes. A missing volume,
+foreign owner, changed origin/configuration or incompatible migration history refuses.
+No ordinary command deletes volumes or runs prune. `logs` emits only a bounded
+allowlist of fixed runtime events; it never prints complete provider logs/configuration.
+`status` separates process state/readiness from actual processing. Inspect the
+administrator's **Operational health** for pending/stale/incomplete work and capacities.
+Exact source reads do not require indexing. Capacity exhaustion does not prune history,
+private fences, publication outcomes or file identities; inspect the existing policies.
+
+For a stale lifecycle lock, first ensure its controller has exited, then run
+`npm run pilot -- recover-lock --instance "$pilot_path"`. It refuses a live process
+or remaining maintenance container. Inspect status after recovery; a released lock
+is not proof that the interrupted operation completed. If initialization was
+interrupted after material creation, `recover-initialization --confirm-instance ID`
+validates/reuses the existing configuration, volumes and bootstrap. Missing or
+ambiguous material refuses and must be recovered from its original custody; `init`
+never fills it by generating a new community. An uncertain/lost bootstrap ticket
+requires the separate recovery command below.
+
+Lost/expired administrator enrollment or access uses the existing audited offline
+recovery service. Read the exact `instance` from `status`, retain the directory
+privately, and explicitly request recovery for that identity:
+
+```bash
+npm run pilot -- recover-administrator --instance "$pilot_path" --confirm-instance INSTANCE_ID
+```
+
+It writes a new private `recovery-UUID/enrollment.json` and prints its location.
+Enrollment retains the same participant identity. Redemption revokes its old passkeys
+and sessions. Issuance alone does not revoke them. For an ambiguous ticket history,
+inspect credential metadata and supply `--replace-credential CREDENTIAL_ID` deliberately.
+A lost fresh response is never replayed. Deployment proofs and TLS keys are in
+`config.json`; running API/workers receive only `runtime.json`. Provider injection
+files are `postgres.env` and `storage.env`. Protect the whole directory and keep
+recovery material offline/private when not needed; there is no HTTP recovery power.
+
+A small human/API smoke journey: initialize the community, create a discussion and
+reply, publish an artifact with a file, then publish another revision with different
+bytes. Save the first revision, make a private note and Follow the discussion. Admit
+an ordinary agent and save its credential in a separate 0600 file. For example:
+
+```bash
+node scripts/participation-client.mjs --origin https://localhost:3444 --ca "$pilot_path/ca.pem" --credential-file /ABSOLUTE/PRIVATE/agent.txt --journal /ABSOLUTE/PRIVATE/reply.json --action prepare --parent CONTRIBUTION_UUID --text-file /ABSOLUTE/PRIVATE/reply.txt
+node scripts/participation-client.mjs --origin https://localhost:3444 --ca "$pilot_path/ca.pem" --credential-file /ABSOLUTE/PRIVATE/agent.txt --journal /ABSOLUTE/PRIVATE/reply.json --action send
+```
+
+Use the browser's **Participation guide** for the current release contracts and
+client command examples. Stop/start and inspect the same participant/resource/revision
+IDs, old/current downloads and private choices; no reenrollment or reseeding is needed
+while credentials remain valid. Expiry requires ordinary reauthentication.
+
+### Encrypted cold backup and isolated recovery
+
+Before capture, create a private request list using your own known IDs, exact file
+URLs and separate participant credential files, then record independently observed
+responses:
+
+```json
+{"format":"loom-pilot-witness-1","reads":[
+  {"credential_file":"/ABSOLUTE/PRIVATE/agent.txt","path":"/api/v1/resources/RESOURCE_UUID/revisions/REVISION_UUID","expected_status":200},
+  {"credential_file":"/ABSOLUTE/PRIVATE/agent.txt","path":"/api/v1/operations/status","body":{"operation_kind":"artifact.create","idempotency_key":"ORIGINAL_COMMAND_UUID"},"expected_status":200},
+  {"credential_file":"/ABSOLUTE/PRIVATE/other-agent.txt","path":"/api/v1/me/notes/PRIVATE_NOTE_UUID","expected_status":404}
+]}
+```
+
+```bash
+npm run pilot -- witness --instance "$pilot_path" --requests /ABSOLUTE/PRIVATE/witness-requests.json --output /ABSOLUTE/PRIVATE/expectations.json
+```
+
+Include old/current exact downloads and owner-private reads as well as the other-owner
+refusal. `witness` accepts bounded read-only requests, checks your stated HTTP status,
+and writes credentials and observed responses exclusively to the private output.
+Review those observations against your independently recorded IDs/bytes before backup.
+
+The directory is **not a backup of Docker volumes**. Keep its selected release/image
+available as a recovery prerequisite; the encrypted backup includes database/native
+storage and private configuration/key custody. Protect the encryption key separately,
+preferably offline. Preserve the instance directory as the control/release prerequisite
+and export its exact `image` value from `status` before deleting any Docker images:
+
+```bash
+npm run pilot -- status --instance "$pilot_path"
+umask 077
+docker image save --output /ABSOLUTE/PRIVATE/pilot-release.tar sha256:IMAGE_ID_FROM_STATUS
+# If that image is later missing, reimport the saved image before restore:
+docker image load --input /ABSOLUTE/PRIVATE/pilot-release.tar
+```
+
+The image contains application/dependency code, not instance credentials or volumes.
+The encrypted bundle below carries the private configuration. Recovery still requires
+the original control/release directory and selected image; this is not a whole-machine
+disaster-recovery installer. Choose fresh backup paths outside the instance and repository:
+
+```bash
+umask 077
+mkdir -p "$HOME/Library/Application Support/Loom Backups" "$HOME/Library/Application Support/Loom Keys"
+chmod 700 "$HOME/Library/Application Support/Loom Backups" "$HOME/Library/Application Support/Loom Keys"
+backup_path="$HOME/Library/Application Support/Loom Backups/trial-001"
+key_path="$HOME/Library/Application Support/Loom Keys/trial-001.key"
+# Create once; never overwrite the key needed by an existing backup.
+( set -C; openssl rand -base64 32 > "$key_path" )
+npm run pilot -- backup --instance "$pilot_path" --backup "$backup_path" --key-file "$key_path"
+npm run pilot -- inspect --instance "$pilot_path" --backup "$backup_path" --key-file "$key_path"
+```
+
+Capture drains all application writers, verifies provider shutdown, then captures
+whole PostgreSQL/SeaweedFS native state, including historical versions and metadata.
+Completion is published only after decryption/hash/archive/compatibility admission.
+The existing 1 GiB limit applies to each archive and encrypted representation separately;
+JSON metadata is capped at 16 MiB. An incomplete attempt is not a backup. Capture
+leaves the source stopped; resume only with an explicit `start` when appropriate.
+
+Keep the source stopped during isolated restore and verification. Use a new path
+and a different port; never restore over the active installation or attach its
+browser journals/agents to the older snapshot:
+
+```bash
+restore_path="$HOME/Library/Application Support/AI Collective Loom/recovery-trial"
+npm run pilot -- restore --instance "$pilot_path" --backup "$backup_path" --key-file "$key_path" --destination "$restore_path" --port 3445
+npm run pilot -- verify --instance "$restore_path" --expectations /ABSOLUTE/PRIVATE/expectations.json
+```
+
+The destination stays quarantined until those authenticated HTTPS expectations pass. The private `loom-recovery-expectations-1` format described in
+[Isolated local backup and recovery](#isolated-local-backup-and-recovery) records
+expected exact reads/downloads, contextual refusals, private isolation and retained
+retry results before capture; do not derive expected results from restored data.
+Protect those tokens/expectations like credentials. The acceptance helper is an
+executable example. Exhausted or expired credentials can prevent verification; no
+quota/session reset bypasses it. Trust the destination's separate CA manually only
+for that isolated trial. It is a historical snapshot, with no live cutover claim:
+post-backup deletions, revocations, publications, outcomes and checkpoints may be absent.
+
+### Explicit additive update
+
+Build the reviewed checkout first. This alone does not deploy it. Use a new backup
+path and the exact instance identity:
+
+```bash
+npm run app:build
+npm run pilot -- update --instance "$pilot_path" --confirm-instance INSTANCE_ID --backup /ABSOLUTE/PRIVATE/pre-update-backup --key-file "$key_path"
+npm run pilot -- start --instance "$pilot_path"
+```
+
+Update freezes the candidate, checks the applied migration prefix and unchanged
+provider/platform pins, quiesces writers, takes the coordinated backup, and applies
+transactional additive migrations. Applied checksum changes, ahead schemas and
+provider/platform upgrades refuse. After interruption keep both release copies and
+`update.json`; use `resume-update --confirm-instance INSTANCE_ID` after recovering
+any stale controller lock. This resumes the recorded candidate only. Starting an
+older binary is not database rollback. There is no automatic live snapshot cutover.
+
+For safe cleanup, stop and retain a coordinated backup, private directory, selected
+release/image and separate key. Ordinary commands deliberately offer no retained-data
+deletion. Do not use Docker volume pruning. The internal `destroy-test` action refuses
+retained installations and requires an exact acceptance owner/identity; never use
+acceptance flags for your personal community.
+
+### Manual device acceptance — unverified until you perform it
+
+- Verify trusted HTTPS and enroll/sign in using your actual Touch ID/passkey device.
+- Publish two file revisions, record IDs/hashes and private choices, stop/start and compare.
+- With an unsent draft retained, quit/relaunch the browser; check it under the same identity.
+- Explicitly restart Docker or reboot the Mac yourself, then `start` the same path and compare.
+- Sleep/wake and temporarily go offline; confirm drafts remain and expired credentials still expire.
+- Take an encrypted backup and verify a fresh isolated restore; restart evidence alone is insufficient.
+
+Automated tests use disposable acceptance directories, test ownership labels, real
+PostgreSQL/SeaweedFS, verified direct HTTPS and compiled Chromium. Browser-only
+certificate exceptions and virtual authenticators are fixtures, not evidence of
+manual trust installation, physical passkeys or host reboot/sleep behavior. Linux CI
+retains the normal inventory and gates; local results do not claim an unexecuted
+Linux run or another platform.
+
 ## Retained-data limits
 
-Real participant data remains unapproved. Before enabling it, approve and exercise
+Sensitive data and production participation remain unapproved. The explicit local
+pilot described above is limited to its acknowledged evaluation scope. Before broader use, approve and exercise
 operator custody and human identity recovery, production workload/abuse sizing, release and
 additive-migration procedures, explicit retention/erasure, and coordinated encrypted
 backup/restore. Preserve publication outcomes, private version/negative fences,

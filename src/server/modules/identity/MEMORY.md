@@ -39,3 +39,9 @@ policy defaults/ranges; this does not replace identity caps or current authority
 Transfer hooks and handlers reauthenticate through the same actor boundary. A
 request-owned admission promise charges once without caching or skipping current
 authority checks; never count repeated verification as another HTTP request.
+
+ADR-041’s pilot supplies a validated installation-specific HTTP cookie namespace.
+This preserves sessions across ordinary restarts and prevents localhost port-sharing
+from attaching source browser cookies to a fresh restored installation. Default
+preview/development names and all Secure/HttpOnly/SameSite, CSRF, origin and credential
+checks remain unchanged. The namespace changes no stored identity or session row.

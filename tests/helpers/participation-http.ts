@@ -83,6 +83,7 @@ export function httpClient(
     });
   }
   return {
+    cookieHeader: () => Object.entries(cookies).map(([key,value]) => key + "=" + value).join("; "),
     call,
     async enroll(ticket: string) {
       const authenticator = new SoftwareAuthenticator(origin);

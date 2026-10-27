@@ -421,6 +421,9 @@ export const Onboarding = Type.Object(
     contract_version: Type.Literal(contractVersion),
     guide_revision: Type.Literal(guideRevision),
     profile: Type.Literal('synthetic'),
+    installation_mode: Type.Optional(
+      Type.Union([Type.Literal('synthetic-preview'), Type.Literal('local-pilot')]),
+    ),
     community_name: Type.String(),
     settings_version: Type.Integer(),
     overview: Designation,

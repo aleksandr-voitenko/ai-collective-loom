@@ -38,7 +38,19 @@ Expired preview cursors retain a First text page action. Independent status read
 sequence their local observations while all same-owner denials still propagate.
 
 `ParticipationApp.tsx` owns session/community discovery, navigation, sign-out and
-the ReadingProvider/view keys. `ParticipationRoutes.tsx` selects page components
+the ReadingProvider/view keys. Before community initialization it uses a focused
+shell without workspace navigation. `CommunitySetup.tsx` reuses the existing setup
+journal/authority protocol; administrators enter only the community name, other
+participants see an explicit waiting/refresh screen. Fresh requests use the existing
+topic/overview defaults. Hidden fields come from the complete current saved body on
+name edits and first dispatch; older drafts/corrections and uncertain retries must
+retain their authored content and exact recovery identity. An uncertain setup remains focused even when discovery sees
+settings_version > 0: that observation cannot settle the original command. Successful
+confirmation reveals the current workspace route. Corrected drafts retain the existing
+`/loom/admin?intent=...` recovery link; no automatic POST or new key is introduced.
+`ParticipationAdministration.tsx` owns post-setup management only. Additive server
+installation_mode distinguishes Local pilot from Synthetic preview; the legacy
+synthetic protocol profile and finite policies remain unchanged. `ParticipationRoutes.tsx` selects page components
 and supplies fallback authorization boundaries; individual topic, discussion and
 resource pages retain their existing source boundaries. The Changes route excludes
 query edits from its provider key so persistent controls keep their lifetime.
@@ -52,6 +64,13 @@ Discussion headers distinguish local closure from inherited topic closure; only
 administrators receive the contextual close/reopen organization links. The existing
 Organization journal keeps the same scope and bytes, with original decision versus
 current local/effective state displayed on recovery. No reopening resends drafts.
+Routine `area.create` confirmation opens the authorized current topic only after
+durable local settlement, with matching original/current ID, parent, version and
+open state. A changed result keeps the receipt; late view/identity/authority loss
+cannot navigate. Completed creation records stay in Local drafts, but are excluded
+from the next creation's implicit slot lookup and the Topics recovery list.
+The destination's short success notice binds the participant and topic, follows
+an authorized source read, focuses the heading and expires without another write.
 `response-contracts.ts` accepts certified `forbidden_reason: publication_closed`
 only for publication/preparation/upload endpoints. This retains independent readable
 history after closure; generic forbidden/identity/source loss still withdraws it.

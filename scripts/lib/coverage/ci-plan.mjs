@@ -7,15 +7,15 @@ import { browserBatches } from '../browser-batches.mjs';
 import { buildInventory, keys, validateNode, expandBrowser, readEvidence } from './portable.mjs';
 import { checked, validRun, captureName } from '../browser-diagnostics.mjs';
 
-// Seconds observed in PR #28's complete native/browser coverage run. Unknown
+// Seconds observed in PR #28 and the local arm64 pilot acceptance run. Unknown
 // suites are still included; these weights affect scheduling only, never selection.
 const nativeSeconds = { migrations: 5, app: 12, publication: 4, identity: 105, participation: 52,
   'saved-items': 16, organization: 70, references: 105, summaries: 72, search: 58, changes: 63,
   notifications: 81, following: 109, updates: 127, attention: 191, reading: 69, moderation: 58,
-  files: 242, reservations: 134, notes: 78, recovery: 100 };
+  files: 242, reservations: 134, notes: 78, recovery: 100, pilot: 310 };
 const browserSeconds = { administration: 23, attention: 215, changes: 50, 'files-text': 37, files: 99,
   following: 84, moderation: 57, notes: 50, notifications: 44, organization: 110, participation: 150,
-  reading: 109, recovery: 33, references: 71, reservations: 40, 'saved-items': 88, search: 41, summaries: 60, updates: 75 };
+  reading: 109, recovery: 33, references: 71, reservations: 40, 'saved-items': 88, search: 41, summaries: 60, updates: 75, pilot: 125 };
 export function partition(items, weight, count = 4) {
   assert.ok(items.length >= count);
   const groups = Array.from({ length: count }, () => ({ weight: 0, items: [] }));

@@ -8,7 +8,7 @@ import {RouterProvider} from 'react-router/dom';
 import {ActiveView} from '../../src/web/ParticipationRoutes.js';
 import {FileTextAdministration} from '../../src/web/FileText.js';
 import {AuthorizationBoundary,useAuthorization} from '../../src/web/AuthorizationBoundary.js';
-import {invalidateIdentity} from '../../src/web/participation-client.js';
+import {invalidateIdentity,IntentStore} from '../../src/web/participation-client.js';
 import type {Context} from '../../src/web/participation-state.js';
 import type {FileTextValue,FileSearchPageValue} from '../../src/contracts/file-text.js';
 
@@ -26,7 +26,7 @@ function mount(t:TestContext,initial=route){
   const calls:{path:string;done:boolean;finish:(r:Response)=>void}[]=[];
   t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(resolve=>{const c={path,done:false,finish(r:Response){c.done=true;resolve(r);}};calls.push(c);}));
   function Probe(){const a=useAuthorization();return <button onClick={()=>void a.read('/api/v1/resources/'+id).catch(()=>{})}>Check source authority</button>;}
-  const c={self:{participant_id:person.id,role:'administrator'}} as Context;
+  const c={community:{settings_version:1},store:new IntentStore(randomUUID(),person.id,localStorage,dom.window.location.origin),self:{participant_id:person.id,role:'administrator'}} as Context;
   const router=createMemoryRouter([{path:'/loom/*',element:<ActiveView context={c}/>},{path:'/other',element:<h1>Other view</h1>}],{initialEntries:[initial]});
   const view=render(<StrictMode><RouterProvider router={router}/><AuthorizationBoundary scope="probe"><Probe/></AuthorizationBoundary></StrictMode>);
   t.after(()=>{view.unmount();router.dispose();});
@@ -74,7 +74,7 @@ test('Files mode retains query/filter intent, starts a separate traversal and re
 });
 test('file administration loads only when opened and retains explicit bounded maintenance',async t=>{
   const calls:{path:string;finish:(r:Response)=>void}[]=[];t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(finish=>calls.push({path,finish})));
-  const c={self:{participant_id:person.id,role:'administrator'}} as Context;
+  const c={community:{settings_version:1},store:new IntentStore(randomUUID(),person.id,localStorage,dom.window.location.origin),self:{participant_id:person.id,role:'administrator'}} as Context;
   render(<StrictMode><AuthorizationBoundary sourcePolicy="settings"><FileTextAdministration context={c}/></AuthorizationBoundary></StrictMode>);assert.equal(calls.length,0);
   const details=screen.getByText('File text processing administration').parentElement as HTMLDetailsElement;
   await act(async()=>{details.open=true;fireEvent(details,new dom.window.Event('toggle'));});await waitFor(()=>assert.ok(calls.length));

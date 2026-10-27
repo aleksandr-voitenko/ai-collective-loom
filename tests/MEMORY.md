@@ -16,6 +16,47 @@ private recovery assertions. Diagnostic changes add only fixed route/spec names
 and the two new test identities; existing numerical runtime/byte/coverage gates stay.
 
 
+`integration/pilot.test.ts` and `e2e/pilot.spec.ts` execute the actual persistent
+installation CLI and immutable built image with real PostgreSQL/SeaweedFS. Separate
+acceptance owner/instance labels gate teardown; personal/dev installations are never
+selected. The normal native inventory discovers the pilot suite; the browser inventory
+has four explicit pilot journeys, unchanged deadlines and zero retries. Register cleanup
+before initialization and close browser contexts before deleting owned providers.
+Permission fault fixtures set their modes explicitly so a private caller umask cannot
+remove the intended unsafe-permission condition.
+The ticket-custody case requires a non-root Linux operator and checks initial and
+administrator-recovery files for host ownership, 0600, actual owner reads and denial
+to a different container UID through a direct read-only file mount. It also enrolls
+both tickets over verified HTTPS, checks same-identity recovery/session revocation,
+unchanged ticket bytes after restart, and secret-free CLI/owned-service log output.
+Mac runs cover delivery/recovery but do not stand in for Linux UID enforcement.
+
+Pilot acceptance records independent exact HTTPS outcomes/files/private reads, then
+compares ordinary stop/start/container replacement and isolated encrypted recovery.
+Persistent Chromium profiles cover actual process relaunch, exact uncertain commands,
+unreceived requests and committed-response loss with a real API SIGKILL. Provider and
+independent worker outages preserve direct reads and original notification identity.
+No test quota overrides, reseeding or authenticator code enters the pilot runtime.
+Direct HTTPS trusts the actual CA; browser certificate exceptions and software passkeys
+are fixtures, never physical-device/trust-installation evidence.
+The pilot first-run journey checks the real server mode, uncluttered desktop/mobile
+name-only setup, exact default topic/overview reads, draft reload and committed-response
+loss followed by same-command status. Mounted name-only cases preserve the full older
+draft/correction body and exact uncertain key/body after a missing status.
+Mounted shell tests cover administrator versus participant gating and no eager
+workspace queries; existing role-withdrawal/setup-recovery tests retain their guards.
+
+The additive pilot update case compiles actual source at
+`bfc127ed20310c987325bb9eef030fe4b0d112a0` in a private disposable local clone,
+transplanting only the new controller and using its identical dependency lock. It
+copies the installed dependencies into that checkout so Vite's generated-config
+cache and module URLs stay private to the historical source. Never link the whole
+node_modules directory: that aliases old source into the current coverage inventory.
+The additive case asserts the actual compiler-cache path remains isolated. It
+populates schema0028 through normal HTTPS, interrupts after the observed cold-backup
+journal barrier and explicitly resumes to0029. A separate no-op update case is not
+historical compatibility evidence. Hosted CI already fetches complete history.
+
 `recovery.test.ts` uses ADR-034's separately owned cold-volume installation, real
 HTTPS and native provider versions. Expectations are captured before backup through
 application routes, independently of restore code. Source containers/volumes/network
@@ -684,6 +725,14 @@ retry, original/current result display, and late status ownership. Real journal
 faults preserve blocked drafts and rejected originals through review/correction;
 resolved removal is selective. Context retries retain authored bytes and never
 dispatch a replacement command automatically.
+Creation cases additionally check automatic navigation only after confirmed local
+settlement, a fresh form beside retained completed records, unchanged exact retry,
+changed-result receipts, local storage failure, and late view/identity ownership.
+The compiled organization journeys exercise keyboard creation, optional description,
+heading focus and timed confirmation, plus committed-response loss followed by
+status-only recovery with exact native identity/content and one retained operation.
+`LOOM_TOPIC_CREATE_REVIEW=1` writes disposable desktop/mobile creation views under
+`/tmp/loom-review-evidence/topic-create`; remove them after visual inspection.
 
 Search scenarios extend the same closed diagnostics with `search.spec.ts`, search/
 authors/status/admin route templates and search/refresh controls. Queries and cursors are

@@ -910,6 +910,17 @@
 .organization-form {
   max-width: 850px;
 }
+.organization-form.topic-create {
+  max-width: 640px;
+}
+.topic-created {
+  color: var(--accent);
+  font-weight: 600;
+  margin-block: 1rem;
+}
+.topic-created:empty {
+  display: none;
+}
 .organization-form label {
   display: grid;
   gap: 0.4rem;
@@ -1390,4 +1401,86 @@
 .private-notes .notice button,
 .private-notes article button {
   margin: 0.25rem;
+}
+
+/* Before initialization, one task takes the place of the full workspace navigation. */
+.loom-app.setup-shell .workspace {
+  margin-left: 0;
+}
+.loom-app.setup-shell .topbar {
+  max-width: 1040px;
+  margin: auto;
+  min-height: 90px;
+  height: auto;
+  flex-wrap: wrap;
+  padding: 20px 32px;
+}
+.loom-app.setup-shell .brand {
+  padding: 0;
+  margin-right: auto;
+}
+.loom-app .setup-account {
+  color: var(--muted);
+  font-size: 12px;
+}
+.loom-app.setup-shell .topbar .release-label {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 3px 10px;
+}
+.loom-app.setup-shell main.page {
+  max-width: 664px;
+  padding: 48px 32px 64px;
+  min-height: calc(100vh - 90px);
+}
+.loom-app .setup-progress {
+  display: flex;
+  gap: 24px;
+  list-style: none;
+  margin: 26px 0 32px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.loom-app .setup-progress [aria-current] {
+  color: var(--accent);
+  font-weight: 650;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 8px;
+}
+.loom-app .setup-form {
+  padding: 28px;
+  margin: 0;
+}
+.loom-app .setup-form > .primary {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 8px;
+  font-size: 15px;
+}
+.loom-app .setup-waiting {
+  padding: 32px;
+  max-width: 640px;
+  margin: 24px auto;
+}
+@media (max-width: 760px) {
+  .loom-app.setup-shell .topbar {
+    padding: 18px 20px;
+    gap: 12px;
+  }
+  .loom-app.setup-shell main.page {
+    padding: 28px 20px 48px;
+  }
+  .loom-app .setup-account {
+    flex-basis: 100%;
+    order: 2;
+  }
+  .loom-app .setup-form {
+    padding: 20px;
+  }
+  .loom-app .setup-progress {
+    gap: 14px;
+    font-size: 11px;
+  }
 }

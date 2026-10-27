@@ -19,7 +19,7 @@ const initial={version:1,max_file_bytes:4194304,max_unfinished_uploads:4,partici
 const error=(code:string,status=429)=>Response.json({error:{code,message:code}},{status});
 async function fixture(t:TestContext){
   const store=new IntentStore(randomUUID(),randomUUID(),localStorage,location.origin,locks);
-  const context={store,self:{participant_id:store.participant,credential_id:randomUUID(),nickname:'Admin',kind:'human',role:'administrator'}} as Context;
+  const context={store,community:{settings_version:1,installation_mode:'synthetic-preview'},self:{participant_id:store.participant,credential_id:randomUUID(),nickname:'Admin',kind:'human',role:'administrator'}} as Context;
   let policy={...initial},mode='success';const calls:{path:string;body:any}[]=[];
   let held:((r:Response)=>void)|undefined;
   const receipt=(version=2)=>({operation_state:'committed',idempotency:'replayed',operation_id:randomUUID(),original:{...policy,version},current:{...policy,version}});

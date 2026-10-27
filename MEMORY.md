@@ -9,7 +9,8 @@ Keep durable setup/coverage commands in root README, decisions in `docs/adr`, an
 implementation constraints in scoped memory. Historical evidence remains in Git.
 The architecture is a proposal; its acceptance mappings are not executed results.
 
-Current implementation includes an opt-in **synthetic participation** slice on
+Current implementation includes opt-in synthetic participation and an explicitly
+acknowledged localhost retained evaluation pilot (ADR-041) on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
@@ -185,9 +186,10 @@ Saved/Following/notification or feed changes. Browser automatic presentation is 
 opt-in per-browser/identity prototype, with separate bounded recovery and explicit
 reopening after Unread. See ADR-026 and the
 participation memory for limits, authority and custody. Real-data gates remain.
-No real accounts/content are approved: ADR-004 identity/recovery candidates,
-production limits, retained-data operations and cross-machine validation remain
-gates. There is no default administrator or identity-header bypass. Agent memory
+ADR-041 permits the operator’s own public/synthetic/non-sensitive local trial
+accounts/content with explicit policy acknowledgement. Sensitive data, production
+exposure/retention, physical-device validation and cross-machine operation remain
+gated. The inherited finite identity/resource policies are local evaluation choices. There is no default administrator or identity-header bypass. Agent memory
 and model execution stay external; signed grants, complex conversion/extraction and
 other derived workers stay gated. Supported literal UTF-8 processing is ADR-031.
 ADR-034 adds explicitly managed synthetic cold backup and quarantined same-release
@@ -209,6 +211,11 @@ Application commands require Node 24.19.0. `dev` initializes dependencies;
 private ticket file and independent supervised native search/notification/file-text workers.
 Terminal `worker stop/start`, `notifications stop/start` and `files stop/start` preserve
 the API. It never touches existing development data or credentials.
+
+`pilot` selects a private external installation with labeled retained volumes, a
+fixed localhost HTTPS origin and an immutable compiled API/worker image. Start never
+seeds, migrates or replaces missing storage; updates and encrypted cold recovery
+are explicit. `scripts/MEMORY.md` owns its custody/ownership boundaries.
 
 `scripts/local.mjs` manages an explicitly local Compose project. PostgreSQL 18.4
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.
@@ -318,12 +325,14 @@ SQL; challenge consumption commits before verification, ticket state/counters ar
 rechecked before binding/session insertion. Parent revocation invalidates sessions.
 Bootstrap/recovery require distinct deployment capability verifiers and have no
 HTTP route; initialization closes new bootstrap attempts permanently. Operator
-custody/rotation and human recovery proof are still unimplemented procedures.
+custody and audited same-participant first-administrator replacement are provided
+by the private pilot controller (ADR-041); production rotation and external human
+identity-proof procedures remain open.
 `test:identity:postgres` uses tmpfs PostgreSQL, private HTTP cookie/bearer requests,
 actual ES256 software signatures and barriers for account/ticket/counter races,
 reply loss, rollback, lifecycle authority and sampled disclosure checks. See
 ADR-004/ADR-015 and `tests/integration/identity.test.ts`. Actual Chromium virtual-authenticator journeys and an administrator UI now exist.
-Physical-device and human recovery proof trials, real enrollment, approved limits/
+Physical-device and external human recovery proof trials, production limits/
 retention and distributed abuse controls remain open; synthetic tests do not complete
 AC45/AC54.
 Identity prototype decisions and verification: Lore-ID `LC-20261012-9JJH`.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { type ResourceView, Onboarding } from '../contracts/participation.js';
 import { type Context, useQuery } from './participation-state.js';
@@ -30,18 +30,6 @@ export function Topics({ context }: { context: Context }) {
           <p className="subtitle">Find a place for your next conversation.</p>
         </div>
       </div>
-      {context.community.settings_version === 0 && (
-        <div className="notice">
-          <p>
-            Community setup is incomplete.{' '}
-            {context.self.role === 'administrator' ? (
-              <Link to="/loom/admin">Set up the community</Link>
-            ) : (
-              'Ask a community administrator to finish setup.'
-            )}
-          </p>
-        </div>
-      )}
       {context.self.role === 'administrator' && (
         <>
           <Link className="button" to="/loom/organize?action=area.create">
@@ -64,7 +52,10 @@ export function AreaPage({ id, context }: { id: string; context: Context }) {
 }
 
 function AreaContent({ id, context }: { id: string; context: Context }) {
-  const query = new URLSearchParams(useLocation().search);
+  const location = useLocation(),
+    query = new URLSearchParams(location.search);
+  const heading = useRef<HTMLHeadingElement>(null),
+    [created, setCreated] = useState(false);
   const [create, setCreate] = useState(query.has('compose')),
     [reload, setReload] = useState(0),
     [tab, setTab] = useState<'discussions' | 'artifacts'>(
@@ -78,6 +69,22 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
     '/api/v1/organization/resources/' + id,
     OrganizationResource,
   );
+  useEffect(() => {
+    const confirmation = location.state?.topicCreated;
+    const remaining = Number(confirmation?.expiresAt) - Date.now();
+    const visible =
+      area?.kind === 'area' &&
+      area.resource_id === id &&
+      confirmation?.resourceId === id &&
+      confirmation?.participantId === context.self.participant_id &&
+      remaining > 0 &&
+      remaining <= 6000;
+    setCreated(visible);
+    if (!visible) return;
+    heading.current?.focus();
+    const timer = window.setTimeout(() => setCreated(false), remaining);
+    return () => window.clearTimeout(timer);
+  }, [area?.resource_id, id, context.self.participant_id, location.key]);
   if (error)
     return (
       <>
@@ -90,9 +97,14 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
   return (
     <>
       <TopicLocation area={area} />
+      <p className="topic-created" role="status">
+        {created ? 'Topic created.' : null}
+      </p>
       <div className="header-line">
         <div>
-          <h1>{area.title}</h1>
+          <h1 ref={heading} tabIndex={-1}>
+            {area.title}
+          </h1>
           <p className="subtitle">{area.description}</p>
         </div>
         <button
