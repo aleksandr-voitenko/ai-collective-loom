@@ -22,7 +22,7 @@ const { render, screen, fireEvent, cleanup, act, waitFor } = await import('@test
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 type Call = { path: string; method: string; body: unknown; raw: string | undefined; done: boolean; finish: (response: Response) => void };
-function fixture(t: TestContext) {
+function fixture(t: TestContext, kind: 'area.edit' | 'area.create' = 'area.edit') {
   const instance = randomUUID(), participant = randomUUID();
   const resource: OrganizationResourceView = {
     resource_id: randomUUID(), kind: 'area', parent_id: null, version: 1, hierarchy_version: 1,
@@ -64,6 +64,7 @@ function fixture(t: TestContext) {
       { path: '/loom/organize', element: <AuthorizationBoundary><OrganizationPage context={context} /></AuthorizationBoundary> },
       { path: '/recovery', element: <OrganizationRecovery context={context} /> },
       { path: '/loom', element: <h1>Topics</h1> },
+      { path: '/loom/area/:id', element: <h1>Created topic</h1> },
       { path: '/elsewhere', element: <h1>Another view</h1> },
     ], { initialEntries: [entry] });
     t.after(() => router.dispose());
@@ -77,14 +78,15 @@ function fixture(t: TestContext) {
   async function loadContext(value = resource) {
     await waitFor(() => assert.ok(get().some(c => !c.done)));
     await act(async () => { for (const call of get().filter(c => !c.done)) {
-      assert.equal(call.path, '/api/v1/organization/resources/' + resource.resource_id);
-      call.finish(Response.json(value));
+      assert.equal(call.path, kind === 'area.create' ? '/api/v1/organization/children?limit=1' : '/api/v1/organization/resources/' + resource.resource_id);
+      call.finish(Response.json(kind === 'area.create' ? { items: [], next_cursor: null, hierarchy_version: 1,
+        complete: true, work_budget_reached: false, scope: 'community', limit: 1, max_response_bytes: 65536 } : value));
     } });
-    await screen.findByLabelText('Topic title');
+    await screen.findByLabelText(kind === 'area.create' ? 'Topic name' : 'Topic title');
   }
   async function seed(state: Intent['state'] = 'uncertain', title = 'Retained authored title') {
-    let record = context.store.create('organization:area.edit:' + resource.resource_id, 'organization.change', '/api/v1/organization/changes', {
-      kind: 'area.edit', resource_id: resource.resource_id, expected_version: 1, expected_hierarchy_version: 1,
+    let record = context.store.create('organization:' + kind + ':' + (kind === 'area.create' ? 'root' : resource.resource_id), 'organization.change', '/api/v1/organization/changes', {
+      kind, ...(kind === 'area.create' ? { parent_id: null } : { resource_id: resource.resource_id, expected_version: 1 }), expected_hierarchy_version: 1,
       title, description: 'Retained scope with Unicode: café',
     });
     record = await context.store.saveDraft(record, record.body);
@@ -99,6 +101,11 @@ function fixture(t: TestContext) {
     return context.store.saveDraft(record, record.body);
   }
   function result(): OrganizationResult {
+    if (kind === 'area.create') return {
+      operation_state: 'committed', operation_id: randomUUID(), kind, idempotency: 'replayed',
+      outcome: { resource_id: resource.resource_id, parent_id: null, version: 1, hierarchy_version: 2, local_open: true },
+      current: { ...resource, hierarchy_version: 3 },
+    };
     const currentParent = randomUUID();
     return {
       operation_state: 'committed', operation_id: randomUUID(), kind: 'area.edit', idempotency: 'replayed',
@@ -120,6 +127,99 @@ async function status(f: ReturnType<typeof fixture>, record: Intent) {
   return call;
 }
 const unavailable = (message: string) => Response.json({ error: { code: 'service_unavailable', message } }, { status: 503 });
+
+test('topic creation opens the confirmed topic and keeps its receipt without blocking another creation', async t => {
+  const f = fixture(t, 'area.create'), router = f.mount('/loom/organize?action=area.create');
+  await f.loadContext();
+  assert.equal(screen.queryByText('Parent: Community root'), null);
+  await act(async () => fireEvent.change(screen.getByLabelText('Topic name'), { target: { value: 'Research' } }));
+  await click('Create topic');
+  await waitFor(() => assert.equal(f.posts().length, 1));
+  const chosen = f.saved()[0]!;
+  assert.deepEqual(f.posts()[0]!.body, {
+    kind: 'area.create', parent_id: null, expected_hierarchy_version: 1,
+    title: 'Research', description: '', idempotency_key: chosen.key,
+  });
+  await act(async () => f.posts()[0]!.finish(Response.json(f.result())));
+  await screen.findByRole('heading', { name: 'Created topic' });
+  assert.equal(router.state.location.pathname, '/loom/area/' + f.resource.resource_id);
+  assert.equal(router.state.historyAction, 'REPLACE');
+  assert.deepEqual(f.saved(), [{ ...chosen, state: 'committed', sequence: chosen.sequence + 1 }]);
+  assert.equal(router.state.location.state.topicCreated.participantId, f.context.self.participant_id);
+  await act(async () => { await router.navigate('/recovery'); });
+  assert.equal(screen.queryByRole('link'), null);
+  await act(async () => { await router.navigate('/loom/organize?action=area.create'); });
+  await f.loadContext();
+  assert.equal((screen.getByLabelText('Topic name') as HTMLInputElement).value, '');
+  assert.equal((screen.getByRole('button', { name: 'Create topic' }) as HTMLButtonElement).disabled, false);
+  assert.equal(f.saved()[0]!.key, chosen.key);
+  assert.equal(f.posts().length, 1, 'Reopening the form never dispatches');
+});
+
+test('uncertain topic creation retains missing status and opens only after an exact confirmed retry', async t => {
+  const f = fixture(t, 'area.create'), chosen = await f.seed();
+  const router = f.mount('/loom/organize?action=area.create');
+  await f.loadContext();
+  const before = f.rawRecords(), call = await status(f, chosen);
+  await act(async () => call.finish(Response.json({ operation_state: 'not_recorded' })));
+  await screen.findByText('Confirmation is unavailable. Keep this exact request; it may still commit.');
+  assert.equal(router.state.location.pathname, '/loom/organize');
+  assert.deepEqual(f.rawRecords(), before);
+  assert.equal(screen.queryByRole('button', { name: 'Create topic' }), null);
+  await click('Retry same organization change');
+  await waitFor(() => assert.equal(f.posts().length, 2));
+  assert.equal(f.posts()[1]!.raw, JSON.stringify(chosen.body));
+  await act(async () => f.posts()[1]!.finish(Response.json(f.result())));
+  await screen.findByRole('heading', { name: 'Created topic' });
+  assert.deepEqual(f.saved(), [{ ...chosen, state: 'committed', sequence: chosen.sequence + 2 }]);
+});
+
+for (const change of ['moved', 'edited', 'closed'] as const) test(`recovered topic creation keeps original/current detail when ${change}`, async t => {
+  const f = fixture(t, 'area.create'), chosen = await f.seed('committed');
+  const router = f.mount('/loom/organize?intent=' + chosen.key);
+  await f.loadContext();
+  const call = await status(f, chosen), result = f.result();
+  if (change === 'moved') result.current.parent_id = randomUUID();
+  if (change === 'edited') result.current.version = 2;
+  if (change === 'closed') result.current.publication_open = false;
+  await act(async () => call.finish(Response.json(result)));
+  await screen.findByRole('link', { name: 'View current location' });
+  assert.equal(router.state.location.pathname, '/loom/organize');
+  assert.ok(screen.getByText('Original result: version 1, parent Community root.'));
+  assert.equal(f.saved()[0]!.key, chosen.key);
+});
+
+for (const departure of ['route', 'identity'] as const) test(`confirmed topic creation cannot navigate after ${departure} departure`, async t => {
+  const f = fixture(t, 'area.create'), chosen = await f.seed();
+  const router = f.mount('/loom/organize?intent=' + chosen.key);
+  await f.loadContext();
+  const call = await status(f, chosen), before = f.rawRecords();
+  if (departure === 'route') await act(async () => { await router.navigate('/elsewhere'); });
+  else {
+    t.mock.method(window, 'dispatchEvent', () => true);
+    await act(async () => { invalidateIdentity(); });
+  }
+  await act(async () => call.finish(Response.json(f.result())));
+  assert.equal(router.state.location.pathname, departure === 'route' ? '/elsewhere' : '/loom/organize');
+  if (departure === 'identity') assert.deepEqual(f.rawRecords(), before);
+  else assert.equal(f.saved()[0]!.state, 'committed');
+});
+
+test('topic creation stays recoverable when local settlement fails', async t => {
+  const f = fixture(t, 'area.create'), chosen = await f.seed();
+  const router = f.mount('/loom/organize?intent=' + chosen.key);
+  await f.loadContext();
+  const call = await status(f, chosen), before = f.rawRecords(), originalSet = dom.window.Storage.prototype.setItem;
+  t.mock.method(dom.window.Storage.prototype, 'setItem', function (this: Storage, key: string, value: string) {
+    if (key === f.context.store.prefix + chosen.key && JSON.parse(value).state === 'committed') throw new Error('Receipt storage unavailable');
+    originalSet.call(this, key, value);
+  });
+  await act(async () => call.finish(Response.json(f.result())));
+  await screen.findByText('Receipt storage unavailable');
+  assert.equal(router.state.location.pathname, '/loom/organize');
+  assert.deepEqual(f.rawRecords(), before);
+  assert.ok(screen.getByRole('button', { name: 'Retry same organization change' }));
+});
 
 test('selected Organization status preserves exact uncertainty through not-recorded and transport failure before explicit retry', async t => {
   const f = fixture(t), chosen = await f.seed(), other = await f.seed('draft', 'Independent organization draft');

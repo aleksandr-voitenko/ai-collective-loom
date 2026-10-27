@@ -910,6 +910,17 @@
 .organization-form {
   max-width: 850px;
 }
+.organization-form.topic-create {
+  max-width: 640px;
+}
+.topic-created {
+  color: var(--accent);
+  font-weight: 600;
+  margin-block: 1rem;
+}
+.topic-created:empty {
+  display: none;
+}
 .organization-form label {
   display: grid;
   gap: 0.4rem;

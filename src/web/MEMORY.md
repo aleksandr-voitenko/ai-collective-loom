@@ -64,6 +64,13 @@ Discussion headers distinguish local closure from inherited topic closure; only
 administrators receive the contextual close/reopen organization links. The existing
 Organization journal keeps the same scope and bytes, with original decision versus
 current local/effective state displayed on recovery. No reopening resends drafts.
+Routine `area.create` confirmation opens the authorized current topic only after
+durable local settlement, with matching original/current ID, parent, version and
+open state. A changed result keeps the receipt; late view/identity/authority loss
+cannot navigate. Completed creation records stay in Local drafts, but are excluded
+from the next creation's implicit slot lookup and the Topics recovery list.
+The destination's short success notice binds the participant and topic, follows
+an authorized source read, focuses the heading and expires without another write.
 `response-contracts.ts` accepts certified `forbidden_reason: publication_closed`
 only for publication/preparation/upload endpoints. This retains independent readable
 history after closure; generic forbidden/identity/source loss still withdraws it.

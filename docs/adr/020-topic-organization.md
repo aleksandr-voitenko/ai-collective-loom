@@ -136,6 +136,15 @@ after a definitive refusal. Account/view generations and record sequences preven
 late responses or stale tabs replacing another operation. Organization recovery
 never clears publication or Saved records.
 
+Routine topic creation opens the created topic after an authorized confirmation
+and durable local settlement, with a short success message. The exact completed
+journal remains in Local drafts; a new creation does not reopen that completed
+form. Uncertainty still requires explicit status/retry. If the confirmed topic's
+current parent, version or open state differs from its original outcome, the
+original/current receipt remains visible. This keeps recovery evidence available
+without asking users to interpret versions or dismiss a receipt after every
+successful creation. Edit, move and closure receipts retain their existing flows.
+
 Organizational suggestions remain ordinary discussions. Optional proposal context
 binds the affected area, configured destination and settings version at composition;
 the server checks that binding under the configuration/structure guards. Changing

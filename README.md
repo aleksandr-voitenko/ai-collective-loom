@@ -27,6 +27,11 @@ Production identity, capacity and retention policies still require review. Use s
 content in disposable previews; retained trials follow the local-pilot limits below.
 Administrators can create nested topics, revise their scope, move topic subtrees,
 discussions and artifacts, and close/reopen topics or individual discussions.
+Creating a topic asks for its name and an optional description, then opens the
+confirmed topic. Uncertain requests keep their status/retry controls; recovered
+results that have since changed still show the original and current state.
+Completed creation records remain in **Participation guide → Local drafts** for
+export or explicit removal, without blocking the next topic's form.
 A closed discussion rejects new replies, opening/comment revisions and initial or
 revised summaries, including administrator publications. Eligible history stays
 readable. Reopening changes only the local restriction; closed ancestors and

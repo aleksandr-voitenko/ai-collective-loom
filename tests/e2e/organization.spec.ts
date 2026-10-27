@@ -47,10 +47,30 @@ async function view(page:Page) {await page.getByRole('link',{name:'View current 
 test('administrator creates and edits nested topics, moves a subtree, closes/reopens by keyboard and browses narrow layouts',async({page,context,server},info)=>{
   const d=await setup(page,context,server);await page.getByRole('link',{name:'Topics',exact:true}).first().click();
   await page.getByRole('link',{name:'Create root topic',exact:true}).click();
-  await page.getByLabel('Topic title',{exact:true}).fill('Research');await page.getByLabel('Scope description').fill('Shared research scope.');
-  await page.getByRole('button',{name:'Save topic',exact:true}).click();await expect(page.getByText('Organization change confirmed.',{exact:true})).toBeVisible();await view(page);
-  await page.getByRole('link',{name:'Create subtopic',exact:true}).click();await page.getByLabel('Topic title').fill('Reviews');await page.getByLabel('Scope description').fill('Research review scope.');await page.getByRole('button',{name:'Save topic',exact:true}).click();await view(page);
+  await page.getByLabel('Topic name',{exact:true}).fill('Research');await page.getByLabel('Description (optional)').fill('Shared research scope.');
+  await expect(page.getByText('Parent: Community root',{exact:true})).toHaveCount(0);
+  if(process.env.LOOM_TOPIC_CREATE_REVIEW==='1') {
+    await mkdir('/tmp/loom-review-evidence/topic-create',{recursive:true,mode:0o700});
+    await page.screenshot({path:'/tmp/loom-review-evidence/topic-create/form-desktop.png',fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:'/tmp/loom-review-evidence/topic-create/form-mobile.png',fullPage:true});
+    await page.setViewportSize({width:1440,height:1000});
+  }
+  await page.clock.install();
+  await page.getByRole('button',{name:'Create topic',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading',{name:'Research',exact:true})).toBeFocused();
+  await expect(page.getByRole('status').filter({hasText:'Topic created.'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'View current location',exact:true})).toHaveCount(0);
+  if(process.env.LOOM_TOPIC_CREATE_REVIEW==='1') await page.screenshot({path:'/tmp/loom-review-evidence/topic-create/created-desktop.png',fullPage:true});
+  await page.clock.fastForward(6001);
+  await expect(page.getByText('Topic created.',{exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:'Create subtopic',exact:true}).click();await page.getByLabel('Topic name').fill('Reviews');
+  await expect(page.getByText('Inside Research',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Create topic',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Reviews',exact:true})).toBeFocused();
   const child=page.url().split('/').at(-1)!;
+  expect((await api(page,'/api/v1/organization/resources/'+child)).description).toBe('');
   await expect(page.getByRole('navigation',{name:'Topic ancestry'})).toContainText('Research');
   await page.getByRole('link',{name:'Edit topic',exact:true}).click();await page.getByLabel('Topic title').fill('Evidence reviews');await page.getByLabel('Scope description').fill('Published evidence and open questions.');await page.getByRole('button',{name:'Save topic',exact:true}).click();await view(page);
   await page.getByText('About this topic',{exact:true}).click();await page.getByText('Topic metadata history',{exact:true}).click();await expect(page.getByText('Evidence reviews · 2',{exact:true})).toBeVisible();
@@ -71,6 +91,45 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   await page.screenshot({path:info.outputPath('organization-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Open navigation'}).click();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'Open navigation'})).toBeFocused();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('organization-mobile.png'),fullPage:true});
+});
+
+test('topic creation recovers a lost committed response without duplicate creation and allows a fresh form',async({page,context,server})=>{
+  await setup(page,context,server);
+  await page.goto(server.origin+'/loom/organize?action=area.create');
+  await page.getByLabel('Topic name',{exact:true}).fill('Retained topic');
+  await page.getByLabel('Description (optional)',{exact:true}).fill('Exact retained description.');
+  let original:Record<string,unknown>|undefined,resourceId='';const committed=barrier();
+  await page.route('**'+changes,async route=>{
+    original=route.request().postDataJSON();const response=await route.fetch();expect(response.status()).toBe(200);
+    resourceId=(await response.json()).outcome.resource_id;await route.abort('connectionfailed');committed.release();
+  },{times:1});
+  await page.getByRole('button',{name:'Create topic',exact:true}).click();await committed.promise;
+  await expect(page.getByRole('button',{name:'Check organization status'})).toBeVisible();
+  await expect(page).toHaveURL(server.origin+'/loom/organize?action=area.create');
+  const uncertain=(await records(page)).find(r=>r.key===original!.idempotency_key)!;
+  expect(uncertain.state).toBe('uncertain');expect(uncertain.body).toEqual(original);
+  await page.reload();await expect(page.getByLabel('Topic name')).toHaveValue('Retained topic');
+  let checks=0,writes=0;page.on('request',request=>{
+    if(request.url().endsWith('/api/v1/organization/status')){checks++;expect(request.postDataJSON()).toEqual({kind:'area.create',idempotency_key:uncertain.key});}
+    if(request.url().endsWith(changes))writes++;
+  });
+  await page.getByRole('button',{name:'Check organization status'}).click();
+  await expect(page).toHaveURL(server.origin+'/loom/area/'+resourceId);
+  await expect(page.getByRole('heading',{name:'Retained topic',exact:true})).toBeFocused();
+  await expect(page.getByText('Topic created.',{exact:true})).toBeVisible();
+  expect(checks).toBe(1);expect(writes).toBe(0);
+  expect((await records(page)).find(r=>r.key===uncertain.key)).toEqual({...uncertain,state:'committed',sequence:uncertain.sequence+1});
+  const actual=await api(page,'/api/v1/organization/resources/'+resourceId);
+  expect({id:actual.resource_id,title:actual.title,description:actual.description,parent:actual.parent_id,version:actual.version})
+    .toEqual({id:resourceId,title:'Retained topic',description:'Exact retained description.',parent:null,version:1});
+  expect((await server.observer.query('SELECT count(*)::int AS n FROM loom.organization_operations WHERE idempotency_key=$1',[uncertain.key])).rows[0].n).toBe(1);
+  await page.getByRole('navigation',{name:'Topic ancestry'}).getByRole('link',{name:'Topics',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Organization drafts and recovery'})).toHaveCount(0);
+  await page.getByRole('link',{name:'Create root topic',exact:true}).click();
+  await expect(page.getByLabel('Topic name')).toHaveValue('');
+  await expect(page.getByRole('button',{name:'Create topic',exact:true})).toBeEnabled();
+  expect((await records(page)).find(r=>r.key===uncertain.key)?.body).toEqual(original);
+  expect(writes).toBe(0);
 });
 
 test('discussion and artifact move controls preserve exact revisions and use bounded contextual destinations',async({page,context,server})=>{

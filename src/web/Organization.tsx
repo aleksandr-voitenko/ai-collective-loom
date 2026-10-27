@@ -171,7 +171,13 @@ export function OrganizationActions({
   );
 }
 export function OrganizationRecovery({ context }: { context: Context }) {
-  const records = context.store.all().filter((r) => r.kind === 'organization.change');
+  const records = context.store
+    .all()
+    .filter(
+      (r) =>
+        r.kind === 'organization.change' &&
+        !(r.body.kind === 'area.create' && r.state === 'committed'),
+    );
   return records.length ? (
     <aside className="notice">
       <h2>Organization drafts and recovery</h2>
@@ -195,11 +201,12 @@ export function OrganizationPage({ context }: { context: Context }) {
         r.kind === 'organization.change' &&
         (selected
           ? r.key === selected
-          : r.slot ===
-            'organization:' +
-              (query.get('action') ?? 'area.create') +
-              ':' +
-              (query.get('target') || query.get('parent') || 'root')),
+          : !(r.body.kind === 'area.create' && r.state === 'committed') &&
+            r.slot ===
+              'organization:' +
+                (query.get('action') ?? 'area.create') +
+                ':' +
+                (query.get('target') || query.get('parent') || 'root')),
     );
   const target = String(initial?.body.resource_id ?? query.get('target') ?? ''),
     parent = String(initial?.body.parent_id ?? query.get('parent') ?? '');
@@ -329,12 +336,37 @@ function OrganizationForm({
     intent: Intent,
     generation: number | undefined,
   ) {
-    await update(async (current) => {
+    const settled = await update(async (current) => {
       const next = await context.store.settle(intent, { state: 'committed' });
       return current?.key === intent.key ? next : current;
     });
     if (owned()) {
-      if (authority.current(generation)) setResult(value);
+      if (authority.current(generation)) {
+        // A changed placement or state still needs the original/current receipt.
+        // Keep the exact journal even when routine creation leaves this form.
+        if (
+          kind === 'area.create' &&
+          settled?.key === intent.key &&
+          value.current.resource_id === value.outcome.resource_id &&
+          value.current.parent_id === value.outcome.parent_id &&
+          value.current.version === value.outcome.version &&
+          value.current.local_open === value.outcome.local_open &&
+          value.current.publication_open
+        ) {
+          void navigate('/loom/area/' + value.current.resource_id, {
+            replace: true,
+            state: {
+              topicCreated: {
+                resourceId: value.current.resource_id,
+                participantId: context.self.participant_id,
+                expiresAt: Date.now() + 6000,
+              },
+            },
+          });
+          return;
+        }
+        setResult(value);
+      }
       setStatus('Organization change confirmed.');
     }
   }
@@ -424,7 +456,7 @@ function OrganizationForm({
   const move = kind.endsWith('.move'),
     metadata = kind === 'area.create' || kind === 'area.edit';
   return (
-    <section className="organization-form">
+    <section className={'organization-form' + (kind === 'area.create' ? ' topic-create' : '')}>
       <Link to={target && source?.kind === 'area' ? '/loom/area/' + target : '/loom'}>
         ← Back to topics
       </Link>
@@ -438,14 +470,15 @@ function OrganizationForm({
               : (kind.endsWith('.close') ? 'Close ' : 'Reopen ') +
                 (source?.kind === 'discussion' ? 'discussion' : 'topic')}
       </h1>
-      {source && (
+      {source && kind === 'area.create' ? (
+        <p className="subtitle">Inside {pathText(source)}</p>
+      ) : source ? (
         <p className="notice">
           {target ? 'Source' : 'Parent'}: <strong>{pathText(source)}</strong>
           <br />
           <small>Resource ID: {source.resource_id}</small>
         </p>
-      )}
-      {!target && !parent && <p>Parent: Community root</p>}
+      ) : null}
       {error && (
         <p role="alert" className="notice error">
           {error}
@@ -471,7 +504,7 @@ function OrganizationForm({
         {metadata && (
           <>
             <label>
-              Topic title
+              {kind === 'area.create' ? 'Topic name' : 'Topic title'}
               <input
                 value={String(body.title ?? '')}
                 maxLength={160}
@@ -480,7 +513,7 @@ function OrganizationForm({
               />
             </label>
             <label>
-              Scope description
+              {kind === 'area.create' ? 'Description (optional)' : 'Scope description'}
               <textarea
                 value={String(body.description ?? '')}
                 maxLength={2048}
@@ -574,7 +607,9 @@ function OrganizationForm({
                 ? 'Confirm close'
                 : kind.endsWith('.open')
                   ? 'Confirm reopen'
-                  : 'Save topic'}
+                  : kind === 'area.create'
+                    ? 'Create topic'
+                    : 'Save topic'}
           </button>
         )}
       </form>

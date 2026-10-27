@@ -715,6 +715,14 @@ retry, original/current result display, and late status ownership. Real journal
 faults preserve blocked drafts and rejected originals through review/correction;
 resolved removal is selective. Context retries retain authored bytes and never
 dispatch a replacement command automatically.
+Creation cases additionally check automatic navigation only after confirmed local
+settlement, a fresh form beside retained completed records, unchanged exact retry,
+changed-result receipts, local storage failure, and late view/identity ownership.
+The compiled organization journeys exercise keyboard creation, optional description,
+heading focus and timed confirmation, plus committed-response loss followed by
+status-only recovery with exact native identity/content and one retained operation.
+`LOOM_TOPIC_CREATE_REVIEW=1` writes disposable desktop/mobile creation views under
+`/tmp/loom-review-evidence/topic-create`; remove them after visual inspection.
 
 Search scenarios extend the same closed diagnostics with `search.spec.ts`, search/
 authors/status/admin route templates and search/refresh controls. Queries and cursors are
