@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, cpSync, unlinkSync, lstatSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, cpSync, unlinkSync, lstatSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   pilotFixture,
@@ -671,6 +671,8 @@ test(
     old = await historicalPilot((x) => {
       f = x;
     });
+    const compilerCache = join(old.checkout, 'node_modules/.vite-temp');
+    assert.equal(realpathSync(compilerCache), compilerCache, 'historical compiler cache stays in its own checkout');
     f = old.f;
     const p = await populatePilot(f);
     assert.equal(p.d.release.revision, previousPilotSource);

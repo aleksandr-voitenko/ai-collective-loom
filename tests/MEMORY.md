@@ -49,6 +49,10 @@ workspace queries; existing role-withdrawal/setup-recovery tests retain their gu
 The additive pilot update case compiles actual source at
 `bfc127ed20310c987325bb9eef030fe4b0d112a0` in a private disposable local clone,
 transplanting only the new controller and using its identical dependency lock. It
+copies the installed dependencies into that checkout so Vite's generated-config
+cache and module URLs stay private to the historical source. Never link the whole
+node_modules directory: that aliases old source into the current coverage inventory.
+The additive case asserts the actual compiler-cache path remains isolated. It
 populates schema0028 through normal HTTPS, interrupts after the observed cold-backup
 journal barrier and explicitly resumes to0029. A separate no-op update case is not
 historical compatibility evidence. Hosted CI already fetches complete history.

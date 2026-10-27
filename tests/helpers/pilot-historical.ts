@@ -4,7 +4,6 @@ import {
   cpSync,
   mkdtempSync,
   realpathSync,
-  symlinkSync,
   readFileSync,
   existsSync,
   rmSync,
@@ -34,14 +33,20 @@ export async function historicalPilot(onCreated: (fixture: any) => void) {
     );
     for (const path of ['scripts', 'infra/pilot'])
       cpSync(join(root, path), join(checkout, path), { recursive: true });
-    symlinkSync(join(root, 'node_modules'), join(checkout, 'node_modules'), 'dir');
+    // Vite writes its generated config beneath node_modules/.vite-temp. A shared
+    // directory link gives historical source the current checkout's module URL,
+    // which correctly fails the distributed coverage source-identity boundary.
+    cpSync(join(root, 'node_modules'), join(checkout, 'node_modules'), {
+      recursive: true,
+      dereference: true,
+    });
     await execute(process.execPath, ['scripts/build-application.mjs'], {
       cwd: checkout,
       timeout: 120000,
       maxBuffer: 256 * 1024,
     });
     const f = await pilotFixture(onCreated, checkout);
-    return { f, close: () => rmSync(checkout, { recursive: true, force: true }) };
+    return { f, checkout, close: () => rmSync(checkout, { recursive: true, force: true }) };
   } catch (error) {
     rmSync(checkout, { recursive: true, force: true });
     throw error;
