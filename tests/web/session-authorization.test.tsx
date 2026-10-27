@@ -381,7 +381,7 @@ test(`production setup: ${path} settlement leaves reauthorization to an explicit
   await act(async()=>{commands.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'Recheck access.'}},{status:403}));await rejected;});
  };
  if(path!=='first')await refuse();
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:path==='first'?'Initialize community':path==='status'?'Check setup status':'Retry same setup'})));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:path==='first'?'Create community':path==='status'?'Check setup status':'Retry same setup'})));
  const pending=commands.at(-1)!,exact=store.all()[0]!;
  if(path==='first')await refuse();
  const before=[...reads];community.settings_version=1;
@@ -413,4 +413,74 @@ for(const initialThrottle of [false,true])test('shell temporary discovery thrott
  const calls=probes;await act(async()=>Promise.resolve());assert.equal(probes,calls);
  throttled=false;await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry community discovery'})));
  assert.ok(screen.queryByText('Retained authorized guide'));assert.equal(!!screen.queryByRole('button',{name:'Retry community discovery'}),false);assert.deepEqual(store.all(),[saved]);
+});
+
+for (const role of ['administrator','participant'] as const)
+test(`first-run ${role} gets focused setup without workspace queries or navigation`,async t=>{
+ const {Onboarding}=await import('../../src/contracts/participation.js');
+ const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});community.settings_version=0;
+ const reads:string[]=[];
+ t.mock.method(globalThis,'fetch',async(url:string)=>{
+  reads.push(url);
+  if(url==='/api/v1/identity/self')return Response.json({...self,role});
+  if(url==='/api/v1/community')return Response.json(community);
+  return Response.json({items:[],next_after:null});
+ });
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom']});t.after(()=>router.dispose());
+ await act(async()=>render(<StrictMode><RouterProvider router={router}/></StrictMode>));
+ assert.ok(screen.queryByRole('heading',{name:role==='administrator'?'Set up your community':'Your community is being set up'}));
+ assert.equal(screen.queryByRole('navigation',{name:'Community navigation'}),null);
+ assert.equal(screen.queryByRole('link',{name:'Create root topic'}),null);
+ assert.equal(!!screen.queryByRole('button',{name:'Create community'}),role==='administrator');
+ assert.ok(reads.every(path=>['/api/v1/identity/self','/api/v1/community'].includes(path)));
+ assert.ok(screen.queryByRole('button',{name:'Sign out'}));
+});
+
+for(const state of ['fresh','draft','rejected','uncertain'] as const)
+test(`name-only setup preserves defaults or the exact retained ${state} request`,async t=>{
+ const {Onboarding}=await import('../../src/contracts/participation.js');
+ const instance=randomUUID(),community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});
+ community.settings_version=state==='uncertain'?1:0;
+ const store=new IntentStore(instance,self.participant_id);
+ const defaults={ordinary_area_name:'General',proposal_area_name:'Community organization',overview:{format:'loom-markdown-v1',text:'Welcome to our shared workspace.\n\nUse General for questions and ongoing work. Propose organizational changes in Community organization.',mentions:[]}};
+ const priorBody={community_name:'Earlier name',ordinary_area_name:'Earlier questions',proposal_area_name:'Earlier proposals',overview:{format:'loom-markdown-v2',text:'Earlier welcome',mentions:[],references:[]}};
+ let prior:ReturnType<IntentStore['create']>|undefined;
+ if(state!=='fresh'){
+  prior=await store.saveDraft(store.create('setup','community.setup','/api/v1/community/setup',priorBody),priorBody);
+  if(state!=='draft')prior=await store.save({...prior,state});
+ }
+ const sent:{path:string;body:Record<string,unknown>}[]=[];
+ t.mock.method(globalThis,'fetch',async(path:string,options?:RequestInit)=>{
+  if(options?.method==='POST'){
+   sent.push({path,body:JSON.parse(String(options.body))});
+   if(path==='/api/v1/operations/status')return Response.json({operation_state:'not_recorded'});
+   return Response.json({error:{code:'service_unavailable',message:'Keep the saved request.'}},{status:503});
+  }
+  if(path==='/api/v1/identity/self')return Response.json({...self,role:'administrator'});
+  if(path==='/api/v1/community')return Response.json(community);
+  throw new Error('Unexpected setup read: '+path);
+ });
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom']});t.after(()=>router.dispose());
+ await act(async()=>render(<StrictMode><RouterProvider router={router}/></StrictMode>));
+ assert.equal(screen.getAllByRole('textbox').length,1);
+ assert.ok(screen.getByRole('textbox',{name:'Community name'}));
+ assert.equal(screen.queryByRole('complementary',{name:'What setup creates'}),null);
+ assert.equal(sent.length,0,'Loading a saved setup must not dispatch it.');
+ if(state==='uncertain'){
+  assert.equal((screen.getByRole('textbox',{name:'Community name'}) as HTMLInputElement).disabled,true);
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check setup status'})));
+  assert.deepEqual(sent[0],{path:'/api/v1/operations/status',body:{operation_kind:prior!.kind,idempotency_key:prior!.key}});
+  assert.deepEqual(store.all(),[prior],'Missing status must preserve the exact uncertain request.');
+ }else{
+  if(state==='rejected')await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Prepare corrected setup'})));
+  await act(async()=>fireEvent.change(screen.getByRole('textbox',{name:'Community name'}),{target:{value:'Chosen name'}}));
+ }
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:state==='uncertain'?'Retry same setup':'Create community'})));
+ const request=sent.at(-1)!,key=String(request.body.idempotency_key);
+ assert.equal(request.path,'/api/v1/community/setup');
+ assert.deepEqual(request.body,state==='fresh'?{...defaults,community_name:'Chosen name',idempotency_key:key}:state==='uncertain'?prior!.body:{...prior!.body,community_name:'Chosen name',idempotency_key:key});
+ if(state==='draft'||state==='uncertain')assert.equal(key,prior!.key);
+ if(state==='rejected')assert.notEqual(key,prior!.key,'Only explicit correction can replace a rejected key.');
+ assert.deepEqual(store.all().find(r=>r.key===key)!.body,request.body);
+ assert.equal(store.all().find(r=>r.key===key)!.state,'uncertain');
 });

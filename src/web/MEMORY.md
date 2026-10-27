@@ -38,7 +38,19 @@ Expired preview cursors retain a First text page action. Independent status read
 sequence their local observations while all same-owner denials still propagate.
 
 `ParticipationApp.tsx` owns session/community discovery, navigation, sign-out and
-the ReadingProvider/view keys. `ParticipationRoutes.tsx` selects page components
+the ReadingProvider/view keys. Before community initialization it uses a focused
+shell without workspace navigation. `CommunitySetup.tsx` reuses the existing setup
+journal/authority protocol; administrators enter only the community name, other
+participants see an explicit waiting/refresh screen. Fresh requests use the existing
+topic/overview defaults. Hidden fields come from the complete current saved body on
+name edits and first dispatch; older drafts/corrections and uncertain retries must
+retain their authored content and exact recovery identity. An uncertain setup remains focused even when discovery sees
+settings_version > 0: that observation cannot settle the original command. Successful
+confirmation reveals the current workspace route. Corrected drafts retain the existing
+`/loom/admin?intent=...` recovery link; no automatic POST or new key is introduced.
+`ParticipationAdministration.tsx` owns post-setup management only. Additive server
+installation_mode distinguishes Local pilot from Synthetic preview; the legacy
+synthetic protocol profile and finite policies remain unchanged. `ParticipationRoutes.tsx` selects page components
 and supplies fallback authorization boundaries; individual topic, discussion and
 resource pages retain their existing source boundaries. The Changes route excludes
 query edits from its provider key so persistent controls keep their lifetime.

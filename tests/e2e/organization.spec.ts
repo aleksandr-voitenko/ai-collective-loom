@@ -11,7 +11,7 @@ const changes='/api/v1/organization/changes';
 const content=(text:string)=>({format:'loom-markdown-v1',text,mentions:[]});
 function barrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};}
 const authenticators=new WeakMap<Page,{remove:()=>Promise<unknown>}>();
-async function enter(page:Page,context:BrowserContext,origin:string,ticket:string) {
+async function enter(page:Page,context:BrowserContext,origin:string,ticket:string,initialSetup=false) {
   await authenticators.get(page)?.remove();
   const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');
   const {authenticatorId}=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
@@ -19,7 +19,7 @@ async function enter(page:Page,context:BrowserContext,origin:string,ticket:strin
   await page.goto(origin+'/loom');await page.getByText('Set up an admitted account',{exact:true}).click();
   await page.getByLabel('Enrollment ticket',{exact:true}).fill(ticket);await page.getByRole('button',{name:'Create passkey',exact:true}).click();
   await expect(page.getByText('Your passkey is ready. Sign in to continue.')).toBeVisible();
-  await page.getByRole('button',{name:'Sign in with passkey'}).click();await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Sign in with passkey'}).click();await expect(page.getByRole('heading',{name:initialSetup?'Set up your community':'Topics',exact:true})).toBeVisible();
 }
 async function api(page:Page,path:string,body?:unknown) {
   const self=await (await page.request.get(new URL('/api/v1/identity/self',page.url()).href)).json();
@@ -27,9 +27,9 @@ async function api(page:Page,path:string,body?:unknown) {
   expect(response.ok()).toBeTruthy();return response.json();
 }
 async function setup(page:Page,context:BrowserContext,server:Awaited<ReturnType<typeof syntheticServer>>) {
-  await enter(page,context,server.origin,server.ticket);
-  await page.getByRole('link',{name:'Administration',exact:true}).click();await page.getByRole('button',{name:'Initialize community',exact:true}).click();
-  await expect(page.getByText('Community configuration',{exact:true})).toBeVisible();
+  await enter(page,context,server.origin,server.ticket,true);
+  await page.getByRole('button',{name:'Create community',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await page.getByRole('link',{name:'Administration',exact:true}).click();await expect(page.getByText('Community configuration',{exact:true})).toBeVisible();
   const areas=(await api(page,'/api/v1/areas')).items;
   return {general:areas.find((r:any)=>r.title==='General').id as string,feedback:areas.find((r:any)=>r.title==='Community organization').id as string};
 }

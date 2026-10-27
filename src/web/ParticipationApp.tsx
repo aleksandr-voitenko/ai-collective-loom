@@ -20,6 +20,7 @@ import { ReadingRecovery, exportReadingRecovery } from './reading-recovery.js';
 import './participation.css';
 import { Avatar, ErrorText, Icon } from './participation-ui.js';
 import { ActiveView } from './ParticipationRoutes.js';
+import { needsCommunitySetup } from './CommunitySetup.js';
 import { SignIn } from './ParticipationSignIn.js';
 
 export function ParticipationApp() {
@@ -85,7 +86,7 @@ export function ParticipationApp() {
           if (failure instanceof ApiError && failure.code === 'not_found') {
             setUnavailable(true);
             setError(
-              'Participation is unavailable. This instance has not enabled the synthetic preview.',
+              'Participation is unavailable. This instance has not enabled a participation runtime.',
             );
           } else if (!(failure instanceof ApiError && failure.code === 'unauthenticated'))
             setError(failure.message);
@@ -194,6 +195,29 @@ export function ParticipationApp() {
       setError((failure as Error).message);
     }
   }
+  function requestSignout() {
+    if (!self) return;
+    try {
+      if (
+        store?.all().length ||
+        (community &&
+          (new ReadingRecovery(community.instance_id, self.participant_id).all().length ||
+            new AttentionRecovery(community.instance_id, self.participant_id).all().length))
+      )
+        setSignout(true);
+      else void logout();
+    } catch {
+      setSignout(true);
+    }
+  }
+  const focused =
+    !community || (!!self && !!store && needsCommunitySetup({ self, community, store }));
+  const releaseLabel =
+    community?.installation_mode === 'local-pilot'
+      ? 'Local pilot'
+      : community
+        ? 'Synthetic preview'
+        : 'Local evaluation';
   const navigation = (
     <>
       <Link className="brand" to="/loom">
@@ -283,25 +307,7 @@ export function ParticipationApp() {
             <strong>{self.nickname}</strong>
             <small>@{self.nickname}</small>
           </div>
-          <button
-            aria-label="Sign out"
-            title="Sign out"
-            onClick={() => {
-              try {
-                if (
-                  store?.all().length ||
-                  (community &&
-                    (new ReadingRecovery(community.instance_id, self.participant_id).all().length ||
-                      new AttentionRecovery(community.instance_id, self.participant_id).all()
-                        .length))
-                )
-                  setSignout(true);
-                else void logout();
-              } catch {
-                setSignout(true);
-              }
-            }}
-          >
+          <button aria-label="Sign out" title="Sign out" onClick={requestSignout}>
             ↪
           </button>
         </div>
@@ -309,59 +315,83 @@ export function ParticipationApp() {
     </>
   );
   return (
-    <div className="loom-app">
+    <div className={focused ? 'loom-app setup-shell' : 'loom-app'}>
       <a className="skip-link" href="#loom-main">
         Skip to content
       </a>
-      <aside className="sidebar">{navigation}</aside>
-      <dialog
-        ref={dialog}
-        className="navigation-drawer"
-        onCancel={() => setDrawer(false)}
-        onClose={() => {
-          setDrawer(false);
-          mobileButton.current?.focus();
-        }}
-      >
-        <button className="drawer-close" onClick={() => setDrawer(false)}>
-          Close navigation ×
-        </button>
-        {navigation}
-      </dialog>
+      {!focused && <aside className="sidebar">{navigation}</aside>}
+      {!focused && (
+        <dialog
+          ref={dialog}
+          className="navigation-drawer"
+          onCancel={() => setDrawer(false)}
+          onClose={() => {
+            setDrawer(false);
+            mobileButton.current?.focus();
+          }}
+        >
+          <button className="drawer-close" onClick={() => setDrawer(false)}>
+            Close navigation ×
+          </button>
+          {navigation}
+        </dialog>
+      )}
       <div className="workspace">
         <header className="topbar">
-          <button
-            ref={mobileButton}
-            className="mobile-menu"
-            aria-label="Open navigation"
-            onClick={() => setDrawer(true)}
-          >
-            ☰
-          </button>
-          <span>
-            {location.pathname.includes('/notes')
-              ? 'Private notes'
-              : location.pathname.includes('/admin')
-                ? 'Administration'
-                : location.pathname.includes('/overview')
-                  ? 'Community overview'
-                  : location.pathname.includes('/artifacts')
-                    ? 'Artifacts'
-                    : location.pathname.includes('/following')
-                      ? 'Following'
-                      : location.pathname.includes('/changes')
-                        ? 'Changes'
-                        : location.pathname.includes('/updates')
-                          ? 'Updates'
-                          : location.pathname.includes('/notifications')
-                            ? 'Mentions/replies'
-                            : location.pathname.includes('/saved')
-                              ? 'Saved items'
-                              : location.pathname.includes('/search')
-                                ? 'Search'
-                                : 'Topics'}
-          </span>
-          <span className="release-label">Synthetic preview</span>
+          {focused && (
+            <>
+              <Link className="brand" to="/loom">
+                <span className="loom-mark" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span>
+                  <small>AI Collective</small>Loom
+                </span>
+              </Link>
+              <span className="setup-account">
+                {self ? `Signed in as ${self.nickname}` : 'Your shared workspace'}
+              </span>
+              {self && <button onClick={requestSignout}>Sign out</button>}
+            </>
+          )}
+          {!focused && (
+            <>
+              <button
+                ref={mobileButton}
+                className="mobile-menu"
+                aria-label="Open navigation"
+                onClick={() => setDrawer(true)}
+              >
+                ☰
+              </button>
+              <span>
+                {location.pathname.includes('/notes')
+                  ? 'Private notes'
+                  : location.pathname.includes('/admin')
+                    ? 'Administration'
+                    : location.pathname.includes('/overview')
+                      ? 'Community overview'
+                      : location.pathname.includes('/artifacts')
+                        ? 'Artifacts'
+                        : location.pathname.includes('/following')
+                          ? 'Following'
+                          : location.pathname.includes('/changes')
+                            ? 'Changes'
+                            : location.pathname.includes('/updates')
+                              ? 'Updates'
+                              : location.pathname.includes('/notifications')
+                                ? 'Mentions/replies'
+                                : location.pathname.includes('/saved')
+                                  ? 'Saved items'
+                                  : location.pathname.includes('/search')
+                                    ? 'Search'
+                                    : 'Topics'}
+              </span>
+            </>
+          )}
+          <span className="release-label">{releaseLabel}</span>
         </header>
         <main id="loom-main" className="page">
           <ErrorText error={error} />

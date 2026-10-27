@@ -51,9 +51,6 @@ const errors = Object.fromEntries(
   [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((code) => [code, ErrorOutput]),
 );
 const base = '/api/v1/identity';
-function cookie(secret: string, name: 'session' | 'challenge', seconds: number) {
-  return `__Host-loom-${name}=${secret}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${seconds}`;
-}
 function cookies(request: FastifyRequest) {
   const found: Record<string, string> = {};
   for (const part of (request.headers.cookie ?? '').split(';').filter(Boolean)) {
@@ -66,15 +63,24 @@ function cookies(request: FastifyRequest) {
   return found;
 }
 
-/** Installed only in the explicitly enabled synthetic participation profile. */
+/** Installed only in an explicitly enabled participation runtime. */
 export async function registerIdentityRoutes(
   app: FastifyInstance,
   options: {
+    cookieNamespace?: string;
     database: Transactions;
     administration: IdentityAdministration;
     authentication: IdentityAuthentication;
   },
 ) {
+  if (options.cookieNamespace !== undefined && !/^[a-z0-9-]{1,64}$/.test(options.cookieNamespace))
+    throw new Error('Invalid identity cookie namespace.');
+  // Cookies are shared across localhost ports. A retained installation and a fresh
+  // snapshot destination must not automatically consume each other’s browser session.
+  const prefix = options.cookieNamespace ? `__Host-loom-${options.cookieNamespace}` : '__Host-loom';
+  function cookie(secret: string, name: 'session' | 'challenge', seconds: number) {
+    return `${prefix}-${name}=${secret}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${seconds}`;
+  }
   const { authentication: auth, administration: admin } = options;
   app.addHook('onRequest', async (request, reply) => {
     reply.header('vary', 'Cookie, Authorization');
@@ -91,7 +97,7 @@ export async function registerIdentityRoutes(
       throw new IdentityError('invalid_proof');
   });
   async function resolveActor(request: FastifyRequest) {
-    const session = cookies(request)['__Host-loom-session'];
+    const session = cookies(request)[`${prefix}-session`];
     const authorization = request.headers.authorization;
     if (session && authorization) throw new IdentityError('unauthenticated');
     if (authorization) {
@@ -230,7 +236,7 @@ export async function registerIdentityRoutes(
     },
     async (request) => {
       const result = await auth.self(await actor(request));
-      const session = cookies(request)['__Host-loom-session'];
+      const session = cookies(request)[`${prefix}-session`];
       return { ...result, ...(session ? { csrf: csrfValue(session) } : {}) };
     },
   );
@@ -359,7 +365,7 @@ export async function registerIdentityRoutes(
       },
     },
     async (request) =>
-      auth.finishRegistration(request.body, cookies(request)['__Host-loom-challenge'] ?? ''),
+      auth.finishRegistration(request.body, cookies(request)[`${prefix}-challenge`] ?? ''),
   );
   app.post(
     base + '/signin/start',
@@ -394,7 +400,7 @@ export async function registerIdentityRoutes(
     async (request, reply) => {
       const { session, ...result } = await auth.finishSignIn(
         request.body,
-        cookies(request)['__Host-loom-challenge'] ?? '',
+        cookies(request)[`${prefix}-challenge`] ?? '',
       );
       reply.header('set-cookie', cookie(session, 'session', auth.policy.sessionSeconds));
       return result;

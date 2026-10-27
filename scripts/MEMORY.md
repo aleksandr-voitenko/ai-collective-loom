@@ -89,3 +89,50 @@ without relaxing authoritative inventory equality or the PR29 charge allowance.
 health/outcome/job-failure page through HTTPS, with private input/output and current
 administrator authority on each invocation. `--after-page` binds origin/owner/collection;
 outputs never carry credentials. It imports no server internals and sends no mutations.
+
+
+## Persistent local pilot (ADR-041)
+
+`pilot.mjs` / `lib/pilot*.mjs` are a separate opt-in controller. They never import
+`tests/`, seed accounts or read `.env.local`. `local-pilot-1` acknowledges only the
+operator’s public/synthetic/non-sensitive localhost trial under inherited finite
+policies. No production/sensitive-data/agent-execution approval follows.
+
+Exclusive private external custody records exact owner/instance/test-kind labels,
+fixed HTTPS origin and RP, local Docker endpoint/platform, selected image/files,
+dependency/provider pins and secret fingerprints. Runtime has only app/storage/TLS
+leaf custody; offline helpers alone mount bootstrap/recovery/CA-key custody. Ordinary
+start requires all existing volumes/configuration, validates topology/schema and
+never provisions. No restart loop, volume deletion or prune is implicit. Test-only
+destruction requires the exact acceptance owner plus identity and validates every
+target before removal. Maintenance helpers share a named, labeled controller slot;
+a stale lock cannot be released while that slot remains.
+
+The release image owns compiled API/browser and all three actual workers, independent
+of checkout dist or fixtures. `build-application.mjs` records exact authored build
+inputs; image selection checks them. Each worker can stop/start independently; process
+readiness is not processing completeness. Logs expose only fixed bounded events.
+
+Pilot runtime supplies explicit local-pilot presentation metadata without changing the
+legacy participation profile or policy. It supplies its installation identity as the cookie namespace because
+localhost cookies cross ports. Ordinary restart preserves it; fresh restore changes
+it without mutating stored sessions. The ten-year local CA is never installed automatically; one-year leaf renewal keeps
+the CA/origin. Normal bootstrap writes a private one-time ticket once. Explicit
+same-administrator recovery uses the existing audited service; uncertain delivery
+requires replacement, never secret replay. Recovery from partial initialization
+requires complete existing material and checks whether bootstrap already committed.
+
+`pilot-recovery.mjs` is a narrow owner-validated adapter over the same bundle/archive,
+`native-inventory.mjs`, and HTTPS verifier as ADR-034. Pilot verifier categories and
+outcome families are read from the selected immutable image, never mutable checkout dist. It does not broaden synthetic
+source admission. Cold capture stops writers/providers and verifies the full inventory;
+source stays stopped. Restore uses fresh quarantine storage/origin, locks the unavailable
+source during independent HTTPS verification, and keeps all original narrow verifier
+allowances. Required release/image and separate decryption key remain prerequisites.
+
+Update freezes an immutable candidate, requires unchanged provider/platform pins and
+applied migration prefix, captures a coordinated backup, and runs additive transactional
+migrations. `update.json` and both release copies retain interrupted selection custody;
+explicit resume can only select the recorded candidate. Old binaries are not rollback.
+Private `witness` output records caller-selected read expectations before backup; it
+contains credentials and must never enter source control or diagnostic artifacts.

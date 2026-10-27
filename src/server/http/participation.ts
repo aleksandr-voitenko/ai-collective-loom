@@ -53,6 +53,8 @@ import { SummaryError } from '../modules/participation/summary-context.js';
 import { participationRecoveryPolicy } from './recovery-policy.js';
 
 export interface ParticipationServices {
+  cookieNamespace?: string;
+  installationMode?: 'synthetic-preview' | 'local-pilot';
   database: Transactions;
   fileStorage?: FileStorage;
   authentication: IdentityAuthentication;
@@ -394,7 +396,10 @@ export async function registerParticipation(app: FastifyInstance, services: Part
         response: { ...errors, 200: C.Onboarding },
       },
     },
-    async (request) => reads.onboarding(await actor(request)),
+    async (request) => ({
+      ...(await reads.onboarding(await actor(request))),
+      installation_mode: services.installationMode ?? 'synthetic-preview',
+    }),
   );
   app.get(
     '/api/v1/guide',

@@ -9,6 +9,8 @@ dist, browser-diagnostics or approved output between simultaneous collectors.
 
 `ci-plan.mjs` discovers every PostgreSQL script and complete browser inventory.
 Scheduling weights affect placement only; new entries must never be omitted.
+Pilot weights include the measured actual CLI/native and Chromium journeys;
+its historical additive fixture needs complete local Git history (already fetched).
 Plans bind tested commit, base, run attempt, runtime/platform, all repository input
 hashes and full dist hashes. Each job regenerates the plan after building and
 rechecks inputs/build after measurement. Job labels may differ; authority does not.

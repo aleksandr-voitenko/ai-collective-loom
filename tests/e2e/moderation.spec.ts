@@ -15,8 +15,8 @@ async function setup(page:Page,context:BrowserContext,server:Awaited<ReturnType<
   const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
   await page.goto(server.origin+'/loom');await page.getByText('Set up an admitted account',{exact:true}).click();await page.getByLabel('Enrollment ticket',{exact:true}).fill(server.ticket);
   await page.getByRole('button',{name:'Create passkey',exact:true}).click();await expect(page.getByText('Your passkey is ready. Sign in to continue.')).toBeVisible();
-  await page.getByRole('button',{name:'Sign in with passkey'}).click();await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();
-  await page.getByRole('link',{name:'Administration',exact:true}).click();await page.getByRole('button',{name:'Initialize community',exact:true}).click();await expect(page.getByText('Community configuration',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Sign in with passkey'}).click();await expect(page.getByRole('heading',{name:'Set up your community',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Create community',exact:true}).click();await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await page.getByRole('link',{name:'Administration',exact:true}).click();await expect(page.getByText('Community configuration',{exact:true})).toBeVisible();
   const area=(await api(page,'/api/v1/areas')).items.find((r:any)=>r.title==='General').id;
   const opening=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:area,title:'Moderation discussion',content:text('Opening to preserve')});
   const discussion=(await api(page,'/api/v1/resources/'+opening.resource_id)).discussion_id;

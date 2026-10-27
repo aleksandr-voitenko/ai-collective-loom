@@ -1,3 +1,4 @@
+import { CommunitySetup, SetupPending, needsCommunitySetup } from './CommunitySetup.js';
 import { PrivateNotesPage } from './PrivateNotes.js';
 import { PromotionPage } from './AttachmentPromotion.js';
 import { EditingIntentRecovery } from './EditingIntent.js';
@@ -27,6 +28,16 @@ import { AreaPage, Overview, Topics } from './ParticipationTopics.js';
 export function ActiveView({ context }: { context: Context }) {
   const location = useLocation(),
     kind = location.pathname.split('/')[2];
+  if (needsCommunitySetup(context))
+    return (
+      <AuthorizationBoundary scope="administration" sourcePolicy="settings">
+        {context.self.role === 'administrator' ? (
+          <CommunitySetup context={context} />
+        ) : (
+          <SetupPending context={context} />
+        )}
+      </AuthorizationBoundary>
+    );
   // Attention pages already own their full-view or private-settings boundary.
   // The remaining routes must also provide a protected read capability.
   if (

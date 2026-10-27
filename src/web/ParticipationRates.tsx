@@ -31,8 +31,11 @@ export function ParticipationRates({ context }: { context: Context }) {
     <section className="card admin-card">
       <h2>Participation rate limits</h2>
       <p>
-        Shared across each participant’s credentials and sessions. Synthetic preview policy;
-        production sizing is unapproved.
+        Shared across each participant’s credentials and sessions.{' '}
+        {context.community.installation_mode === 'local-pilot'
+          ? 'Local pilot'
+          : 'Synthetic preview'}{' '}
+        policy; production sizing is unapproved.
       </p>
       {!opened ? (
         <button onClick={() => setOpened(true)}>Inspect participation limits</button>

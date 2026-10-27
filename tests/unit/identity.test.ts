@@ -47,3 +47,12 @@ test('identity policy must be explicit, bounded and use the exact HTTPS RP origi
     assert.throws(() => verifyPolicy(invalid as IdentityPolicy),error => error instanceof Error && error.message === 'An explicit valid HTTPS identity prototype policy is required.');
   }
 });
+
+test('invalid installation cookie namespaces fail closed before route registration', async () => {
+  const { registerIdentityRoutes } = await import('../../src/server/http/identity.js');
+  for (const cookieNamespace of ['', 'a; Domain=localhost', 'A', 'a'.repeat(65)])
+    await assert.rejects(registerIdentityRoutes(undefined as never, {
+      cookieNamespace, database: undefined as never,
+      authentication: undefined as never, administration: undefined as never,
+    }), /Invalid identity cookie namespace/);
+});

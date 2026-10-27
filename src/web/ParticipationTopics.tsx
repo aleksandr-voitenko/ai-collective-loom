@@ -30,18 +30,6 @@ export function Topics({ context }: { context: Context }) {
           <p className="subtitle">Find a place for your next conversation.</p>
         </div>
       </div>
-      {context.community.settings_version === 0 && (
-        <div className="notice">
-          <p>
-            Community setup is incomplete.{' '}
-            {context.self.role === 'administrator' ? (
-              <Link to="/loom/admin">Set up the community</Link>
-            ) : (
-              'Ask a community administrator to finish setup.'
-            )}
-          </p>
-        </div>
-      )}
       {context.self.role === 'administrator' && (
         <>
           <Link className="button" to="/loom/organize?action=area.create">

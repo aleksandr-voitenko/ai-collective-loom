@@ -40,6 +40,7 @@ async function enter(
   context: BrowserContext,
   origin: string,
   ticket: string,
+  initialSetup = false,
 ) {
   await authenticator(page, context);
   await page.goto(origin + "/loom");
@@ -53,17 +54,16 @@ async function enter(
   ).toBeVisible();
   await page.getByRole("button", { name: "Sign in with passkey" }).click();
   await expect(
-    page.getByRole("heading", { name: "Topics", exact: true }),
+    page.getByRole("heading", { name: initialSetup ? "Set up your community" : "Topics", exact: true }),
   ).toBeVisible();
 }
 async function setup(page: Page) {
-  await page.getByRole("link", { name: "Administration", exact: true }).click();
   await page
-    .getByRole("button", { name: "Initialize community", exact: true })
+    .getByRole("button", { name: "Create community", exact: true })
     .click();
-  await expect(
-    page.getByText("Community configuration", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Topics", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Administration", exact: true }).click();
+  await expect(page.getByText("Community configuration", { exact: true })).toBeVisible();
 }
 async function createDiscussion(
   page: Page,
@@ -186,7 +186,7 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
     expect(anonymousProbes).toBe(index+1);
   }
   page.off('response',observed);
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   await page.getByLabel("Nickname", { exact: true }).fill("lyra");
   await page
@@ -345,7 +345,7 @@ test("a late committed publication cannot repopulate another identity or route a
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   const d = await createDiscussion(page);
   const account = await (
@@ -453,7 +453,7 @@ test("lost committed response survives actual browser process restart and exact 
   });
   try {
     let page = await context.newPage();
-    await enter(page, context, server.origin, server.ticket);
+    await enter(page, context, server.origin, server.ticket, true);
     await setup(page);
     const d = await createDiscussion(page);
     const opening = page.locator(`[data-resource-id="${d.resource}"]`);
@@ -527,7 +527,7 @@ test("late reads preserve navigation/account ownership; older-page failure and r
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   const d = await createDiscussion(page),
     external = await agent(page, server);
@@ -685,7 +685,7 @@ test("overview uses ordinary artifact history/editors; text-artifact drafts surv
   context,
   server,
 }, testInfo) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   await page
     .getByRole("link", { name: /Research commons — Community overview/ })
@@ -785,7 +785,7 @@ test("review regression: issued secrets stay bound to their target during and af
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   for (const [nickname, kind] of [
     ["credential_human", "human"],
@@ -872,11 +872,10 @@ test("review regression: definitive setup rejection can be corrected after reloa
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
-  await page.getByRole("link", { name: "Administration", exact: true }).click();
+  await enter(page, context, server.origin, server.ticket, true);
   await page.getByLabel("Community name", { exact: true }).fill("");
   await page
-    .getByRole("button", { name: "Initialize community", exact: true })
+    .getByRole("button", { name: "Create community", exact: true })
     .click();
   await expect(page.getByRole("alert")).toBeVisible();
   const rejected = (await savedIntents(page)).find((r) => r.slot === "setup");
@@ -893,11 +892,11 @@ test("review regression: definitive setup rejection can be corrected after reloa
   const corrected = (await savedIntents(page)).find((r) => r.slot === "setup");
   expect(corrected.key).not.toBe(rejected.key);
   await page
-    .getByRole("button", { name: "Initialize community", exact: true })
+    .getByRole("button", { name: "Create community", exact: true })
     .click();
-  await expect(
-    page.getByText("Community configuration", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Community configuration", { exact: true })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/loom/admin");
+  expect(new URL(page.url()).searchParams.get("intent")).toBe(corrected.key);
 });
 
 test("review regression: rejected admission preserves editable correction and uncertain retries keep identity", async ({
@@ -905,7 +904,7 @@ test("review regression: rejected admission preserves editable correction and un
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   for (const nickname of ["synthetic_admin", "invalid nickname!"]) {
     await page.getByLabel("Nickname", { exact: true }).fill(nickname);
@@ -1078,7 +1077,7 @@ test("review regression: corrected conflict drafts survive navigation and browse
   let context = await diagnostics.launchPersistentContext(directory, options);
   try {
     let page = await context.newPage();
-    await enter(page, context, server.origin, server.ticket);
+    await enter(page, context, server.origin, server.ticket, true);
     await setup(page);
     const d = await createDiscussion(page);
     const url =
@@ -1193,7 +1192,7 @@ test("review regression: mismatched and artifact focus never offer reply control
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   const a = await createDiscussion(page, "Discussion A"),
     b = await createDiscussion(page, "Discussion B");
@@ -1230,7 +1229,7 @@ test("review regression: suppressed parents preserve browser branches and eligib
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   const d = await createDiscussion(page);
   const parent = await (
@@ -1358,7 +1357,7 @@ test("review regression: a stale tab preserves separate edits without overwritin
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   const d = await createDiscussion(page);
   const url =
@@ -1487,7 +1486,7 @@ for (const kind of ["artifacts", "discussions", "replies"] as const)
     let context = await diagnostics.launchPersistentContext(directory, options);
     try {
       let page = await context.newPage();
-      await enter(page, context, server.origin, server.ticket);
+      await enter(page, context, server.origin, server.ticket, true);
       await setup(page);
       const discussion =
         kind === "replies" ? await createDiscussion(page) : undefined;
@@ -1579,7 +1578,7 @@ test("publication fails closed without browser locks while retained drafts remai
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   const d = await createDiscussion(page);
   await page.goto(server.origin + `/loom/resource/${d.resource}?edit=1`);
@@ -1632,7 +1631,7 @@ test("publication persists the visible text again after a failed draft save", as
   context,
   server,
 }) => {
-  await enter(page, context, server.origin, server.ticket);
+  await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
   const d = await createDiscussion(page);
   await page.goto(server.origin + `/loom/resource/${d.resource}?edit=1`);
