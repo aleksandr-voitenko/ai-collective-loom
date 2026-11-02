@@ -3,9 +3,59 @@ import { setup } from '../helpers/change-browser.js';
 import { populateAdministration, administrationTarget } from '../helpers/administration.js';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { journal } from '../helpers/change-browser.js';
 const click=(page:Page,name:string)=>page.getByRole('button',{name,exact:true}).click();
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return{promise,release};}
+
+async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,server:Parameters<typeof setup>[2]){
+ await page.goto(server.origin+'/loom/admin');await page.getByText('Community configuration',{exact:true}).click();
+ const panel=page.locator('details').filter({has:page.getByText('Community configuration',{exact:true})});
+ const overview=page.getByLabel('Overview artifact ID'),proposal=page.getByLabel('Proposal area ID');
+ const savedOverview=await overview.inputValue(),savedProposal=await proposal.inputValue();
+ await overview.fill(f.target.resource_id);
+ const writes:any[]=[];page.on('request',r=>{if(r.url().endsWith('/community/settings')&&r.method()==='POST')writes.push(r.postDataJSON());});
+ const capture=async(stage:string)=>{if(process.env.LOOM_SETTINGS_REVIEW_SCREENS==='1'){
+  await mkdir('/tmp/loom-review-evidence/ui-01',{recursive:true});
+  await panel.screenshot({path:`/tmp/loom-review-evidence/ui-01/${stage}.png`});
+ }};
+ await capture('edited');
+ const read=page.waitForResponse(r=>r.url().endsWith('/api/v1/community'));
+ await click(page,'Refresh configuration');await read;
+ await expect(overview).toBeVisible();
+ await capture('refreshed');
+ expect(writes).toEqual([]);await expect(overview).toHaveValue(f.target.resource_id);
+ await expect(proposal).toHaveValue(savedProposal);
+ expect(savedOverview).not.toBe(f.target.resource_id);
+ await expect(panel.getByText(/Unsaved changes/)).toBeVisible();
+ const settings=(await f.admin.call('/api/v1/community')).body;
+ expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:settings.settings_version,
+  community_name:'Synthetic updated settings',overview_id:savedOverview,proposal_area_id:f.area})).status).toBe(200);
+ await click(page,'Refresh configuration');await expect(panel.getByText(/Saved settings have changed to version 2/)).toBeVisible();
+ await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);expect(writes).toEqual([]);
+ const conflict=page.waitForResponse(r=>r.url().endsWith('/community/settings'));
+ await click(page,'Save configuration');expect((await conflict).status()).toBe(409);
+ expect(writes[0].expected_version).toBe(1);expect(writes[0].community_name).toBe(settings.community_name);
+ await expect(panel.getByText('The current revision differs from the expected revision.')).toBeVisible();
+ await expect(overview).toHaveValue(f.target.resource_id);await expect(panel.getByText(/Unsaved changes/)).toBeVisible();
+ await page.route('**/api/v1/community',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic configuration refresh failure'}})}),{times:1});
+ await click(page,'Refresh configuration');await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();
+ await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);expect(writes).toHaveLength(1);
+ page.once('dialog',async dialog=>{expect(dialog.message()).toContain('Discard your unsaved');await dialog.dismiss();});
+ await click(page,'Discard changes and reload saved settings');await expect(overview).toHaveValue(f.target.resource_id);
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Discard changes and reload saved settings',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(overview).toHaveValue(savedOverview);await expect(proposal).toHaveValue(f.area);
+ await expect(panel.getByText(/Unsaved changes/)).toHaveCount(0);await expect(panel.getByText(/Editing settings version 2/)).toBeVisible();
+ expect(writes).toHaveLength(1);
+ await overview.fill(f.target.resource_id);await click(page,'Save configuration');
+ await expect(panel.getByText(/Configuration saved at version 3/)).toBeVisible();
+ await expect(panel.getByText(/Unsaved changes/)).toHaveCount(0);expect(writes[1].expected_version).toBe(2);
+ const saved=(await f.admin.call('/api/v1/community')).body;
+ expect(saved.settings_version).toBe(3);expect(saved.overview.resource_id).toBe(f.target.resource_id);expect(saved.proposal_area.resource_id).toBe(f.area);
+ await overview.fill('');await page.setViewportSize({width:390,height:844});await capture('mobile');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.setViewportSize({width:1440,height:1000});
+}
 
 test('administrator rate controls retain a lost decision through reload and recover original versus current policy',async({page,context,server})=>{
  await server.observer.query('UPDATE loom.participation_rate_policy SET ordinary_requests=120,new_publications=20,recovery_control=60 WHERE id=1');
@@ -50,12 +100,16 @@ test('administrator rate controls retain a lost decision through reload and reco
  expect((await journal(page,'file.policy')).key).not.toBe(conflict.key);
  await panel.getByRole('button',{name:'Save file limits',exact:true}).click();await expect(panel.getByText(/Recorded policy version 5/)).toBeVisible();
  await panel.getByRole('button',{name:'Inspect file policy audit',exact:true}).click();await expect(panel.getByText(/Version 5: maximum file 10 bytes/)).toBeVisible();
+ await page.getByText('Community configuration',{exact:true}).click();await page.getByLabel('Overview artifact ID').fill('');
  const heldPolicy=barrier(),releasePolicy=barrier();
  await page.route('**/api/v1/admin/file-limits',async route=>{const response=await route.fetch();heldPolicy.release();await releasePolicy.promise;await route.fulfill({response});},{times:1});
  await panel.getByRole('button',{name:'Refresh file limits',exact:true}).click();await heldPolicy.promise;
  await server.observer.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[f.person]);
  try{await panel.getByRole('button',{name:'Inspect file policy audit',exact:true}).click();await expect(panel.getByText(/Current policy version/)).toHaveCount(0);}finally{releasePolicy.release();}
  await expect(panel.getByText(/Current policy version/)).toHaveCount(0);await expect(panel.getByText(/Community reserved file bytes/)).toHaveCount(0);
+ await expect(page.getByLabel('Overview artifact ID')).toHaveValue('');
+ await expect(page.getByRole('button',{name:'Save configuration',exact:true})).toHaveCount(0);
+ await expect(page.getByText('Your draft is retained. Refresh configuration to check access again.')).toBeVisible();
 
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 
@@ -87,7 +141,9 @@ async function begin(page:Page,context:Parameters<typeof setup>[1],server:Parame
  await page.getByText('Participant accounts',{exact:true}).click();await expect(page.getByRole('button',{name:'Manage credentials'}).first()).toBeVisible();return f;
 }
 test('bounded administrative browsing reaches later accounts, credential history and audit with keyboard, retries and stable-ID actions',async({page,context,server})=>{
- const f=await begin(page,context,server);await page.setViewportSize({width:390,height:844});
+ const f=await begin(page,context,server);await checkConfiguration(page,f,server);
+ await page.getByText('Participant accounts',{exact:true}).click();await expect(page.getByRole('button',{name:'Manage credentials'}).first()).toBeVisible();
+ await page.setViewportSize({width:390,height:844});
  // Fail one actual next-page read and preserve the first page and focused control.
  const first=await page.getByRole('button',{name:'Manage credentials'}).count();expect(first).toBeLessThanOrEqual(25);
  const next=page.getByRole('button',{name:'Next accounts page',exact:true});await next.focus();

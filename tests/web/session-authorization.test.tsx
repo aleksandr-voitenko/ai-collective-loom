@@ -343,7 +343,7 @@ test(`production configuration: ${outcome} success refreshes only with current c
   await act(async()=>{commands[1]!.resolve(Response.json({error:{code:'forbidden',message:'Recheck access.'}},{status:403}));await rejected;});
  }
  const before=[...reads];community.settings_version=2;
- await act(async()=>commands[0]!.resolve(Response.json({operation_state:'committed'})));
+ await act(async()=>commands[0]!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:2})));
  if(outcome==='withdrawn'){
   assert.deepEqual(reads,before,'Late configuration success must not restart shell discovery or a protected query.');
   assert.equal(!!screen.queryByRole('button',{name:'Save configuration'}),false);
@@ -351,7 +351,7 @@ test(`production configuration: ${outcome} success refreshes only with current c
  }
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Save configuration'})));
  assert.equal(commands.at(-1)!.body.expected_version,2,'Repeated saves must use the newly authorized configuration version.');
- await act(async()=>commands.at(-1)!.resolve(Response.json({operation_state:'committed'})));
+ await act(async()=>commands.at(-1)!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:3})));
 });
 
 for(const path of ['first','status','retry'] as const)

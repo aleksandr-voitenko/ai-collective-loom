@@ -244,6 +244,13 @@ response while older sibling bodies and refresh callbacks remain fenced.
 Setup first/status/retry and recovery initiated after withdrawal settle privately
 without shell/query reloads. Configuration tests require consecutive saves to use
 the newly authorized settings version and forbid late completion from reloading.
+`web/community-settings.test.tsx` holds configuration reads, discards and saves in
+the production ActiveView/StrictMode host. It checks dirty values/original versions,
+confirmed receipts, failed reads and authority/identity/route fences. The existing
+compiled administration browsing journey also exercises dirty/failed refresh, explicit
+discard cancellation/acceptance, a real competing settings write and version conflict,
+then confirmed save. `LOOM_SETTINGS_REVIEW_SCREENS=1` curates synthetic configuration
+screens under `/tmp/loom-review-evidence/ui-01`, outside diagnostic uploads.
 The definitive publication-refusal regression now passes, including blocked
 journal settlement, exact uncertain retries and pending responses across all hosts.
 Administrative refusal tests use the production shell and role-protected account
