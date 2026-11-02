@@ -14,6 +14,11 @@ session-authorization tests use new page envelopes; the retained participation
 Chromium recovery monitor follows POST query reads while preserving its exact
 private recovery assertions. Diagnostic changes add only fixed route/spec names
 and the two new test identities; existing numerical runtime/byte/coverage gates stay.
+The configuration refresh sequence keeps one route interceptor through held success,
+injected failure and explicit reload, asserting each response/count before advancing.
+Replacing expiring one-shot handlers can race interception updates and miss the fault.
+The no-Web-Locks sign-out journey checks each cleanup warning independently of order,
+server session revocation and exact retained draft/uncertain Search recovery bytes.
 
 
 `integration/pilot.test.ts` and `e2e/pilot.spec.ts` execute the actual persistent

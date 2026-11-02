@@ -1,7 +1,7 @@
 import { test, expect } from '../helpers/browser-fixtures.js';
 import { setup } from '../helpers/change-browser.js';
 import { populateAdministration, administrationTarget } from '../helpers/administration.js';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { settingsReview } from '../helpers/community-settings-review.js';
 import { journal } from '../helpers/change-browser.js';
@@ -105,22 +105,30 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:base,community_name:'Synthetic research commons',overview_id:generalOverview,proposal_area_id:researchProposals})).status).toBe(200);
  const conflict=page.waitForResponse(r=>r.url().endsWith('/community/settings'));await click(page,'Save changes');expect((await conflict).status()).toBe(409);
  expect(writes[0].expected_version).toBe(base);await expect(panel.getByText(/Community settings changed while/)).toBeVisible();await expect(overview.getByText('Research',{exact:true})).toBeVisible();await review.capture('version-conflict');
- const entered=barrier(),release=barrier(),refreshed=barrier();
- await page.route('**/api/v1/community',async route=>{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response});refreshed.release();},{times:1});
+ const entered=barrier(),release=barrier(),reloadEntered=barrier(),releaseReload=barrier();
+ let configurationReads=0;
+ // Keep interception installed across all three reads: expiring one-shot routes
+ // can race the next registration's network-interception update.
+ const configurationRoute=async(route:Route)=>{
+  expect(route.request().method()).toBe('GET');const read=++configurationReads;expect(read).toBeLessThanOrEqual(3);
+  if(read===2){await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic configuration refresh failure'}})});return;}
+  const response=await route.fetch();expect(response.status()).toBe(200);
+  (read===1?entered:reloadEntered).release();await(read===1?release:releaseReload).promise;await route.fulfill({response});
+ };
+ await page.route('**/api/v1/community',configurationRoute);
  await click(page,'Check saved settings');await entered.promise;
  try{await expect(overview.getByText('Research',{exact:true})).toBeVisible();await expect(panel.getByText('Unsaved changes',{exact:true})).toBeVisible();expect(writes).toHaveLength(1);}finally{release.release();}
- await refreshed.promise;
+ await expect(panel.getByText('Saved choices checked. Your unsaved choices are unchanged.',{exact:true})).toBeVisible();expect(configurationReads).toBe(1);
  await expect(panel.getByText(/Community settings changed while/)).toBeVisible();
- await page.route('**/api/v1/community',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic configuration refresh failure'}})}),{times:1});
- await click(page,'Check saved settings');await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();expect(writes).toHaveLength(1);
+ const failedRefresh=page.waitForResponse(r=>r.url().endsWith('/api/v1/community')&&r.request().method()==='GET');
+ await click(page,'Check saved settings');expect((await failedRefresh).status()).toBe(503);await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();expect(configurationReads).toBe(2);expect(writes).toHaveLength(1);
  await review.capture('refresh-error',['One GET /api/v1/community is deliberately replaced with HTTP 503. The settings conflict is a live server 409 after a competing administrator write.']);
- page.once('dialog',async dialog=>{review.dialog('cancel',dialog.message());await dialog.dismiss();});await click(page,'Load saved settings');await expect(overview.getByText('Research',{exact:true})).toBeVisible();
- const reloadEntered=barrier(),releaseReload=barrier();
- await page.route('**/api/v1/community',async route=>{expect(route.request().method()).toBe('GET');const response=await route.fetch();expect(response.status()).toBe(200);reloadEntered.release();await releaseReload.promise;await route.fulfill({response});},{times:1});
+ page.once('dialog',async dialog=>{review.dialog('cancel',dialog.message());await dialog.dismiss();});await click(page,'Load saved settings');await expect(overview.getByText('Research',{exact:true})).toBeVisible();expect(configurationReads).toBe(2);
  page.once('dialog',dialog=>{review.dialog('accept',dialog.message());return dialog.accept();});await page.getByRole('button',{name:'Load saved settings',exact:true}).focus();await page.keyboard.press('Enter');await reloadEntered.promise;
  try{await expect(overview.getByText('Research',{exact:true})).toBeVisible();await expect(panel.getByText('Unsaved changes',{exact:true})).toBeVisible();await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();expect(writes).toHaveLength(1);}finally{releaseReload.release();}
  await expect(overview.getByText('General',{exact:true})).toBeVisible();await expect(proposal.getByText('Research › Proposals',{exact:true})).toBeVisible();
  await expect(panel.getByText('Unsaved changes',{exact:true})).toHaveCount(0);await expect(panel.getByText('Saved settings loaded.',{exact:true})).toBeVisible();await expect(page.getByText('Synthetic configuration refresh failure')).toHaveCount(0);expect(writes).toHaveLength(1);
+ expect(configurationReads).toBe(3);await page.unroute('**/api/v1/community',configurationRoute);
  await review.capture('recovered',['The earlier HTTP 503 was injected; this explicit reload is a live successful GET.']);
  await selectOverview('Research');await click(page,'Save changes');await expect(panel.getByText('Changes saved.',{exact:true})).toBeVisible();expect(writes[1].expected_version).toBe(base+1);
  const saved=(await f.admin.call('/api/v1/community')).body;expect(saved.settings_version).toBe(base+2);expect(saved.overview.resource_id).toBe(researchOverview);expect(saved.proposal_area.resource_id).toBe(researchProposals);

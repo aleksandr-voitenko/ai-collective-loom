@@ -1593,6 +1593,27 @@ test("publication fails closed without browser locks while retained drafts remai
     )
     .toBe("Retained before browser locks unavailable");
   const before = await savedIntents(page);
+  // Retain a real maintenance request too: lack of Web Locks must prevent
+  // cleanup of either owner-scoped store without preventing server sign-out.
+  await page.goto(server.origin + "/loom/admin/search");
+  await page.route("**/api/v1/admin/search/rebuild", async (route) => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    await route.abort("failed");
+  }, { times: 1 });
+  await page.getByRole("button", { name: "Rebuild index", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Rebuild index", exact: true }).click();
+  await expect(page.getByText("Outcome not confirmed", { exact: true })).toBeVisible();
+  const maintenanceRecords = () => page.evaluate(() =>
+    Object.entries(localStorage).filter(([key]) => key.startsWith("loom.search-maintenance.v1:")),
+  );
+  const maintenanceBefore = await maintenanceRecords();
+  expect(maintenanceBefore).toHaveLength(1);
+  expect(JSON.parse(maintenanceBefore[0]![1])).toEqual({
+    version: 1, sequence: 1, state: "uncertain",
+    request: { kind: "rebuild", body: { expected_generation: 1 } },
+  });
+  await page.goto(server.origin + `/loom/resource/${d.resource}?edit=1`);
   await page.addInitScript(() =>
     Object.defineProperty(navigator, "locks", { value: undefined }),
   );
@@ -1614,16 +1635,22 @@ test("publication fails closed without browser locks while retained drafts remai
     page.getByRole("button", { name: "Export drafts" }),
   ).toBeEnabled();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  const signedOut = page.waitForResponse((response) => response.url().endsWith("/api/v1/identity/logout"));
   await page
     .getByRole("button", { name: "Clear local drafts and sign out" })
     .click();
+  expect((await signedOut).status()).toBe(200);
+  expect(await (await signedOut).json()).toEqual({ session_state: "revoked" });
   await expect(
     page.getByRole("button", { name: "Sign in with passkey" }),
   ).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText(
-    "Signed out, but local drafts could not be cleared",
-  );
+  const warning = page.getByRole("alert");
+  await expect(warning).toContainText("Signed out, but");
+  await expect(warning).toContainText("local drafts could not be cleared.");
+  await expect(warning).toContainText("search maintenance recovery could not be cleared.");
+  await expect(warning).toContainText("They remain scoped to this account on this browser.");
   expect(await savedIntents(page)).toEqual(before);
+  expect(await maintenanceRecords()).toEqual(maintenanceBefore);
 });
 
 test("publication persists the visible text again after a failed draft save", async ({
