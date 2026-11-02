@@ -266,6 +266,15 @@ Successful explicit reload retires the previous read error; a later failed read
 must still appear. Held reloads retain dirty values/base until success and neither
 read submits settings mutations. Separate save/conflict errors survive ordinary
 successful reads. Uncertain settings retries retain their exact key/body on remount.
+Settings follow-up tests cover exact retry after a lost conflict response, including
+remount, generic-error uncertainty and leased saved-choice comparison withdrawal.
+The compiled journey exercises version 1 versus a competing version 2, drops the
+live 409, receives a live 409 on exact retry and verifies no audit commit for that
+key. Lost-committed-response recovery remains in the original browsing journey.
+Picker traversal covers 18 forward transitions and First choices, keyboard focus
+and unchanged selection. In the browser, a labelled request-limit reduction to 1
+keeps synthetic seeding bounded while exercising real destination pages/cursors.
+Opt-in follow-up PNGs use `/tmp/loom-review-evidence/ui-02-followup/viewport`.
 The definitive publication-refusal regression now passes, including blocked
 journal settlement, exact uncertain retries and pending responses across all hosts.
 Administrative refusal tests use the production shell and role-protected account

@@ -8,6 +8,63 @@ import { journal } from '../helpers/change-browser.js';
 const click=(page:Page,name:string)=>page.getByRole('button',{name,exact:true}).click();
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return{promise,release};}
 
+test('community settings conflict recovery and bounded picker navigation',async({page,context,server})=>{
+ const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
+ const initial=(await f.admin.call('/api/v1/community')).body;expect(initial.settings_version).toBe(1);
+ let savedTopic='';
+ for(let i=1;i<=18;i++){
+  const hierarchy=(await f.admin.call('/api/v1/organization/children?limit=1')).body.hierarchy_version;
+  const r=await f.admin.call('/api/v1/organization/changes',{idempotency_key:randomUUID(),kind:'area.create',title:'Navigation topic '+String(i).padStart(2,'0'),parent_id:null,description:'Synthetic picker navigation',expected_hierarchy_version:hierarchy});
+  expect(r.status).toBe(200);savedTopic=r.body.current.resource_id;
+ }
+ await page.goto(server.origin+'/loom/admin/community');
+ const form=page.getByRole('form',{name:'Community settings'}),overview=page.getByRole('region',{name:'Community overview',exact:true});
+ await click(page,'Change community overview');await click(page,'Choose Target R1 in General');
+ await expect(overview.getByText('Target R1',{exact:true})).toBeVisible();await expect(form.getByText('Unsaved changes',{exact:true})).toBeVisible();
+ const review=await settingsReview(page,'ui-02-followup');
+ expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:1,community_name:initial.community_name,overview_id:initial.overview.resource_id,proposal_area_id:savedTopic})).status).toBe(200);
+ const writes:any[]=[];page.on('request',r=>{if(r.url().endsWith('/community/settings')&&r.method()==='POST')writes.push(r.postDataJSON());});
+ await page.route('**/api/v1/community/settings',async route=>{
+  const response=await route.fetch();expect(response.status()).toBe(409);expect((await response.json()).error.code).toBe('revision_conflict');await route.abort('failed');
+ },{times:1});
+ await click(page,'Save changes');await expect(page.getByRole('button',{name:'Retry same save',exact:true})).toBeEnabled();
+ const retained=await journal(page,'community.settings');expect(retained.state).toBe('uncertain');expect(retained.body.expected_version).toBe(1);expect(writes).toHaveLength(1);
+ const replay=page.waitForResponse(r=>r.url().endsWith('/community/settings'));await click(page,'Retry same save');expect((await replay).status()).toBe(409);
+ expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);expect(writes[1]).toEqual(retained.body);
+ await expect(form.getByText(/Community settings changed while/)).toBeVisible();await expect(form.getByText('Unsaved changes',{exact:true})).toBeVisible();await expect(overview.getByText('Target R1',{exact:true})).toBeVisible();
+ expect(await journal(page,'community.settings')).toBeUndefined();await expect(page.getByRole('button',{name:'Retry same save',exact:true})).toHaveCount(0);
+ expect((await f.admin.call('/api/v1/community')).body.settings_version).toBe(2);
+ expect((await server.observer.query('SELECT id FROM loom.participation_audit WHERE actor_id=$1 AND operation_kind=$2 AND idempotency_key=$3',[f.person,'community.settings',retained.key])).rowCount).toBe(0);
+ const conflictInjection=['The initial real server revision_conflict (HTTP 409) was deliberately dropped. The exact retained request was retried and its live HTTP 409 delivered.'];
+ await review.capture('recovered-conflict',conflictInjection);
+ await click(page,'Check saved settings');const comparison=page.getByRole('region',{name:'Saved choices'});
+ await expect(comparison.getByText('Navigation topic 18',{exact:true}).first()).toBeVisible();await expect(comparison.getByText('Loading selection…')).toHaveCount(0);
+ await expect(form.getByText('Saved choices checked. Your unsaved choices are unchanged.',{exact:true})).toBeVisible();await expect(overview.getByText('Target R1',{exact:true})).toBeVisible();expect(writes).toHaveLength(2);
+ await review.capture('saved-comparison',conflictInjection);
+ // Deliberately reduce page size for a long traversal; responses and opaque cursors still come from the real authorized endpoint.
+ const choicesPattern='**/api/v1/organization/destinations?*';const pageRequests:string[]=[];
+ await page.route(choicesPattern,async route=>{
+  const url=new URL(route.request().url());expect(url.searchParams.get('limit')).toBe('12');pageRequests.push(url.searchParams.get('cursor')??'first');
+  url.searchParams.set('limit','1');const response=await route.fetch({url:url.href});expect(response.status()).toBe(200);await route.fulfill({response});
+ });
+ const opener=page.getByRole('button',{name:'Change proposal topic',exact:true});await opener.focus();await page.keyboard.press('Enter');
+ const dialog=page.getByRole('dialog',{name:'Choose a proposal topic'}),heading=dialog.getByRole('heading',{name:'Choose a proposal topic'});
+ const first=dialog.locator('.community-resource-identity h3');await expect(first).toHaveCount(1);const firstTitle=await first.innerText();
+ const startReads=pageRequests.length;
+ for(let i=0;i<18;i++){
+  const title=await first.innerText();await dialog.getByRole('button',{name:'Next choices',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(first).not.toHaveText(title);await expect(heading).toBeFocused();
+ }
+ expect(pageRequests).toHaveLength(startReads+18);
+ const pagingInjection=['Playwright changes the requested destination limit from 12 to 1 to exercise 19 real server pages. Responses, authorization and opaque cursors are live; no choice data is mocked.'];
+ await review.capture('picker-page-19',pagingInjection);
+ await dialog.getByRole('button',{name:'First choices',exact:true}).focus();await page.keyboard.press('Enter');await expect(first).toHaveText(firstTitle);await expect(heading).toBeFocused();
+ await expect(dialog.getByRole('button',{name:'Previous choices',exact:true})).toBeDisabled();expect(pageRequests).toHaveLength(startReads+19);
+ await review.capture('picker-first-page',pagingInjection);await page.keyboard.press('Escape');await expect(opener).toBeFocused();await page.unroute(choicesPattern);
+ await expect(overview.getByText('Target R1',{exact:true})).toBeVisible();await expect(form.getByText('Unsaved changes',{exact:true})).toBeVisible();
+ page.once('dialog',d=>{review.dialog('accept',d.message());return d.accept();});await click(page,'Load saved settings');await expect(form.getByText('Saved settings loaded.',{exact:true})).toBeVisible();await expect(form.getByText('Unsaved changes',{exact:true})).toHaveCount(0);expect(writes).toHaveLength(2);
+});
+
 async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,server:Parameters<typeof setup>[2]){
  const createArea=async(title:string,parent_id:string|null)=>{
   const hierarchy=(await f.admin.call('/api/v1/organization/children?limit=1')).body.hierarchy_version;

@@ -108,7 +108,7 @@ export function CommunityResourcePicker({
     };
   }, []);
   useEffect(() => {
-    if (result.data && previous.length) heading.current?.focus();
+    if (result.data) heading.current?.focus();
   }, [result.data]);
   return (
     <dialog
@@ -200,6 +200,17 @@ export function CommunityResourcePicker({
           <footer>
             <button
               type="button"
+              disabled={!cursor && !result.error}
+              onClick={() => {
+                setCursor('');
+                setPrevious([]);
+                if (!cursor) result.refresh();
+              }}
+            >
+              First choices
+            </button>
+            <button
+              type="button"
               disabled={!previous.length || !result.data}
               onClick={() => {
                 setCursor(previous.at(-1)!);
@@ -218,18 +229,6 @@ export function CommunityResourcePicker({
             >
               Next choices
             </button>
-            {result.error && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCursor('');
-                  setPrevious([]);
-                  result.refresh();
-                }}
-              >
-                Start choices again
-              </button>
-            )}
           </footer>
         </>
       )}

@@ -6,9 +6,9 @@ import {expect} from './browser-fixtures.js';
 import {applicationInputs} from '../../scripts/lib/release-identity.mjs';
 
 // Deliberately curated synthetic review evidence, never diagnostic attachments.
-export async function settingsReview(page:Page){
+export async function settingsReview(page:Page,review:'ui-02'|'ui-02-followup'='ui-02'){
  const enabled=process.env.LOOM_SETTINGS_REVIEW_SCREENS==='1';
- const directory='/tmp/loom-review-evidence/ui-02/viewport';
+ const directory=`/tmp/loom-review-evidence/${review}/viewport`;
  const git=(...args:string[])=>execFileSync('git',args,{encoding:'utf8'}).trimEnd();
  const metadata=enabled?{
   source_commit:git('rev-parse','HEAD'),dirty_tree:git('status','--porcelain').length>0,
@@ -17,7 +17,7 @@ export async function settingsReview(page:Page){
   browser:{name:'Chromium',version:page.context().browser()!.version()},
   test_account:{role:'administrator',kind:'human',authentication:'existing Playwright virtual WebAuthn enrollment and sign-in'},
   route:'/loom/admin/community',
-  reproduction_command:"npm run app:build && LOOM_SETTINGS_REVIEW_SCREENS=1 npm run test:e2e -- administration.spec.ts --grep 'bounded administrative browsing'",
+  reproduction_command:`npm run app:build && LOOM_SETTINGS_REVIEW_SCREENS=1 npm run test:e2e -- administration.spec.ts --grep '${review==='ui-02'?'bounded administrative browsing':'community settings conflict recovery and bounded picker navigation'}'`,
  }:undefined;
  if(metadata){
   const built=JSON.parse(await readFile('dist/release.json','utf8'));
@@ -44,7 +44,7 @@ export async function settingsReview(page:Page){
     const bytes=await page.screenshot({path:directory+'/'+filename,fullPage:false});
     screenshots.push({...metadata,route:new URL(page.url()).pathname,filename,state,viewport,injected_responses_or_delays:injected,
      full_viewport:true,scroll_y:await page.evaluate(()=>window.scrollY),sha256:createHash('sha256').update(bytes).digest('hex')});
-    if(['version-conflict','refresh-error','unresolved-save'].includes(state) && await page.getByRole('form',{name:'Community settings'}).evaluate(form=>form.getBoundingClientRect().bottom>innerHeight)){
+    if(['version-conflict','refresh-error','unresolved-save','recovered-conflict','saved-comparison'].includes(state) && await page.getByRole('form',{name:'Community settings'}).evaluate(form=>form.getBoundingClientRect().bottom>innerHeight)){
      const fullFilename=`${state}-${viewport.width}-full-page.png`;
      const fullBytes=await page.screenshot({path:directory+'/'+fullFilename,fullPage:true});
      screenshots.push({...metadata,route:new URL(page.url()).pathname,filename:fullFilename,state,viewport,injected_responses_or_delays:injected,
@@ -53,7 +53,7 @@ export async function settingsReview(page:Page){
    }
    await page.setViewportSize(previous);
    await writeFile(directory+'/manifest.json',JSON.stringify({
-    task:'UI-02',screenshots,native_confirmation_checks:dialogs,
+    task:review,screenshots,native_confirmation_checks:dialogs,
     native_confirmation_note:'Browser-native confirm dialogs are verified by Playwright dialog events; they are not page DOM and are not reconstructed in these viewport PNGs.',
     isolation:'Disposable PostgreSQL/HTTPS fixture; synthetic accounts; fixture role promotion. No retained pilot data. Browser credentials stay in the private test context; no authentication state is exported.',
    },null,2)+'\n',{mode:0o600});

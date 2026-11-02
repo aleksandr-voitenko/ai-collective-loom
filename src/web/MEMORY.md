@@ -128,12 +128,22 @@ Its instance/participant-bound in-memory draft outlives query reads. Dirty reads
 retain both IDs, community name and expected version. Cancel restores the accepted
 baseline locally; conflict reload confirms and replaces it only after success.
 A successful reload supersedes read errors, independently of save/conflict errors.
+Successful Check saved settings shows a separately leased Saved choices comparison,
+without rebasing or replacing the draft; withdrawal removes that comparison too.
 `CommunityResourcePicker.tsx` uses existing bounded artifact/destination pages and
 organization lookups for leased titles/full paths, never whole-community preload.
+A permanent First choices action bypasses the capped 16-cursor back history;
+completed page navigation focuses the heading, including returning to page one.
 A failed lookup retains the internal ID. Unknown unavailable designations cannot
 be submitted as null; whole-view source withdrawal still applies.
 Settings dispatch uses IntentStore exact custody, validated next-version receipts
 and deliberate same-key retry after uncertainty (there is no settings-status API).
+Settings-specific revision_conflict can settle an exact uncertain retry: server
+`participation/administration.ts` serializes the attempt and returns any committed
+audit result before checking the settings version. Generic authority/unavailable
+or unknown-outcome errors do not qualify; the shared rejection helper is unchanged.
+Restored request bytes keep the form dirty but cannot reconstruct an accepted
+baseline for local Cancel; explicit saved reload or confirmed save establishes one.
 Unsent edits warn on route/unload loss; uncertain bytes persist across reloads.
 Withdrawal hides metadata and fences dispatch/late settlement. Explicit access
 checks verify the current administrator role before fresh protected reads; private

@@ -74,6 +74,27 @@
 .loom-app .community-dirty {
   color: var(--muted);
 }
+.loom-app .community-saved-choices {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.loom-app .community-saved-choices h2 {
+  font-size: 18px;
+}
+.loom-app .community-saved-choices > p {
+  color: var(--muted);
+}
+.loom-app .community-saved-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.loom-app .community-saved-label {
+  color: var(--muted);
+  margin-bottom: 8px;
+}
 .loom-app .community-picker {
   width: min(700px, calc(100vw - 32px));
   max-height: calc(100dvh - 48px);
@@ -113,6 +134,9 @@
   color: inherit;
 }
 @media (max-width: 600px) {
+  .loom-app .community-saved-grid {
+    grid-template-columns: 1fr;
+  }
   .loom-app .community-settings-form {
     padding: 20px 18px;
   }

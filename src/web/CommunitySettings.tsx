@@ -41,7 +41,7 @@ type Values = {
   overview: string | null | undefined;
   proposal: string | null | undefined;
 };
-type Draft = { base: Values; values: Values };
+type Draft = { base: Values; values: Values; restored?: true };
 type Problem = { kind: 'conflict' | 'validation' | 'uncertain' | 'local'; message: string };
 function valuesFrom(community: OnboardingView): Values {
   const designation = (value: OnboardingView['overview']) =>
@@ -55,7 +55,9 @@ function valuesFrom(community: OnboardingView): Values {
 }
 function changed(draft: Draft) {
   return (
-    draft.values.overview !== draft.base.overview || draft.values.proposal !== draft.base.proposal
+    !!draft.restored ||
+    draft.values.overview !== draft.base.overview ||
+    draft.values.proposal !== draft.base.proposal
   );
 }
 function retainedDraft(record: Intent | undefined): Draft | undefined {
@@ -67,7 +69,9 @@ function retainedDraft(record: Intent | undefined): Draft | undefined {
     overview: record.body.overview_id as string | null,
     proposal: record.body.proposal_area_id as string | null,
   };
-  return { base: values, values };
+  // Custody retains the submitted values/version, not the original accepted choices.
+  // Until an explicit reload or confirmed save, there is no local baseline to cancel to.
+  return { base: values, values, restored: true };
 }
 
 export function CommunitySettings({ context }: { context: Context }) {
@@ -88,11 +92,15 @@ export function CommunitySettings({ context }: { context: Context }) {
     generation: number | undefined;
   }>();
   const [picker, setPicker] = useState<CommunityResourceKind>();
+  const [comparison, setComparison] = useState<{
+    values: Values;
+    generation: number | undefined;
+  }>();
   const [problem, setProblem] = useState<Problem>();
   const [reloadError, setReloadError] = useState(''),
     [accessError, setAccessError] = useState('');
   const [status, setStatus] = useState(''),
-    [operation, setOperation] = useState<'save' | 'reload'>(),
+    [operation, setOperation] = useState<'save' | 'reload' | 'check'>(),
     [readErrorVisible, setReadErrorVisible] = useState(true);
   const live = useRef(false),
     owner = useRef(identityGeneration()),
@@ -152,6 +160,7 @@ export function CommunitySettings({ context }: { context: Context }) {
     pending.current = true;
     setOperation('save');
     setProblem(undefined);
+    setComparison(undefined);
     setStatus('');
     try {
       if (!record && context.store.all().some((item) => item.kind === 'community.settings'))
@@ -194,7 +203,15 @@ export function CommunitySettings({ context }: { context: Context }) {
       context.refreshCommunity();
     } catch (failure) {
       if (!current()) return;
-      if (sent && isDefinitiveRejection(failure, wasUncertain)) {
+      // community.settings serializes the exact attempt and returns any committed
+      // audit result before checking the settings version (administration.ts).
+      // Its revision_conflict therefore proves noncommit even after response loss.
+      // Permission/unavailability refusals can precede that lookup and do not.
+      const settingsConflict =
+        failure instanceof ApiError &&
+        failure.code === 'revision_conflict' &&
+        failure.operationOutcome !== 'unknown';
+      if (sent && (settingsConflict || isDefinitiveRejection(failure, wasUncertain))) {
         try {
           const rejected = await context.store.settle(sent, { state: 'rejected' });
           if (!current()) return;
@@ -232,13 +249,14 @@ export function CommunitySettings({ context }: { context: Context }) {
   }
 
   async function cancel() {
-    if (!draft || pending.current || uncertain) return;
+    if (!draft || draft.restored || pending.current || uncertain) return;
     try {
       if (record) await context.store.remove(record);
       if (!current()) return;
       setRecord(undefined);
       setDraft({ base: draft.base, values: draft.base });
       setProblem(undefined);
+      setComparison(undefined);
       setStatus('Changes cancelled.');
     } catch (failure) {
       if (current()) setProblem({ kind: 'local', message: (failure as Error).message });
@@ -269,9 +287,36 @@ export function CommunitySettings({ context }: { context: Context }) {
       setObservation({ version: values.version, generation: result.generation });
       setDraft({ base: values, values });
       setProblem(undefined);
+      setComparison(undefined);
       setReloadError('');
       setReadErrorVisible(false);
       setStatus('Saved settings loaded.');
+    } catch (failure) {
+      if (current()) setReloadError((failure as Error).message);
+    } finally {
+      pending.current = false;
+      if (current()) setOperation(undefined);
+    }
+  }
+  async function checkSaved() {
+    if (pending.current || uncertain || !authorized()) return;
+    const generation = observation!.generation;
+    pending.current = true;
+    setOperation('check');
+    setComparison(undefined);
+    setStatus('');
+    try {
+      const result = await authority.readAuthorized<OnboardingView>('/api/v1/community', {
+        schema: Onboarding,
+      });
+      if (!current() || !authority.current(generation) || !authority.current(result.generation))
+        return;
+      const values = valuesFrom(result.value);
+      setObservation({ version: values.version, generation: result.generation });
+      setComparison({ values, generation: result.generation });
+      setReadErrorVisible(false);
+      setReloadError('');
+      setStatus('Saved choices checked. Your unsaved choices are unchanged.');
     } catch (failure) {
       if (current()) setReloadError((failure as Error).message);
     } finally {
@@ -412,7 +457,11 @@ export function CommunitySettings({ context }: { context: Context }) {
             ))}
             {busy && (
               <p role="status">
-                {operation === 'save' ? 'Saving changes…' : 'Loading saved settings…'}
+                {operation === 'save'
+                  ? 'Saving changes…'
+                  : operation === 'check'
+                    ? 'Checking saved choices…'
+                    : 'Loading saved settings…'}
               </p>
             )}
             {status && (
@@ -444,7 +493,7 @@ export function CommunitySettings({ context }: { context: Context }) {
                 </p>
                 {authorized() && (
                   <div className="actions">
-                    <button type="button" disabled={busy} onClick={refresh}>
+                    <button type="button" disabled={busy} onClick={() => void checkSaved()}>
                       Check saved settings
                     </button>
                     <button type="button" disabled={busy} onClick={() => void reloadSaved()}>
@@ -453,6 +502,34 @@ export function CommunitySettings({ context }: { context: Context }) {
                   </div>
                 )}
               </div>
+            )}
+            {comparison && authorized() && authority.current(comparison.generation) && (
+              <section className="community-saved-choices" aria-labelledby="saved-choices-title">
+                <h2 id="saved-choices-title">Saved choices</h2>
+                <p>Compare these saved choices with your unsaved choices above.</p>
+                <div className="community-saved-grid">
+                  {(['overview', 'proposal'] as const).map((field) => (
+                    <div key={field}>
+                      <p className="community-saved-label">
+                        {field === 'overview' ? 'Community overview' : 'Proposal topic'}
+                      </p>
+                      {comparison.values[field] ? (
+                        <CommunityResource
+                          key={comparison.values[field]}
+                          id={comparison.values[field]}
+                          kind={field === 'overview' ? 'artifact' : 'area'}
+                        />
+                      ) : (
+                        <p>
+                          {comparison.values[field] === undefined
+                            ? 'Saved selection unavailable.'
+                            : 'No saved selection.'}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
             {!busy && (uncertain || problem?.kind === 'uncertain') && (
               <div className="notice" role="alert">
@@ -487,7 +564,7 @@ export function CommunitySettings({ context }: { context: Context }) {
               </button>
               <button
                 type="button"
-                disabled={busy || uncertain || !dirty}
+                disabled={busy || uncertain || !!draft.restored || !dirty}
                 onClick={() => void cancel()}
               >
                 Cancel

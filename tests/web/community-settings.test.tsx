@@ -28,7 +28,7 @@ const failure=(code:string,status:number)=>Response.json({error:{code,message:'S
 const receipt=(version:number)=>Response.json({operation_state:'committed',operation_id:randomUUID(),version});
 const selected=(heading:string)=>within(screen.getByRole('region',{name:heading}));
 const dirty=()=>!!screen.queryByText('Unsaved changes');
-async function fixture(t:TestContext,options:{lookupFails?:boolean;initialReadFails?:boolean;unavailable?:boolean;paged?:boolean;choicesFail?:boolean}={}){
+async function fixture(t:TestContext,options:{lookupFails?:boolean;initialReadFails?:boolean;unavailable?:boolean;paged?:boolean;pageCount?:number;choicesFail?:boolean}={}){
  const self={participant_id:randomUUID(),credential_id:randomUUID(),nickname:'Synthetic admin',kind:'human',role:'administrator',csrf:'fixture'};
  t.mock.method(globalThis,'fetch',async()=>Response.json(self));await sessionRequest('/api/v1/identity/self');
  const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});
@@ -41,7 +41,7 @@ async function fixture(t:TestContext,options:{lookupFails?:boolean;initialReadFa
   {id:otherTopic,kind:'area',title:'Proposals',parent:'Research'},
  ].map(r=>({parent_id:null,version:1,hierarchy_version:1,description:null,metadata_version:null,local_open:true,can_organize:true,contacts_url:'/api/v1/contacts',proposal_route_url:'/api/v1/proposals',resource_id:r.id,kind:r.kind as 'area'|'artifact',title:r.title,publication_open:true,ancestors:[{id:randomUUID(),title:r.parent}]}));
  let shellRefreshes=0,holdReads=false,failLookup=!!options.lookupFails,failInitial=!!options.initialReadFails,failChoices=!!options.choicesFail;
- const paged=options.paged;
+ const paged=options.paged,pageCount=options.pageCount;
  const reads:string[]=[],calls:{path:string;method:string;body:any;finish:(response:Response)=>void}[]=[];
  t.mock.method(globalThis,'fetch',(path:string,options?:RequestInit)=>{
   if(!options?.body)reads.push(path);
@@ -49,6 +49,10 @@ async function fixture(t:TestContext,options:{lookupFails?:boolean;initialReadFa
   if(path==='/api/v1/community'&&!holdReads)return Promise.resolve(failInitial?failure('service_unavailable',503):Response.json(community));
   if(path.startsWith('/api/v1/organization/resources/'))return Promise.resolve(failLookup?failure('service_unavailable',503):Response.json(resources.find(r=>path.endsWith(r.resource_id))));
   if(path.startsWith('/api/v1/organization/destinations?')){
+   if(pageCount){
+    const page=Number(new URL(path,'https://loom.example').searchParams.get('cursor')??0);
+    return Promise.resolve(Response.json({...Value.Create(OrganizationPage),items:[{...resources[2],title:'Choices page '+(page+1)}],complete:page===pageCount-1,next_cursor:page<pageCount-1?String(page+1):null}));
+   }
    const next=path.includes('cursor=next');
    return Promise.resolve(failChoices?failure('service_unavailable',503):Response.json({...Value.Create(OrganizationPage),items:resources.filter(r=>r.kind==='area'&&(!paged||r.resource_id===(next?otherTopic:proposal))),complete:!paged||next,next_cursor:paged&&!next?'next':null}));
   }
@@ -94,9 +98,45 @@ test('dirty read retains choices and expected version after a conflicting save; 
  assert.ok(selected('Community overview').queryByText('Research'));assert.ok(selected('Proposal topic').queryByText('Shared work › Proposals'));
  assert.equal(f.writes().length,1);assert.equal(dirty(),true);
  assert.ok(screen.queryByText(/Community settings changed while/),'A settings read must not clear a separate conflict.');
+ const saved=within(screen.getByRole('region',{name:'Saved choices'}));
+ assert.ok(saved.getByText('Shared work'));assert.ok(saved.getByText('Research › Proposals'));
+ assert.ok(screen.getByText('Saved choices checked. Your unsaved choices are unchanged.'));
  await click('Save changes');const {idempotency_key,...body}=f.calls.at(-1)!.body;
  assert.equal(typeof idempotency_key,'string');assert.deepEqual(body,{expected_version:1,community_name:'Synthetic community',overview_id:changed,proposal_area_id:proposal});
  await f.finish(failure('revision_conflict',409));assert.equal(f.shellRefreshes(),0);
+});
+
+for(const remount of [false,true])test(`lost conflict response resolves on exact settings retry; remount ${remount}`,async t=>{
+ const f=await fixture(t);await choose('overview');await click('Save changes');const first=f.writes()[0]!.body;
+ f.community.settings_version=2;await f.finish(failure('service_unavailable',503));
+ if(remount){await act(async()=>f.router.navigate('/loom/help'));await act(async()=>f.router.navigate('/loom/admin/community'));}
+ await click('Retry same save');assert.deepEqual(f.writes()[1]!.body,first);assert.equal(f.store.all()[0]!.state,'uncertain');
+ await f.finish(failure('revision_conflict',409));
+ assert.ok(screen.queryByText(/Community settings changed while/));assert.equal(screen.queryByRole('button',{name:'Retry same save'}),null);
+ assert.deepEqual(f.store.all(),[]);assert.equal(dirty(),true);assert.ok(selected('Community overview').queryByText('Research'));
+ assert.equal((screen.getByRole('button',{name:'Cancel'}) as HTMLButtonElement).disabled,remount,'A restored request cannot invent the earlier accepted baseline.');
+ assert.equal(f.writes().length,2);assert.equal(screen.queryByText('Changes saved.'),null);
+ let confirmed=false;t.mock.method(window,'confirm',()=>{confirmed=true;return false;});await click('Load saved settings');assert.equal(confirmed,true);
+ await click('Save changes');assert.equal(f.writes()[2]!.body.expected_version,1);assert.equal(f.writes()[2]!.body.overview_id,changed);
+ await f.finish(failure('revision_conflict',409));
+});
+
+test('saved comparison metadata withdraws independently of the retained draft',async t=>{
+ const f=await fixture(t);await choose('overview');await conflict(f);await click('Check saved settings');
+ assert.ok(screen.getByRole('region',{name:'Saved choices'}));assert.equal(dirty(),true);
+ const refusal=commandRequest('/api/v1/identity/reconcile',{self:f.self,body:{operation_kind:'account.create',idempotency_key:randomUUID()}});const denied=assert.rejects(refusal,{code:'forbidden'});
+ await act(async()=>{f.calls.at(-1)!.finish(failure('forbidden',403));await denied;});
+ assert.equal(screen.queryByRole('region',{name:'Saved choices'}),null);assert.equal(screen.queryByText('Research'),null);assert.equal(dirty(),true);
+ await click('Check access');assert.equal(screen.queryByRole('region',{name:'Saved choices'}),null,'Reauthorization cannot republish the old saved comparison.');
+ assert.ok(selected('Community overview').queryByText('Research'));assert.equal(f.writes().length,1);
+});
+
+for(const code of ['forbidden','unavailable','service_unavailable','unknown-conflict'])test(`uncertain settings remain retained after ${code}`,async t=>{
+ const f=await fixture(t);await choose('overview');await click('Save changes');const first=f.writes()[0]!.body;await f.finish(failure('service_unavailable',503));
+ await click('Retry same save');assert.deepEqual(f.writes()[1]!.body,first);
+ await f.finish(code==='unknown-conflict'?Response.json({error:{code:'revision_conflict',message:'Synthetic unknown outcome',operation_outcome:'unknown'}},{status:409}):failure(code,code==='forbidden'?403:code==='unavailable'?404:503));
+ assert.equal(f.store.all()[0]!.state,'uncertain');assert.deepEqual(f.store.all()[0]!.body,first);
+ assert.ok(screen.queryByRole('button',{name:'Retry same save'}));assert.equal(screen.queryByText(/Community settings changed while/),null);assert.equal(f.writes().length,2);
 });
 
 test('failed refresh then explicit successful reload clears obsolete read error and changes baseline only after success',async t=>{
@@ -229,6 +269,25 @@ test('picker retries failure explicitly and traverses bounded pages without prel
  assert.ok(f.reads.includes('/api/v1/organization/destinations?limit=12&cursor=next'));
  await click('Previous choices');assert.ok(screen.getByRole('button',{name:'Choose Proposals in Shared work › Proposals'}));
  await click('Close resource picker');assert.equal(dirty(),false);assert.deepEqual(f.writes(),[]);
+});
+
+test('picker can return to the first page after 18 forward transitions without losing selection or focus',async t=>{
+ const f=await fixture(t,{pageCount:20});await choose('overview');
+ const opener=screen.getByRole('button',{name:'Change proposal topic'});opener.focus();await click('Change proposal topic');
+ const pageReads=()=>f.reads.filter(p=>p.startsWith('/api/v1/organization/destinations?'));
+ const initial=pageReads().length;
+ for(let i=0;i<18;i++){
+  await click('Next choices');assert.ok(screen.getByText('Choices page '+(i+2)));
+  assert.equal(document.activeElement,screen.getByRole('heading',{name:'Choose a proposal topic'}));
+ }
+ assert.equal(pageReads().length,initial+18,'Only requested bounded pages are fetched.');
+ await click('First choices');assert.ok(screen.getByText('Choices page 1'));
+ assert.equal(document.activeElement,screen.getByRole('heading',{name:'Choose a proposal topic'}));
+ assert.equal((screen.getByRole('button',{name:'Previous choices'}) as HTMLButtonElement).disabled,true);
+ assert.equal((screen.getByRole('button',{name:'First choices'}) as HTMLButtonElement).disabled,true);
+ assert.equal(pageReads().length,initial+19);
+ await click('Close resource picker');assert.equal(document.activeElement,opener);
+ assert.ok(selected('Community overview').queryByText('Research'));assert.ok(selected('Proposal topic').queryByText('Shared work › Proposals'));assert.equal(dirty(),true);assert.deepEqual(f.writes(),[]);
 });
 
 test('journal persistence failure prevents settings dispatch and preserves the editable draft',async t=>{
