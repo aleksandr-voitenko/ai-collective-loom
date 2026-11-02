@@ -164,6 +164,10 @@ or IntentStore records. Acknowledgement is separate from processing and actor
 attribution. A conflict after response loss remains uncertain: no status lookup can
 recover beyond the server replay window. Fresh health never rebases that request.
 Sign-out includes explicit uncertain-request warning and owner-scoped cleanup.
+Command errors bind to the recovery snapshot; cross-tab supersession retires only
+that attempt's error. Retry feedback/recovery stays beside its job, retaining only
+a bounded page position if the row disappears; rebuild feedback stays in Maintenance. Retry
+feedback updates do not move focus or scroll the reader.
 See `SearchAdministration.md` for states, existing API limits and capture commands.
 
 `recovery-storage.ts` shares exact write/readback and best-effort raw rollback

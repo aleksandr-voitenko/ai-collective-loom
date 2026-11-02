@@ -164,3 +164,50 @@ test('search indexing rebuild confirmation, exact recovery and authority withdra
  await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[server.administratorId]);await page.getByRole('button',{name:'Check access',exact:true}).click();await expect(page.getByText('Indexing in progress',{exact:true})).toBeVisible();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByRole('button',{name:'Clear local drafts and sign out',exact:true}).click();await expect(page.getByRole('button',{name:'Sign in with passkey'})).toBeVisible();expect(await page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('loom.search-maintenance.v1:')))).toBe(false);
 });
+
+test('search indexing contextual retry survives response loss and cross-tab acknowledgement on a full page',async({page,context,server})=>{
+ await setup(page,context,server,28);
+ await server.observer.query("UPDATE loom.search_jobs SET state='failed',attempts=3,failure='processing_failed',claim_generation=claim_generation+1 WHERE generation=1");
+ await page.goto(server.origin+'/loom/admin/search');await expect(page.getByRole('article')).toHaveCount(25);
+ const target=(await api(page,'/api/v1/admin/search/failures')).items[0];
+ const before=(await server.observer.query('SELECT id,state,attempts,claim_generation FROM loom.search_jobs ORDER BY id')).rows;
+ const other=await context.newPage();await other.goto(server.origin+'/loom/admin/search');await expect(other.getByRole('article')).toHaveCount(25);
+ const writes:any[]=[];for(const tab of [page,other])tab.on('request',r=>{if(r.url().endsWith('/api/v1/admin/search/retry')&&r.method()==='POST')writes.push(r.postDataJSON());});
+ const entered=barrier(),release=barrier();
+ await page.route('**/api/v1/admin/search/retry',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);entered.release();await release.promise;await route.abort('failed');},{times:1});
+ const failed=page.getByRole('region',{name:'Failed jobs',exact:true}),heading=failed.getByRole('heading',{name:'Failed jobs',exact:true});
+ await heading.evaluate(element=>element.scrollIntoView({block:'start'}));const retry=failed.getByRole('article').first().getByRole('button',{name:'Retry job',exact:true});await retry.focus();const scrollBefore=await page.evaluate(()=>scrollY);
+ await page.keyboard.press('Enter');await entered.promise;
+ try{
+  await expect(failed.getByText('Sending retry request…',{exact:true})).toBeVisible();await expect(retry).toBeDisabled();await expect(failed.getByRole('article')).toHaveCount(25);
+  expect(await page.evaluate(()=>scrollY)).toBe(scrollBefore);expect(writes).toEqual([{id:target.id,claim_generation:target.claim_generation}]);
+ }finally{release.release();}
+ const feedback=failed.getByRole('region',{name:'Job retry',exact:true});
+ await expect(feedback.getByText('Outcome not confirmed',{exact:true})).toBeVisible();await expect(feedback.getByRole('alert')).toBeVisible();await expect(feedback.getByRole('button',{name:'Retry same request',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>scrollY)).toBe(scrollBefore);
+ const retained=()=>page.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('loom.search-maintenance.v1:'))![1]));
+ const original=await retained();expect(original.state).toBe('uncertain');expect(original.request).toEqual({kind:'retry',body:writes[0]});
+ const afterFirst=(await server.observer.query('SELECT * FROM loom.search_jobs ORDER BY id')).rows;
+ const review=await searchIndexingReview(page,'followup');
+ const injection=['Existing jobs in an isolated synthetic database are marked failed. Tab A receives no response after the real retry endpoint commits: Playwright deliberately holds then drops HTTP 200. Tab B uses the same authenticated browser context and replays the retained payload against the real endpoint.'];
+ await review.capture('top-job-uncertain',injection,failed,{fullPage:false});
+ await heading.evaluate(element=>element.scrollIntoView({block:'start'}));const beforeRecovery=await page.evaluate(()=>scrollY);
+ await expect(other.getByRole('region',{name:'Job retry',exact:true}).getByText('Outcome not confirmed',{exact:true})).toBeVisible();
+ await other.getByRole('button',{name:'Retry same request',exact:true}).focus();await other.keyboard.press('Enter');
+ await expect(other.getByText('Retry request acknowledged',{exact:true})).toBeVisible();await expect(feedback.getByText('Retry request acknowledged',{exact:true})).toBeVisible();await expect(feedback.getByRole('alert')).toHaveCount(0);
+ expect(await page.evaluate(()=>scrollY)).toBe(beforeRecovery);expect(writes).toEqual([original.request.body,original.request.body]);
+ expect(await retained()).toEqual({...original,sequence:original.sequence+1,state:'acknowledged'});
+ expect((await server.observer.query('SELECT * FROM loom.search_jobs ORDER BY id')).rows).toEqual(afterFirst);
+ expect((await server.observer.query('SELECT id,state,attempts,claim_generation FROM loom.search_jobs ORDER BY id')).rows).toEqual(before.map(job=>job.id===target.id?{...job,state:'pending',attempts:0,claim_generation:job.claim_generation+1}:job));
+ await review.capture('tab-a-recovered',injection,failed,{fullPage:false});
+ await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(failed.getByRole('article')).toHaveCount(25);
+ await expect(failed.getByRole('article').filter({hasText:target.id})).toHaveCount(0);await expect(feedback.getByText('This job is not in the displayed failure page.',{exact:true})).toBeVisible();await expect(feedback.getByText('Retry request acknowledged',{exact:true})).toBeVisible();await expect(feedback.getByRole('alert')).toHaveCount(0);await expect(feedback).toContainText(target.id);expect(writes).toHaveLength(2);
+ await other.close();
+ // A later row also keeps its feedback in view, including after its automatic read removes it.
+ const laterEntered=barrier(),laterRelease=barrier();
+ await page.route('**/api/v1/admin/search/retry',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);laterEntered.release();await laterRelease.promise;await route.fulfill({response});},{times:1});
+ const later=failed.getByRole('article').nth(20);await later.scrollIntoViewIfNeeded();await later.getByRole('button',{name:'Retry job',exact:true}).focus();const laterScroll=await page.evaluate(()=>scrollY);
+ await page.keyboard.press('Enter');await laterEntered.promise;
+ try{await expect(feedback.getByText('Sending retry request…',{exact:true})).toBeVisible();expect(await page.evaluate(()=>scrollY)).toBe(laterScroll);}finally{laterRelease.release();}
+ await expect(feedback.getByText('Retry request acknowledged',{exact:true})).toBeVisible();await expect(feedback.getByText('This job is not in the displayed failure page.',{exact:true})).toBeVisible();expect(await page.evaluate(()=>scrollY)).toBe(laterScroll);expect(writes).toHaveLength(3);
+});

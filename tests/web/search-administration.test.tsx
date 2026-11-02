@@ -10,6 +10,7 @@ import {ActiveView} from '../../src/web/ParticipationRoutes.js';
 import {Onboarding} from '../../src/contracts/participation.js';
 import {IntentStore,invalidateIdentity,sessionRequest,commandRequest} from '../../src/web/participation-client.js';
 import type {Context} from '../../src/web/participation-state.js';
+import {SearchMaintenanceRecovery} from '../../src/web/search-maintenance-recovery.js';
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://loom.example/loom/admin/search'});
 for(const key of ['window','document','navigator','HTMLElement','MutationObserver','location','localStorage','Event','CustomEvent'] as const)Object.defineProperty(globalThis,key,{value:dom.window[key],configurable:true});
 Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true,writable:true});
@@ -131,4 +132,63 @@ test('new post-acknowledgement observations supersede overlapping earlier refres
  const f=await fixture(t);f.hold();await click('Refresh status');const older=[...f.held];await rebuild();await f.finish(Response.json({generation:2}));const newer=f.held.slice(older.length);
  await act(async()=>{for(const r of newer)r.finish(Response.json(r.path.endsWith('/health')?{...f.health,generation:2,scan_complete:false}:{items:[],next_after:null}));});
  await act(async()=>{for(const r of older)r.finish(Response.json(r.path.endsWith('/health')?f.health:{items:[job()],next_after:null}));});assert.ok(screen.getByText('Indexing in progress'));assert.equal(screen.queryByText('No queued work observed'),null);assert.equal(screen.queryByText('Processing could not finish'),null);
+});
+for(const kind of ['rebuild','retry'] as const)test('cross-tab '+kind+' settlement retires only superseded command feedback',async t=>{
+ const f=await fixture(t),failed=job();
+ if(kind==='retry'){f.pages.set('',{items:[failed],next_after:null});await click('Refresh status');await click('Retry job');}else await rebuild();
+ await f.finish(error());assert.ok(screen.getByText('Outcome not confirmed'));
+ const other=new SearchMaintenanceRecovery(f.context.community.instance_id,f.self.participant_id),original=other.read()!;
+ const changed=()=>act(async()=>{window.dispatchEvent(new dom.window.StorageEvent('storage',{key:other.key}));});
+ f.fail();await click('Refresh status');await changed();
+ assert.equal(screen.getAllByText('Synthetic service_unavailable',{exact:true}).length,2,'An unchanged uncertain record must retain its command error as well as the health error');
+ const reads=[...f.reads];let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
+ const replay=other.attempt(original.request,original.sequence,()=>true,async()=>{await held;});
+ try{await changed();assert.ok(screen.getByText('Outcome not confirmed'));assert.equal(screen.getAllByText('Synthetic service_unavailable',{exact:true}).length,1,'A newer unresolved attempt retires only the older command error, without implying acknowledgement');}finally{release();}
+ const resolved=await replay;
+ assert.deepEqual(resolved.record.request,original.request);assert.equal(resolved.record.sequence,original.sequence+1);await changed();
+ assert.ok(screen.getByText(kind==='rebuild'?'Rebuild request acknowledged':'Retry request acknowledged'));
+ assert.equal(screen.getAllByText('Synthetic service_unavailable',{exact:true}).length,1,'Only the independent health error remains');
+ assert.ok(screen.getByText(/Could not load the requested failed-job page/));assert.deepEqual(f.reads,reads);assert.equal(f.writes.length,1);
+});
+test('a full failed-job page keeps pending, uncertain and acknowledged retry feedback contextual after the row disappears',async t=>{
+ const f=await fixture(t),jobs=Array.from({length:25},()=>job()),target=jobs[0]!;
+ f.pages.set('',{items:jobs,next_after:null});await click('Refresh status');
+ const section=within(screen.getByRole('region',{name:'Failed jobs'})),maintenance=within(screen.getByRole('region',{name:'Maintenance'}));
+ await act(async()=>fireEvent.click(within(section.getAllByRole('article')[0]!).getByRole('button',{name:'Retry job'})));
+ assert.ok(section.getByText('Sending retry request…'));assert.equal(maintenance.queryByText(/Sending/),null);
+ assert.equal(section.getAllByRole('article').length,25);assert.deepEqual(f.writes[0]!.body,{id:target.id,claim_generation:3});
+ await f.finish(error());const feedback=within(section.getByRole('region',{name:'Job retry'}));
+ assert.ok(feedback.getByText('Outcome not confirmed'));assert.ok(feedback.getByText(/Failed job 1/));assert.ok(feedback.getByRole('button',{name:'Retry same request'}));assert.equal(maintenance.queryByText('Outcome not confirmed'),null);
+ await click('Refresh status');assert.ok(feedback.getByText('Synthetic service_unavailable'));assert.equal(f.writes.length,1);
+ await click('Retry same request');assert.deepEqual(f.writes[1]!.body,f.writes[0]!.body);await f.finish(Response.json({accepted:true}));
+ assert.ok(feedback.getByText('Retry request acknowledged'));assert.equal(feedback.queryByRole('alert'),null);
+ f.pages.set('',{items:jobs.slice(1),next_after:null});await click('Refresh status');
+ assert.equal(section.getAllByRole('article').length,24);assert.ok(feedback.getByText('Retry request acknowledged'));assert.ok(feedback.getByText('This job is not in the displayed failure page.'));assert.ok(feedback.getByText(target.id));assert.equal(feedback.queryByText(/Failed job 1/),null);assert.equal(f.writes.length,2);
+});
+test('a rejected job retry stays in Failed jobs and cannot be attributed to a later rebuild',async t=>{
+ const f=await fixture(t),failed=job();f.pages.set('',{items:[failed],next_after:null});await click('Refresh status');await click('Retry job');await f.finish(error('search_changed',409));
+ const failures=within(screen.getByRole('region',{name:'Failed jobs'})),maintenance=within(screen.getByRole('region',{name:'Maintenance'}));
+ assert.ok(failures.getByText('Request rejected'));assert.ok(failures.getByText(/generation changed/));assert.equal(maintenance.queryByText('Request rejected'),null);
+ await rebuild();assert.equal(failures.queryByRole('region',{name:'Job retry'}),null);await f.finish(Response.json({generation:2}));
+ assert.ok(maintenance.getByText('Rebuild request acknowledged'));assert.equal(screen.queryByText(/generation changed/),null);
+});
+test('withdrawal removes protected retry context while cross-tab settlement cannot restore authority',async t=>{
+ const f=await fixture(t),failed=job();f.pages.set('',{items:[failed],next_after:null});await click('Refresh status');await click('Retry job');await f.finish(error());
+ const feedback=within(screen.getByRole('region',{name:'Job retry'}));assert.ok(feedback.getByText(/Failed job 1/));
+ const refused=commandRequest('/api/v1/admin/search/rebuild',{self:f.self as any,body:{expected_generation:1}}),rejected=assert.rejects(refused,{code:'forbidden'});
+ await act(async()=>{f.writes.at(-1)!.finish(error('forbidden',403));await rejected;});
+ assert.equal(screen.queryByRole('article'),null);assert.equal(feedback.queryByText(/Failed job 1/),null);assert.equal((feedback.getByRole('button',{name:'Retry same request'}) as HTMLButtonElement).disabled,true);
+ const other=new SearchMaintenanceRecovery(f.context.community.instance_id,f.self.participant_id),original=other.read()!;await other.attempt(original.request,original.sequence,()=>true,async()=>{});
+ const reads=[...f.reads];await act(async()=>window.dispatchEvent(new dom.window.StorageEvent('storage',{key:other.key})));
+ assert.ok(feedback.getByText('Retry request acknowledged'));assert.equal(screen.queryByRole('article'),null);assert.equal(feedback.queryByText(/Failed job 1/),null);assert.equal(screen.queryByText('No queued work observed'),null);assert.deepEqual(f.reads,reads);assert.equal(f.writes.length,2);
+});
+test('retry feedback remains beside a later job and holds its position after removal, restarting with explicit pagination',async t=>{
+ const f=await fixture(t),jobs=Array.from({length:25},()=>job()),target=jobs[20]!,cursor=jobs[24]!.id,next=job();
+ f.pages.set('',{items:jobs,next_after:cursor});f.pages.set(cursor,{items:[next],next_after:null});await click('Refresh status');
+ const section=within(screen.getByRole('region',{name:'Failed jobs'}));let rows=section.getAllByRole('article');
+ await act(async()=>fireEvent.click(within(rows[20]!).getByRole('button',{name:'Retry job'})));
+ let feedback=section.getByRole('region',{name:'Job retry'});assert.ok(rows[19]!.nextElementSibling===feedback,'Feedback must follow the preceding job');assert.ok(feedback.nextElementSibling===rows[20],'Feedback must precede the affected position');
+ await f.finish(error());f.pages.set('',{items:jobs.filter(j=>j.id!==target.id),next_after:cursor});await click('Refresh status');
+ rows=section.getAllByRole('article');feedback=section.getByRole('region',{name:'Job retry'});assert.ok(rows[19]!.nextElementSibling===feedback,'Feedback must follow the preceding job');assert.ok(feedback.nextElementSibling===rows[20],'Feedback must precede the affected position');assert.ok(within(feedback).getByText('This job is not in the displayed failure page.'));
+ await click('Next page');feedback=section.getByRole('region',{name:'Job retry'});assert.ok(feedback.nextElementSibling===section.getByRole('article'),'A different page starts with retained feedback');assert.ok(within(feedback).getByText(target.id));assert.equal(f.writes.length,1);
 });

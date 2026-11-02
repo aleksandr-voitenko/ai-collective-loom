@@ -50,6 +50,14 @@ current generations require fresh health; refreshing never changes a retained re
 job ID or claim generation. A validated `{accepted:true}` acknowledges retry;
 it does not mean the job succeeded. Separate fresh reads inspect processing.
 
+Pending, rejected, acknowledged and uncertain retry feedback stays beside the
+affected row in Failed jobs, with the exact-request recovery control. The current
+page position identifies it without promoting technical IDs. If the row leaves
+the page, its result keeps that bounded position without retaining old job metadata.
+On another page or reopening without the row, the retained result appears first,
+explicitly separate from observed processing. Feedback updates do not move focus
+or scroll the reader. Rebuild feedback stays in Maintenance.
+
 ## Maintenance and uncertainty
 
 Rebuild index opens a native focus-contained dialog. It explains the retained-source
@@ -71,6 +79,10 @@ uncertain/acknowledged/rejected state. It persists uncertainty before transport,
 serializes cross-tab dispatch and refuses replacement while unresolved. Reload and
 reopening restore the record without sending a command. Sign-out's existing local
 cleanup includes this slot and warns before clearing an uncertain request.
+Command errors bind to the retained request, sequence and settlement state. A
+storage event adopting a superseding attempt/settlement retires its obsolete error,
+without clearing independent health or page errors. Reading unchanged uncertain
+custody preserves its error and never establishes acknowledgement.
 
 The server serializes rebuilds with the discovery guard: current generation N
 advances to N+1; an exact request for N also acknowledges an already-current N+1.

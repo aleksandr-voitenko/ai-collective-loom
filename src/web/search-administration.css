@@ -98,6 +98,13 @@
   padding: 18px 0;
   border-top: 1px solid var(--line);
 }
+.loom-app .search-admin-failures {
+  /* Updating request feedback above the rows must not scroll the reader away. */
+  overflow-anchor: none;
+}
+.loom-app .search-admin-failures > .search-admin-recovery {
+  margin: 0 0 18px;
+}
 .loom-app .search-admin-job-heading p {
   color: var(--muted);
   margin: 0 0 6px;

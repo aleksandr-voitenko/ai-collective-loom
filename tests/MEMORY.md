@@ -693,8 +693,9 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 174 collected tests and <17 MiB/candidate. The test count includes
-the Community settings and Search indexing recovery journeys so coverage captures the complete suite;
+128 KiB/document, 175 collected tests and <17 MiB/candidate. The test count includes
+Community settings and Search indexing recovery, including two-tab exact retry on a
+25-row failed-job page, so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
