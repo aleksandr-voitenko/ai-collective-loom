@@ -72,7 +72,7 @@ assert.equal(sourceFile('/private/synthetic/references.spec.ts'),'references.spe
 for(const path of ['/api/v1/references/target','/api/v1/references/incoming','/api/v1/resources/:id/revisions/:id/references'])
   assert.equal(routeTemplate('https://example.test'+path.replaceAll(':id','00000000-0000-0000-0000-000000000001')+'?resource_id='+canary+'&cursor='+canary,'https://example.test'),path);
 assert.equal(sourceFile('/private/synthetic/search.spec.ts'),'search.spec.ts');
-for(const path of ['/loom/search','/api/v1/search','/api/v1/search/status','/api/v1/search/authors','/api/v1/admin/search/health','/api/v1/admin/search/failures','/api/v1/admin/search/rebuild','/api/v1/admin/search/retry'])
+for(const path of ['/loom/admin/search','/loom/search','/api/v1/search','/api/v1/search/status','/api/v1/search/authors','/api/v1/admin/search/health','/api/v1/admin/search/failures','/api/v1/admin/search/rebuild','/api/v1/admin/search/retry'])
   assert.equal(routeTemplate('https://example.test'+path+'?q='+canary+'&cursor='+canary,'https://example.test'),path);
 assert.equal(sourceFile('/private/synthetic/following.spec.ts'),'following.spec.ts');
 for(const path of ['/loom/following','/loom/changes','/api/v1/me/following','/api/v1/me/following/lookup','/api/v1/me/following/state','/api/v1/me/following/status','/api/v1/shared-changes/query','/api/v1/shared-changes/detail'])

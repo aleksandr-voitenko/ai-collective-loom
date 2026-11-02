@@ -25,6 +25,13 @@ references and lost-response recovery. Known first-attempt quota rejections can 
 dismissed individually without losing publication drafts. See the [Saved items decision](docs/adr/013-private-saved-items.md).
 Production identity, capacity and retention policies still require review. Use synthetic
 content in disposable previews; retained trials follow the local-pilot limits below.
+**Administration → Search indexing** opens a dedicated shared-text operational page.
+It loads current observations and bounded failed-job pages, separates retries from
+processing progress, and confirms before rebuilding. Exact uncertain maintenance
+requests survive reopening and reload; a changed index alone never proves their
+outcome. File-text processing remains a separate administration tool. See the
+[page specification](src/web/SearchAdministration.md) for replay limits and review capture.
+
 **Administration → Community settings** opens a dedicated form for choosing the
 community overview and proposal topic by name and location. **Cancel** restores
 the last accepted values without saving. Reads retain unsaved edits and their

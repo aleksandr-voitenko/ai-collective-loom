@@ -5,10 +5,10 @@ import { join, resolve } from 'node:path';
 
 // This is a closed vocabulary, not a secret-pattern scrubber. Never add free text
 // (including reporter titles/errors/attachments) to an approved document.
-// Include the complete browser inventory, including Community settings recovery;
+// Include the complete browser inventory, including Community settings and Search indexing recovery;
 // retain both byte envelopes and every per-test collection bound.
 export const limits = Object.freeze({ events: 256, pages: 16, contexts: 8, pending: 64,
-  steps: 16, tests: 172, bytes: 131072, runBytes: 17 * 1024 * 1024 });
+  steps: 16, tests: 175, bytes: 131072, runBytes: 17 * 1024 * 1024 });
 export const root = resolve('browser-diagnostics');
 export const files = ['administration.spec.ts', 'participation.spec.ts', 'saved-items.spec.ts', 'organization.spec.ts', 'search.spec.ts', 'references.spec.ts', 'summaries.spec.ts', 'changes.spec.ts', 'notifications.spec.ts', 'following.spec.ts', 'updates.spec.ts', 'reading.spec.ts', 'attention.spec.ts', 'moderation.spec.ts', 'files.spec.ts', 'files-text.spec.ts', 'reservations.spec.ts', 'notes.spec.ts', 'recovery.spec.ts', 'pilot.spec.ts', 'diagnostics.probe.ts', 'browser-fixtures.ts', 'browser-diagnostics.ts', 'unknown'];
 export const issues = ['capture_failed', 'capture_timed_out', 'capture_invalid', 'checkpoint_failed',
@@ -46,7 +46,7 @@ const routePatterns = [
   '/loom/summaries', '/api/v1/summaries', '/api/v1/summary-revisions', '/api/v1/summaries/status', '/api/v1/summaries/editors', '/api/v1/summaries/maintenance',
   '/api/v1/summary-preparations', '/api/v1/summary-preparations/cleanup', '/api/v1/summary-preparations/:id', '/api/v1/summary-preparations/:id/members',
   '/api/v1/discussions/:id/summary', '/api/v1/discussions/:id/summary-sources', '/api/v1/summaries/:id/revisions/:id/coverage', '/api/v1/summaries/:id/revisions/:id/members', '/api/v1/summaries/:id/revisions/:id/sources',
-  '/loom', '/loom/saved', '/loom/admin', '/loom/help', '/loom/overview', '/loom/artifacts', '/loom/organize', '/loom/area/:id',
+  '/loom', '/loom/saved', '/loom/admin/search', '/loom/admin', '/loom/help', '/loom/overview', '/loom/artifacts', '/loom/organize', '/loom/area/:id',
   '/loom/discussion/:id', '/loom/resource/:id', '/loom/resource/:id/:id',
   '/loom/search', '/api/v1/search', '/api/v1/search/status', '/api/v1/search/authors', '/api/v1/admin/search/health', '/api/v1/admin/search/failures', '/api/v1/admin/search/rebuild', '/api/v1/admin/search/retry',
   '/api/v1/runtime', '/api/v1/identity/self', '/api/v1/identity/register/start', '/api/v1/identity/register/finish',

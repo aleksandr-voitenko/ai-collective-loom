@@ -10,17 +10,14 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import {
   SearchPage,
   SearchStatus,
-  SearchHealth,
-  FailedSearchJobs,
   SearchAuthorsPage,
   type SearchPageView,
   type SearchStatusView,
-  type SearchHealthView,
   type SearchAuthorsView,
 } from '../contracts/search.js';
 import { OrganizationResource, type OrganizationResourceView } from '../contracts/organization.js';
 import { TopicDirectory } from './Organization.js';
-import { identityGeneration, commandRequest } from './participation-client.js';
+import { identityGeneration } from './participation-client.js';
 import { useQuery, type Context } from './participation-state.js';
 
 export function IndexingNotice({ status }: { status: SearchStatusView | FileSearchStatusValue }) {
@@ -489,129 +486,5 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
         </>
       )}
     </section>
-  );
-}
-
-export function SearchAdministration({ context }: { context: Context }) {
-  const health = useQuery<SearchHealthView>('/api/v1/admin/search/health', SearchHealth);
-  const [after, setAfter] = useState(''),
-    [version, setVersion] = useState(0),
-    [error, setError] = useState(''),
-    [notice, setNotice] = useState(''),
-    [busy, setBusy] = useState(false);
-  const failed = useQuery<{
-    items: {
-      id: string;
-      failure: string;
-      attempts: number;
-      claim_generation: number;
-      generation: number;
-    }[];
-    next_after: string | null;
-  }>('/api/v1/admin/search/failures' + (after ? '?after=' + after : ''), FailedSearchJobs);
-  const owner = useRef(identityGeneration()),
-    live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
-  const owned = () => live.current && owner.current === identityGeneration();
-  async function action(path: string, body: unknown) {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      await commandRequest(path, { body, self: context.self });
-      if (owned()) {
-        setNotice('Search maintenance request accepted. Refresh health to inspect progress.');
-        health.refreshIfCurrent();
-        failed.refreshIfCurrent();
-        setVersion((n) => n + 1);
-      }
-    } catch (e) {
-      if (owned()) setError((e as Error).message);
-    } finally {
-      if (owned()) setBusy(false);
-    }
-  }
-  return (
-    <details className="card search-admin">
-      <summary>Search indexing administration</summary>
-      {health.error && <p role="alert">{health.error}</p>}
-      {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
-      {health.data && (
-        <>
-          <p>
-            Generation {health.data.generation} · Worker{' '}
-            {health.data.worker_available ? 'available' : 'unavailable'} · Initial scan{' '}
-            {health.data.scan_complete ? 'finished' : 'in progress'}
-          </p>
-          <p>
-            {Object.entries(health.data.jobs)
-              .map(([state, n]) => `${n} ${state}`)
-              .join(' · ')}
-          </p>
-          {health.data.capacity_limited && (
-            <p role="alert">Synthetic search capacity reached. Direct retrieval is independent.</p>
-          )}
-          <details key={version}>
-            <summary>Rebuild derived index</summary>
-            <p>
-              Starts a resumable scan of retained sources. Search coverage will be incomplete until
-              it finishes. Source publications and Saved items are preserved.
-            </p>
-            <button
-              disabled={busy}
-              onClick={() =>
-                void action('/api/v1/admin/search/rebuild', {
-                  expected_generation: health.data!.generation,
-                })
-              }
-            >
-              Start search rebuild
-            </button>
-          </details>
-        </>
-      )}
-      <button
-        onClick={() => {
-          health.refresh();
-          failed.refresh();
-        }}
-      >
-        Refresh search health
-      </button>
-      <h3>Failed search jobs</h3>
-      {failed.error && <p role="alert">{failed.error}</p>}
-      {failed.data?.items.map((job) => (
-        <div key={job.id}>
-          <p>
-            {job.failure} · {job.attempts} attempts · generation {job.generation}
-          </p>
-          <details>
-            <summary>Job reference</summary>
-            {job.id}
-          </details>
-          <button
-            disabled={busy || job.generation !== health.data?.generation}
-            onClick={() =>
-              void action('/api/v1/admin/search/retry', {
-                id: job.id,
-                claim_generation: job.claim_generation,
-              })
-            }
-          >
-            Retry failed job
-          </button>
-        </div>
-      ))}
-      {failed.data && !failed.data.items.length && <p>No failed jobs on this page.</p>}
-      {failed.data?.next_after && (
-        <button onClick={() => setAfter(failed.data!.next_after!)}>More failed jobs</button>
-      )}
-    </details>
   );
 }

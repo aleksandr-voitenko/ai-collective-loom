@@ -150,6 +150,28 @@ checks verify the current administrator role before fresh protected reads; priva
 input and receipts never reauthorize content. Page/API limits are documented in
 `CommunitySettings.md`; no global query, authorization or server contract changes.
 
+`SearchAdministration.tsx` owns `/loom/admin/search`; Administration links to it.
+Health and the exact requested failed-job page load on entry and Refresh status.
+One leased page replaces prior rows; failed continuations remain exact, First page
+stays reachable and explicit pagination focuses its heading. Health counts are
+current-generation only; failure rows span generations and older jobs cannot retry.
+No queued work observed is not a coverage claim. Failed reads qualify retained data
+as earlier observations; role withdrawal hides it and explicit access rechecks role.
+`search-maintenance-recovery.ts` retains one 2KiB exact request per origin/instance/
+participant using verified storage and Web Locks, including cross-tab dispatch.
+Rebuild/retry use the original generation guards, without invented idempotency keys
+or IntentStore records. Acknowledgement is separate from processing and actor
+attribution. A conflict after response loss remains uncertain: no status lookup can
+recover beyond the server replay window. Fresh health never rebases that request.
+Sign-out includes explicit uncertain-request warning and owner-scoped cleanup.
+Command errors bind to the recovery snapshot; cross-tab supersession retires only
+that attempt's error. Unsent attempts keep their own request/context beside the
+older custody snapshot; only failure before the send callback proves non-dispatch.
+Receipt-storage failure remains uncertain. Retry feedback/recovery stays beside its job, retaining only
+a bounded page position if the row disappears; rebuild feedback stays in Maintenance. Retry
+feedback updates do not move focus or scroll the reader.
+See `SearchAdministration.md` for states, existing API limits and capture commands.
+
 `recovery-storage.ts` shares exact write/readback and best-effort raw rollback
 across Reading, Attention, Shared Changes and both Updates journals. Its bounded
 per-intent scanner/writer serves only Reading and Attention: scans count stored

@@ -4,7 +4,6 @@ import { ParticipationRates } from './ParticipationRates.js';
 import { Link } from 'react-router';
 import { type Context } from './participation-state.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
-import { SearchAdministration } from './Search.js';
 import { FileTextAdministration } from './FileText.js';
 import { Admission } from './ParticipationAdmission.js';
 import { IdentityAuditBrowsing } from './AdministrationBrowsing.js';
@@ -33,7 +32,12 @@ export function Administration({ context }: { context: Context }) {
       <OperationalHealth context={context} />
       <ParticipationRates context={context} />
       <FileLimits context={context} />
-      <SearchAdministration context={context} />
+      <section className="panel">
+        <h2>
+          <Link to="/loom/admin/search">Search indexing</Link>
+        </h2>
+        <p>Inspect shared-text indexing, failed jobs and maintenance requests.</p>
+      </section>
       <FileTextAdministration context={context} />
       <Admission context={context} />
       <IdentityAuditBrowsing self={context.self} />

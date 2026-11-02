@@ -14,6 +14,11 @@ session-authorization tests use new page envelopes; the retained participation
 Chromium recovery monitor follows POST query reads while preserving its exact
 private recovery assertions. Diagnostic changes add only fixed route/spec names
 and the two new test identities; existing numerical runtime/byte/coverage gates stay.
+The configuration refresh sequence keeps one route interceptor through held success,
+injected failure and explicit reload, asserting each response/count before advancing.
+Replacing expiring one-shot handlers can race interception updates and miss the fault.
+The no-Web-Locks sign-out journey checks each cleanup warning independently of order,
+server session revocation and exact retained draft/uncertain Search recovery bytes.
 
 
 `integration/pilot.test.ts` and `e2e/pilot.spec.ts` execute the actual persistent
@@ -688,8 +693,9 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 172 collected tests and <17 MiB/candidate. The test count includes
-the Community settings recovery journey so coverage captures the complete suite;
+128 KiB/document, 175 collected tests and <17 MiB/candidate. The test count includes
+Community settings and Search indexing recovery, including two-tab exact retry on a
+25-row failed-job page, so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
@@ -772,6 +778,19 @@ status-only recovery with exact native identity/content and one retained operati
 Search scenarios extend the same closed diagnostics with `search.spec.ts`, search/
 authors/status/admin route templates and search/refresh controls. Queries and cursors are
 discarded by route classification; no authored text or raw diagnostics are approved.
+Dedicated `/loom/admin/search` coverage joins that existing spec: current versus
+earlier-generation failures, real bounded pagination with an injected later-page 503,
+exact-page retry/focus, acknowledgement versus native job completion, confirmation,
+lost rebuild responses, exact replay, competing generations and role/sign-out fences.
+`web/search-administration.test.tsx` mounts ActiveView/StrictMode; the dedicated
+recovery unit suite checks bounded custody, cross-tab serialization and late owners.
+Mounted and compiled Search recovery cases also refuse the initial storage write
+after an acknowledged request of the other kind. Assert no new POST, unchanged
+prior custody and Request not sent in the attempted action's context; distinguish
+acknowledgement-storage failure after dispatch from those unsent attempts.
+Opt-in `LOOM_SEARCH_REVIEW_SCREENS=1` uses `helpers/search-indexing-review.ts` for
+actual synthetic desktop/mobile PNGs and provenance in `/tmp/loom-review-evidence/ui-03`.
+Seeded health/failure states and transport injections are labelled in the manifest.
 Preserve approved failure evidence before another browser/diagnostic run replaces
 the output directory. Search tests exercise actual HTTPS/SQL and native built workers;
 build first and never clean `dist` while native children are running.
