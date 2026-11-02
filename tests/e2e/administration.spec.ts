@@ -78,14 +78,14 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  const base=initial.settings_version+1;
  await page.goto(server.origin+'/loom/admin');
  await expect(page.getByRole('heading',{name:'Administration',exact:true})).toBeVisible();
- await expect(page.getByText('Search indexing administration',{exact:true})).toBeVisible();
+ await expect(page.getByRole('link',{name:'Search indexing',exact:true})).toBeVisible();
  const review=await settingsReview(page);await review.capture('administration-entry');
  await page.getByRole('link',{name:'Community settings',exact:true}).click();
  await expect(page).toHaveURL(server.origin+'/loom/admin/community');
  const panel=page.getByRole('form',{name:'Community settings'}),overview=page.getByRole('region',{name:'Community overview',exact:true}),proposal=page.getByRole('region',{name:'Proposal topic',exact:true});
  await expect(overview.getByText('General',{exact:true})).toBeVisible();await expect(proposal.getByText('General › Proposals',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();
- await expect(page.getByText('Search indexing administration',{exact:true})).toHaveCount(0);await expect(panel).not.toContainText(generalOverview);
+ await expect(page.getByRole('link',{name:'Search indexing',exact:true})).toHaveCount(0);await expect(panel).not.toContainText(generalOverview);
  await review.capture('loaded');
  const writes:any[]=[];let reads=0;
  page.on('request',r=>{if(r.url().endsWith('/community/settings')&&r.method()==='POST')writes.push(r.postDataJSON());if(r.url().endsWith('/api/v1/community')&&r.method()==='GET')reads++;});

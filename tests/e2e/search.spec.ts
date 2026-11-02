@@ -5,6 +5,7 @@ import { NativeSearchWorker } from '../../scripts/lib/native-search-worker.js';
 import type { syntheticServer } from '../helpers/participation-server.js';
 import { readFile } from 'node:fs/promises';
 import { httpClient } from '../helpers/participation-http.js';
+import { searchIndexingReview } from '../helpers/search-indexing-review.js';
 const content=(text:string)=>({format:'loom-markdown-v1',text,mentions:[]});
 function barrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};}
 async function api(page:Page,path:string,body?:unknown){
@@ -72,8 +73,9 @@ test('late query and page responses do not replace newer search or another desti
 });
 test('late account search cannot reappear after sign-out; administrator can start a bounded rebuild',async({page,context,server})=>{
   await setup(page,context,server,2);
-  await page.goto(server.origin+'/loom/admin');await page.getByText('Search indexing administration',{exact:true}).click();await page.getByText('Rebuild derived index',{exact:true}).click();
-  await page.getByRole('button',{name:'Start search rebuild'}).click();await expect(page.getByText('Search maintenance request accepted.',{exact:false})).toBeVisible();
+  await page.goto(server.origin+'/loom/admin');await page.getByRole('link',{name:'Search indexing',exact:true}).click();
+  await page.getByRole('button',{name:'Rebuild index',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Rebuild index',exact:true}).click();await expect(page.getByText('Rebuild request acknowledged',{exact:true})).toBeVisible();
   expect((await server.observer.query('SELECT generation FROM loom.search_state')).rows[0].generation).toBe(2);
   const entered=barrier(),release=barrier();await page.route('**/api/v1/search?**',async route=>{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});});
   try {await page.goto(server.origin+'/loom/search?q=zephyr');await entered.promise;await page.getByRole('button',{name:'Sign out',exact:true}).click();
@@ -100,4 +102,65 @@ test('author picker retains a suspended publication author through search and re
   expect(new URL(page.url()).searchParams.get('author')).toBe(person.participant_id);
   await page.reload();await expect(page.locator('.search-result')).toHaveCount(1);
   await expect(page.getByText('Original author: retained_author',{exact:true})).toBeVisible();
+});
+
+test('search indexing observations, failed-page recovery and retry preserve bounded reads and processing meaning',async({page,context,server})=>{
+ const data=await setup(page,context,server,28),review=await searchIndexingReview(page,'observations');
+ const writes:any[]=[];page.on('request',request=>{if(/\/admin\/search\/(retry|rebuild)$/.test(request.url())&&request.method()==='POST')writes.push(request.postDataJSON());});
+ await page.goto(server.origin+'/loom/admin');await expect(page.getByRole('link',{name:'Community settings',exact:true})).toBeVisible();await page.getByRole('link',{name:'Search indexing',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Search indexing',exact:true})).toBeVisible();await expect(page.getByText('No queued work observed',{exact:true})).toBeVisible();
+ await review.capture('normal-status');
+ const before=(await server.observer.query('SELECT generation FROM loom.search_state')).rows[0].generation;
+ await page.route('**/api/v1/admin/search/health',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic observation unavailable'}})}),{times:1});
+ await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.getByText(/Showing an earlier observation/)).toBeVisible();await expect(page.getByText('No queued work observed',{exact:true})).toBeVisible();
+ await review.capture('refresh-failure',['A single health GET is deliberately fulfilled with HTTP 503. Earlier authorized observations remain.']);
+ expect(writes).toHaveLength(0);expect((await server.observer.query('SELECT generation FROM loom.search_state')).rows[0].generation).toBe(before);
+ await server.observer.query("UPDATE loom.search_state SET heartbeat_at=clock_timestamp()-interval '1 minute'");await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.getByText('Worker unavailable',{exact:true})).toBeVisible();
+ await review.capture('worker-unavailable',['The stopped synthetic worker heartbeat is aged beyond the existing server availability window; the real health endpoint supplies this state.']);
+ await server.observer.query('UPDATE loom.search_state SET capacity_limited=true,heartbeat_at=clock_timestamp()');await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.getByText('Capacity limited',{exact:true})).toBeVisible();
+ await review.capture('capacity-limited',['The isolated synthetic search_state capacity flag is seeded true; no production limit is changed.']);
+ const old=(await server.observer.query('SELECT id FROM loom.search_jobs ORDER BY id LIMIT 1')).rows[0].id;
+ await api(page,'/api/v1/admin/search/rebuild',{expected_generation:1});await data.worker.start();try{await data.worker.observeUntil(async()=>(await api(page,'/api/v1/search/status')).indexing==='ready');}finally{await data.worker.stop();}
+ const current=(await server.observer.query('SELECT id FROM loom.search_jobs WHERE generation=2 ORDER BY id LIMIT 2')).rows.map(r=>r.id);
+ await server.observer.query("UPDATE loom.search_jobs SET state='failed',attempts=3,failure='processing_failed',claim_generation=claim_generation+1 WHERE id=ANY($1::uuid[])",[[old,...current]]);
+ await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(3);await expect(page.getByText('Earlier index generation; this job cannot be retried.')).toBeVisible();
+ const earlier=page.getByRole('article').filter({hasText:'Earlier index generation;'});await expect(earlier.getByRole('button',{name:'Retry job',exact:true})).toBeDisabled();
+ await review.capture('failed-jobs',['Three existing synthetic jobs are seeded as failed, including one from generation 1. Health and failure pages are real authorized server responses.'],page.getByRole('heading',{name:'Failed jobs',exact:true}));
+ const eligible=page.getByRole('article').filter({hasNotText:'Earlier index generation;'}).first();const target=(await api(page,'/api/v1/admin/search/failures')).items.find((j:any)=>j.generation===2);
+ await eligible.getByRole('button',{name:'Retry job',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByText('Retry request acknowledged',{exact:true})).toBeVisible();
+ expect(writes.at(-1)).toEqual({id:target.id,claim_generation:target.claim_generation});expect((await server.observer.query('SELECT state,attempts,claim_generation FROM loom.search_jobs WHERE id=$1',[target.id])).rows[0]).toEqual({state:'pending',attempts:0,claim_generation:target.claim_generation+1});
+ await data.worker.start();try{await data.worker.observeUntil(async()=>(await server.observer.query('SELECT state FROM loom.search_jobs WHERE id=$1',[target.id])).rows[0].state==='succeeded');}finally{await data.worker.stop();}
+ await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(2);
+ await server.observer.query("UPDATE loom.search_jobs SET state='failed',attempts=3,failure='processing_failed' WHERE generation=2");await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(25);
+ const firstIds=(await api(page,'/api/v1/admin/search/failures')).items.map((j:any)=>j.id),after=firstIds.at(-1),requests:string[]=[];
+ await page.route('**/api/v1/admin/search/failures?*',async route=>{requests.push(new URL(route.request().url()).searchParams.get('after')!);if(requests.length===1)await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic page failure'}})});else await route.continue();});
+ await page.getByRole('button',{name:'Next page',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('button',{name:'Retry this page',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Failed jobs',exact:true})).toBeFocused();
+ await page.getByRole('button',{name:'Retry this page',exact:true}).click();await expect(page.getByRole('article')).toHaveCount(5);expect(requests).toEqual([after,after]);await expect(page.getByRole('heading',{name:'Failed jobs',exact:true})).toBeFocused();
+ await page.getByRole('button',{name:'First page',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('article')).toHaveCount(25);await expect(page.getByRole('heading',{name:'Failed jobs',exact:true})).toBeFocused();expect(writes.filter(w=>'claim_generation' in w)).toHaveLength(1);
+});
+
+test('search indexing rebuild confirmation, exact recovery and authority withdrawal retain request custody',async({page,context,server})=>{
+ await setup(page,context,server,2);const review=await searchIndexingReview(page,'maintenance');const writes:any[]=[];
+ page.on('request',r=>{if(r.url().endsWith('/api/v1/admin/search/rebuild')&&r.method()==='POST')writes.push(r.postDataJSON());});
+ await page.goto(server.origin+'/loom/admin/search');await expect(page.getByText('No queued work observed',{exact:true})).toBeVisible();
+ const sourceBefore=(await server.observer.query('SELECT id FROM loom.revisions ORDER BY id')).rows,savedBefore=(await server.observer.query('SELECT * FROM loom.saved_items')).rows;
+ const open=()=>page.getByRole('button',{name:'Rebuild index',exact:true}).click();
+ await open();const dialog=page.getByRole('dialog',{name:'Rebuild shared-text index?'});await expect(dialog.getByRole('button',{name:'Cancel',exact:true})).toBeFocused();
+ await review.capture('rebuild-confirmation');await dialog.getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.getByRole('button',{name:'Rebuild index',exact:true})).toBeFocused();expect(writes).toHaveLength(0);
+ await open();await dialog.getByRole('button',{name:'Rebuild index',exact:true}).click();await expect(page.getByText('Rebuild request acknowledged',{exact:true})).toBeVisible();await expect(page.getByText('Indexing in progress',{exact:true})).toBeVisible();
+ await review.capture('rebuild-acknowledged',[],page.getByRole('region',{name:'Maintenance',exact:true}));expect((await server.observer.query('SELECT generation,scan_complete FROM loom.search_state')).rows[0]).toEqual({generation:2,scan_complete:false});
+ await page.route('**/api/v1/admin/search/rebuild',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
+ await open();await dialog.getByRole('button',{name:'Rebuild index',exact:true}).click();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();expect(writes.at(-1)).toEqual({expected_generation:2});
+ await review.capture('unresolved-maintenance',['The real rebuild response is deliberately dropped after the endpoint commits generation 3.'],page.getByRole('region',{name:'Maintenance',exact:true}));
+ await page.reload();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();expect(writes).toHaveLength(2);await page.getByRole('button',{name:'Refresh status',exact:true}).click();expect(writes).toHaveLength(2);
+ await page.getByRole('button',{name:'Retry same request',exact:true}).click();await expect(page.getByText('Rebuild request acknowledged',{exact:true})).toBeVisible();expect(writes[2]).toEqual(writes[1]);expect((await server.observer.query('SELECT generation FROM loom.search_state')).rows[0].generation).toBe(3);
+ await page.route('**/api/v1/admin/search/rebuild',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
+ await open();await dialog.getByRole('button',{name:'Rebuild index',exact:true}).click();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();
+ await api(page,'/api/v1/admin/search/rebuild',{expected_generation:4});await page.getByRole('button',{name:'Refresh status',exact:true}).click();await page.getByRole('button',{name:'Retry same request',exact:true}).click();await expect(page.getByText('The generation changed. The earlier request outcome is still unconfirmed.')).toBeVisible();expect(writes.at(-1)).toEqual({expected_generation:3});
+ await review.capture('unresolved-generation-conflict',['A rebuild response is dropped after generation 4 commits; a separate authenticated request advances generation 5. Exact replay of generation 3 receives the real search_changed refusal.'],page.getByRole('region',{name:'Maintenance',exact:true}));
+ expect((await server.observer.query('SELECT id FROM loom.revisions ORDER BY id')).rows).toEqual(sourceBefore);expect((await server.observer.query('SELECT * FROM loom.saved_items')).rows).toEqual(savedBefore);
+ await server.observer.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[server.administratorId]);await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.getByText(/Operational observations were withdrawn/)).toBeVisible();await expect(page.getByText('Indexing in progress',{exact:true})).toHaveCount(0);
+ const writesBefore=writes.length;await page.getByRole('button',{name:'Check access',exact:true}).click();await expect(page.getByText(/Administrator access is required/)).toBeVisible();expect(writes).toHaveLength(writesBefore);
+ await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[server.administratorId]);await page.getByRole('button',{name:'Check access',exact:true}).click();await expect(page.getByText('Indexing in progress',{exact:true})).toBeVisible();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByRole('button',{name:'Clear local drafts and sign out',exact:true}).click();await expect(page.getByRole('button',{name:'Sign in with passkey'})).toBeVisible();expect(await page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('loom.search-maintenance.v1:')))).toBe(false);
 });

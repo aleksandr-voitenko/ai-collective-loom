@@ -20,7 +20,7 @@ Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configur
 dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
 dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
 Object.defineProperty(navigator,'locks',{value:{request:async(_name:string,work:()=>unknown)=>work()},configurable:true});
-const {render,screen,fireEvent,cleanup,act}=await import('@testing-library/react');
+const {render,screen,fireEvent,cleanup,act,within}=await import('@testing-library/react');
 // JSDOM exercises the real shell's state/effects; Vite handles CSS in Chromium.
 const css=registerHooks({load(url,context,next){return url.endsWith('.css')?{format:'module',source:'',shortCircuit:true}:next(url,context);}});
 const {ParticipationApp}=await import('../../src/web/ParticipationApp.js');css.deregister();
@@ -286,11 +286,11 @@ test(`production administration: late ${action} success cannot start protected r
   if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
   if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([{id:account,nickname:'ProtectedAccount',kind:'human',state:'active',role:'participant'}])));
   if(url==='/api/v1/identity/credentials/query')return Promise.resolve(Response.json(browsingPage([{id:credential,kind:'enrollment',label:'ProtectedCredential',state:'active'}])));
-  if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
+  if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json({...Value.Create(SearchHealth),generation:1}));
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
  });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:[action==='search'?'/loom/admin/search':'/loom/admin']});t.after(()=>router.dispose());
  await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
  const refuse=async()=>{
   const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'account.create',idempotency_key:randomUUID()},self:admin});
@@ -299,11 +299,12 @@ test(`production administration: late ${action} success cannot start protected r
  };
  // Recovery initiated after withdrawal still has no metadata authority.
  if(action==='recovery')await refuse();
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:{account:'Create account',recovery:'Check account operation',state:'Suspend',revoke:'Revoke',search:'Start search rebuild'}[action]})));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:{account:'Create account',recovery:'Check account operation',state:'Suspend',revoke:'Revoke',search:'Rebuild index'}[action]})));
+ if(action==='search')await act(async()=>fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'Rebuild index'})));
  const pending=commands.at(-1)!;
  if(action!=='recovery')await refuse();
  const before=[...reads];
- await act(async()=>pending.resolve(Response.json(action==='search'?{generation:1}:{operation_state:'committed',participant_id:account,credential_id:credential})));
+ await act(async()=>pending.resolve(Response.json(action==='search'?{generation:2}:{operation_state:'committed',participant_id:account,credential_id:credential})));
  assert.deepEqual(reads,before,'A late receipt cannot implicitly request replacement metadata, including when it mounts credential recovery.');
  assert.equal(!!screen.queryByText(/ProtectedCredential/),false);
  assert.equal(!!screen.queryByText('ProtectedAccount · human · active'),false);
@@ -311,10 +312,10 @@ test(`production administration: late ${action} success cannot start protected r
   assert.deepEqual(store.all(),[]);
   assert.ok(screen.queryByRole('button',{name:'Issue enrollment ticket'}));
  }
- const refresh=action==='account'||action==='recovery'?'Refresh credentials':action==='search'?'Refresh search health':'Refresh accounts';
+ const refresh=action==='account'||action==='recovery'?'Refresh credentials':action==='search'?'Check access':'Refresh accounts';
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:refresh})));
  assert.ok(reads.length>before.length,'An explicit refresh must still obtain new authorization.');
- assert.ok(screen.queryByText(action==='account'||action==='recovery'?/ProtectedCredential/:action==='search'?/Generation 0 · Worker/: 'ProtectedAccount · human · active'));
+ assert.ok(screen.queryByText(action==='account'||action==='recovery'?/ProtectedCredential/:action==='search'?/No queued work observed|Worker unavailable/: 'ProtectedAccount · human · active'));
 });
 
 for(const outcome of ['current','withdrawn'] as const)

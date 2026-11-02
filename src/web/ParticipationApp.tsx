@@ -14,11 +14,13 @@ import {
 import { NotificationRecovery } from './notification-recovery.js';
 import { AttentionRecovery, exportAttentionRecovery } from './attention-recovery.js';
 import { UpdatesRecovery } from './updates-recovery.js';
+import { SearchMaintenanceRecovery } from './search-maintenance-recovery.js';
 import { SharedRecovery } from './shared-recovery.js';
 import { ReadingProvider } from './Reading.js';
 import { ReadingRecovery, exportReadingRecovery } from './reading-recovery.js';
 import './participation.css';
 import './community-settings.css';
+import './search-administration.css';
 import { Avatar, ErrorText, Icon } from './participation-ui.js';
 import { ActiveView } from './ParticipationRoutes.js';
 import { needsCommunitySetup } from './CommunitySetup.js';
@@ -135,6 +137,13 @@ export function ParticipationApp() {
       }
       const cleanupOwner = identityGeneration();
       try {
+        if (community)
+          await new SearchMaintenanceRecovery(community.instance_id, self.participant_id).clear();
+      } catch {
+        cleanupFailures.push('search maintenance recovery could not be cleared.');
+      }
+      if (cleanupOwner !== identityGeneration()) return;
+      try {
         if (store && community)
           await new IntentStore(community.instance_id, self.participant_id).clear();
       } catch {
@@ -202,7 +211,9 @@ export function ParticipationApp() {
       if (
         store?.all().length ||
         (community &&
-          (new ReadingRecovery(community.instance_id, self.participant_id).all().length ||
+          (new SearchMaintenanceRecovery(community.instance_id, self.participant_id).read()
+            ?.state === 'uncertain' ||
+            new ReadingRecovery(community.instance_id, self.participant_id).all().length ||
             new AttentionRecovery(community.instance_id, self.participant_id).all().length))
       )
         setSignout(true);

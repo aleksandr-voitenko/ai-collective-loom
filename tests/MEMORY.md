@@ -688,8 +688,8 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 172 collected tests and <17 MiB/candidate. The test count includes
-the Community settings recovery journey so coverage captures the complete suite;
+128 KiB/document, 174 collected tests and <17 MiB/candidate. The test count includes
+the Community settings and Search indexing recovery journeys so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
@@ -772,6 +772,15 @@ status-only recovery with exact native identity/content and one retained operati
 Search scenarios extend the same closed diagnostics with `search.spec.ts`, search/
 authors/status/admin route templates and search/refresh controls. Queries and cursors are
 discarded by route classification; no authored text or raw diagnostics are approved.
+Dedicated `/loom/admin/search` coverage joins that existing spec: current versus
+earlier-generation failures, real bounded pagination with an injected later-page 503,
+exact-page retry/focus, acknowledgement versus native job completion, confirmation,
+lost rebuild responses, exact replay, competing generations and role/sign-out fences.
+`web/search-administration.test.tsx` mounts ActiveView/StrictMode; the dedicated
+recovery unit suite checks bounded custody, cross-tab serialization and late owners.
+Opt-in `LOOM_SEARCH_REVIEW_SCREENS=1` uses `helpers/search-indexing-review.ts` for
+actual synthetic desktop/mobile PNGs and provenance in `/tmp/loom-review-evidence/ui-03`.
+Seeded health/failure states and transport injections are labelled in the manifest.
 Preserve approved failure evidence before another browser/diagnostic run replaces
 the output directory. Search tests exercise actual HTTPS/SQL and native built workers;
 build first and never clean `dist` while native children are running.

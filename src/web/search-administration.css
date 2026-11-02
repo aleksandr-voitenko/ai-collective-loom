@@ -1,0 +1,151 @@
+.loom-app .search-administration {
+  width: 100%;
+  max-width: 820px;
+}
+.loom-app .search-administration > .breadcrumb {
+  margin-bottom: 22px;
+}
+.loom-app .search-administration > .subtitle {
+  margin-bottom: 28px;
+}
+.loom-app .search-admin-section {
+  margin-bottom: 20px;
+  padding: 26px 28px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.loom-app .search-admin-section header,
+.loom-app .search-admin-job-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.loom-app .search-admin-section h2 {
+  margin: 0 0 14px;
+}
+.loom-app .search-admin-section h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+.loom-app .search-admin-section header button,
+.loom-app .search-admin-job-heading button {
+  flex-shrink: 0;
+  margin: 0;
+}
+.loom-app .search-admin-state {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 6px 0 20px;
+}
+.loom-app .search-admin-observations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 0 0 24px;
+}
+.loom-app .search-admin-observations div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+.loom-app .search-admin-observations dt,
+.loom-app .search-admin-counts dt,
+.loom-app .search-admin-context {
+  color: var(--muted);
+}
+.loom-app .search-admin-observations dd,
+.loom-app .search-admin-counts dd {
+  margin: 0;
+}
+.loom-app .search-admin-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 30px;
+  margin: 12px 0 20px;
+}
+.loom-app .search-admin-counts div {
+  display: flex;
+  gap: 8px;
+}
+.loom-app .search-admin-counts dd {
+  font-weight: 600;
+}
+.loom-app .search-admin-details {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.loom-app .search-admin-details summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.loom-app .search-admin-details dl div {
+  margin: 8px 0;
+}
+.loom-app .search-admin-details dt {
+  text-transform: capitalize;
+}
+.loom-app .search-admin-details dd {
+  margin: 2px 0 0;
+  color: var(--ink);
+}
+.loom-app .search-admin-job {
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+.loom-app .search-admin-job-heading p {
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+.loom-app .search-administration .actions {
+  gap: 12px;
+  margin-top: 18px;
+}
+.loom-app .search-administration .actions button {
+  margin: 0;
+}
+.loom-app .search-admin-recovery {
+  margin-top: 20px;
+  padding: 18px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.loom-app .search-admin-confirm {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 26px;
+  background: white;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.loom-app .search-admin-confirm h2 {
+  margin-top: 0;
+}
+@media (max-width: 600px) {
+  .loom-app .search-admin-section {
+    padding: 20px 18px;
+  }
+  .loom-app .search-admin-section header {
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .loom-app .search-admin-observations {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .loom-app .search-admin-job-heading {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .loom-app .search-admin-confirm {
+    padding: 20px;
+  }
+}
