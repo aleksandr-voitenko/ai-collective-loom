@@ -63,7 +63,7 @@ async function setup(page: Page) {
     .click();
   await expect(page.getByRole("heading", { name: "Topics", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Administration", exact: true }).click();
-  await expect(page.getByText("Community configuration", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Community settings", exact: true })).toBeVisible();
 }
 async function createDiscussion(
   page: Page,
@@ -894,7 +894,7 @@ test("review regression: definitive setup rejection can be corrected after reloa
   await page
     .getByRole("button", { name: "Create community", exact: true })
     .click();
-  await expect(page.getByText("Community configuration", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Community settings", exact: true })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/loom/admin");
   expect(new URL(page.url()).searchParams.get("intent")).toBe(corrected.key);
 });

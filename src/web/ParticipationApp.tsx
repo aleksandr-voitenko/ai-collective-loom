@@ -18,6 +18,7 @@ import { SharedRecovery } from './shared-recovery.js';
 import { ReadingProvider } from './Reading.js';
 import { ReadingRecovery, exportReadingRecovery } from './reading-recovery.js';
 import './participation.css';
+import './community-settings.css';
 import { Avatar, ErrorText, Icon } from './participation-ui.js';
 import { ActiveView } from './ParticipationRoutes.js';
 import { needsCommunitySetup } from './CommunitySetup.js';

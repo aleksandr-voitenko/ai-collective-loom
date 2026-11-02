@@ -320,36 +320,39 @@ test(`production administration: late ${action} success cannot start protected r
 for(const outcome of ['current','withdrawn'] as const)
 test(`production configuration: ${outcome} success refreshes only with current content authority`,async t=>{
  const {Onboarding}=await import('../../src/contracts/participation.js');
- const {SearchHealth}=await import('../../src/contracts/search.js');
  const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});community.settings_version=1;
+ community.community_name='Synthetic community';
+ const topic=randomUUID(),other=randomUUID();
+ const resource=(id:string)=>({resource_id:id,kind:'area',parent_id:null,version:1,hierarchy_version:1,title:id===topic?'Proposals':'Suggestions',description:null,metadata_version:null,local_open:true,publication_open:true,can_organize:true,ancestors:[],contacts_url:'/api/v1/contacts',proposal_route_url:'/api/v1/proposals'});
  const commands:{path:string;body:Record<string,unknown>;resolve:(r:Response)=>void}[]=[],reads:string[]=[];
  t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
   if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
   reads.push(url);
   if(url==='/api/v1/identity/self')return Promise.resolve(Response.json({...self,role:'administrator'}));
   if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([])));
-  if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
-  if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
+  if(url.startsWith('/api/v1/organization/resources/'))return Promise.resolve(Response.json(resource(url.split('/').at(-1)!)));
+  if(url.startsWith('/api/v1/organization/destinations?'))return Promise.resolve(Response.json({items:[resource(topic),resource(other)],hierarchy_version:1,next_cursor:null,complete:true,work_budget_reached:false,scope:'destinations',limit:12,max_response_bytes:131072}));
   throw new Error('Unexpected request: '+url);
  });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/community']});t.after(()=>router.dispose());
  await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Save configuration'})));
- assert.equal(commands[0]!.body.expected_version,1);
+ const click=async(name:string)=>act(async()=>fireEvent.click(screen.getByRole('button',{name})));
+ await click('Change proposal topic');await click('Choose Proposals in Proposals');await click('Save changes');
+ assert.equal(commands[0]!.body.expected_version,1);const first=commands[0]!.body;
  if(outcome==='withdrawn'){
   const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'account.create',idempotency_key:randomUUID()},self});
   const rejected=assert.rejects(refusal,{code:'forbidden'});
   await act(async()=>{commands[1]!.resolve(Response.json({error:{code:'forbidden',message:'Recheck access.'}},{status:403}));await rejected;});
  }
- const before=[...reads];community.settings_version=2;
+ const before=[...reads];community.settings_version=2;community.proposal_area={state:'ready',resource_id:topic};
  await act(async()=>commands[0]!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:2})));
  if(outcome==='withdrawn'){
   assert.deepEqual(reads,before,'Late configuration success must not restart shell discovery or a protected query.');
-  assert.equal(!!screen.queryByRole('button',{name:'Save configuration'}),false);
-  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh configuration'})));
+  assert.equal((screen.getByRole('button',{name:'Retry same save'}) as HTMLButtonElement).disabled,true);
+  await click('Check access');await click('Retry same save');assert.deepEqual(commands.at(-1)!.body,first);
+  await act(async()=>commands.at(-1)!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:2})));
  }
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Save configuration'})));
+ await click('Change proposal topic');await click('Choose Suggestions in Suggestions');await click('Save changes');
  assert.equal(commands.at(-1)!.body.expected_version,2,'Repeated saves must use the newly authorized configuration version.');
  await act(async()=>commands.at(-1)!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:3})));
 });
@@ -394,8 +397,10 @@ test(`production setup: ${path} settlement leaves reauthorization to an explicit
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh administration'})));
  assert.ok(reads.length>before.length);
  assert.equal(!!screen.queryByText('Initialize the community'),false);
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh configuration'})));
- assert.ok(screen.queryByRole('button',{name:'Save configuration'}));
+ assert.ok(screen.queryByRole('link',{name:'Community settings'}));
+ await act(async()=>router.navigate('/loom/admin/community'));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check access'})));
+ assert.ok(screen.queryByRole('button',{name:'Save changes'}));
 });
 
 for(const initialThrottle of [false,true])test('shell temporary discovery throttling preserves session and journals without automatic retries: '+initialThrottle,async t=>{

@@ -85,6 +85,8 @@ export interface Context {
 }
 
 export function intentUrl(record: Intent) {
+  if (record.kind === 'community.settings')
+    return '/loom/admin/community?intent=' + encodeURIComponent(record.key);
   if (record.kind === 'file.upload') {
     const target = record.body.target as { kind: string; resource_id: string };
     return target.kind === 'artifact' || target.kind === 'contribution'

@@ -25,11 +25,13 @@ references and lost-response recovery. Known first-attempt quota rejections can 
 dismissed individually without losing publication drafts. See the [Saved items decision](docs/adr/013-private-saved-items.md).
 Production identity, capacity and retention policies still require review. Use synthetic
 content in disposable previews; retained trials follow the local-pilot limits below.
-In Administration, **Refresh configuration** keeps unsaved Community configuration
-edits and their original settings version. **Discard changes and reload saved settings**
-asks for confirmation before replacing them. Failed reads or saves retain the draft;
-a concurrent settings change can require resolving a version conflict. These drafts
-last only while the administration view remains open, not across page reloads.
+**Administration → Community settings** opens a dedicated form for choosing the
+community overview and proposal topic by name and location. **Cancel** restores
+the last accepted values without saving. Reads retain unsaved edits and their
+original settings version; explicit reload after a conflict confirms before
+discarding them. Navigation warns before losing unsent edits. An unconfirmed save
+keeps its exact request across reloads and offers **Retry same save**. Ordinary
+unsent edits remain local to the open page.
 Administrators can create nested topics, revise their scope, move topic subtrees,
 discussions and artifacts, and close/reopen topics or individual discussions.
 Creating a topic asks for its name and an optional description, then opens the
