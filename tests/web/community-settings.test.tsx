@@ -33,13 +33,13 @@ async function fixture(t:TestContext){
  community.settings_version=1;community.community_name='Synthetic community';
  community.overview={state:'ready',resource_id:overview};community.proposal_area={state:'ready',resource_id:proposal};
  let shellRefreshes=0,holdReads=false;
- const calls:{path:string;body:any;finish:(response:Response)=>void}[]=[];
+ const calls:{path:string;method:string;body:any;finish:(response:Response)=>void}[]=[];
  t.mock.method(globalThis,'fetch',(path:string,options?:RequestInit)=>{
   if(path==='/api/v1/community'&&!holdReads)return Promise.resolve(Response.json(community));
   if(path==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json({contract:'administration-pages-1',scope:{collection:'accounts',participant_id:null,order:'id',consistency:'restart-on-change'},items:[],next_cursor:null,complete:true,expires_at:'2090-01-01Z'}));
   if(path.endsWith('/admin/search/health'))return Promise.resolve(Response.json(Value.Create(SearchHealth)));
   if(path.endsWith('/admin/search/failures'))return Promise.resolve(Response.json({items:[],next_after:null}));
-  return new Promise<Response>(finish=>calls.push({path,body:options?.body?JSON.parse(String(options.body)):undefined,finish}));
+  return new Promise<Response>(finish=>calls.push({path,method:options?.method??'GET',body:options?.body?JSON.parse(String(options.body)):undefined,finish}));
  });
  const context={self,community,store:new IntentStore(community.instance_id,self.participant_id),refreshCommunity:()=>{shellRefreshes++;}} as Context;
  const router=createMemoryRouter([{path:'/loom/*',element:<ActiveView context={context}/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
@@ -81,13 +81,44 @@ test('successful discard/reload clears a superseded refresh error without claimi
  const f=await fixture(t);await edit('Overview artifact ID',changed);f.holdReads();
  await click('Refresh configuration');await f.finish(failure('service_unavailable',503));
  assert.ok(screen.queryByText('Synthetic service_unavailable'));
+ assert.equal(input('Overview artifact ID'),changed);assert.ok(screen.queryByText(/Unsaved changes/));
+ assert.ok(screen.queryByText(/Editing settings version 1/));
+ f.community.settings_version=3;f.community.community_name='Saved elsewhere';f.community.proposal_area.resource_id=changed;
  t.mock.method(window,'confirm',()=>true);
- await click('Discard changes and reload saved settings');await f.finish(Response.json(f.community));
- assert.equal(input('Overview artifact ID'),overview);
+ await click('Discard changes and reload saved settings');
+ assert.equal(input('Overview artifact ID'),changed);assert.equal(input('Proposal area ID'),proposal);
+ assert.ok(screen.queryByText(/Unsaved changes/),'Confirmation alone must not discard the draft.');
+ assert.ok(screen.queryByText(/Editing settings version 1/));
+ assert.ok(screen.queryByText('Synthetic service_unavailable'));
+ assert.equal(!!screen.queryByText(/Saved configuration loaded/),false);
+ await f.finish(Response.json(f.community));
+ assert.equal(input('Overview artifact ID'),overview);assert.equal(input('Proposal area ID'),changed);
+ assert.equal(!!screen.queryByText(/Unsaved changes/),false);assert.ok(screen.queryByText(/Editing settings version 3/));
  assert.equal(!!screen.queryByText('Synthetic service_unavailable'),false);
  assert.ok(screen.queryByText(/Saved configuration loaded/));assert.equal(!!screen.queryByText(/Configuration saved/),false);
+ assert.deepEqual(f.calls.map(({path,method,body})=>({path,method,body})),[
+  {path:'/api/v1/community',method:'GET',body:undefined},
+  {path:'/api/v1/community',method:'GET',body:undefined},
+ ],'The failed refresh and successful discard/reload must only read settings.');
  await click('Refresh configuration');await f.finish(failure('service_unavailable',503));
  assert.ok(screen.queryByText('Synthetic service_unavailable'),'A new failure must still be visible.');
+ await edit('Overview artifact ID',changed);await click('Save configuration');
+ assert.equal(f.calls.at(-1)!.body.expected_version,3);assert.equal(f.calls.at(-1)!.body.community_name,'Saved elsewhere');
+ await f.finish(failure('invalid_input',400));
+});
+
+for(const [code,status] of [['invalid_input',400],['revision_conflict',409]] as const)
+test(`successful settings refresh supersedes its read failure while preserving a separate ${code} save error`,async t=>{
+ const f=await fixture(t);await edit('Overview artifact ID',changed);await click('Save configuration');
+ await f.finish(failure(code,status));f.holdReads();
+ await click('Refresh configuration');await f.finish(failure('service_unavailable',503));
+ assert.ok(screen.queryByText('Synthetic service_unavailable'));assert.ok(screen.queryByText('Synthetic '+code));
+ f.community.settings_version=2;
+ await click('Refresh configuration');await f.finish(Response.json(f.community));
+ assert.equal(!!screen.queryByText('Synthetic service_unavailable'),false);assert.ok(screen.queryByText('Synthetic '+code));
+ assert.equal(input('Overview artifact ID'),changed);assert.ok(screen.queryByText(/Unsaved changes/));
+ assert.ok(screen.queryByText(/Editing settings version 1/));
+ assert.equal(f.calls.filter(c=>c.path==='/api/v1/community/settings').length,1);
 });
 
 test('discard requires confirmation and replaces the draft only after a successful saved-settings read',async t=>{

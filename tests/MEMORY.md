@@ -256,7 +256,10 @@ viewports and a per-image provenance manifest under
 include dirty, held-read, conflict, injected-read-error, discard and saved states.
 Native confirmation text/decisions are recorded separately, not reconstructed in PNGs.
 Successful discard/reload retires the previous query error; a subsequent failed
-refresh must still be displayed. The mounted regression checks both transitions.
+refresh must still be displayed. Mounted and compiled regressions hold the reload
+response to keep the dirty draft/base until success, then verify saved values,
+the new baseline and no mutation from either read. Mounted refresh regressions
+also keep separate save rejection/conflict errors when a later read succeeds.
 The definitive publication-refusal regression now passes, including blocked
 journal settlement, exact uncertain retries and pending responses across all hosts.
 Administrative refusal tests use the production shell and role-protected account

@@ -47,12 +47,27 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  await page.route('**/api/v1/community',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic configuration refresh failure'}})}),{times:1});
  await click(page,'Refresh configuration');await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();
  await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);expect(writes).toHaveLength(1);
+ await expect(panel.getByText('The current revision differs from the expected revision.')).toBeVisible();
  await review.capture('refresh-error',['One GET /api/v1/community is replaced with HTTP 503 and message Synthetic configuration refresh failure. The earlier 409 conflict is a real server response.']);
  page.once('dialog',async dialog=>{expect(dialog.message()).toContain('Discard your unsaved');review.dialog('cancel',dialog.message());await dialog.dismiss();});
  await click(page,'Discard changes and reload saved settings');await expect(overview).toHaveValue(f.target.resource_id);
+ const reloadEntered=barrier(),releaseReload=barrier();
+ await page.route('**/api/v1/community',async route=>{
+  expect(route.request().method()).toBe('GET');const response=await route.fetch();expect(response.status()).toBe(200);
+  reloadEntered.release();await releaseReload.promise;await route.fulfill({response});
+ },{times:1});
  page.once('dialog',dialog=>{review.dialog('accept',dialog.message());return dialog.accept();});await page.getByRole('button',{name:'Discard changes and reload saved settings',exact:true}).focus();await page.keyboard.press('Enter');
+ await reloadEntered.promise;
+ try{
+  await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);
+  await expect(panel.getByText(/Unsaved changes.*Editing settings version 1/)).toBeVisible();
+  await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();
+  await expect(panel.getByText('Saved configuration loaded.',{exact:false})).toHaveCount(0);expect(writes).toHaveLength(1);
+  await review.capture('discard-pending',['Earlier read failure was an injected HTTP 503; the real successful discard/reload GET response is held by a Playwright barrier.']);
+ }finally{releaseReload.release();}
  await expect(overview).toHaveValue(savedOverview);await expect(proposal).toHaveValue(f.area);
  await expect(panel.getByText(/Unsaved changes/)).toHaveCount(0);await expect(panel.getByText(/Editing settings version 2/)).toBeVisible();
+ await expect(panel.getByText(/Saved configuration loaded/)).toBeVisible();
  await expect(page.getByText('Synthetic configuration refresh failure')).toHaveCount(0);
  expect(writes).toHaveLength(1);
  await review.capture('discard-reloaded',['Earlier read failure was an injected HTTP 503; discard/reload uses a real successful GET.']);
