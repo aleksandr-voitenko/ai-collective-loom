@@ -42,6 +42,27 @@ test('batch discovery preserves all tests and file groups, refusing duplicates, 
   }
 });
 
+test('the complete repository browser inventory fits the bounded discovery contract', { timeout: 60_000 }, async t => {
+  const { root } = fixture(t), planPath = join(root, 'repository-plan.json');
+  const environment = { ...process.env, LOOM_BROWSER_PLAN: planPath,
+    NODE_V8_COVERAGE: join(root, 'discovery-coverage') };
+  delete environment.LOOM_COVERAGE_OUTPUT;
+  // Discover the real suite without running fixtures or exposing reporter errors.
+  // Focused journeys and synthetic plans cannot detect a stale inventory ceiling.
+  const child = spawn(process.execPath, ['--import', 'tsx', 'node_modules/@playwright/test/cli.js', 'test',
+    '--list', '--reporter', resolve('tests/helpers/browser-inventory-reporter.ts'), '--output', join(root, 'discovery')],
+  { env: environment, stdio: 'ignore' });
+  const code = await new Promise((done, reject) => { child.once('error', reject); child.once('close', done); });
+  assert.equal(code, 0, 'Complete browser inventory discovery must succeed');
+  assert.ok(existsSync(planPath), 'Complete browser inventory must pass diagnostic admission');
+  const plan = JSON.parse(readFileSync(planPath, 'utf8'));
+  assert.deepEqual(browserBatches(plan).flat(), plan.tests, 'Discovery must retain every test');
+  const run = { schema: 'loom-browser-run-1', metadata: plan.metadata, state: 'completed', status: 'passed',
+    planned: plan.tests.length, ended: plan.tests.length, omitted: 0,
+    tests: plan.tests.map(test => ({ test, status: 'passed', duration_ms: 0 })) };
+  writeChecked(join(root, 'complete-run.json'), run, validRun);
+});
+
 test('combined diagnostics retain every batch and an earlier failure after later success', t => {
   const f = fixture(t), first = f.candidate(0, 'failed'), second = f.candidate(1);
   const batches = [collectBrowserBatch(first.directory, [f.tests[0]], f.plan.metadata, 1),

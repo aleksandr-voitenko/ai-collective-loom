@@ -688,11 +688,15 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 166 collected tests and <17 MiB/candidate. The test count includes
-the isolated recovery and exact-file reference journeys so coverage captures the complete suite;
+128 KiB/document, 172 collected tests and <17 MiB/candidate. The test count includes
+the Community settings recovery journey so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.
+`bootstrap/browser-batches.test.mjs` discovers the actual complete repository suite
+without executing its fixtures, then validates both plan and combined-run admission.
+Keep the finite inventory ceiling aligned when adding journeys; focused spec runs
+and synthetic diagnostic plans cannot detect overflow of the full inventory.
 
 `test:browser-diagnostics` uses separate intentionally failing children and scans
 every approved file for its synthetic canaries, schema/byte bounds and lifecycle
