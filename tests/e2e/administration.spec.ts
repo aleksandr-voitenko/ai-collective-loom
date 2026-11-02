@@ -3,7 +3,7 @@ import { setup } from '../helpers/change-browser.js';
 import { populateAdministration, administrationTarget } from '../helpers/administration.js';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { settingsReview } from '../helpers/community-settings-review.js';
 import { journal } from '../helpers/change-browser.js';
 const click=(page:Page,name:string)=>page.getByRole('button',{name,exact:true}).click();
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return{promise,release};}
@@ -13,17 +13,22 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  const panel=page.locator('details').filter({has:page.getByText('Community configuration',{exact:true})});
  const overview=page.getByLabel('Overview artifact ID'),proposal=page.getByLabel('Proposal area ID');
  const savedOverview=await overview.inputValue(),savedProposal=await proposal.inputValue();
+ const review=await settingsReview(page);
+ await review.capture('administration-top');
  await overview.fill(f.target.resource_id);
  const writes:any[]=[];page.on('request',r=>{if(r.url().endsWith('/community/settings')&&r.method()==='POST')writes.push(r.postDataJSON());});
- const capture=async(stage:string)=>{if(process.env.LOOM_SETTINGS_REVIEW_SCREENS==='1'){
-  await mkdir('/tmp/loom-review-evidence/ui-01',{recursive:true});
-  await panel.screenshot({path:`/tmp/loom-review-evidence/ui-01/${stage}.png`});
- }};
- await capture('edited');
+ await review.capture('dirty');
+ const entered=barrier(),release=barrier();
+ await page.route('**/api/v1/community',async route=>{
+  const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response});
+ },{times:1});
  const read=page.waitForResponse(r=>r.url().endsWith('/api/v1/community'));
- await click(page,'Refresh configuration');await read;
+ await click(page,'Refresh configuration');await entered.promise;
+ try{await expect(overview).toHaveValue(f.target.resource_id);await review.capture('refresh-pending',['The real successful GET /api/v1/community response is held by a Playwright barrier.']);}
+ finally{release.release();}
+ await read;
  await expect(overview).toBeVisible();
- await capture('refreshed');
+ await review.capture('refreshed-dirty');
  expect(writes).toEqual([]);await expect(overview).toHaveValue(f.target.resource_id);
  await expect(proposal).toHaveValue(savedProposal);
  expect(savedOverview).not.toBe(f.target.resource_id);
@@ -38,21 +43,26 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  expect(writes[0].expected_version).toBe(1);expect(writes[0].community_name).toBe(settings.community_name);
  await expect(panel.getByText('The current revision differs from the expected revision.')).toBeVisible();
  await expect(overview).toHaveValue(f.target.resource_id);await expect(panel.getByText(/Unsaved changes/)).toBeVisible();
+ await review.capture('version-conflict');
  await page.route('**/api/v1/community',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic configuration refresh failure'}})}),{times:1});
  await click(page,'Refresh configuration');await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();
  await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);expect(writes).toHaveLength(1);
- page.once('dialog',async dialog=>{expect(dialog.message()).toContain('Discard your unsaved');await dialog.dismiss();});
+ await review.capture('refresh-error',['One GET /api/v1/community is replaced with HTTP 503 and message Synthetic configuration refresh failure. The earlier 409 conflict is a real server response.']);
+ page.once('dialog',async dialog=>{expect(dialog.message()).toContain('Discard your unsaved');review.dialog('cancel',dialog.message());await dialog.dismiss();});
  await click(page,'Discard changes and reload saved settings');await expect(overview).toHaveValue(f.target.resource_id);
- page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Discard changes and reload saved settings',exact:true}).focus();await page.keyboard.press('Enter');
+ page.once('dialog',dialog=>{review.dialog('accept',dialog.message());return dialog.accept();});await page.getByRole('button',{name:'Discard changes and reload saved settings',exact:true}).focus();await page.keyboard.press('Enter');
  await expect(overview).toHaveValue(savedOverview);await expect(proposal).toHaveValue(f.area);
  await expect(panel.getByText(/Unsaved changes/)).toHaveCount(0);await expect(panel.getByText(/Editing settings version 2/)).toBeVisible();
+ await expect(page.getByText('Synthetic configuration refresh failure')).toHaveCount(0);
  expect(writes).toHaveLength(1);
+ await review.capture('discard-reloaded',['Earlier read failure was an injected HTTP 503; discard/reload uses a real successful GET.']);
  await overview.fill(f.target.resource_id);await click(page,'Save configuration');
  await expect(panel.getByText(/Configuration saved at version 3/)).toBeVisible();
  await expect(panel.getByText(/Unsaved changes/)).toHaveCount(0);expect(writes[1].expected_version).toBe(2);
  const saved=(await f.admin.call('/api/v1/community')).body;
  expect(saved.settings_version).toBe(3);expect(saved.overview.resource_id).toBe(f.target.resource_id);expect(saved.proposal_area.resource_id).toBe(f.area);
- await overview.fill('');await page.setViewportSize({width:390,height:844});await capture('mobile');
+ await review.capture('saved');
+ await overview.fill('');await page.setViewportSize({width:390,height:844});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.setViewportSize({width:1440,height:1000});
 }

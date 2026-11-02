@@ -249,8 +249,14 @@ the production ActiveView/StrictMode host. It checks dirty values/original versi
 confirmed receipts, failed reads and authority/identity/route fences. The existing
 compiled administration browsing journey also exercises dirty/failed refresh, explicit
 discard cancellation/acceptance, a real competing settings write and version conflict,
-then confirmed save. `LOOM_SETTINGS_REVIEW_SCREENS=1` curates synthetic configuration
-screens under `/tmp/loom-review-evidence/ui-01`, outside diagnostic uploads.
+then confirmed save. `LOOM_SETTINGS_REVIEW_SCREENS=1` uses
+`helpers/community-settings-review.ts` to curate full 1440x1000/390x844 application
+viewports and a per-image provenance manifest under
+`/tmp/loom-review-evidence/ui-01/viewport`, outside diagnostic uploads. Captures
+include dirty, held-read, conflict, injected-read-error, discard and saved states.
+Native confirmation text/decisions are recorded separately, not reconstructed in PNGs.
+Successful discard/reload retires the previous query error; a subsequent failed
+refresh must still be displayed. The mounted regression checks both transitions.
 The definitive publication-refusal regression now passes, including blocked
 journal settlement, exact uncertain retries and pending responses across all hosts.
 Administrative refusal tests use the production shell and role-protected account

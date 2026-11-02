@@ -77,6 +77,19 @@ test('failed read refresh preserves draft, dirty state and save version',async t
  await f.finish(failure('invalid_input',400));assert.equal(input('Proposal area ID'),changed);
 });
 
+test('successful discard/reload clears a superseded refresh error without claiming a save',async t=>{
+ const f=await fixture(t);await edit('Overview artifact ID',changed);f.holdReads();
+ await click('Refresh configuration');await f.finish(failure('service_unavailable',503));
+ assert.ok(screen.queryByText('Synthetic service_unavailable'));
+ t.mock.method(window,'confirm',()=>true);
+ await click('Discard changes and reload saved settings');await f.finish(Response.json(f.community));
+ assert.equal(input('Overview artifact ID'),overview);
+ assert.equal(!!screen.queryByText('Synthetic service_unavailable'),false);
+ assert.ok(screen.queryByText(/Saved configuration loaded/));assert.equal(!!screen.queryByText(/Configuration saved/),false);
+ await click('Refresh configuration');await f.finish(failure('service_unavailable',503));
+ assert.ok(screen.queryByText('Synthetic service_unavailable'),'A new failure must still be visible.');
+});
+
 test('discard requires confirmation and replaces the draft only after a successful saved-settings read',async t=>{
  const f=await fixture(t);await edit('Overview artifact ID',changed);f.holdReads();
  const confirm=t.mock.method(window,'confirm',()=>false);

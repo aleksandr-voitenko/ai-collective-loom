@@ -88,6 +88,7 @@ function Configuration({ context }: { context: Context }) {
   const authority = useAuthorization();
   const [draft, setDraft] = useState<ConfigurationDraft>(),
     [observation, setObservation] = useState<{ version: number; generation: number | undefined }>(),
+    [refreshErrorVisible, setRefreshErrorVisible] = useState(true),
     [error, setError] = useState(''),
     [status, setStatus] = useState(''),
     [busy, setBusy] = useState(false);
@@ -145,6 +146,7 @@ function Configuration({ context }: { context: Context }) {
       const values = { ...submitted, version: result.version };
       setDraft({ base: values, values });
       setStatus(`Configuration saved at version ${result.version}.`);
+      setRefreshErrorVisible(true);
       community.refreshIfCurrent();
       context.refreshCommunity();
     } catch (failure) {
@@ -176,6 +178,8 @@ function Configuration({ context }: { context: Context }) {
       const values = configurationValues(result.value);
       setObservation({ version: values.version, generation: result.generation });
       setDraft({ base: values, values });
+      // This successful read supersedes any earlier query refresh failure.
+      setRefreshErrorVisible(false);
       setStatus('Saved configuration loaded.');
     } catch (failure) {
       if (current()) setError((failure as Error).message);
@@ -187,10 +191,16 @@ function Configuration({ context }: { context: Context }) {
 
   return (
     <>
-      <button disabled={busy} onClick={community.refresh}>
+      <button
+        disabled={busy}
+        onClick={() => {
+          setRefreshErrorVisible(true);
+          community.refresh();
+        }}
+      >
         Refresh configuration
       </button>
-      <ErrorText error={community.error} />
+      <ErrorText error={refreshErrorVisible ? community.error : ''} />
       <details className="card admin-card">
         <summary>Community configuration</summary>
         <ErrorText error={error} />
