@@ -347,6 +347,9 @@ Integration uses real local dependencies; it is separate and never reported pass
 when unavailable.
 Browser checks use a containing runner and allowlisted failure bundles; raw reporter
 output/attachments are not approved artifacts. See `tests/MEMORY.md` for collection, teardown and CI gates.
+Every UI-enhancement PR requires actual-app synthetic viewport evidence and a
+provenance manifest; follow `.lore-coding/instructions/verification.md` for capture,
+visual inspection, authentication privacy and handoff requirements.
 `npm run coverage` combines Node/JSDOM, all PostgreSQL suites and Chromium client
 execution. Application gates enforce 90% changed lines, 85% branches and exact
 no-decline line/branch baseline ratios. Tooling is reported separately. See

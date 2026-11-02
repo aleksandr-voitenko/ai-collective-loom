@@ -123,6 +123,13 @@ Participation components. Private recovery does not authorize selected account
 copies or one-time secrets. Shared presentation and leased collection components
 live in `participation-ui.tsx`, without page or shell imports. Page modules do not
 import the shell; new shared helpers must preserve that direction.
+Community configuration keeps an in-memory, instance/participant-bound draft outside
+the query result's lifetime. Dirty reads retain both IDs, the community name and
+original settings version; only confirmed saves or deliberate discard/reload replace
+that base. Discard confirms before reading and keeps the draft on failure. Saved
+observations retain separate authorization leases; drafts cannot authorize dispatch
+or late refresh after withdrawal, identity change or navigation. This is not a
+durable journal across page reloads.
 
 `recovery-storage.ts` shares exact write/readback and best-effort raw rollback
 across Reading, Attention, Shared Changes and both Updates journals. Its bounded

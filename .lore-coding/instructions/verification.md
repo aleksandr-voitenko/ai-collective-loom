@@ -39,6 +39,35 @@ A regression test may be skipped when impractical or misleading: reproduction is
 - Test-only work: describe the regression/risk covered and record the exact command and result.
 - Documentation and comments: compare explanations with relevant source and inspect rendered output when applicable. Comment-only work must not change runtime behavior. Confirm no unintended changes to code, generated artifacts, or behavior-bearing configuration. The distinct Docs-task exception for documentation generation affecting runtime artifacts does not turn behavior-changing work into a comment-only task. A server starting is not by itself documentation or UI verification.
 
+## Repository UI-enhancement PR visual evidence
+
+Screenshots are required deliverables for every UI-enhancement PR in this repository.
+
+- Capture the actual React application built from the reviewed source. Use isolated
+  synthetic data, dedicated test accounts and the existing Playwright/WebAuthn
+  authentication approach. Never disable authentication or add a production login
+  bypass. Keep enrollment tickets, passkey material, cookies and authentication
+  state in private test storage.
+- Capture the main changed screen as full application viewports at 1440x1000 and
+  390x844. Include important interaction states, such as dirty forms, open pickers,
+  conflicts/errors, confirmations and pending operations, as applicable. Include a
+  comparable before screenshot when it explains the change. Full-page or focused
+  screenshots may supplement content outside the viewport, never replace the main
+  viewport captures.
+- Wait for the intended rendered state and loaded assets. Do not modify the DOM,
+  inject cosmetic CSS or reconstruct HTML just for screenshots. Identify every
+  mocked response and deliberately injected failure in the evidence.
+- Inspect every delivered image for hierarchy, spacing, action placement, readable
+  labels, clipping and horizontal overflow. Correct visible defects within the
+  task's scope and recapture after the last relevant code change.
+- Supply reviewable PNG files in an attachment/package with a small manifest:
+  source commit, dirty-tree status, route, viewport, browser, test-account role,
+  demonstrated state and reproduction command. Keep capture opt-in and separate
+  from approved diagnostics. Never share authentication material, authentication
+  state files or unreviewed traces.
+- If capture is blocked, identify the specific blocker and mark visual verification
+  incomplete. Do not substitute generated images or claim unperformed inspection.
+
 ## Standard development checks
 
 Standard development checks are expected during development, but they are not a substitute for behavior-specific verification. Examples appropriate to the repository and changed files include linting, typechecking, building, formatting, dependency/lockfile checks, generated-file consistency, `git diff --check`, or a smoke start. These do not replace behavior-specific acceptance evidence.
