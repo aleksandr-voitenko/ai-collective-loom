@@ -244,22 +244,28 @@ response while older sibling bodies and refresh callbacks remain fenced.
 Setup first/status/retry and recovery initiated after withdrawal settle privately
 without shell/query reloads. Configuration tests require consecutive saves to use
 the newly authorized settings version and forbid late completion from reloading.
-`web/community-settings.test.tsx` holds configuration reads, discards and saves in
-the production ActiveView/StrictMode host. It checks dirty values/original versions,
-confirmed receipts, failed reads and authority/identity/route fences. The existing
-compiled administration browsing journey also exercises dirty/failed refresh, explicit
-discard cancellation/acceptance, a real competing settings write and version conflict,
-then confirmed save. `LOOM_SETTINGS_REVIEW_SCREENS=1` uses
-`helpers/community-settings-review.ts` to curate full 1440x1000/390x844 application
-viewports and a per-image provenance manifest under
-`/tmp/loom-review-evidence/ui-01/viewport`, outside diagnostic uploads. Captures
-include dirty, held-read, conflict, injected-read-error, discard and saved states.
-Native confirmation text/decisions are recorded separately, not reconstructed in PNGs.
-Successful discard/reload retires the previous query error; a subsequent failed
-refresh must still be displayed. Mounted and compiled regressions hold the reload
-response to keep the dirty draft/base until success, then verify saved values,
-the new baseline and no mutation from either read. Mounted refresh regressions
-also keep separate save rejection/conflict errors when a later read succeeds.
+`web/community-settings.test.tsx` exercises the dedicated Community settings route
+in the production ActiveView/StrictMode host: named/path-aware selections, local
+Cancel, dirty read/version retention, explicit reload, confirmed/uncertain receipts,
+failed settings/resource reads and authority/identity/navigation fences. Production
+shell tests retain successive-save and late-withdrawal assertions.
+The compiled administration browsing journey checks the Administration link, bounded
+duplicate-name pickers, keyboard containment/focus restoration, local Cancel and
+navigation warning, a real competing settings write/conflict, held reads and explicit
+reload, confirmed save and exact replay after a deliberately lost committed response.
+Actual role withdrawal hides metadata while preserving the draft; Check access must
+verify administrator role before renewed metadata reads. Existing file/rate/audit
+journeys remain independent of the settings page.
+`LOOM_SETTINGS_REVIEW_SCREENS=1` uses `helpers/community-settings-review.ts` for full
+1440x1000/390x844 application viewports and per-image provenance under
+`/tmp/loom-review-evidence/ui-02/viewport`, outside diagnostic uploads. Capture is
+opt-in; loaded/picker/dirty/conflict/error/recovery states use isolated synthetic
+accounts and existing WebAuthn. Native confirmation events are recorded separately,
+not reconstructed in PNGs. Injected failures/response loss are labelled.
+Successful explicit reload retires the previous read error; a later failed read
+must still appear. Held reloads retain dirty values/base until success and neither
+read submits settings mutations. Separate save/conflict errors survive ordinary
+successful reads. Uncertain settings retries retain their exact key/body on remount.
 The definitive publication-refusal regression now passes, including blocked
 journal settlement, exact uncertain retries and pending responses across all hosts.
 Administrative refusal tests use the production shell and role-protected account

@@ -9,77 +9,85 @@ const click=(page:Page,name:string)=>page.getByRole('button',{name,exact:true}).
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return{promise,release};}
 
 async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,server:Parameters<typeof setup>[2]){
- await page.goto(server.origin+'/loom/admin');await page.getByText('Community configuration',{exact:true}).click();
- const panel=page.locator('details').filter({has:page.getByText('Community configuration',{exact:true})});
- const overview=page.getByLabel('Overview artifact ID'),proposal=page.getByLabel('Proposal area ID');
- const savedOverview=await overview.inputValue(),savedProposal=await proposal.inputValue();
- const review=await settingsReview(page);
- await review.capture('administration-top');
- await overview.fill(f.target.resource_id);
- const writes:any[]=[];page.on('request',r=>{if(r.url().endsWith('/community/settings')&&r.method()==='POST')writes.push(r.postDataJSON());});
- await review.capture('dirty');
- const entered=barrier(),release=barrier();
- await page.route('**/api/v1/community',async route=>{
-  const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response});
- },{times:1});
- const read=page.waitForResponse(r=>r.url().endsWith('/api/v1/community'));
- await click(page,'Refresh configuration');await entered.promise;
- try{await expect(overview).toHaveValue(f.target.resource_id);await review.capture('refresh-pending',['The real successful GET /api/v1/community response is held by a Playwright barrier.']);}
- finally{release.release();}
- await read;
- await expect(overview).toBeVisible();
- await review.capture('refreshed-dirty');
- expect(writes).toEqual([]);await expect(overview).toHaveValue(f.target.resource_id);
- await expect(proposal).toHaveValue(savedProposal);
- expect(savedOverview).not.toBe(f.target.resource_id);
- await expect(panel.getByText(/Unsaved changes/)).toBeVisible();
- const settings=(await f.admin.call('/api/v1/community')).body;
- expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:settings.settings_version,
-  community_name:'Synthetic updated settings',overview_id:savedOverview,proposal_area_id:f.area})).status).toBe(200);
- await click(page,'Refresh configuration');await expect(panel.getByText(/Saved settings have changed to version 2/)).toBeVisible();
- await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);expect(writes).toEqual([]);
- const conflict=page.waitForResponse(r=>r.url().endsWith('/community/settings'));
- await click(page,'Save configuration');expect((await conflict).status()).toBe(409);
- expect(writes[0].expected_version).toBe(1);expect(writes[0].community_name).toBe(settings.community_name);
- await expect(panel.getByText('The current revision differs from the expected revision.')).toBeVisible();
- await expect(overview).toHaveValue(f.target.resource_id);await expect(panel.getByText(/Unsaved changes/)).toBeVisible();
- await review.capture('version-conflict');
+ const createArea=async(title:string,parent_id:string|null)=>{
+  const hierarchy=(await f.admin.call('/api/v1/organization/children?limit=1')).body.hierarchy_version;
+  const response=await f.admin.call('/api/v1/organization/changes',{idempotency_key:randomUUID(),kind:'area.create',title,parent_id,description:'Synthetic settings review',expected_hierarchy_version:hierarchy});expect(response.status).toBe(200);return response.body.current.resource_id as string;
+ };
+ const research=await createArea('Research',null),generalProposals=await createArea('Proposals',f.area),researchProposals=await createArea('Proposals',research);
+ const createOverview=async(area_id:string)=>{const r=await f.admin.call('/api/v1/artifacts',{idempotency_key:randomUUID(),area_id,title:'Community introduction',content:{format:'loom-markdown-v1',text:'Synthetic community introduction for settings review.',mentions:[]}});expect(r.status).toBe(201);return r.body.resource_id as string;};
+ const generalOverview=await createOverview(f.area),researchOverview=await createOverview(research);
+ const initial=(await f.admin.call('/api/v1/community')).body;
+ expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:initial.settings_version,community_name:'Synthetic research commons',overview_id:generalOverview,proposal_area_id:generalProposals})).status).toBe(200);
+ const base=initial.settings_version+1;
+ await page.goto(server.origin+'/loom/admin');
+ await expect(page.getByRole('heading',{name:'Administration',exact:true})).toBeVisible();
+ await expect(page.getByText('Search indexing administration',{exact:true})).toBeVisible();
+ const review=await settingsReview(page);await review.capture('administration-entry');
+ await page.getByRole('link',{name:'Community settings',exact:true}).click();
+ await expect(page).toHaveURL(server.origin+'/loom/admin/community');
+ const panel=page.getByRole('form',{name:'Community settings'}),overview=page.getByRole('region',{name:'Community overview',exact:true}),proposal=page.getByRole('region',{name:'Proposal topic',exact:true});
+ await expect(overview.getByText('General',{exact:true})).toBeVisible();await expect(proposal.getByText('General › Proposals',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();
+ await expect(page.getByText('Search indexing administration',{exact:true})).toHaveCount(0);await expect(panel).not.toContainText(generalOverview);
+ await review.capture('loaded');
+ const writes:any[]=[];let reads=0;
+ page.on('request',r=>{if(r.url().endsWith('/community/settings')&&r.method()==='POST')writes.push(r.postDataJSON());if(r.url().endsWith('/api/v1/community')&&r.method()==='GET')reads++;});
+ const changeTopic=page.getByRole('button',{name:'Change proposal topic',exact:true});await changeTopic.focus();await page.keyboard.press('Enter');
+ const picker=page.getByRole('dialog',{name:'Choose a proposal topic'});
+ await expect(picker.getByRole('button',{name:'Choose Proposals in General › Proposals',exact:true})).toBeVisible();
+ await expect(picker.getByRole('button',{name:'Choose Proposals in Research › Proposals',exact:true})).toBeVisible();
+ await expect.poll(()=>picker.evaluate(dialog=>dialog.contains(document.activeElement))).toBe(true);
+ await page.getByRole('button',{name:'Close resource picker'}).focus();await page.keyboard.press('Shift+Tab');await expect.poll(()=>picker.evaluate(dialog=>dialog.contains(document.activeElement))).toBe(true);
+ await review.capture('topic-picker');await page.keyboard.press('Escape');await expect(changeTopic).toBeFocused();
+ await click(page,'Change proposal topic');await page.getByRole('button',{name:'Choose Proposals in Research › Proposals',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(proposal.getByText('Research › Proposals',{exact:true})).toBeVisible();const beforeCancel=reads;await click(page,'Cancel');expect(reads).toBe(beforeCancel);expect(writes).toEqual([]);
+ const selectOverview=async(location:string)=>{await click(page,'Change community overview');await page.getByRole('button',{name:'Choose Community introduction in '+location,exact:true}).focus();await page.keyboard.press('Enter');};
+ await selectOverview('Research');await expect(overview.getByText('Research',{exact:true})).toBeVisible();await expect(panel.getByText('Unsaved changes',{exact:true})).toBeVisible();await review.capture('dirty');
+ page.once('dialog',async dialog=>{expect(dialog.message()).toContain('Discard unsaved Community settings');review.dialog('cancel',dialog.message());await dialog.dismiss();});
+ await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Administration'}).click();await expect(page).toHaveURL(server.origin+'/loom/admin/community');
+ expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:base,community_name:'Synthetic research commons',overview_id:generalOverview,proposal_area_id:researchProposals})).status).toBe(200);
+ const conflict=page.waitForResponse(r=>r.url().endsWith('/community/settings'));await click(page,'Save changes');expect((await conflict).status()).toBe(409);
+ expect(writes[0].expected_version).toBe(base);await expect(panel.getByText(/Community settings changed while/)).toBeVisible();await expect(overview.getByText('Research',{exact:true})).toBeVisible();await review.capture('version-conflict');
+ const entered=barrier(),release=barrier(),refreshed=barrier();
+ await page.route('**/api/v1/community',async route=>{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response});refreshed.release();},{times:1});
+ await click(page,'Check saved settings');await entered.promise;
+ try{await expect(overview.getByText('Research',{exact:true})).toBeVisible();await expect(panel.getByText('Unsaved changes',{exact:true})).toBeVisible();expect(writes).toHaveLength(1);}finally{release.release();}
+ await refreshed.promise;
+ await expect(panel.getByText(/Community settings changed while/)).toBeVisible();
  await page.route('**/api/v1/community',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic configuration refresh failure'}})}),{times:1});
- await click(page,'Refresh configuration');await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();
- await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);expect(writes).toHaveLength(1);
- await expect(panel.getByText('The current revision differs from the expected revision.')).toBeVisible();
- await review.capture('refresh-error',['One GET /api/v1/community is replaced with HTTP 503 and message Synthetic configuration refresh failure. The earlier 409 conflict is a real server response.']);
- page.once('dialog',async dialog=>{expect(dialog.message()).toContain('Discard your unsaved');review.dialog('cancel',dialog.message());await dialog.dismiss();});
- await click(page,'Discard changes and reload saved settings');await expect(overview).toHaveValue(f.target.resource_id);
+ await click(page,'Check saved settings');await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();expect(writes).toHaveLength(1);
+ await review.capture('refresh-error',['One GET /api/v1/community is deliberately replaced with HTTP 503. The settings conflict is a live server 409 after a competing administrator write.']);
+ page.once('dialog',async dialog=>{review.dialog('cancel',dialog.message());await dialog.dismiss();});await click(page,'Load saved settings');await expect(overview.getByText('Research',{exact:true})).toBeVisible();
  const reloadEntered=barrier(),releaseReload=barrier();
- await page.route('**/api/v1/community',async route=>{
-  expect(route.request().method()).toBe('GET');const response=await route.fetch();expect(response.status()).toBe(200);
-  reloadEntered.release();await releaseReload.promise;await route.fulfill({response});
- },{times:1});
- page.once('dialog',dialog=>{review.dialog('accept',dialog.message());return dialog.accept();});await page.getByRole('button',{name:'Discard changes and reload saved settings',exact:true}).focus();await page.keyboard.press('Enter');
- await reloadEntered.promise;
- try{
-  await expect(overview).toHaveValue(f.target.resource_id);await expect(proposal).toHaveValue(savedProposal);
-  await expect(panel.getByText(/Unsaved changes.*Editing settings version 1/)).toBeVisible();
-  await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();
-  await expect(panel.getByText('Saved configuration loaded.',{exact:false})).toHaveCount(0);expect(writes).toHaveLength(1);
-  await review.capture('discard-pending',['Earlier read failure was an injected HTTP 503; the real successful discard/reload GET response is held by a Playwright barrier.']);
- }finally{releaseReload.release();}
- await expect(overview).toHaveValue(savedOverview);await expect(proposal).toHaveValue(f.area);
- await expect(panel.getByText(/Unsaved changes/)).toHaveCount(0);await expect(panel.getByText(/Editing settings version 2/)).toBeVisible();
- await expect(panel.getByText(/Saved configuration loaded/)).toBeVisible();
- await expect(page.getByText('Synthetic configuration refresh failure')).toHaveCount(0);
- expect(writes).toHaveLength(1);
- await review.capture('discard-reloaded',['Earlier read failure was an injected HTTP 503; discard/reload uses a real successful GET.']);
- await overview.fill(f.target.resource_id);await click(page,'Save configuration');
- await expect(panel.getByText(/Configuration saved at version 3/)).toBeVisible();
- await expect(panel.getByText(/Unsaved changes/)).toHaveCount(0);expect(writes[1].expected_version).toBe(2);
- const saved=(await f.admin.call('/api/v1/community')).body;
- expect(saved.settings_version).toBe(3);expect(saved.overview.resource_id).toBe(f.target.resource_id);expect(saved.proposal_area.resource_id).toBe(f.area);
+ await page.route('**/api/v1/community',async route=>{expect(route.request().method()).toBe('GET');const response=await route.fetch();expect(response.status()).toBe(200);reloadEntered.release();await releaseReload.promise;await route.fulfill({response});},{times:1});
+ page.once('dialog',dialog=>{review.dialog('accept',dialog.message());return dialog.accept();});await page.getByRole('button',{name:'Load saved settings',exact:true}).focus();await page.keyboard.press('Enter');await reloadEntered.promise;
+ try{await expect(overview.getByText('Research',{exact:true})).toBeVisible();await expect(panel.getByText('Unsaved changes',{exact:true})).toBeVisible();await expect(page.getByText('Synthetic configuration refresh failure')).toBeVisible();expect(writes).toHaveLength(1);}finally{releaseReload.release();}
+ await expect(overview.getByText('General',{exact:true})).toBeVisible();await expect(proposal.getByText('Research › Proposals',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Unsaved changes',{exact:true})).toHaveCount(0);await expect(panel.getByText('Saved settings loaded.',{exact:true})).toBeVisible();await expect(page.getByText('Synthetic configuration refresh failure')).toHaveCount(0);expect(writes).toHaveLength(1);
+ await review.capture('recovered',['The earlier HTTP 503 was injected; this explicit reload is a live successful GET.']);
+ await selectOverview('Research');await click(page,'Save changes');await expect(panel.getByText('Changes saved.',{exact:true})).toBeVisible();expect(writes[1].expected_version).toBe(base+1);
+ const saved=(await f.admin.call('/api/v1/community')).body;expect(saved.settings_version).toBe(base+2);expect(saved.overview.resource_id).toBe(researchOverview);expect(saved.proposal_area.resource_id).toBe(researchProposals);
  await review.capture('saved');
- await overview.fill('');await page.setViewportSize({width:390,height:844});
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.setViewportSize({width:1440,height:1000});
+ // Commit succeeds but the browser deliberately loses its response. Recovery must replay exactly.
+ await selectOverview('General');
+ await page.route('**/api/v1/community/settings',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
+ await click(page,'Save changes');await expect(page.getByRole('button',{name:'Retry same save',exact:true})).toBeEnabled();const uncertain=await journal(page,'community.settings');expect(uncertain.state).toBe('uncertain');
+ await review.capture('unresolved-save',['A real committed settings POST response is deliberately aborted before delivery to the browser.']);
+ const count=writes.length;await page.reload();await expect(page.getByRole('button',{name:'Retry same save',exact:true})).toBeEnabled();expect(writes).toHaveLength(count);
+ await click(page,'Retry same save');await expect(panel.getByText('Changes saved.',{exact:true})).toBeVisible();expect(writes.at(-1)).toEqual(uncertain.body);expect(await journal(page,'community.settings')).toBeUndefined();
+ // A failed metadata lookup is not an empty designation.
+ await page.route('**/api/v1/organization/resources/'+generalOverview,route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic selection lookup failure'}})}),{times:1});
+ await page.reload();await expect(overview.getByText('Could not load this selection.')).toBeVisible();await expect(overview.getByText('No selection yet.')).toHaveCount(0);
+ await overview.getByRole('button',{name:'Retry resource lookup'}).click();await expect(overview.getByText('General',{exact:true})).toBeVisible();
+ // The draft is private input, not authority: a real role withdrawal hides metadata and fences dispatch.
+ await selectOverview('Research');await server.observer.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[f.person]);
+ await click(page,'Save changes');await expect(panel.getByText(/Access changed/)).toBeVisible();await expect(overview.getByText('Research',{exact:true})).toHaveCount(0);await expect(panel.getByText('Unsaved changes',{exact:true})).toBeVisible();
+ const deniedCount=writes.length;await click(page,'Check access');await expect(panel.getByText(/Administrator access is required/)).toBeVisible();expect(writes).toHaveLength(deniedCount);
+ await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);await click(page,'Check access');await expect(overview.getByText('Research',{exact:true})).toBeVisible();
+ await click(page,'Cancel');await expect(overview.getByText('General',{exact:true})).toBeVisible();expect(writes).toHaveLength(deniedCount);
+ await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Administration'}).click();
+ // Let the shell's navigation discovery and the dependent account page settle before the next fault injection.
+ await page.waitForLoadState('networkidle');await expect(page.getByRole('heading',{name:'Administration',exact:true})).toBeVisible();
 }
 
 test('administrator rate controls retain a lost decision through reload and recover original versus current policy',async({page,context,server})=>{
@@ -125,16 +133,12 @@ test('administrator rate controls retain a lost decision through reload and reco
  expect((await journal(page,'file.policy')).key).not.toBe(conflict.key);
  await panel.getByRole('button',{name:'Save file limits',exact:true}).click();await expect(panel.getByText(/Recorded policy version 5/)).toBeVisible();
  await panel.getByRole('button',{name:'Inspect file policy audit',exact:true}).click();await expect(panel.getByText(/Version 5: maximum file 10 bytes/)).toBeVisible();
- await page.getByText('Community configuration',{exact:true}).click();await page.getByLabel('Overview artifact ID').fill('');
  const heldPolicy=barrier(),releasePolicy=barrier();
  await page.route('**/api/v1/admin/file-limits',async route=>{const response=await route.fetch();heldPolicy.release();await releasePolicy.promise;await route.fulfill({response});},{times:1});
  await panel.getByRole('button',{name:'Refresh file limits',exact:true}).click();await heldPolicy.promise;
  await server.observer.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[f.person]);
  try{await panel.getByRole('button',{name:'Inspect file policy audit',exact:true}).click();await expect(panel.getByText(/Current policy version/)).toHaveCount(0);}finally{releasePolicy.release();}
  await expect(panel.getByText(/Current policy version/)).toHaveCount(0);await expect(panel.getByText(/Community reserved file bytes/)).toHaveCount(0);
- await expect(page.getByLabel('Overview artifact ID')).toHaveValue('');
- await expect(page.getByRole('button',{name:'Save configuration',exact:true})).toHaveCount(0);
- await expect(page.getByText('Your draft is retained. Refresh configuration to check access again.')).toBeVisible();
 
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 

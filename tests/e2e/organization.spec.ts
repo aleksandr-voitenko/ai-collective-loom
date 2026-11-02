@@ -29,7 +29,7 @@ async function api(page:Page,path:string,body?:unknown) {
 async function setup(page:Page,context:BrowserContext,server:Awaited<ReturnType<typeof syntheticServer>>) {
   await enter(page,context,server.origin,server.ticket,true);
   await page.getByRole('button',{name:'Create community',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await page.getByRole('link',{name:'Administration',exact:true}).click();await expect(page.getByText('Community configuration',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await page.getByRole('link',{name:'Administration',exact:true}).click();await expect(page.getByRole('link',{name:'Community settings',exact:true})).toBeVisible();
   const areas=(await api(page,'/api/v1/areas')).items;
   return {general:areas.find((r:any)=>r.title==='General').id as string,feedback:areas.find((r:any)=>r.title==='Community organization').id as string};
 }

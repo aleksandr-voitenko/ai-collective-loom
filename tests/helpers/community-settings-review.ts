@@ -8,7 +8,7 @@ import {applicationInputs} from '../../scripts/lib/release-identity.mjs';
 // Deliberately curated synthetic review evidence, never diagnostic attachments.
 export async function settingsReview(page:Page){
  const enabled=process.env.LOOM_SETTINGS_REVIEW_SCREENS==='1';
- const directory='/tmp/loom-review-evidence/ui-01/viewport';
+ const directory='/tmp/loom-review-evidence/ui-02/viewport';
  const git=(...args:string[])=>execFileSync('git',args,{encoding:'utf8'}).trimEnd();
  const metadata=enabled?{
   source_commit:git('rev-parse','HEAD'),dirty_tree:git('status','--porcelain').length>0,
@@ -16,7 +16,7 @@ export async function settingsReview(page:Page){
   application_input_sha256:applicationInputs(process.cwd()).sha256,
   browser:{name:'Chromium',version:page.context().browser()!.version()},
   test_account:{role:'administrator',kind:'human',authentication:'existing Playwright virtual WebAuthn enrollment and sign-in'},
-  route:'/loom/admin',
+  route:'/loom/admin/community',
   reproduction_command:"npm run app:build && LOOM_SETTINGS_REVIEW_SCREENS=1 npm run test:e2e -- administration.spec.ts --grep 'bounded administrative browsing'",
  }:undefined;
  if(metadata){
@@ -37,20 +37,23 @@ export async function settingsReview(page:Page){
      await document.fonts.ready;
      await Promise.all([...document.images].map(image=>image.decode()));
     });
-    if(state==='administration-top')await page.evaluate(()=>window.scrollTo(0,0));
-    else await page.getByRole('button',{name:'Refresh configuration',exact:true}).evaluate(element=>{
-     window.scrollTo(0,window.scrollY+element.getBoundingClientRect().top-24);
-    });
+    await page.evaluate(()=>window.scrollTo(0,0));
     await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     const filename=`${state}-${viewport.width}x${viewport.height}.png`;
     const bytes=await page.screenshot({path:directory+'/'+filename,fullPage:false});
-    screenshots.push({...metadata,filename,state,viewport,injected_responses_or_delays:injected,
+    screenshots.push({...metadata,route:new URL(page.url()).pathname,filename,state,viewport,injected_responses_or_delays:injected,
      full_viewport:true,scroll_y:await page.evaluate(()=>window.scrollY),sha256:createHash('sha256').update(bytes).digest('hex')});
+    if(['version-conflict','refresh-error','unresolved-save'].includes(state) && await page.getByRole('form',{name:'Community settings'}).evaluate(form=>form.getBoundingClientRect().bottom>innerHeight)){
+     const fullFilename=`${state}-${viewport.width}-full-page.png`;
+     const fullBytes=await page.screenshot({path:directory+'/'+fullFilename,fullPage:true});
+     screenshots.push({...metadata,route:new URL(page.url()).pathname,filename:fullFilename,state,viewport,injected_responses_or_delays:injected,
+      full_viewport:false,full_page:true,sha256:createHash('sha256').update(fullBytes).digest('hex')});
+    }
    }
    await page.setViewportSize(previous);
    await writeFile(directory+'/manifest.json',JSON.stringify({
-    task:'UI-01',screenshots,native_confirmation_checks:dialogs,
+    task:'UI-02',screenshots,native_confirmation_checks:dialogs,
     native_confirmation_note:'Browser-native confirm dialogs are verified by Playwright dialog events; they are not page DOM and are not reconstructed in these viewport PNGs.',
     isolation:'Disposable PostgreSQL/HTTPS fixture; synthetic accounts; fixture role promotion. No retained pilot data. Browser credentials stay in the private test context; no authentication state is exported.',
    },null,2)+'\n',{mode:0o600});

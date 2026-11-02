@@ -123,13 +123,22 @@ Participation components. Private recovery does not authorize selected account
 copies or one-time secrets. Shared presentation and leased collection components
 live in `participation-ui.tsx`, without page or shell imports. Page modules do not
 import the shell; new shared helpers must preserve that direction.
-Community configuration keeps an in-memory, instance/participant-bound draft outside
-the query result's lifetime. Dirty reads retain both IDs, the community name and
-original settings version; only confirmed saves or deliberate discard/reload replace
-that base. Discard confirms before reading and keeps the draft on failure. Saved
-observations retain separate authorization leases; drafts cannot authorize dispatch
-or late refresh after withdrawal, identity change or navigation. This is not a
-durable journal across page reloads.
+`CommunitySettings.tsx` owns `/loom/admin/community`; Administration links to it.
+Its instance/participant-bound in-memory draft outlives query reads. Dirty reads
+retain both IDs, community name and expected version. Cancel restores the accepted
+baseline locally; conflict reload confirms and replaces it only after success.
+A successful reload supersedes read errors, independently of save/conflict errors.
+`CommunityResourcePicker.tsx` uses existing bounded artifact/destination pages and
+organization lookups for leased titles/full paths, never whole-community preload.
+A failed lookup retains the internal ID. Unknown unavailable designations cannot
+be submitted as null; whole-view source withdrawal still applies.
+Settings dispatch uses IntentStore exact custody, validated next-version receipts
+and deliberate same-key retry after uncertainty (there is no settings-status API).
+Unsent edits warn on route/unload loss; uncertain bytes persist across reloads.
+Withdrawal hides metadata and fences dispatch/late settlement. Explicit access
+checks verify the current administrator role before fresh protected reads; private
+input and receipts never reauthorize content. Page/API limits are documented in
+`CommunitySettings.md`; no global query, authorization or server contract changes.
 
 `recovery-storage.ts` shares exact write/readback and best-effort raw rollback
 across Reading, Attention, Shared Changes and both Updates journals. Its bounded
