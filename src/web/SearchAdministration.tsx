@@ -17,6 +17,7 @@ type CommandFeedback = {
   request: SearchMaintenanceRequest;
   record: SearchMaintenanceRecord | undefined;
   message: string;
+  notSent?: boolean;
 };
 const RetryReceipt = Type.Object({ accepted: Type.Literal(true) }, closed);
 const RebuildReceipt = Type.Object({ generation: Type.Integer({ minimum: 2 }) }, closed);
@@ -223,9 +224,11 @@ export function SearchAdministration({ context }: { context: Context }) {
     pending.current = true;
     setSending(request);
     setCommandFeedback(undefined);
+    let sendEntered = false;
     try {
       const result = await custody.attempt(request, record?.sequence ?? 0, active, async () => {
         if (!active()) throw new DOMException('View changed.', 'AbortError');
+        sendEntered = true;
         if (request.kind === 'rebuild') {
           const receipt = await commandRequest<{ generation: number }>(
             '/api/v1/admin/search/rebuild',
@@ -264,9 +267,12 @@ export function SearchAdministration({ context }: { context: Context }) {
         const recovered = readRecovery();
         if ((error as Error).name !== 'AbortError')
           setCommandFeedback({
-            request: recovered?.request ?? request,
+            request,
             record: recovered,
             message: (error as Error).message,
+            // Only failure before entering transport proves this attempt was not
+            // sent. A failure retaining its receipt must preserve uncertainty.
+            notSent: !sendEntered,
           });
       }
     } finally {
@@ -278,7 +284,13 @@ export function SearchAdministration({ context }: { context: Context }) {
     }
   }
 
-  const feedbackRequest = sending ?? record?.request ?? commandFeedback?.request;
+  const feedbackRequest = sending ?? commandFeedback?.request ?? record?.request;
+  // An unsent attempt can coexist with an older retained result. That result is
+  // custody for its own request, never the outcome of the attempted action.
+  const feedbackRecord =
+    !commandFeedback?.notSent && JSON.stringify(record?.request) === JSON.stringify(feedbackRequest)
+      ? record
+      : undefined;
   const retryIndex =
     feedbackRequest?.kind === 'retry'
       ? (page?.items.findIndex((job) => job.id === feedbackRequest.body.id) ?? -1)
@@ -326,21 +338,21 @@ export function SearchAdministration({ context }: { context: Context }) {
             ? feedbackRequest.kind === 'retry'
               ? 'Sending retry request…'
               : 'Sending maintenance request…'
-            : !record
+            : commandFeedback?.notSent
               ? 'Request not sent'
-              : record.state === 'uncertain'
-                ? 'Outcome not confirmed'
-                : record.state === 'rejected'
-                  ? 'Request rejected'
-                  : record.request.kind === 'rebuild'
+              : feedbackRecord?.state === 'rejected'
+                ? 'Request rejected'
+                : feedbackRecord?.state !== 'acknowledged'
+                  ? 'Outcome not confirmed'
+                  : feedbackRecord.request.kind === 'rebuild'
                     ? 'Rebuild request acknowledged'
                     : 'Retry request acknowledged'}
         </h3>
-        {!busy && record && (
+        {!busy && feedbackRecord && (
           <p>
-            {record.state === 'uncertain'
+            {feedbackRecord.state === 'uncertain'
               ? 'The original request is retained. Retry it to seek an acknowledgement.'
-              : record.state === 'acknowledged'
+              : feedbackRecord.state === 'acknowledged'
                 ? 'Processing continues independently. Check the observations for progress.'
                 : 'No new maintenance action was accepted by this attempt.'}
           </p>
@@ -348,13 +360,16 @@ export function SearchAdministration({ context }: { context: Context }) {
       </div>
       {!busy && commandFeedback && <p role="alert">{commandFeedback.message}</p>}
       {storageError && <p role="alert">{storageError}</p>}
-      {!busy && record?.state === 'uncertain' && (
+      {!busy && feedbackRecord?.state === 'uncertain' && (
         <button
           disabled={!observed || withdrawn || !!storageError}
-          onClick={() => void dispatch(record.request)}
+          onClick={() => void dispatch(feedbackRecord.request)}
         >
           Retry same request
         </button>
+      )}
+      {!busy && commandFeedback?.notSent && record?.state === 'uncertain' && (
+        <button onClick={() => setCommandFeedback(undefined)}>Review retained request</button>
       )}
       <details className="search-admin-details">
         <summary>Request details</summary>

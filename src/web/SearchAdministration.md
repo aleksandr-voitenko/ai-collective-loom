@@ -83,6 +83,13 @@ Command errors bind to the retained request, sequence and settlement state. A
 storage event adopting a superseding attempt/settlement retires its obsolete error,
 without clearing independent health or page errors. Reading unchanged uncertain
 custody preserves its error and never establishes acknowledgement.
+An attempt that fails before its send callback starts shows Request not sent in
+that attempted action's context. Its local feedback is separate from any older
+acknowledged recovery record; those stored bytes and their outcome remain unchanged.
+Failure after transport begins, including failure retaining an acknowledgement,
+does not establish non-dispatch. If another tab left an unresolved request before
+the unsent attempt, Review retained request exposes its original recovery controls
+without replacing its payload or sending a command.
 
 The server serializes rebuilds with the discovery guard: current generation N
 advances to N+1; an exact request for N also acknowledges an already-current N+1.

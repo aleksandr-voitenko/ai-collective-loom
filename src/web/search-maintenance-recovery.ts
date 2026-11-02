@@ -69,8 +69,7 @@ export class SearchMaintenanceRecovery {
       key: this.key,
       raw,
       previous: this.storage.getItem(this.key),
-      failureMessage:
-        'Search maintenance recovery could not be saved. The request outcome is not confirmed.',
+      failureMessage: 'Search maintenance recovery could not be saved.',
     });
     return record;
   }

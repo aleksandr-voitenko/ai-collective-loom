@@ -165,7 +165,9 @@ attribution. A conflict after response loss remains uncertain: no status lookup 
 recover beyond the server replay window. Fresh health never rebases that request.
 Sign-out includes explicit uncertain-request warning and owner-scoped cleanup.
 Command errors bind to the recovery snapshot; cross-tab supersession retires only
-that attempt's error. Retry feedback/recovery stays beside its job, retaining only
+that attempt's error. Unsent attempts keep their own request/context beside the
+older custody snapshot; only failure before the send callback proves non-dispatch.
+Receipt-storage failure remains uncertain. Retry feedback/recovery stays beside its job, retaining only
 a bounded page position if the row disappears; rebuild feedback stays in Maintenance. Retry
 feedback updates do not move focus or scroll the reader.
 See `SearchAdministration.md` for states, existing API limits and capture commands.

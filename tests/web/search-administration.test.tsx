@@ -128,6 +128,38 @@ test('failed local custody prevents dispatch; unreadable recovery blocks replace
  localStorage.setItem(`loom.search-maintenance.v1:${location.origin}:${f.context.community.instance_id}:${f.self.participant_id}`,'invalid');
  await act(async()=>f.router.navigate('/loom/help'));await act(async()=>f.router.navigate('/loom/admin/search'));assert.ok(screen.getByText(/recovery is unreadable/));assert.equal((screen.getByRole('button',{name:'Rebuild index'}) as HTMLButtonElement).disabled,true);
 });
+for(const priorKind of ['rebuild','retry'] as const)test('initial persistence failure attributes the unsent action separately from acknowledged '+priorKind,async t=>{
+ const f=await fixture(t),failed=job();f.pages.set('',{items:[failed],next_after:null});await click('Refresh status');
+ if(priorKind==='rebuild'){await rebuild();await f.finish(Response.json({generation:2}));}else{await click('Retry job');await f.finish(Response.json({accepted:true}));}
+ const custody=new SearchMaintenanceRecovery(f.context.community.instance_id,f.self.participant_id),prior=localStorage.getItem(custody.key),writes=f.writes.length;
+ const set=localStorage.setItem.bind(localStorage);t.mock.method(Object.getPrototypeOf(localStorage),'setItem',(key:string,value:string)=>{if(key===custody.key&&value!==prior)throw Error('Synthetic initial persistence refusal');set(key,value);});
+ if(priorKind==='rebuild')await click('Retry job');else await rebuild();
+ assert.equal(f.writes.length,writes,'The attempted operation must send no POST');assert.equal(localStorage.getItem(custody.key),prior,'Prior custody bytes must remain exact');
+ const attempted=within(screen.getByRole('region',{name:priorKind==='rebuild'?'Failed jobs':'Maintenance'})),previous=within(screen.getByRole('region',{name:priorKind==='rebuild'?'Maintenance':'Failed jobs'}));
+ const feedback=within(attempted.getByRole('region',{name:priorKind==='rebuild'?'Job retry':'Rebuild request'}));
+ assert.ok(feedback.getByText('Request not sent'));assert.ok(feedback.getByRole('alert'));assert.equal(feedback.queryByText(/acknowledged|Outcome not confirmed/),null);assert.equal(previous.queryByRole('alert'),null);
+ assert.ok(feedback.getByText(priorKind==='rebuild'?failed.id:'1'));await click('Refresh status');assert.ok(feedback.getByText('Request not sent'));assert.equal(localStorage.getItem(custody.key),prior);assert.equal(f.writes.length,writes);
+});
+test('failure retaining a new acknowledgement remains uncertain after an older acknowledged request',async t=>{
+ const f=await fixture(t),failed=job();f.pages.set('',{items:[failed],next_after:null});await click('Refresh status');await rebuild();await f.finish(Response.json({generation:2}));
+ const set=localStorage.setItem.bind(localStorage);t.mock.method(Object.getPrototypeOf(localStorage),'setItem',(key:string,value:string)=>{if(key.startsWith('loom.search-maintenance.v1:')&&JSON.parse(value).state==='acknowledged')throw Error('Synthetic acknowledgement persistence refusal');set(key,value);});
+ await click('Retry job');await f.finish(Response.json({accepted:true}));const feedback=within(screen.getByRole('region',{name:'Job retry'}));
+ assert.ok(feedback.getByText('Outcome not confirmed'));assert.equal(feedback.queryByText('Request not sent'),null);assert.ok(feedback.getByRole('button',{name:'Retry same request'}));
+ const custody=new SearchMaintenanceRecovery(f.context.community.instance_id,f.self.participant_id);assert.deepEqual(custody.read(),{version:1,sequence:2,state:'uncertain',request:{kind:'retry',body:{id:failed.id,claim_generation:3}}});assert.equal(f.writes.length,2);
+});
+test('an unsent action cannot hide a competing unresolved request or replace its payload',async t=>{
+ const f=await fixture(t),failed=job();f.pages.set('',{items:[failed],next_after:null});await click('Refresh status');await rebuild();await f.finish(Response.json({generation:2}));
+ const other=new SearchMaintenanceRecovery(f.context.community.instance_id,f.self.participant_id),prior=other.read()!;await other.attempt(prior.request,prior.sequence,()=>true,async()=>{throw Error('Synthetic response loss');});const retained=localStorage.getItem(other.key);
+ await click('Retry job');const feedback=within(screen.getByRole('region',{name:'Job retry'}));assert.ok(feedback.getByText('Request not sent'));assert.equal(f.writes.length,1);assert.equal(localStorage.getItem(other.key),retained);
+ await click('Review retained request');assert.ok(within(screen.getByRole('region',{name:'Rebuild request'})).getByText('Outcome not confirmed'));await click('Retry same request');assert.deepEqual(f.writes.at(-1)!.body,prior.request.body);await f.finish(Response.json({generation:2}));
+});
+test('post-dispatch custody and read failures cannot borrow an older acknowledgement',async t=>{
+ const f=await fixture(t),failed=job();f.pages.set('',{items:[failed],next_after:null});await click('Refresh status');await rebuild();await f.finish(Response.json({generation:2}));await click('Retry job');
+ const set=localStorage.setItem.bind(localStorage),get=localStorage.getItem.bind(localStorage);let unreadable=false;
+ t.mock.method(Object.getPrototypeOf(localStorage),'setItem',(key:string,value:string)=>{if(key.startsWith('loom.search-maintenance.v1:')&&JSON.parse(value).state==='rejected'){unreadable=true;throw Error('Synthetic custody failure');}set(key,value);});
+ t.mock.method(Object.getPrototypeOf(localStorage),'getItem',(key:string)=>{if(unreadable&&key.startsWith('loom.search-maintenance.v1:'))throw Error('Synthetic read failure');return get(key);});
+ await f.finish(error('search_changed',409));const feedback=within(screen.getByRole('region',{name:'Job retry'}));assert.ok(feedback.getByText('Outcome not confirmed'));assert.equal(feedback.queryByText('Request not sent'),null);assert.equal(feedback.queryByText(/acknowledged/),null);assert.equal(f.writes.length,2);
+});
 test('new post-acknowledgement observations supersede overlapping earlier refresh responses',async t=>{
  const f=await fixture(t);f.hold();await click('Refresh status');const older=[...f.held];await rebuild();await f.finish(Response.json({generation:2}));const newer=f.held.slice(older.length);
  await act(async()=>{for(const r of newer)r.finish(Response.json(r.path.endsWith('/health')?{...f.health,generation:2,scan_complete:false}:{items:[],next_after:null}));});

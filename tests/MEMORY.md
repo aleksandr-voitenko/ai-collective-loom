@@ -784,6 +784,10 @@ exact-page retry/focus, acknowledgement versus native job completion, confirmati
 lost rebuild responses, exact replay, competing generations and role/sign-out fences.
 `web/search-administration.test.tsx` mounts ActiveView/StrictMode; the dedicated
 recovery unit suite checks bounded custody, cross-tab serialization and late owners.
+Mounted and compiled Search recovery cases also refuse the initial storage write
+after an acknowledged request of the other kind. Assert no new POST, unchanged
+prior custody and Request not sent in the attempted action's context; distinguish
+acknowledgement-storage failure after dispatch from those unsent attempts.
 Opt-in `LOOM_SEARCH_REVIEW_SCREENS=1` uses `helpers/search-indexing-review.ts` for
 actual synthetic desktop/mobile PNGs and provenance in `/tmp/loom-review-evidence/ui-03`.
 Seeded health/failure states and transport injections are labelled in the manifest.

@@ -166,7 +166,7 @@ test('search indexing rebuild confirmation, exact recovery and authority withdra
 });
 
 test('search indexing contextual retry survives response loss and cross-tab acknowledgement on a full page',async({page,context,server})=>{
- await setup(page,context,server,28);
+ const data=await setup(page,context,server,28);
  await server.observer.query("UPDATE loom.search_jobs SET state='failed',attempts=3,failure='processing_failed',claim_generation=claim_generation+1 WHERE generation=1");
  await page.goto(server.origin+'/loom/admin/search');await expect(page.getByRole('article')).toHaveCount(25);
  const target=(await api(page,'/api/v1/admin/search/failures')).items[0];
@@ -210,4 +210,19 @@ test('search indexing contextual retry survives response loss and cross-tab ackn
  await page.keyboard.press('Enter');await laterEntered.promise;
  try{await expect(feedback.getByText('Sending retry request…',{exact:true})).toBeVisible();expect(await page.evaluate(()=>scrollY)).toBe(laterScroll);}finally{laterRelease.release();}
  await expect(feedback.getByText('Retry request acknowledged',{exact:true})).toBeVisible();await expect(feedback.getByText('This job is not in the displayed failure page.',{exact:true})).toBeVisible();expect(await page.evaluate(()=>scrollY)).toBe(laterScroll);expect(writes).toHaveLength(3);
+ // Refuse only the next maintenance custody write, preserving readable prior bytes.
+ const refuseInitialWrite=()=>page.evaluate(()=>{const set=Storage.prototype.setItem;let refused=false;Storage.prototype.setItem=function(key,value){if(!refused&&key.startsWith('loom.search-maintenance.v1:')){refused=true;throw new DOMException('Synthetic initial persistence refusal','QuotaExceededError');}return set.call(this,key,value);};});
+ const maintenancePosts:string[]=[];page.on('request',r=>{if(r.method()==='POST'&&/\/api\/v1\/admin\/search\/(retry|rebuild)$/.test(r.url()))maintenancePosts.push(r.postData()!);});
+ const unsentReview=await searchIndexingReview(page,'unsent');
+ const priorRetry=await retained();await refuseInitialWrite();await page.getByRole('button',{name:'Rebuild index',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Rebuild index',exact:true}).click();
+ const maintenance=page.getByRole('region',{name:'Maintenance',exact:true}),rebuildFeedback=maintenance.getByRole('region',{name:'Rebuild request',exact:true});
+ await expect(rebuildFeedback.getByText('Request not sent',{exact:true})).toBeVisible();await expect(rebuildFeedback.getByRole('alert')).toContainText('could not be saved');await expect(failed.getByRole('alert')).toHaveCount(0);expect(await retained()).toEqual(priorRetry);expect(maintenancePosts).toEqual([]);
+ await unsentReview.capture('rebuild-not-sent',['Deliberately refuse the initial localStorage write before a new rebuild. The prior acknowledged job-retry record remains readable and unchanged. No new POST is sent.'],maintenance,{fullPage:false});
+ await page.getByRole('button',{name:'Rebuild index',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Rebuild index',exact:true}).click();await expect(rebuildFeedback.getByText('Rebuild request acknowledged',{exact:true})).toBeVisible();expect(maintenancePosts).toHaveLength(1);
+ await expect(page.getByText('Indexing in progress',{exact:true})).toBeVisible();await data.worker.start();try{await data.worker.observeUntil(async()=>(await server.observer.query('SELECT count(*)::int AS n FROM loom.search_jobs WHERE generation=2')).rows[0].n===29);}finally{await data.worker.stop();}
+ await server.observer.query("UPDATE loom.search_jobs SET state='succeeded',failure=NULL WHERE generation=1 AND state='failed'");await server.observer.query("UPDATE loom.search_jobs SET state='failed',attempts=3,failure='processing_failed',claim_generation=claim_generation+1 WHERE generation=2");await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(failed.getByRole('article')).toHaveCount(25);
+ const priorRebuild=await retained();await refuseInitialWrite();await failed.getByRole('article').first().getByRole('button',{name:'Retry job',exact:true}).click();
+ await expect(feedback.getByText('Request not sent',{exact:true})).toBeVisible();await expect(feedback.getByRole('alert')).toContainText('could not be saved');await expect(maintenance.getByRole('alert')).toHaveCount(0);expect(await retained()).toEqual(priorRebuild);expect(maintenancePosts).toHaveLength(1);
+ expect((await server.observer.query('SELECT generation FROM loom.search_state')).rows[0].generation).toBe(2);
+ await unsentReview.capture('job-retry-not-sent',['After the real worker discovers generation 2, seed its jobs as failed and retire earlier synthetic failures. Deliberately refuse the initial localStorage write before a new job retry. The prior acknowledged rebuild record remains readable and unchanged. No new POST is sent.'],failed,{fullPage:false});
 });
