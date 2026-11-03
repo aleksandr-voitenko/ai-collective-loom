@@ -46,6 +46,23 @@ test('staging ordinary non-admin browser enrolls and reconciles a lost committed
       },
     });
     await page.goto(p.c.origin + '/loom');
+    await expect(page.getByText('Staging test', { exact: true })).toBeVisible();
+    await expect(page.getByText('Invitation-only staging for non-sensitive test material.')).toBeVisible();
+    await expect(page.getByText('Local evaluation', { exact: true })).toHaveCount(0);
+    if (process.env.LOOM_STAGING_REVIEW_SCREENS === '1') {
+      const output = '/tmp/loom-review-evidence/staging';
+      mkdirSync(output, { recursive: true, mode: 0o700 });
+      for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+        await page.setViewportSize(viewport);
+        await page.screenshot({ path: join(output, 'signin-' + viewport.width + '.png') });
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
+    await page.goto(p.c.origin + '/');
+    await expect(page.getByRole('heading', { name: 'Invitation-only staging' })).toBeVisible();
+    await page.goto(p.c.origin + '/status');
+    await expect(page.getByText('Staging participant access is enabled. Sign in with an admitted account.')).toBeVisible();
+    await page.goto(p.c.origin + '/loom');
     await page.getByText('Set up an admitted account', { exact: true }).click();
     await page.getByLabel('Enrollment ticket', { exact: true }).fill(p.browser.token);
     await page.getByRole('button', { name: 'Create passkey', exact: true }).click();
@@ -67,12 +84,12 @@ test('staging ordinary non-admin browser enrolls and reconciles a lost committed
       writeFileSync(
         join(output, 'manifest.json'),
         JSON.stringify({
-          source: 'working tree based on b90ed54',
+          source: 'working tree based on befdbbb',
           dirty: true,
           route: '/loom',
           browser: 'Chromium',
           role: 'ordinary human participant',
-          state: 'Topics with staging presentation',
+          state: 'Anonymous sign-in and ordinary participant Topics with staging presentation',
           fixture: 'isolated synthetic accounts; pinned fixture TLS key and scoped DNS',
           command: 'LOOM_STAGING_REVIEW_SCREENS=1 npm run test:e2e -- staging.spec.ts',
         }),

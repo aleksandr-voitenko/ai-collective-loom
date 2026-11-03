@@ -72,7 +72,10 @@ exact-owner/data-loss teardown. It never selects a retained staging or pilot.
 fixture SPKI pin (no blanket certificate exception); deliberate lost-response
 forwarding uses a separate CA-validating native client with that fixture browser's
 ordinary request headers. No fixture credential goes into diagnostics/screenshots.
-Optional LOOM_STAGING_REVIEW_SCREENS=1 curates actual desktop/mobile Topics PNGs and
+The same journey checks anonymous staging sign-in, landing and status presentation
+before enrollment; mounted discovery tests assert no extra public/protected probes.
+HTML contract tests keep pilot/preview/foundation documents byte-identical.
+Optional LOOM_STAGING_REVIEW_SCREENS=1 curates actual desktop/mobile sign-in/Topics PNGs and
 provenance under /tmp/loom-review-evidence/staging. Local fixture trust is not public
 certificate evidence or a remote-browser trial. README keeps manual tiers separate.
 

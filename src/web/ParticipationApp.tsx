@@ -25,6 +25,7 @@ import { Avatar, ErrorText, Icon } from './participation-ui.js';
 import { ActiveView } from './ParticipationRoutes.js';
 import { needsCommunitySetup } from './CommunitySetup.js';
 import { SignIn } from './ParticipationSignIn.js';
+import { isStagingInstallation } from './installation.js';
 
 export function ParticipationApp() {
   const [discoveryThrottled, setDiscoveryThrottled] = useState(false);
@@ -225,7 +226,7 @@ export function ParticipationApp() {
   const focused =
     !community || (!!self && !!store && needsCommunitySetup({ self, community, store }));
   const releaseLabel =
-    community?.installation_mode === 'staging'
+    community?.installation_mode === 'staging' || isStagingInstallation()
       ? 'Staging test'
       : community?.installation_mode === 'local-pilot'
         ? 'Local pilot'
@@ -429,6 +430,7 @@ export function ParticipationApp() {
             </p>
           ) : !self ? (
             <SignIn
+              staging={isStagingInstallation()}
               onSignedIn={() => {
                 announceIdentityChange();
                 setEpoch((n) => n + 1);

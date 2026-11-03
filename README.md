@@ -1122,6 +1122,8 @@ worker policies as trial limits. This is not production or sensitive-data approv
 `npm run pilot -- ...`, the disposable preview, normal development and their
 localhost protections remain separate. Staging never selects their directories,
 volumes, credentials or recovery histories. Do not import a personal pilot.
+Public landing, status and sign-in pages identify staging before enrollment;
+participants continue to use ordinary admitted accounts and passkeys.
 
 The staging controller runs **on the VPS**, against its local Docker socket. It
 never SSHes, edits DNS, installs host services, changes firewall/trust settings or
