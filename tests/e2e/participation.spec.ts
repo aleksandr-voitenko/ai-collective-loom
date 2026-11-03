@@ -4,7 +4,7 @@ import {
   type CDPSession,
 } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { readFile, mkdtemp, rm } from "node:fs/promises";
+import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect as connectTls } from "node:tls";
@@ -12,6 +12,7 @@ import { once } from "node:events";
 import type { syntheticServer } from "../helpers/participation-server.js";
 import { test, expect } from "../helpers/browser-fixtures.js";
 import { httpClient } from "../helpers/participation-http.js";
+import { admissionReview } from "../helpers/admission-review.js";
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
 async function authenticator(page: Page, context: BrowserContext) {
@@ -906,6 +907,7 @@ test("review regression: rejected admission preserves editable correction and un
 }) => {
   await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
+  await expect(page.getByRole('button',{name:'Create account',exact:true})).toBeDisabled();
   for (const nickname of ["synthetic_admin", "invalid nickname!"]) {
     await page.getByLabel("Nickname", { exact: true }).fill(nickname);
     await page
@@ -993,6 +995,8 @@ test("review regression: rejected admission preserves editable correction and un
     page.getByRole("button", { name: "Issue agent credential", exact: true }),
   ).toBeVisible();
 
+  await reviewAgentAccess(page,server);
+
   // A selected human account starts from protected metadata, while the pending
   // enrollment request must keep its own private kind through role withdrawal.
   await expect.poll(async()=>(await savedIntents(page)).find(r=>r.slot==='admission')).toBeUndefined();
@@ -1001,6 +1005,8 @@ test("review regression: rejected admission preserves editable correction and un
   })).status()).toBe(200);
   await page.reload();
   await page.getByText('Participant accounts',{exact:true}).click();
+  await page.getByLabel('Exact account ID or nickname').fill('human_recovery');
+  await page.getByRole('button',{name:'Find account',exact:true}).click();
   await page.locator('.list-row').filter({hasText:'human_recovery · human · active'}).getByRole('button',{name:'Manage credentials'}).click();
   let releaseSecret!:()=>void,secretReady=false;
   const secretHeld=new Promise<void>(resolve=>{releaseSecret=resolve;});
@@ -1033,6 +1039,9 @@ test("review regression: rejected admission preserves editable correction and un
   // controls must not implicitly start a new credentials read after withdrawal.
   await page.reload();
   await page.getByText('Participant accounts',{exact:true}).click();
+  await page.getByLabel('Exact account ID or nickname').fill('human_recovery');
+  await page.getByRole('button',{name:'Find account',exact:true}).click();
+  await expect(page.getByText('human_recovery · human · active',{exact:true})).toBeVisible();
   await page.getByLabel('Nickname',{exact:true}).fill('late_account_recovery');
   let releaseAccount!:()=>void,accountReady=false,credentialReads=0;
   const accountHeld=new Promise<void>(resolve=>{releaseAccount=resolve;});
@@ -1063,6 +1072,124 @@ test("review regression: rejected admission preserves editable correction and un
     await server.database.transaction(tx=>tx.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[administrator]));
   }
 });
+
+async function reviewAgentAccess(page:Page,server:Awaited<ReturnType<typeof syntheticServer>>){
+ const review=await admissionReview(page,'follow-up'),heading=page.getByRole('heading',{name:'Managing @corrected_agent',exact:true});
+ await expect(heading).toBeVisible();
+ await expect(page.getByText('Account created for @corrected_agent.',{exact:true})).toBeVisible();
+ await expect(page.getByText('Access has not been issued yet. Issue an agent credential next.',{exact:true})).toBeVisible();
+ // Fixture-only population below every generated v4 account ID. Real bounded
+ // queries must omit the target; navigation still uses ordinary exact lookup.
+ const fillers=Array.from({length:26},(_,i)=>`00000000-0000-0000-0000-${String(i+1).padStart(12,'0')}`);
+ await server.observer.query(`INSERT INTO loom.participants(id,state,role,kind,nickname)
+  SELECT id::uuid,'active','participant','agent','ux_qa_page_'||ordinality FROM unnest($1::text[]) WITH ORDINALITY AS p(id,ordinality)`,[fillers]);
+ const queryBodies:any[]=[],issuanceBodies:any[]=[];
+ page.on('request',request=>{
+  if(request.url().endsWith('/identity/accounts/query'))queryBodies.push(request.postDataJSON());
+  if(request.url().endsWith('/identity/credentials')&&request.method()==='POST')issuanceBodies.push(request.postDataJSON());
+ });
+ await page.getByRole('button',{name:'Back to admission',exact:true}).click();
+ const summary=page.getByText('Participant accounts',{exact:true});
+ if(!await summary.locator('..').evaluate((element:HTMLDetailsElement)=>element.open))await summary.click();
+ await page.getByRole('button',{name:'Refresh accounts',exact:true}).click();
+ await expect(page.getByText('Loading accounts page…')).toHaveCount(0);
+ await expect(page.getByText('ux_qa_page_1 · agent · active',{exact:true})).toBeVisible();
+ await expect(page.getByText('corrected_agent · agent · active',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Exact account ID or nickname').fill('corrected_agent');
+ await page.getByRole('button',{name:'Find account',exact:true}).click();
+ await page.locator('.list-row').filter({hasText:'corrected_agent · agent · active'}).getByRole('button',{name:'Manage credentials',exact:true}).click();
+ await expect(heading).toBeVisible();
+ let release!:()=>void,entered!:()=>void,writes=0;
+ const held=new Promise<void>(r=>release=r),ready=new Promise<void>(r=>entered=r);
+ await page.route('**/api/v1/identity/credentials',async route=>{
+  writes++;const response=await route.fetch();expect(response.status()).toBe(200);entered();await held;await route.abort('failed');
+ },{times:1});
+ const issue=page.getByRole('button',{name:'Issue agent credential',exact:true});await issue.focus();await page.keyboard.press('Enter');await ready;
+ const pending=(await savedIntents(page)).find(r=>r.slot==='admission');
+ expect(pending.kind).toBe('credential.issue');expect(pending.state).toBe('uncertain');
+ try{
+  await expect(page.getByRole('button',{name:'Issuing credential…',exact:true})).toBeDisabled();await page.keyboard.press('Enter');expect(writes).toBe(1);
+  await expect(page.getByText(/Credential issuance is unconfirmed/)).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Check credential issuance',exact:true})).toHaveCount(0);
+  await expect(page.getByText(/Access has not been issued yet/)).toHaveCount(0);
+  await review.capture('off-page-issuance-pending',heading,['Fixture-only 26 lower-ID agent accounts exclude the target from page one. Playwright holds the committed issuance response before dropping it.']);
+ }finally{release();}
+ await expect(page.getByRole('button',{name:'Retry same credential issuance',exact:true})).toBeEnabled();await page.unrouteAll({behavior:'wait'});
+ await expect(page.getByText(/Credential issuance is unconfirmed/)).toBeVisible();
+ await review.capture('off-page-issuance-unconfirmed',heading,['Playwright dropped a real committed issuance response. Target was selected by ordinary exact nickname lookup.']);
+ let lookupEntered!:()=>void,releaseLookup!:()=>void,metadataReads=0;
+ const lookupReady=new Promise<void>(r=>lookupEntered=r),lookupHeld=new Promise<void>(r=>releaseLookup=r);
+ await page.route('**/api/v1/identity/accounts/lookup',async route=>{
+  expect(route.request().postDataJSON()).toEqual({id:pending.body.participant_id});metadataReads++;
+  if(metadataReads===1){lookupEntered();await lookupHeld;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic participant lookup unavailable',recovery:{action:'retry_same_request'}}})});}
+  else{const response=await route.fetch();expect(response.status()).toBe(200);await route.fulfill({response});}
+ });
+ await page.reload();
+ await lookupReady;
+ try{
+  await expect(page.getByText('Loading participant details…',{exact:true})).toBeVisible();
+  await expect(page.getByLabel('Nickname',{exact:true})).toHaveAttribute('placeholder','Loading nickname…');
+  expect((await savedIntents(page)).find(r=>r.slot==='admission')).toEqual(pending);
+  await review.capture('off-page-lookup-loading',page.getByRole('heading',{name:'Managing participant access',exact:true}),['One exact-ID metadata lookup is held, then will receive fixture HTTP 503. The saved issuance remains untouched.']);
+ }finally{releaseLookup();}
+ await expect(page.getByRole('button',{name:'Retry participant lookup',exact:true})).toBeVisible();
+ await expect(page.getByText('Synthetic participant lookup unavailable',{exact:true})).toBeVisible();
+ expect((await savedIntents(page)).find(r=>r.slot==='admission')).toEqual(pending);
+ await review.capture('off-page-lookup-unavailable',page.getByRole('heading',{name:'Managing participant access',exact:true}),['One exact-ID metadata lookup received deterministic HTTP 503; credential request/key/body are unchanged.']);
+ await page.getByRole('button',{name:'Check credential issuance',exact:true}).click();
+ await expect(page.getByText('Credential issued — secret unavailable',{exact:true})).toBeVisible();
+ expect(await page.getByLabel('Issued secret',{exact:true}).count()).toBe(0);
+ await page.getByRole('button',{name:'Retry participant lookup',exact:true}).click();
+ await expect(heading).toBeVisible();
+ await expect(page.getByLabel('Nickname',{exact:true})).toHaveValue('corrected_agent');
+ await expect.poll(async()=>(await savedIntents(page)).find(r=>r.slot==='admission')).toBeUndefined();
+ expect(issuanceBodies).toEqual([pending.body]);expect(metadataReads).toBe(2);
+ expect((await server.observer.query('SELECT id FROM loom.participants WHERE id=$1',[pending.body.participant_id])).rowCount).toBe(1);
+ expect((await server.observer.query('SELECT count(*)::int n FROM loom.participant_credentials WHERE participant_id=$1',[pending.body.participant_id])).rows[0].n).toBe(1);
+ await review.capture('off-page-issuance-recovered',heading,['Earlier committed issuance response was dropped; exact reconciliation and the retried authorized ID lookup are live. No issuance replay or duplicate credential.']);
+ await page.unroute('**/api/v1/identity/accounts/lookup');
+ await page.getByText('Credentials for this account',{exact:true}).click();
+ const credentials=page.getByText('Credentials for this account',{exact:true}).locator('..');
+ await expect(credentials.getByText(/Synthetic participation · agent · active/)).toBeVisible();
+ await credentials.getByRole('button',{name:'Revoke',exact:true}).click();
+ await expect(credentials.getByText(/Synthetic participation · agent · revoked/)).toBeVisible();
+ await issue.click();
+ await expect.poll(async()=>page.getByLabel('Issued secret',{exact:true}).count()).toBe(1);
+ // Assertions while a secret is visible return booleans, never the credential.
+ expect(await page.getByText('Agent credential for corrected_agent — shown once',{exact:true}).count()===1).toBe(true);
+ const secret=await page.getByLabel('Issued secret',{exact:true}).inputValue();
+ expect(secret.length>0).toBe(true);expect(JSON.stringify(await savedIntents(page)).includes(secret)).toBe(false);
+ await page.getByRole('button',{name:'Select credential to copy',exact:true}).click();
+ expect(await page.getByLabel('Issued secret',{exact:true}).evaluate((element:HTMLTextAreaElement)=>document.activeElement===element&&element.selectionStart===0&&element.selectionEnd===element.value.length)).toBe(true);
+ await page.keyboard.press('Tab');await page.keyboard.press('Tab');
+ expect(await page.getByRole('button',{name:'Done',exact:true}).evaluate(element=>document.activeElement===element)).toBe(true);
+ await page.keyboard.press('Enter');expect(await page.getByLabel('Issued secret',{exact:true}).count()).toBe(0);
+ await page.getByRole('link',{name:'Topics',exact:true}).click();await page.getByRole('link',{name:'Administration',exact:true}).click();
+ await page.getByText('Participant accounts',{exact:true}).click();
+ const lookup=page.getByLabel('Exact account ID or nickname');await lookup.fill('corrected_agent');await lookup.press('Enter');
+ const row=page.locator('.list-row').filter({hasText:'corrected_agent · agent · active'});
+ await row.getByRole('button',{name:'Manage credentials',exact:true}).click();
+ await expect(heading).toBeFocused();await expect(page.getByText(/Account created/)).toHaveCount(0);
+ await page.getByText('Credentials for this account',{exact:true}).click();
+ await expect(credentials.getByText('Credentials for @corrected_agent',{exact:true})).toBeVisible();
+ await page.route('**/api/v1/identity/credentials/query',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic credential read unavailable',recovery:{action:'retry_same_request'}}})}),{times:1});
+ await credentials.getByRole('button',{name:'Refresh credentials',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(credentials.getByText('Synthetic credential read unavailable',{exact:true})).toBeVisible();
+ await expect(heading).toBeVisible();await expect(credentials.getByText(/Synthetic participation · agent · active/)).toBeVisible();
+ await credentials.getByRole('button',{name:'Retry credentials page',exact:true}).click();
+ await expect(credentials.getByText('Synthetic credential read unavailable',{exact:true})).toHaveCount(0);
+ await credentials.getByRole('button',{name:'Revoke',exact:true}).and(page.locator(':enabled')).click();
+ await expect(credentials.getByText(/Synthetic participation · agent · active/)).toHaveCount(0);
+ const identities=await server.observer.query("SELECT id FROM loom.participants WHERE nickname='corrected_agent'");
+ expect(identities.rows.map(r=>r.id)).toEqual([pending.body.participant_id]);
+ const issued=await server.observer.query('SELECT id,state FROM loom.participant_credentials WHERE participant_id=$1',[pending.body.participant_id]);
+ expect(issued.rows).toHaveLength(2);expect(issued.rows.every(r=>r.state==='revoked')).toBe(true);
+ expect(queryBodies.every(body=>body.limit===25&&!body.cursor)).toBe(true);
+ if(process.env.LOOM_ADMISSION_REVIEW_SCREENS==='1')await writeFile('/tmp/loom-review-evidence/ui-04/follow-up/synthetic-agent.json',JSON.stringify({
+  nickname:'corrected_agent',participant_id:pending.body.participant_id,credentials:issued.rows,
+  scope:'Dedicated agent in the isolated admission fixture. Both credentials observed revoked before fixture teardown; the browser runner disposes the test-owned database.'
+ },null,2)+'\n',{mode:0o600});
+}
 
 test("review regression: corrected conflict drafts survive navigation and browser process restart", async ({
   server,

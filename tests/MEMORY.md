@@ -14,6 +14,19 @@ session-authorization tests use new page envelopes; the retained participation
 Chromium recovery monitor follows POST query reads while preserving its exact
 private recovery assertions. Diagnostic changes add only fixed route/spec names
 and the two new test identities; existing numerical runtime/byte/coverage gates stay.
+The existing rejected-admission Chromium case also covers named creation/selection,
+held/lost issuance, reload/reconciliation, revoke then issue on the same identity,
+one-time text selection and failed credential reads. Opt-in UI-04 screenshots use
+`helpers/admission-review.ts` under `/tmp/loom-review-evidence/ui-04`; a capture-time
+mask is mandatory while the one-time textarea exists. No extra browser test entry
+or diagnostic capture is introduced. Mounted browsing tests assert step/status copy
+and lookup-error placement alongside the existing ownership/withdrawal cases.
+That journey seeds 26 lower-ID fixture accounts, selects the off-page target by
+nickname lookup, loses issuance, reloads, fails/holds the exact-ID name lookup and
+reconciles without another issuance. It checks the original key/body, one identity
+and one credential before deliberate replacement. Follow-up recovery PNGs use
+`ui-04/follow-up`, preserving the original review archive. Mounted cases also fence
+late recovered-name replies after account, route, identity and authority changes.
 The configuration refresh sequence keeps one route interceptor through held success,
 injected failure and explicit reload, asserting each response/count before advancing.
 Replacing expiring one-shot handlers can race interception updates and miss the fault.

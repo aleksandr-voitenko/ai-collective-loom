@@ -30,10 +30,11 @@ async function fixture(t:TestContext){
   return new Promise<Response>(finish=>{const call={path,body:options?.body?JSON.parse(String(options.body)):undefined,done:false,finish:(r:Response)=>{call.done=true;finish(r);}};calls.push(call);});
  });
  const router=createMemoryRouter([{path:'/loom/*',element:<ActiveView context={context}/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
- render(<StrictMode><RouterProvider router={router}/></StrictMode>);
+ const element=<StrictMode><RouterProvider router={router}/></StrictMode>;
+ let view=render(element);
  for(const d of document.querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Participant accounts')d.open=true;
  const initial=async(items:unknown[],cursor:string|null='account-next')=>act(async()=>{for(const c of calls.filter(c=>!c.done&&c.path.endsWith('/accounts/query')))c.finish(Response.json(page('accounts',items,cursor)));});
- return {calls,initial,router,store,self};
+ return {calls,initial,router,store,self,remount:()=>{view.unmount();view=render(element);}};
 }
 test('actual administration host retains failed-page position and focus; retry sends the same continuation and replaces rows',async t=>{
  const f=await fixture(t),a=person('First account'),b=person('Beyond account');await f.initial([a]);
@@ -57,6 +58,105 @@ test('account selection keys credential pages; late previous-account data and ob
  assert.ok(screen.queryByText(/B credential/));assert.equal(!!screen.queryByText(/A stale credential/),false);
  const input=screen.getByLabelText('Exact account ID or nickname');await act(async()=>fireEvent.change(input,{target:{value:'old_account'}}));await act(async()=>fireEvent.submit(input.closest('form')!));const lookup=f.calls.at(-1)!;
  await act(async()=>fireEvent.change(input,{target:{value:'new_account'}}));await act(async()=>lookup.finish(Response.json(person('Stale lookup'))));assert.equal(!!screen.queryByText(/Stale lookup/),false);
+});
+test('admission names the created participant and separates account creation from access',async t=>{
+ const f=await fixture(t);await f.initial([]);
+ await act(async()=>fireEvent.change(screen.getByLabelText('Nickname',{exact:true}),{target:{value:'review_agent'}}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Create account'})));
+ const request=f.calls.find(c=>c.path==='/api/v1/identity/accounts')!;assert.ok(request);
+ await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:randomUUID()})));
+ assert.ok(screen.queryByText('Account created for @review_agent.'));
+ assert.ok(screen.queryByText('Access has not been issued yet. Issue an agent credential next.'));
+ assert.ok(screen.queryByRole('button',{name:'Issue agent credential'}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ assert.equal(!!screen.queryByText(/Credential issuance is unconfirmed/),false);
+ assert.equal(!!screen.queryByRole('button',{name:'Check credential issuance'}),false);
+ assert.equal(!!screen.queryByText(/Access has not been issued yet/),false);
+ const issuance=f.calls.find(c=>c.path==='/api/v1/identity/credentials')!;
+ await act(async()=>issuance.finish(Response.json({error:{code:'service_unavailable',message:'Read unavailable'}},{status:503})));
+ assert.ok(screen.queryByText(/Credential issuance is unconfirmed/));
+ assert.ok(screen.queryByRole('button',{name:'Retry same credential issuance'}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check credential issuance'})));
+ const status=f.calls.find(c=>c.path==='/api/v1/identity/reconcile')!;
+ assert.equal(status.body.idempotency_key,issuance.body.idempotency_key);
+ await act(async()=>status.finish(Response.json({operation_state:'committed',participant_id:issuance.body.participant_id,credential_id:randomUUID()})));
+ assert.ok(screen.queryByText('Credential issued — secret unavailable'));
+ assert.equal(!!screen.queryByLabelText('Issued secret'),false);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ assert.equal(!!screen.queryByText('Credential issued — secret unavailable'),false);
+});
+test('off-page admission selection survives lost issuance and remount through exact authorized metadata lookup',async t=>{
+ const f=await fixture(t),target=person('off_page_agent');
+ const firstPage=Array.from({length:25},(_,i)=>person('page_agent_'+i));await f.initial(firstPage);
+ const input=screen.getByLabelText('Exact account ID or nickname');
+ await act(async()=>fireEvent.change(input,{target:{value:target.nickname}}));
+ await act(async()=>fireEvent.submit(input.closest('form')!));
+ await act(async()=>f.calls.at(-1)!.finish(Response.json(target)));
+ await act(async()=>fireEvent.click(screen.getByText(target.nickname+' · agent · active').closest('.list-row')!.querySelector('button')!));
+ assert.ok(screen.queryByRole('heading',{name:'Managing @off_page_agent'}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ const issuance=f.calls.find(c=>c.path==='/api/v1/identity/credentials')!;
+ await act(async()=>issuance.finish(Response.json({error:{code:'service_unavailable',message:'Lost response'}},{status:503})));
+ const original=f.store.all()[0]!;assert.equal(original.body.participant_id,target.id);
+ await act(async()=>f.remount());await f.initial(firstPage);
+ const exact=f.calls.filter(c=>c.path==='/api/v1/identity/accounts/lookup'&&c.body.id===target.id).at(-1);
+ assert.ok(exact,'Reload must resolve the retained account ID independently of the first page.');
+ assert.ok(screen.queryByText('Loading participant details…'));
+ await act(async()=>exact.finish(Response.json({error:{code:'service_unavailable',message:'Metadata lookup unavailable'}},{status:503})));
+ assert.ok(screen.queryByText(/Participant details are unavailable/));assert.deepEqual(f.store.all()[0],original);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry participant lookup'})));
+ const retry=f.calls.filter(c=>c.path==='/api/v1/identity/accounts/lookup').at(-1)!;assert.deepEqual(retry.body,{id:target.id});
+ await act(async()=>retry.finish(Response.json(target)));
+ assert.equal((screen.getByLabelText('Nickname',{exact:true}) as HTMLInputElement).value,target.nickname);
+ assert.ok(screen.queryByRole('heading',{name:'Managing @off_page_agent'}));assert.deepEqual(f.store.all()[0],original);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check credential issuance'})));
+ const status=f.calls.find(c=>c.path==='/api/v1/identity/reconcile')!;
+ assert.deepEqual(status.body,{operation_kind:'credential.issue',idempotency_key:original.key});
+ await act(async()=>status.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:randomUUID()})));
+ assert.ok(screen.queryByRole('heading',{name:'Managing @off_page_agent'}));assert.deepEqual(f.store.all(),[]);
+ assert.equal(f.calls.filter(c=>c.path==='/api/v1/identity/credentials').length,1);
+ assert.equal(f.calls.filter(c=>c.path==='/api/v1/identity/accounts').length,0);
+ assert.ok(f.calls.filter(c=>c.path.endsWith('/accounts/query')).every(c=>c.body.limit===25&&!c.body.cursor));
+});
+for(const departure of ['role','identity','route','selection'] as const)test(`recovered account lookup cannot restore metadata after ${departure} departure`,async t=>{
+ const f=await fixture(t),target=person('ProtectedRecovered'),other=person('OtherAccount');await f.initial([other]);
+ const body={participant_id:target.id,kind:'agent',purpose:null,label:'Synthetic participation',replace_credential_id:null};
+ await act(async()=>{await f.store.prepareDispatch(f.store.create('admission','credential.issue','/api/v1/identity/credentials',body),body);});
+ const original=f.store.all()[0]!;await act(async()=>f.remount());
+ const lookup=f.calls.filter(c=>c.path.endsWith('/accounts/lookup')&&c.body.id===target.id).at(-1)!;assert.ok(lookup);
+ if(departure==='role'){
+  const accounts=f.calls.filter(c=>c.path.endsWith('/accounts/query')).at(-1)!;
+  await act(async()=>accounts.finish(Response.json({error:{code:'forbidden',message:'Administrator authority withdrawn'}},{status:403})));
+ }
+ if(departure==='identity')await act(async()=>invalidateIdentity());
+ if(departure==='route')await act(async()=>f.router.navigate('/loom/help'));
+ if(departure==='selection'){
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check credential issuance'})));
+  await act(async()=>f.calls.find(c=>c.path.endsWith('/identity/reconcile'))!.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:randomUUID()})));
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Back to admission'})));
+  await f.initial([other]);
+  const disclosure=screen.getByText('Participant accounts').closest('details')!;disclosure.open=true;
+  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+  assert.ok(screen.queryByRole('heading',{name:'Managing @OtherAccount'}));
+ }
+ await act(async()=>lookup.finish(Response.json(target)));
+ assert.equal(!!screen.queryByDisplayValue('ProtectedRecovered'),false);
+ assert.equal(!!screen.queryByRole('heading',{name:'Managing @ProtectedRecovered'}),false);
+ if(departure!=='selection')assert.deepEqual(f.store.all()[0],original);
+ else assert.ok(screen.queryByRole('heading',{name:'Managing @OtherAccount'}));
+});
+test('managing an existing participant names it without claiming creation and explains lost agent access',async t=>{
+ const f=await fixture(t),a=person('review_agent');await f.initial([a]);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+ assert.ok(screen.queryByRole('heading',{name:'Managing @review_agent'}));
+ assert.equal(!!screen.queryByText(/Account created/),false);
+ assert.ok(screen.queryByText(/Revoke the lost credential below, then issue a new agent credential for this same participant/));
+ const input=screen.getByLabelText('Exact account ID or nickname');
+ await act(async()=>fireEvent.change(input,{target:{value:'missing_agent'}}));
+ await act(async()=>fireEvent.submit(input.closest('form')!));
+ await act(async()=>f.calls.at(-1)!.finish(Response.json({error:{code:'unavailable',message:'Account not found'}},{status:404})));
+ assert.ok(screen.queryByRole('heading',{name:'Managing @review_agent'}));
+ assert.ok(input.closest('form')!.querySelector('[role="alert"]'));
 });
 for(const departure of ['role','identity','route'] as const)test(`pending account, lookup, credential and audit pages cannot restore metadata after ${departure} departure`,async t=>{
  const f=await fixture(t),a=person('Protected account');await f.initial([a]);
