@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
-import { type Intent, commandRequest, isDefinitiveRejection } from './participation-client.js';
+import {
+  type Intent,
+  type Self,
+  commandRequest,
+  identityGeneration,
+  isDefinitiveRejection,
+} from './participation-client.js';
 import { type Context, useIntent, SeparateDraft } from './participation-state.js';
-import { useAuthorization } from './AuthorizationBoundary.js';
+import { type AuthorizedValue, useAuthorization } from './AuthorizationBoundary.js';
 import { Avatar, ErrorText } from './participation-ui.js';
 import { useAdministrationPage, AdministrationPageControls } from './AdministrationBrowsing.js';
 import type {
@@ -49,10 +55,10 @@ export function Admission({ context }: { context: Context }) {
   const account =
     (pending?.body.participant_id as string | undefined) ?? createdAccount ?? selected?.id;
   const accounts = useAdministrationPage<AdministrativeAccountView>('accounts', context.self);
-  const displayNickname =
-    selected?.nickname ??
-    accounts.data?.items.find((person) => person.id === account)?.nickname ??
-    nickname;
+  const details = useAdmissionAccount(account, context.self, !!selected);
+  const displayNickname = account
+    ? (selected?.nickname ?? details.data?.nickname ?? (accountCreated ? nickname : ''))
+    : nickname;
   const accountHeading = useRef<HTMLHeadingElement>(null),
     secretField = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -63,7 +69,7 @@ export function Admission({ context }: { context: Context }) {
       ? pending.body.kind === 'enrollment'
         ? 'human'
         : 'agent'
-      : (selected?.kind ?? kind);
+      : (selected?.kind ?? details.data?.kind ?? kind);
   const [lookup, setLookup] = useState(''),
     [lookupBusy, setLookupBusy] = useState(false),
     [lookupError, setLookupError] = useState('');
@@ -183,7 +189,7 @@ export function Admission({ context }: { context: Context }) {
               participant_id: result.participant_id,
               credential_id: result.credential_id!,
               kind: String(record.body.kind),
-              nickname: targetNickname || result.participant_id,
+              nickname: targetNickname,
             });
           else setLostCredential(result.credential_id);
         }
@@ -247,7 +253,7 @@ export function Admission({ context }: { context: Context }) {
         <div className="notice neutral">
           <strong>
             {issued.kind === 'agent' ? 'Agent credential' : 'Enrollment ticket'} for{' '}
-            {issued.nickname} — shown once
+            {issued.nickname || displayNickname || 'participant (details unavailable)'} — shown once
           </strong>
           <p>
             Issuance is complete. Copy this one-time{' '}
@@ -284,9 +290,26 @@ export function Admission({ context }: { context: Context }) {
       ) : (
         <>
           {account && (
-            <h3 ref={accountHeading} tabIndex={-1}>
-              {displayNickname ? `Managing @${displayNickname}` : 'Managing participant access'}
-            </h3>
+            <>
+              <h3 ref={accountHeading} tabIndex={-1}>
+                {displayNickname ? `Managing @${displayNickname}` : 'Managing participant access'}
+              </h3>
+              {!selected && !details.data && (
+                <div role="status">
+                  {details.busy ? (
+                    <p>Loading participant details…</p>
+                  ) : (
+                    <>
+                      <p>
+                        Participant details are unavailable. Retry the lookup to see the nickname.
+                      </p>
+                      <ErrorText error={details.error} />
+                      <button onClick={details.refresh}>Retry participant lookup</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </>
           )}
           <ErrorText error={error} />
           <label>
@@ -294,6 +317,9 @@ export function Admission({ context }: { context: Context }) {
             <input
               value={displayNickname}
               disabled={locked || !!account}
+              placeholder={
+                account ? (details.busy ? 'Loading nickname…' : 'Nickname unavailable') : undefined
+              }
               onChange={(e) => {
                 setNickname(e.target.value);
                 draftAccount({ nickname: e.target.value });
@@ -316,9 +342,13 @@ export function Admission({ context }: { context: Context }) {
           </label>
           {pending?.state === 'uncertain' && (
             <p role="status">
-              {pending.kind === 'credential.issue'
-                ? 'Credential issuance is unconfirmed. Check this request before issuing another credential. Retrying sends the same request; a previously issued secret cannot be shown again.'
-                : 'Account creation is unconfirmed. Check this request or retry it before creating another account.'}
+              {busy
+                ? pending.kind === 'credential.issue'
+                  ? 'Credential request in progress…'
+                  : 'Account request in progress…'
+                : pending.kind === 'credential.issue'
+                  ? 'Credential issuance is unconfirmed. Check this request before issuing another credential. Retrying sends the same request; a previously issued secret cannot be shown again.'
+                  : 'Account creation is unconfirmed. Check this request or retry it before creating another account.'}
             </p>
           )}
           {pending?.state === 'rejected' ? (
@@ -399,7 +429,7 @@ export function Admission({ context }: { context: Context }) {
               </div>
             </>
           )}
-          {pending?.state === 'uncertain' && (
+          {pending?.state === 'uncertain' && !busy && (
             <button
               disabled={busy}
               onClick={() =>
@@ -504,6 +534,80 @@ export function Admission({ context }: { context: Context }) {
       )}
     </section>
   );
+}
+
+/** Exact display metadata is independent of collection pages and private command custody. */
+function useAdmissionAccount(participantId: string | undefined, self: Self, selected: boolean) {
+  const authority = useAuthorization();
+  const [result, setResult] = useState<AuthorizedValue<AdministrativeAccountView>>();
+  const [request, setRequest] = useState<{ id: string; busy: boolean; error: string }>();
+  const sequence = useRef(0),
+    live = useRef(false),
+    controller = useRef<AbortController | undefined>(undefined);
+  const load = useCallback(async () => {
+    if (!live.current || !participantId) return;
+    const attempt = ++sequence.current,
+      owner = identityGeneration();
+    controller.current?.abort();
+    const signal = new AbortController();
+    controller.current = signal;
+    setRequest({ id: participantId, busy: true, error: '' });
+    try {
+      const value = await authority.readAuthorized<AdministrativeAccountView>(
+        '/api/v1/identity/accounts/lookup',
+        { self, body: { id: participantId }, signal: signal.signal },
+      );
+      if (value.value.id !== participantId)
+        throw new Error('The account lookup returned a different participant.');
+      if (
+        live.current &&
+        attempt === sequence.current &&
+        owner === identityGeneration() &&
+        authority.current(value.generation)
+      )
+        setResult(value);
+    } catch (failure) {
+      if (
+        live.current &&
+        attempt === sequence.current &&
+        owner === identityGeneration() &&
+        !signal.signal.aborted
+      )
+        setRequest({ id: participantId, busy: false, error: (failure as Error).message });
+    } finally {
+      if (live.current && attempt === sequence.current && owner === identityGeneration())
+        setRequest((current) =>
+          current?.id === participantId ? { ...current, busy: false } : current,
+        );
+    }
+  }, [authority, participantId, self]);
+  useEffect(() => {
+    live.current = true;
+    // A recovered ID cannot reauthorize metadata after withdrawal. An explicit
+    // retry may check access; neither path edits or dispatches the saved command.
+    if (!selected && authority.getSnapshot().state !== 'withdrawn') void load();
+    return () => {
+      live.current = false;
+      sequence.current++;
+      controller.current?.abort();
+    };
+  }, [authority, load, selected]);
+  return {
+    data:
+      result && result.value.id === participantId && authority.current(result.generation)
+        ? result.value
+        : undefined,
+    busy:
+      !!participantId &&
+      !selected &&
+      (request?.id === participantId
+        ? request.busy
+        : authority.getSnapshot().state !== 'withdrawn'),
+    error: request && request.id === participantId ? request.error : '',
+    refresh: () => {
+      if (!request?.busy) void load();
+    },
+  };
 }
 
 function CredentialList({

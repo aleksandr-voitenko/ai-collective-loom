@@ -32,6 +32,23 @@ The third pass labels an uncertain agent request **Retry same credential issuanc
 and **Check credential issuance**, translates its network failure into actionable
 feedback and retires an earlier secretless receipt when a new issuance begins.
 
+UI04-02's follow-up corrects a functional gap: a recovered nickname previously
+depended on the first 25-account page. Selected metadata or an authorized exact
+lookup of the retained participant ID now supplies the name independently.
+Loading/unavailable states and explicit metadata retry leave the immutable
+issuance key/body untouched. Sequence, lifetime, identity and authorization
+checks fence late replies. Active command attempts show progress; status/retry
+instructions appear after the attempt finishes without confirmation.
+
+The regression uses 26 lower-ID fixture accounts so the target is absent from
+page one, selects it through normal nickname lookup, drops the issuance reply,
+reloads, holds/fails its metadata lookup, reconciles and retries only metadata.
+It asserts named context after lookup, unchanged request identity, bounded first
+pages and one participant/credential before deliberate revoke/new issuance.
+Mounted cases also cover metadata arriving after navigation, identity/authority
+loss or selecting another account. Updated desktop/mobile evidence is under
+`/tmp/loom-review-evidence/ui-04/follow-up`; the original ZIP remains unchanged.
+
 ## Reproduction and evidence
 
 Use Node 24.19.0, installed dependencies, Docker and Playwright Chromium. Use the

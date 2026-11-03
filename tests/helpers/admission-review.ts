@@ -7,9 +7,9 @@ import {applicationInputs} from '../../scripts/lib/release-identity.mjs';
 
 // Same opt-in viewport/provenance pattern as the settings and indexing reviews.
 // A one-time display is captured only with Playwright's capture-time mask.
-export async function admissionReview(page:Page){
+export async function admissionReview(page:Page,series:'after'|'follow-up'='after'){
  const enabled=process.env.LOOM_ADMISSION_REVIEW_SCREENS==='1';
- const directory='/tmp/loom-review-evidence/ui-04/after';
+ const directory='/tmp/loom-review-evidence/ui-04/'+series;
  const git=(...args:string[])=>execFileSync('git',args,{encoding:'utf8'}).trimEnd();
  const metadata=enabled?{
   source_commit:git('rev-parse','HEAD'),dirty_tree:git('status','--porcelain').length>0,

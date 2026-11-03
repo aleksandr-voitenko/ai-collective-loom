@@ -136,6 +136,11 @@ stays with lookup. Dispatched issuance hides the not-yet-issued notice; committe
 secretless recovery keeps only the credential ID and requires revoke/issue on the
 same participant. Select-to-copy selects the one-time field without clipboard or
 journal writes. See `ParticipationAdmission.md` for the bounded journey and capture.
+Recovered account names come from an independent authorized exact-ID lookup, not
+the loaded account page. Its local loading/error/retry and lifetime/sequence/owner
+fences never edit the saved command. Automatic lookup stops at withdrawn authority;
+an explicit metadata retry can check access. In-flight command presentation hides
+check/retry guidance while the durable journal remains uncertain.
 `CommunitySettings.tsx` owns `/loom/admin/community`; Administration links to it.
 Its instance/participant-bound in-memory draft outlives query reads. Dirty reads
 retain both IDs, community name and expected version. Cancel restores the accepted
