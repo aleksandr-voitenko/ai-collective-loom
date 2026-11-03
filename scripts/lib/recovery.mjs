@@ -1052,7 +1052,7 @@ export const start = (d) => exclusive(d, () => startSource(d));
 export const destroy = (d) => exclusive(d, () => destroyResources(d));
 export const verify = (d, expectations) => exclusive(d, () => verifyApplication(d, expectations));
 
-export async function verifyRequests(c, expectations, { query, capture, drain, expectedInventory, verifierPolicy }) {
+export async function verifyRequests(c, expectations, { query, capture, drain, expectedInventory, verifierPolicy, requestCall = httpsCall }) {
     const startTime = Date.parse(query('SELECT clock_timestamp()'));
     const admissions = new Map(),
       identities = new Map(), observations = new Map();
@@ -1075,7 +1075,7 @@ export async function verifyRequests(c, expectations, { query, capture, drain, e
     // is itself charged; no verifier bypass or counter reset is permitted.
     for (const { token } of expectations.reads)
       if (!identities.has(token)) {
-        const self = await httpsCall(
+        const self = await requestCall(
           c.origin,
           c.tls.ca ?? c.tls.cert,
           '/api/v1/identity/self',
@@ -1092,7 +1092,7 @@ export async function verifyRequests(c, expectations, { query, capture, drain, e
         }
       }
     for (const [index, entry] of expectations.reads.entries()) {
-      const result = await httpsCall(c.origin, c.tls.ca ?? c.tls.cert, entry.path, entry.body, entry.token);
+      const result = await requestCall(c.origin, c.tls.ca ?? c.tls.cert, entry.path, entry.body, entry.token);
       if (!isDeepStrictEqual(comparable(result, entry.path), entry.expected))
         fail('application expectation ' + (index + 1) + ' differs');
       const method = entry.body === undefined ? 'GET' : 'POST';

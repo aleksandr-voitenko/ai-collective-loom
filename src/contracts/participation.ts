@@ -422,7 +422,11 @@ export const Onboarding = Type.Object(
     guide_revision: Type.Literal(guideRevision),
     profile: Type.Literal('synthetic'),
     installation_mode: Type.Optional(
-      Type.Union([Type.Literal('synthetic-preview'), Type.Literal('local-pilot')]),
+      Type.Union([
+        Type.Literal('synthetic-preview'),
+        Type.Literal('local-pilot'),
+        Type.Literal('staging'),
+      ]),
     ),
     community_name: Type.String(),
     settings_version: Type.Integer(),

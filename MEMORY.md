@@ -10,7 +10,8 @@ implementation constraints in scoped memory. Historical evidence remains in Git.
 The architecture is a proposal; its acceptance mappings are not executed results.
 
 Current implementation includes opt-in synthetic participation and an explicitly
-acknowledged localhost retained evaluation pilot (ADR-041) on
+acknowledged localhost retained evaluation pilot (ADR-041), plus separate invitation-only
+non-sensitive VPS staging (ADR-042), on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
@@ -188,8 +189,8 @@ reopening after Unread. See ADR-026 and the
 participation memory for limits, authority and custody. Real-data gates remain.
 ADR-041 permits the operator’s own public/synthetic/non-sensitive local trial
 accounts/content with explicit policy acknowledgement. Sensitive data, production
-exposure/retention, physical-device validation and cross-machine operation remain
-gated. The inherited finite identity/resource policies are local evaluation choices. There is no default administrator or identity-header bypass. Agent memory
+exposure/retention, physical-device validation and actual cross-machine evidence remain
+gated; the separate staging controller enables a later approved deployment. The inherited finite identity/resource policies are local evaluation choices. There is no default administrator or identity-header bypass. Agent memory
 and model execution stay external; signed grants, complex conversion/extraction and
 other derived workers stay gated. Supported literal UTF-8 processing is ADR-031.
 ADR-034 adds explicitly managed synthetic cold backup and quarantined same-release
@@ -216,6 +217,13 @@ the API. It never touches existing development data or credentials.
 fixed localhost HTTPS origin and an immutable compiled API/worker image. Start never
 seeds, migrates or replaces missing storage; updates and encrypted cold recovery
 are explicit. `scripts/MEMORY.md` owns its custody/ownership boundaries.
+
+`staging` selects separate private custody and external Compose volumes, fixed HTTPS
+FQDN/RP, an internal provider network and the sole public Caddy proxy. Its explicit
+staging profile retains finite policies, exact file versions and ordinary identity
+authority. Cold capture and fresh loopback quarantine reuse complete inventory and
+unchanged verifier allowances. README/ADR-042 distinguish local acceptance from
+unperformed public-certificate/remote-browser/cross-machine evidence.
 
 `scripts/local.mjs` manages an explicitly local Compose project. PostgreSQL 18.4
 and SeaweedFS 4.48 use immutable image-index pins; hosted storage remains undecided.

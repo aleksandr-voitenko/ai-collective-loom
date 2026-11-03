@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { readConfiguration, ConfigurationError } from './config.js';
+import { requireWorkerProfile } from './participation-profile.js';
 import { PostgresDatabase } from './db/postgres.js';
 import { NotificationWorker } from './modules/notifications/worker.js';
 
@@ -12,8 +13,7 @@ process.once('SIGTERM', () => {
   stopping = true;
 });
 try {
-  if (process.env.LOOM_PARTICIPATION_PROFILE !== 'synthetic')
-    throw new ConfigurationError('The worker requires the synthetic profile.');
+  requireWorkerProfile();
   const args = process.argv.slice(2);
   if (args.length && !(args.length === 1 && args[0] === '--once'))
     throw new ConfigurationError('Use no arguments or --once.');

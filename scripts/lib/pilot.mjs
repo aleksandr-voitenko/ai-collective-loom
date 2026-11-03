@@ -363,7 +363,7 @@ function pins() {
     node: JSON.parse(readFileSync(join(root, 'config/recovery.json'))).nodeImage,
   };
 }
-export function snapshotRelease(path) {
+export function snapshotRelease(path, { additionalRuntimeFiles = [] } = {}) {
   const built = JSON.parse(readFileSync(join(root, 'dist/release.json'), 'utf8'));
   if (!isDeepStrictEqual(built, applicationInputs(root)))
     fail('application build does not match source; run app build explicitly');
@@ -415,7 +415,7 @@ export function snapshotRelease(path) {
     for (const entry of ['dist', 'node_modules', 'package.json'])
       cpSync(join(root, entry), join(context, entry), { recursive: true, dereference: true });
     mkdirSync(join(context, 'scripts/lib'), { recursive: true, mode: 0o700 });
-    for (const file of ['pilot-runtime.mjs', 'native-inventory.mjs'])
+    for (const file of ['pilot-runtime.mjs', 'native-inventory.mjs', ...additionalRuntimeFiles])
       cpSync(join(root, 'scripts/lib', file), join(context, 'scripts/lib', file));
     writePrivate(
       join(context, 'Dockerfile'),

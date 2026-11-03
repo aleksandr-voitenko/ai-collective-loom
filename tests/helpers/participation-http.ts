@@ -10,6 +10,7 @@ export function httpClient(
   origin: string,
   cert: string,
   authorization?: string,
+  transport?: { address: string },
 ) {
   let cookies: Record<string, string> = {},
     csrf = "";
@@ -48,6 +49,7 @@ export function httpClient(
         new URL(path, origin),
         {
           ca: cert,
+          ...(transport ? {lookup: (_host: string, options: any, callback: Function) => options.all ? callback(null, [{address:"127.0.0.1", family:4}]) : callback(null, "127.0.0.1", 4)} : {}),
           // Fixtures restart at the same origin; a pooled socket can still be closing.
           // Each call owns its connection so writes need no transport retry.
           agent: false,

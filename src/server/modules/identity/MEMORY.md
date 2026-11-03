@@ -45,3 +45,9 @@ This preserves sessions across ordinary restarts and prevents localhost port-sha
 from attaching source browser cookies to a fresh restored installation. Default
 preview/development names and all Secure/HttpOnly/SameSite, CSRF, origin and credential
 checks remain unchanged. The namespace changes no stored identity or session row.
+
+ADR-042's independent staging runtime uses the same namespace mechanism and ordinary
+admission/audit paths with its exact external HTTPS origin/RP. TLS terminates only
+at the designated proxy; raw peer/Host/forwarded/Origin validation precedes routing.
+No public bootstrap/recovery route, testing login bypass or administrator reviewer
+credential is introduced. Offline deployment custody stays outside API/workers.

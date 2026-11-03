@@ -12,7 +12,10 @@ ADR-031 adds passive exact UTF-8 previews and separate Files search in sibling
 contexts, lifetimes, digests or personal state. See that scoped memory for bounds.
 
 Artifact files and contribution attachments: `files.ts` owns bounded private custody and exact manifest/download
-reads; `file-storage.ts` is the single native S3 boundary. `file-context.ts` owns
+reads; `file-storage.ts` is the single native S3 boundary. ADR-042 adds only an explicit
+staging endpoint at http://s3:8333 inside its owned private Compose network; absent
+that selection the prior loopback endpoint rule remains. This changes no contextual
+authorization, native-version selection, integrity or app-mediated download rule. `file-context.ts` owns
 publication preparation under custody guard15, after actor and before
 structure/resource guards. No object IO occurs while SQL/publication guards are
 held. Migration0019 pins native versions and protects published upload lifetime;

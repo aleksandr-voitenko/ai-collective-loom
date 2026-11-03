@@ -19,6 +19,7 @@ import type { DatabaseHealth } from '../db/postgres.js';
 import { classifyError, safeFailure } from './errors.js';
 import { registerParticipation, type ParticipationServices } from './participation.js';
 import { participationRateRoute } from './rate-policy.js';
+import { validateStagingProxy, stagingRequestAllowed, type StagingProxy } from './staging-proxy.js';
 
 export async function createApplication(options: {
   database: DatabaseHealth;
@@ -26,7 +27,9 @@ export async function createApplication(options: {
   logger?: FastifyServerOptions['logger'];
   participation?: ParticipationServices | undefined;
   tls?: { key: string; cert: string };
+  stagingProxy?: StagingProxy;
 }) {
+  if (options.stagingProxy) validateStagingProxy(options.stagingProxy);
   const app = Fastify({
     ...(options.tls ? { https: options.tls } : {}),
     logger: options.logger ?? true,
@@ -54,6 +57,9 @@ export async function createApplication(options: {
   });
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id).header('cache-control', 'no-store');
+    if (options.stagingProxy && !stagingRequestAllowed(request, options.stagingProxy)) {
+      return reply.code(400).send(safeFailure('invalid_request', request.id).body);
+    }
     reply
       .header('x-content-type-options', 'nosniff')
       .header('x-frame-options', 'DENY')
@@ -192,7 +198,10 @@ export async function createApplication(options: {
       options.participation
         ? {
             ...runtime,
-            stage: 'synthetic-participation' as const,
+            stage:
+              options.participation.installationMode === 'staging'
+                ? ('staging-participation' as const)
+                : ('synthetic-participation' as const),
             capabilities: {
               participant_authentication: true,
               participant_mutations: true,

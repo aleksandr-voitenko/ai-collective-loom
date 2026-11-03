@@ -62,6 +62,20 @@ populates schema0028 through normal HTTPS, interrupts after the observed cold-ba
 journal barrier and explicitly resumes to0029. A separate no-op update case is not
 historical compatibility evidence. Hosted CI already fetches complete history.
 
+`integration/staging.test.ts` separately exercises the actual staging Compose and
+immutable compiled runtime with pinned native providers: fixed proxy envelope,
+ordinary identity, exact files/private choices, lifecycle, worker/provider loss,
+missing-version refusal, encrypted independent quarantine and upgrade guards.
+`helpers/staging.ts` owns exclusive acceptance directories/labels and explicit
+exact-owner/data-loss teardown. It never selects a retained staging or pilot.
+`e2e/staging.spec.ts` uses ordinary non-admin Chromium WebAuthn, scoped DNS and one
+fixture SPKI pin (no blanket certificate exception); deliberate lost-response
+forwarding uses a separate CA-validating native client with that fixture browser's
+ordinary request headers. No fixture credential goes into diagnostics/screenshots.
+Optional LOOM_STAGING_REVIEW_SCREENS=1 curates actual desktop/mobile Topics PNGs and
+provenance under /tmp/loom-review-evidence/staging. Local fixture trust is not public
+certificate evidence or a remote-browser trial. README keeps manual tiers separate.
+
 `recovery.test.ts` uses ADR-034's separately owned cold-volume installation, real
 HTTPS and native provider versions. Expectations are captured before backup through
 application routes, independently of restore code. Source containers/volumes/network
@@ -930,3 +944,9 @@ resume authored/file workers. Optional LOOM_OPERATIONS_REVIEW_SCREENS=1 curates 
 narrow evidence under `/tmp/loom-review-evidence/operations`, outside diagnostic uploads.
 Cold recovery validates identified verifier samples after initial exact restoration;
 `bootstrap/recovery-accounting.test.mjs` rejects unrelated changes and uncorrelated samples.
+
+The staging proxy custody regression writes a0600 Caddyfile owned by a different
+UID inside a labeled test volume and runs the actual pinned proxy with Compose's
+capabilities. It fails without cross-UID read permission and verifies unchanged
+mode/owner after admission. Bootstrap checks bind IPv6 to an explicit selection
+and keep provider ports absent and quarantine loopback-only.

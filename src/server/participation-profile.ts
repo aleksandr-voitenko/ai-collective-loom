@@ -43,3 +43,29 @@ export function participationProfile(database: Transactions, env: NodeJS.Process
     }),
   };
 }
+
+/** Staging is an explicit, bounded non-sensitive trial with its own origin/RP. */
+export function stagingIdentityPolicy(origin: string, acknowledgement: string) {
+  const url = new URL(origin);
+  if (
+    acknowledgement !== 'vps-staging-1' ||
+    url.origin !== origin ||
+    url.protocol !== 'https:' ||
+    !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(url.hostname) ||
+    url.hostname.endsWith('.localhost') ||
+    url.username ||
+    url.password
+  )
+    throw new ConfigurationError(
+      'Explicit staging acknowledgement and exact HTTPS domain required.',
+    );
+  return syntheticIdentityPolicy(origin);
+}
+
+export function requireWorkerProfile(env: NodeJS.ProcessEnv = process.env) {
+  if (env.LOOM_PARTICIPATION_PROFILE === 'staging') {
+    stagingIdentityPolicy(env.LOOM_ORIGIN ?? '', env.LOOM_STAGING_ACKNOWLEDGE ?? '');
+  } else if (env.LOOM_PARTICIPATION_PROFILE !== 'synthetic') {
+    throw new ConfigurationError('The worker requires an explicit participation profile.');
+  }
+}

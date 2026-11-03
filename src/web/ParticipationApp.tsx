@@ -225,11 +225,13 @@ export function ParticipationApp() {
   const focused =
     !community || (!!self && !!store && needsCommunitySetup({ self, community, store }));
   const releaseLabel =
-    community?.installation_mode === 'local-pilot'
-      ? 'Local pilot'
-      : community
-        ? 'Synthetic preview'
-        : 'Local evaluation';
+    community?.installation_mode === 'staging'
+      ? 'Staging test'
+      : community?.installation_mode === 'local-pilot'
+        ? 'Local pilot'
+        : community
+          ? 'Synthetic preview'
+          : 'Local evaluation';
   const navigation = (
     <>
       <Link className="brand" to="/loom">
