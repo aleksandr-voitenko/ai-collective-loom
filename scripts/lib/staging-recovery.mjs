@@ -404,7 +404,7 @@ async function recoverAdministrator(d, options) {
   return {
     enrollment: join(output, 'enrollment.json'),
     participant,
-    warning: 'Redemption revokes old passkeys and sessions; ticket expiry remains one hour.',
+    warning: 'Redemption revokes old passkeys and sessions; ticket expiry follows the selected immutable release.',
   };
 }
 async function update(d, options) {

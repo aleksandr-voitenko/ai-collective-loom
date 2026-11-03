@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { caddyImage, composeSpec, labelArgs } from '../../scripts/lib/staging-compose.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync, cpSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, cpSync, unlinkSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   stagingFixture,
@@ -20,8 +20,55 @@ import {
 import { docker } from '../../scripts/lib/staging-files.mjs';
 import { expiredLeaf } from '../helpers/pilot-certificate.mjs';
 import { httpsCall } from '../../scripts/lib/staging.mjs';
+import { httpClient } from '../helpers/participation-http.js';
 // Actual CLI, immutable compiled image, real providers, default policy and CA-validated fixture TLS.
 // Each teardown is gated by both acceptance owner and exact installation identity.
+test(
+  'staging enrollment tickets expose four-hour expiry and recover after an abandoned ceremony',
+  { timeout: 240000 },
+  async (t) => {
+    let f: any;
+    t.after(async () => { await f?.close(); });
+    f = await stagingFixture((created) => { f = created; });
+    const d = f.instance(), c = f.config();
+    const client = httpClient(c.origin, c.tls.ca, undefined, c.transport);
+    function readTicket(path: string) {
+      const ticket = JSON.parse(readFileSync(path, 'utf8'));
+      assert.equal(statSync(path).mode & 0o777, 0o600);
+      assert.equal(typeof ticket.issuedAt, 'string');
+      assert.equal(typeof ticket.expiresAt, 'string');
+      const lifetime = Date.parse(ticket.expiresAt) - Date.parse(ticket.issuedAt);
+      // PostgreSQL evaluates the issuance default and expiry expression separately.
+      assert.ok(lifetime >= 14399900 && lifetime <= 14400100, 'ticket must last four hours');
+      assert.match(ticket.credentialId, /^[a-f0-9-]{36}$/);
+      const stored = JSON.parse(sql(d, `SELECT json_build_object('issuedAt',to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'expiresAt',to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) FROM loom.participant_credentials WHERE id='${ticket.credentialId}'`));
+      assert.deepEqual({issuedAt:ticket.issuedAt, expiresAt:ticket.expiresAt}, stored);
+      return ticket;
+    }
+    const first = readTicket(join(f.path, 'enrollment/enrollment.json'));
+    // No finish request represents a browser/authenticator that cannot complete creation.
+    for (let attempt=0; attempt<2; attempt++)
+      assert.equal((await client.call('/api/v1/identity/register/start', {ticket:first.ticket})).status, 200);
+    assert.equal(sql(d, `SELECT state FROM loom.participant_credentials WHERE id='${first.credentialId}'`), 'active');
+    assert.equal(sql(d, 'SELECT count(*) FROM loom.passkeys'), '0');
+    // Fixture-only expiry avoids a four-hour wait without changing any runtime policy.
+    sql(d, `UPDATE loom.participant_credentials SET expires_at=clock_timestamp()-interval '1 second' WHERE id='${first.credentialId}'`);
+    assert.equal((await client.call('/api/v1/identity/register/start', {ticket:first.ticket})).status, 401);
+    const recovery = await f.command('recover-administrator', {'confirm-instance':d.id});
+    const fresh = readTicket(recovery.enrollment);
+    assert.equal(fresh.administratorId, first.administratorId);
+    assert.notEqual(fresh.credentialId, first.credentialId);
+    assert.equal(JSON.stringify(recovery).includes(fresh.ticket), false, 'CLI must not disclose the ticket');
+    assert.equal(sql(d, `SELECT state FROM loom.participant_credentials WHERE id='${first.credentialId}'`), 'revoked');
+    const signedIn = await client.enroll(fresh.ticket);
+    assert.equal(signedIn.participant_id, first.administratorId);
+    assert.equal(signedIn.role, 'administrator');
+    assert.equal((await client.call('/api/v1/identity/register/start', {ticket:fresh.ticket})).status, 401);
+    assert.equal(sql(d, 'SELECT count(*) FROM loom.passkeys'), '1');
+    assert.equal(f.instance().origin, c.origin);
+  },
+);
+
 test(
   'staging CLI retains exact community across stop, start, container replacement and isolated encrypted recovery',
   { timeout: 240000 },

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   stagingIdentityPolicy,
   requireWorkerProfile,
+  syntheticIdentityPolicy,
 } from '../../src/server/participation-profile.js';
 import { FileStorage } from '../../src/server/modules/participation/file-storage.js';
 import { createApplication } from '../../src/server/http/app.js';
@@ -52,6 +53,8 @@ test('staging requires its own acknowledgement and exact RP HTTPS domain', () =>
   const p = stagingIdentityPolicy('https://loom-staging.example.com', 'vps-staging-1');
   assert.equal(p.rpId, 'loom-staging.example.com');
   assert.equal(p.maxPasskeys, 2);
+  assert.equal(p.enrollmentSeconds, 4 * 60 * 60);
+  assert.equal(syntheticIdentityPolicy('https://localhost:3443').enrollmentSeconds, 3600);
   for (const origin of [
     'http://loom-staging.example.com',
     'https://loom-staging.example.com/',

@@ -161,6 +161,10 @@ The runtime has a distinct acknowledged staging profile, origin/RP and presentat
 FileStorage accepts exactly http://s3:8333 with explicit staging selection; unchanged
 local endpoints remain the default. API/workers see runtime custody only; offline
 ticket helpers retain the established one-time0600 inode handoff and identity audit.
+New staging enrollment/recovery tickets use a four-hour policy and include committed
+database issuedAt/expiresAt timestamps in their private handoff JSON. Existing ticket
+expiry is not extended. Recovery writes a new path; an older selected immutable
+release retains its old lifetime/file format. Pilot/preview remain one hour.
 Start/recreate never provision or replace missing storage, change origin or reseed.
 Native custody is recorded before migration/bootstrap; later root probes refuse
 empty persistence, including interrupted initialization.

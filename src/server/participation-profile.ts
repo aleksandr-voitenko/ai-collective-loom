@@ -59,7 +59,8 @@ export function stagingIdentityPolicy(origin: string, acknowledgement: string) {
     throw new ConfigurationError(
       'Explicit staging acknowledgement and exact HTTPS domain required.',
     );
-  return syntheticIdentityPolicy(origin);
+  // Staging operator handoff can span setup and review; stored ticket expiries stay authoritative.
+  return { ...syntheticIdentityPolicy(origin), enrollmentSeconds: 4 * 60 * 60 };
 }
 
 export function requireWorkerProfile(env: NodeJS.ProcessEnv = process.env) {

@@ -135,12 +135,22 @@ try {
     );
     // An interrupted/lost issuance must be explicitly replaced, never replayed.
     if (!ticket.secret) throw new Error('one-time issuance unavailable');
+    // Use the committed database timestamps, rather than starting a second client-side clock.
+    const validity = await database.transaction(async (tx) =>
+      (await tx.query(
+        "SELECT created_at, expires_at FROM loom.participant_credentials WHERE id=$1 AND participant_id=$2 AND kind='enrollment'",
+        [ticket.credential_id, account.participant_id],
+      )).rows[0],
+    );
+    if (!validity) throw new Error('one-time issuance unavailable');
     writeFileSync(
       '/output/enrollment.json',
       JSON.stringify({
         ticket: ticket.secret,
         administratorId: account.participant_id,
         credentialId: ticket.credential_id,
+        issuedAt: validity.created_at.toISOString(),
+        expiresAt: validity.expires_at.toISOString(),
       }) + '\n',
       { flag: 'wx', mode: 0o600, flush: true },
     );

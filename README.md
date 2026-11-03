@@ -1255,11 +1255,30 @@ Init writes the offline, one-time administrator ticket to
 `$staging_path/enrollment/enrollment.json` (owner-readable0600); runtime API/workers
 cannot read deployment proofs. Read it privately, open `https://loom-staging.example.com/loom`, choose
 **Set up an admitted account**, supply the ticket and create a passkey, then sign in
-normally. Complete community setup. A one-hour ticket is not replayable. An expired,
+normally. Complete community setup. New staging enrollment and recovery tickets last
+**four hours**. The private JSON includes database-issued UTC `issuedAt` and
+`expiresAt` timestamps alongside `ticket`, `administratorId` and `credentialId`.
+An abandoned or unavailable browser passkey ceremony does not consume the ticket;
+successful binding consumes it. The five-minute WebAuthn challenge lifetime is
+separate from the ticket lifetime. An expired,
 lost or uncertain handoff requires the explicit audited offline
 `recover-administrator --confirm-instance INSTANCE_ID` operation; it preserves the
 administrator identity and redemption revokes old passkeys/sessions. Never expose
 an enrollment endpoint or replace this path with an administrator password.
+
+Run recovery from the reviewed checkout on the VPS:
+
+```bash
+npm run staging -- recover-administrator --instance "$staging_path" --confirm-instance INSTANCE_ID
+```
+
+Read the **new private enrollment path printed by recovery**; the original
+`enrollment/enrollment.json` is not overwritten. Copy only the `ticket` value into
+**Set up an admitted account → Create passkey**, then use **Sign in with passkey**.
+Ticket expiry is enforced by the database; editing the JSON cannot extend it.
+Existing tickets keep their original expiry. Older immutable releases still issue
+one-hour tickets without these metadata fields: upgrade before issuing a four-hour
+replacement. Pilot and synthetic-preview enrollment lifetimes remain one hour.
 
 In Administration create a **dedicated human participant** with role participant
 and issue its ordinary one-time enrollment ticket. Verify the intended tester,
@@ -1279,6 +1298,10 @@ operator's physical Mac passkey is available to a cloud browser. If ordinary
 assisted login is incompatible, record the exact browser/device failure and stop
 that trial; a staging-only alternative requires a **separate approved review**.
 There is no permanent testing backdoor, cookie export or database access handoff.
+Web-interface UX tests require this browser session; an agent API credential does
+not sign a human account into the browser. The initial administrator is a human
+passkey account. Keep a dedicated browser test account and its revocation separate
+from ordinary agent API access, even for a one-off test.
 
 ### Daily lifecycle, upgrade and cold recovery
 

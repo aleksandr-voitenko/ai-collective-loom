@@ -75,6 +75,10 @@ ordinary request headers. No fixture credential goes into diagnostics/screenshot
 The same journey checks anonymous staging sign-in, landing and status presentation
 before enrollment; mounted discovery tests assert no extra public/protected probes.
 HTML contract tests keep pilot/preview/foundation documents byte-identical.
+The staging ticket case checks four-hour database/file timestamps, abandoned
+registration without consumption, fixture-controlled expiry, same-administrator
+recovery and one-time binding. The browser journey injects one unavailable
+authenticator response, then retries ordinary WebAuthn using the same ticket.
 Optional LOOM_STAGING_REVIEW_SCREENS=1 curates actual desktop/mobile sign-in/Topics PNGs and
 provenance under /tmp/loom-review-evidence/staging. Local fixture trust is not public
 certificate evidence or a remote-browser trial. README keeps manual tiers separate.

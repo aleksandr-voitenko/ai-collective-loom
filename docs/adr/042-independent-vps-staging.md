@@ -47,9 +47,16 @@ peer, exact authority, HTTPS envelope and optional Origin. Private bridge member
 alone cannot authorize HTTP, database application operations or native files.
 
 The staging runtime/profile has explicit acknowledgement, exact HTTPS RP/domain and
-bounded existing policies. It presents Staging test, with distinct runtime metadata.
-All three actual workers receive the same explicit profile. This changes no numeric
-limits, schemas/migrations, authentication, publication digests or saved outcomes.
+bounded existing policies. New staging enrollment/recovery tickets have a four-hour
+window so operator setup/review can finish before expiry; pilot/preview remain one
+hour. Existing issued tickets retain their database expiry. Private staging handoff
+files include database-issued UTC issuance/expiry timestamps. Abandoned registration
+does not consume a ticket; successful passkey binding consumes it. Recovery writes
+a new private file on the same administrator identity, rather than refreshing the
+old file. The selected immutable release determines issuance policy and metadata.
+It presents Staging test, with distinct runtime metadata.
+All three actual workers receive the same explicit profile. Other numeric limits,
+schemas/migrations, authentication, publication digests and saved outcomes stay unchanged.
 Secure/HttpOnly/SameSite cookies and ordinary Origin/CSRF/WebAuthn checks remain.
 
 FileStorage's optional staging deployment admits exactly `http://s3:8333`; absent

@@ -1,5 +1,5 @@
 import { diagnosticTest as test, expect } from '../helpers/browser-fixtures.js';
-import { stagingFixture, populateStaging } from '../helpers/staging.js';
+import { stagingFixture, populateStaging, sql } from '../helpers/staging.js';
 import { createHash, X509Certificate } from 'node:crypto';
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -65,6 +65,17 @@ test('staging ordinary non-admin browser enrolls and reconciles a lost committed
     await page.goto(p.c.origin + '/loom');
     await page.getByText('Set up an admitted account', { exact: true }).click();
     await page.getByLabel('Enrollment ticket', { exact: true }).fill(p.browser.token);
+    // Test-only browser capability failure: creation never returns a credential or calls finish.
+    await page.evaluate(() => {
+      const create = navigator.credentials.create.bind(navigator.credentials);
+      navigator.credentials.create = async () => {
+        navigator.credentials.create = create;
+        throw new DOMException('No authenticator was available for this test attempt.', 'NotAllowedError');
+      };
+    });
+    await page.getByRole('button', { name: 'Create passkey', exact: true }).click();
+    await expect(page.getByText('No authenticator was available for this test attempt.')).toBeVisible();
+    expect(sql(p.d, `SELECT state FROM loom.participant_credentials WHERE id='${p.browser.credential}'`)).toBe('active');
     await page.getByRole('button', { name: 'Create passkey', exact: true }).click();
     await expect(page.getByText('Your passkey is ready. Sign in to continue.')).toBeVisible();
     await page.getByRole('button', { name: 'Sign in with passkey' }).click();
