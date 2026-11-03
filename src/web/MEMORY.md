@@ -130,6 +130,12 @@ Participation components. Private recovery does not authorize selected account
 copies or one-time secrets. Shared presentation and leased collection components
 live in `participation-ui.tsx`, without page or shell imports. Page modules do not
 import the shell; new shared helpers must preserve that direction.
+Admission distinguishes a newly created account from protected existing-account
+selection. Nickname headings focus only on account changes; failed lookup feedback
+stays with lookup. Dispatched issuance hides the not-yet-issued notice; committed
+secretless recovery keeps only the credential ID and requires revoke/issue on the
+same participant. Select-to-copy selects the one-time field without clipboard or
+journal writes. See `ParticipationAdmission.md` for the bounded journey and capture.
 `CommunitySettings.tsx` owns `/loom/admin/community`; Administration links to it.
 Its instance/participant-bound in-memory draft outlives query reads. Dirty reads
 retain both IDs, community name and expected version. Cancel restores the accepted

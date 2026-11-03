@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 import { type Intent, commandRequest, isDefinitiveRejection } from './participation-client.js';
 import { type Context, useIntent, SeparateDraft } from './participation-state.js';
@@ -34,6 +34,8 @@ export function Admission({ context }: { context: Context }) {
     [createdAccount, setAccount] = useState<string | undefined>(
       pending?.body.participant_id as string | undefined,
     ),
+    [accountCreated, setAccountCreated] = useState(false),
+    [lostCredential, setLostCredential] = useState<string>(),
     [issued, setIssued] = useState<{
       generation: number;
       secret: string;
@@ -46,16 +48,25 @@ export function Admission({ context }: { context: Context }) {
     [busy, setBusy] = useState(false);
   const account =
     (pending?.body.participant_id as string | undefined) ?? createdAccount ?? selected?.id;
-  const displayNickname = selected?.nickname ?? nickname;
+  const accounts = useAdministrationPage<AdministrativeAccountView>('accounts', context.self);
+  const displayNickname =
+    selected?.nickname ??
+    accounts.data?.items.find((person) => person.id === account)?.nickname ??
+    nickname;
+  const accountHeading = useRef<HTMLHeadingElement>(null),
+    secretField = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (account) accountHeading.current?.focus();
+  }, [account]);
   const accountKind =
     pending?.kind === 'credential.issue'
       ? pending.body.kind === 'enrollment'
         ? 'human'
         : 'agent'
       : (selected?.kind ?? kind);
-  const accounts = useAdministrationPage<AdministrativeAccountView>('accounts', context.self);
   const [lookup, setLookup] = useState(''),
-    [lookupBusy, setLookupBusy] = useState(false);
+    [lookupBusy, setLookupBusy] = useState(false),
+    [lookupError, setLookupError] = useState('');
   const [found, setFound] = useState<{
     person: AdministrativeAccountView;
     generation: number | undefined;
@@ -65,7 +76,7 @@ export function Admission({ context }: { context: Context }) {
     if (lookupBusy) return;
     const sequence = ++lookupSequence.value;
     setLookupBusy(true);
-    setError('');
+    setLookupError('');
     try {
       const result = await authority.readAuthorized<AdministrativeAccountView>(
         '/api/v1/identity/accounts/lookup',
@@ -79,7 +90,7 @@ export function Admission({ context }: { context: Context }) {
       if (sequence === lookupSequence.value && authority.current(result.generation))
         setFound({ person: result.value, generation: result.generation });
     } catch (failure) {
-      if (sequence === lookupSequence.value) setError((failure as Error).message);
+      if (sequence === lookupSequence.value) setLookupError((failure as Error).message);
     } finally {
       if (sequence === lookupSequence.value) setLookupBusy(false);
     }
@@ -129,6 +140,7 @@ export function Admission({ context }: { context: Context }) {
           };
     let record: Intent | undefined;
     setBusy(true);
+    if (action === 'credential.issue' && !pending) setLostCredential(undefined);
     try {
       record = await update(async (current) => {
         const draft = current ?? context.store.create('admission', action, path, body);
@@ -154,6 +166,7 @@ export function Admission({ context }: { context: Context }) {
         )
           throw new Error('The credential response could not be bound to its issuing account.');
         setAccount(result.participant_id);
+        setAccountCreated(record.kind === 'account.create');
         // Recovery keeps the credential kind from the immutable command, even
         // after a protected account selection loses its lease.
         setKind(record.body.kind === 'enrollment' ? 'human' : String(record.body.kind));
@@ -172,12 +185,14 @@ export function Admission({ context }: { context: Context }) {
               kind: String(record.body.kind),
               nickname: targetNickname || result.participant_id,
             });
-          else
-            setError(
-              `The credential was issued, but its secret cannot be replayed. Revoke ${result.credential_id} and issue a replacement on this same account.`,
-            );
+          else setLostCredential(result.credential_id);
         }
-      } else setError('This account operation remains unconfirmed.');
+      } else
+        setError(
+          record.kind === 'credential.issue'
+            ? 'Credential issuance remains unconfirmed.'
+            : 'Account creation remains unconfirmed.',
+        );
     } catch (failure) {
       if (record && !check && isDefinitiveRejection(failure, wasUncertain)) {
         const rejected = { ...record, state: 'rejected' as const };
@@ -188,7 +203,11 @@ export function Admission({ context }: { context: Context }) {
           return;
         }
       }
-      setError((failure as Error).message);
+      setError(
+        record?.kind === 'credential.issue' && failure instanceof TypeError
+          ? 'Credential issuance could not be confirmed. Check its status or retry the same request.'
+          : (failure as Error).message,
+      );
     } finally {
       setBusy(false);
     }
@@ -196,7 +215,10 @@ export function Admission({ context }: { context: Context }) {
   return (
     <section className="card admin-card">
       <h2>Admit a participant</h2>
-      <ErrorText error={error} />
+      <p>
+        Create an account, then provide its access separately. Returning? Find it by nickname in
+        Participant accounts below.
+      </p>
       <SeparateDraft
         record={pending}
         review={() =>
@@ -228,20 +250,32 @@ export function Admission({ context }: { context: Context }) {
             {issued.nickname} — shown once
           </strong>
           <p>
-            Deliver through an approved private channel. It is not saved in browser recovery
-            records.
+            Issuance is complete. Copy this one-time{' '}
+            {issued.kind === 'agent' ? 'credential' : 'ticket'} and deliver it through an approved
+            private channel. Closing this step hides it permanently. It is not saved in browser
+            recovery records.
           </p>
           <p>
             Account: <code>{issued.participant_id}</code> · Credential:{' '}
             <code>{issued.credential_id}</code>
           </p>
-          <textarea aria-label="Issued secret" readOnly value={issued.secret} />
+          <textarea ref={secretField} aria-label="Issued secret" readOnly value={issued.secret} />
+          <button
+            onClick={() => {
+              secretField.current?.focus();
+              secretField.current?.select();
+            }}
+          >
+            Select {issued.kind === 'agent' ? 'credential' : 'ticket'} to copy
+          </button>
           <button
             onClick={() => {
               setIssued(undefined);
               setAccount(undefined);
               setSelection(undefined);
               setNickname('');
+              setLostCredential(undefined);
+              setAccountCreated(false);
             }}
           >
             Done
@@ -249,6 +283,12 @@ export function Admission({ context }: { context: Context }) {
         </div>
       ) : (
         <>
+          {account && (
+            <h3 ref={accountHeading} tabIndex={-1}>
+              {displayNickname ? `Managing @${displayNickname}` : 'Managing participant access'}
+            </h3>
+          )}
+          <ErrorText error={error} />
           <label>
             Nickname
             <input
@@ -274,6 +314,13 @@ export function Admission({ context }: { context: Context }) {
               <option value="human">Human</option>
             </select>
           </label>
+          {pending?.state === 'uncertain' && (
+            <p role="status">
+              {pending.kind === 'credential.issue'
+                ? 'Credential issuance is unconfirmed. Check this request before issuing another credential. Retrying sends the same request; a previously issued secret cannot be shown again.'
+                : 'Account creation is unconfirmed. Check this request or retry it before creating another account.'}
+            </p>
+          )}
           {pending?.state === 'rejected' ? (
             <div className="notice">
               <p>The account operation was rejected. Your draft is preserved.</p>
@@ -289,16 +336,67 @@ export function Admission({ context }: { context: Context }) {
             </button>
           ) : (
             <>
-              <p>
-                Account created: <code>{account}</code>
-              </p>
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() => void operate('credential.issue')}
-              >
-                Issue {accountKind === 'agent' ? 'agent credential' : 'enrollment ticket'}
-              </button>
+              {accountCreated && pending?.kind !== 'credential.issue' && (
+                <div className="notice neutral" role="status">
+                  <p>Account created for @{displayNickname}.</p>
+                  <p>
+                    Access has not been issued yet. Issue{' '}
+                    {accountKind === 'agent' ? 'an agent credential' : 'an enrollment ticket'} next.
+                  </p>
+                </div>
+              )}
+              {lostCredential && (
+                <div className="notice" role="status">
+                  <strong>Credential issued — secret unavailable</strong>
+                  <p>
+                    The request succeeded. Revoke the credential identified below, then issue a new
+                    one for this same participant. Its account and history stay the same.
+                  </p>
+                  <p>
+                    Credential: <code>{lostCredential}</code>
+                  </p>
+                </div>
+              )}
+              <details>
+                <summary>Account details</summary>
+                <p>
+                  Account ID: <code>{account}</code>
+                </p>
+              </details>
+              {accountKind === 'agent' && !accountCreated && (
+                <p>
+                  Lost an agent credential? Revoke the lost credential below, then issue a new agent
+                  credential for this same participant. Its account and history stay the same.
+                  One-time secrets cannot be retrieved.
+                </p>
+              )}
+              <div className="actions">
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={() => void operate('credential.issue')}
+                >
+                  {pending?.kind === 'credential.issue' && accountKind === 'agent'
+                    ? busy
+                      ? 'Issuing credential…'
+                      : 'Retry same credential issuance'
+                    : `Issue ${accountKind === 'agent' ? 'agent credential' : 'enrollment ticket'}`}
+                </button>
+                {!pending && (
+                  <button
+                    onClick={() => {
+                      setAccount(undefined);
+                      setSelection(undefined);
+                      setNickname('');
+                      setAccountCreated(false);
+                      setLostCredential(undefined);
+                      setError('');
+                    }}
+                  >
+                    Back to admission
+                  </button>
+                )}
+              </div>
             </>
           )}
           {pending?.state === 'uncertain' && (
@@ -308,7 +406,9 @@ export function Admission({ context }: { context: Context }) {
                 void operate(pending.kind as 'account.create' | 'credential.issue', true)
               }
             >
-              Check account operation
+              {pending.kind === 'credential.issue' && accountKind === 'agent'
+                ? 'Check credential issuance'
+                : 'Check account operation'}
             </button>
           )}
         </>
@@ -321,6 +421,7 @@ export function Admission({ context }: { context: Context }) {
             void findAccount();
           }}
         >
+          <ErrorText error={lookupError} />
           <label>
             Exact account ID or nickname
             <input
@@ -331,6 +432,7 @@ export function Admission({ context }: { context: Context }) {
                 lookupSequence.value++;
                 setFound(undefined);
                 setLookupBusy(false);
+                setLookupError('');
               }}
             />
           </label>
@@ -354,6 +456,9 @@ export function Admission({ context }: { context: Context }) {
               disabled={busy || !!pending || !!issued}
               onClick={() => {
                 setAccount(undefined);
+                setAccountCreated(false);
+                setLostCredential(undefined);
+                setError('');
                 setSelection({
                   ...person,
                   generation:
@@ -389,12 +494,27 @@ export function Admission({ context }: { context: Context }) {
           </div>
         ))}
       </details>
-      {account && <CredentialList key={account} participantId={account} context={context} />}
+      {account && (
+        <CredentialList
+          key={account}
+          participantId={account}
+          nickname={displayNickname}
+          context={context}
+        />
+      )}
     </section>
   );
 }
 
-function CredentialList({ participantId, context }: { participantId: string; context: Context }) {
+function CredentialList({
+  participantId,
+  nickname,
+  context,
+}: {
+  participantId: string;
+  nickname: string;
+  context: Context;
+}) {
   const page = useAdministrationPage<AdministrativeCredentialView>(
       'credentials',
       context.self,
@@ -404,6 +524,9 @@ function CredentialList({ participantId, context }: { participantId: string; con
   return (
     <details className="section">
       <summary>Credentials for this account</summary>
+      <h3>
+        {nickname ? `Credentials for @${nickname}` : 'Credentials for the selected participant'}
+      </h3>
       <AdministrationPageControls page={page} name="credentials" />
       <ErrorText error={failure} />
       {page.data?.items.map((credential) => (

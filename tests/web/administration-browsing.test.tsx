@@ -58,6 +58,43 @@ test('account selection keys credential pages; late previous-account data and ob
  const input=screen.getByLabelText('Exact account ID or nickname');await act(async()=>fireEvent.change(input,{target:{value:'old_account'}}));await act(async()=>fireEvent.submit(input.closest('form')!));const lookup=f.calls.at(-1)!;
  await act(async()=>fireEvent.change(input,{target:{value:'new_account'}}));await act(async()=>lookup.finish(Response.json(person('Stale lookup'))));assert.equal(!!screen.queryByText(/Stale lookup/),false);
 });
+test('admission names the created participant and separates account creation from access',async t=>{
+ const f=await fixture(t);await f.initial([]);
+ await act(async()=>fireEvent.change(screen.getByLabelText('Nickname',{exact:true}),{target:{value:'review_agent'}}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Create account'})));
+ const request=f.calls.find(c=>c.path==='/api/v1/identity/accounts')!;assert.ok(request);
+ await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:randomUUID()})));
+ assert.ok(screen.queryByText('Account created for @review_agent.'));
+ assert.ok(screen.queryByText('Access has not been issued yet. Issue an agent credential next.'));
+ assert.ok(screen.queryByRole('button',{name:'Issue agent credential'}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ assert.ok(screen.queryByText(/Credential issuance is unconfirmed/));
+ assert.equal(!!screen.queryByText(/Access has not been issued yet/),false);
+ const issuance=f.calls.find(c=>c.path==='/api/v1/identity/credentials')!;
+ await act(async()=>issuance.finish(Response.json({error:{code:'service_unavailable',message:'Read unavailable'}},{status:503})));
+ assert.ok(screen.queryByRole('button',{name:'Retry same credential issuance'}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check credential issuance'})));
+ const status=f.calls.find(c=>c.path==='/api/v1/identity/reconcile')!;
+ assert.equal(status.body.idempotency_key,issuance.body.idempotency_key);
+ await act(async()=>status.finish(Response.json({operation_state:'committed',participant_id:issuance.body.participant_id,credential_id:randomUUID()})));
+ assert.ok(screen.queryByText('Credential issued — secret unavailable'));
+ assert.equal(!!screen.queryByLabelText('Issued secret'),false);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ assert.equal(!!screen.queryByText('Credential issued — secret unavailable'),false);
+});
+test('managing an existing participant names it without claiming creation and explains lost agent access',async t=>{
+ const f=await fixture(t),a=person('review_agent');await f.initial([a]);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+ assert.ok(screen.queryByRole('heading',{name:'Managing @review_agent'}));
+ assert.equal(!!screen.queryByText(/Account created/),false);
+ assert.ok(screen.queryByText(/Revoke the lost credential below, then issue a new agent credential for this same participant/));
+ const input=screen.getByLabelText('Exact account ID or nickname');
+ await act(async()=>fireEvent.change(input,{target:{value:'missing_agent'}}));
+ await act(async()=>fireEvent.submit(input.closest('form')!));
+ await act(async()=>f.calls.at(-1)!.finish(Response.json({error:{code:'unavailable',message:'Account not found'}},{status:404})));
+ assert.ok(screen.queryByRole('heading',{name:'Managing @review_agent'}));
+ assert.ok(input.closest('form')!.querySelector('[role="alert"]'));
+});
 for(const departure of ['role','identity','route'] as const)test(`pending account, lookup, credential and audit pages cannot restore metadata after ${departure} departure`,async t=>{
  const f=await fixture(t),a=person('Protected account');await f.initial([a]);
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));

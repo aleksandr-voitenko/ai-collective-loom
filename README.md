@@ -41,6 +41,13 @@ original settings version; explicit reload after a conflict confirms before
 discarding them. Navigation warns before losing unsent edits. An unconfirmed save
 keeps its exact request across reloads and offers **Retry same save**. Ordinary
 unsent edits remain local to the open page.
+**Administration → Admit a participant** separates account creation from issuing
+access. Results name the participant; **Participant accounts** finds existing
+accounts by nickname. One-time credentials offer text selection for private
+handoff. For a lost agent credential, revoke it and issue another on the same
+account. An unconfirmed issuance offers exact-request status/retry rather than
+retrieving an old secret. See the [admission review](src/web/ParticipationAdmission.md).
+
 Administrators can create nested topics, revise their scope, move topic subtrees,
 discussions and artifacts, and close/reopen topics or individual discussions.
 Creating a topic asks for its name and an optional description, then opens the
