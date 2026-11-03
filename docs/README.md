@@ -22,6 +22,7 @@
 | [Topic organization decision](adr/020-topic-organization.md) | Authoritative parentage, metadata history, versioned moves/closure and common event ordering. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; reading remains independent. |
 | [Owner-private notes decision](adr/033-owner-private-notes.md) | Dedicated private CRUD/search, terminal deletion fences, independent source authority and bounded recovery. |
+| [Independent VPS staging](adr/042-independent-vps-staging.md) | Separate fixed-origin HTTPS deployment, ordinary participant admission, immutable releases and quarantined cold recovery for non-sensitive staging. |
 | [Persistent local pilot](adr/041-persistent-local-pilot.md) | Explicit private installation, stable HTTPS, immutable runtime and isolated encrypted recovery for non-sensitive local evaluation. |
 | [Isolated cold recovery](adr/034-isolated-cold-recovery.md) | Coordinated encrypted synthetic capture, whole native state, fresh quarantined restore and independent HTTPS/browser verification; production cutover remains gated. |
 | [Private reading decision](adr/026-private-reading-progress.md) | Exact read/unread state, deliberate ordering fence, automatic presentation policy and finite retention. |
@@ -48,7 +49,7 @@ and local development choices do not authorize changing the product's behavior.
 The imported architecture files are unchanged snapshots. Later discussion clarified
 that **S3-compatible managed storage with required native-version operations is the
 constraint, not mandatory Amazon hosting**. The local profile uses SeaweedFS only
-for development and ADR-041’s explicitly acknowledged local pilot. The installed repository Lore v24 instructions take precedence
+for development, ADR-041’s explicitly acknowledged local pilot and ADR-042’s independent non-sensitive staging. The installed repository Lore v24 instructions take precedence
 over the architecture's older statement that the method is not yet installed.
 No general architecture approval or resolution of other open policies is implied.
 
@@ -57,7 +58,7 @@ bytes, principal mapping sets, sibling links and illustrative JSON syntax. It do
 not validate implementation semantics. An intentional product or architecture
 amendment requires review and an explicit manifest update, not disabling checks.
 
-Implementation ADRs describe the synthetic release and bounded retained local pilot. Setup and coverage
+Implementation ADRs describe the synthetic release, bounded retained local pilot and separate VPS staging. Setup and coverage
 commands live in the [root README](../README.md). The browser/API guide is generated
 from the release contracts; tests and Lore commits retain verification context.
 Do not recreate `docs/development` or a replacement development folder. Keep

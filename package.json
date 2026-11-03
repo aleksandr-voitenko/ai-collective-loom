@@ -65,6 +65,8 @@
     "test:recovery:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/recovery.test.ts",
     "coverage:ci": "node scripts/coverage-ci.mjs",
     "test:operations:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/operations*.test.ts",
+    "staging": "node scripts/staging.mjs",
+    "test:staging:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/staging.test.ts",
     "pilot": "node scripts/pilot.mjs",
     "test:pilot:postgres": "node scripts/check-runtime.mjs && node --import tsx --test tests/integration/pilot.test.ts"
   },

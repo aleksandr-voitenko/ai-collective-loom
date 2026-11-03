@@ -49,8 +49,15 @@ settings_version > 0: that observation cannot settle the original command. Succe
 confirmation reveals the current workspace route. Corrected drafts retain the existing
 `/loom/admin?intent=...` recovery link; no automatic POST or new key is introduced.
 `ParticipationAdministration.tsx` owns post-setup management only. Additive server
-installation_mode distinguishes Local pilot from Synthetic preview; the legacy
-synthetic protocol profile and finite policies remain unchanged. `ParticipationRoutes.tsx` selects page components
+installation_mode distinguishes Local pilot, Synthetic preview and Staging test
+(ADR-042); staging has its own runtime/profile and preserves the same finite policies.
+Staging HTML alone includes a public deployment meta marker, so anonymous sign-in
+and landing identify staging before protected community discovery. Status uses the
+existing public runtime stage.
+`installation.ts` reads that presentation signal; it grants no authentication or
+authority and adds no discovery requests. Pilot/preview HTML and request flows stay
+unchanged. The legacy synthetic protocol profile and finite policies remain unchanged.
+`ParticipationRoutes.tsx` selects page components
 and supplies fallback authorization boundaries; individual topic, discussion and
 resource pages retain their existing source boundaries. The Changes route excludes
 query edits from its provider key so persistent controls keep their lifetime.

@@ -9,6 +9,8 @@ content and exact files across stops and container replacement. Start with
 created by the tests. Production, sensitive data and autonomous agent execution
 remain outside this mode.
 
+**VPS staging:** an independent, invitation-only non-sensitive deployment is available; see [Independent VPS staging](#independent-vps-staging). Local pilot and preview remain separate.
+
 **Current state:** a working participation implementation, available through the
 disposable synthetic preview or explicitly configured retained local pilot. Administrators initialize a community and admit human
 and agent accounts. A React browser and direct HTTPS clients share discussion,
@@ -1110,6 +1112,326 @@ certificate exceptions and virtual authenticators are fixtures, not evidence of
 manual trust installation, physical passkeys or host reboot/sleep behavior. Linux CI
 retains the normal inventory and gates; local results do not claim an unexecuted
 Linux run or another platform.
+
+## Independent VPS staging
+
+This is a separate, opt-in **invitation-only staging/test installation** for a small
+collective using public, synthetic or non-sensitive material. Acknowledgement
+`vps-staging-1` accepts the existing finite identity, publication, request, file and
+worker policies as trial limits. This is not production or sensitive-data approval.
+`npm run pilot -- ...`, the disposable preview, normal development and their
+localhost protections remain separate. Staging never selects their directories,
+volumes, credentials or recovery histories. Do not import a personal pilot.
+Public landing, status and sign-in pages identify staging before enrollment;
+participants continue to use ordinary admitted accounts and passkeys.
+
+The staging controller runs **on the VPS**, against its local Docker socket. It
+never SSHes, edits DNS, installs host services, changes firewall/trust settings or
+deploys automatically. The following commands are for an operator to execute only
+after reviewing the implementation and separately authorizing a concrete VPS.
+Public examples use the reserved hostname `loom-staging.example.com`. Supply the
+operator’s actual hostname privately at initialization; the RP ID is derived from
+that exact origin. Keep real hostnames, SSH details and key paths in a private
+operator handoff outside Git and public artifacts. The origin is immutable; a
+conflict or certificate failure never chooses a different port, hostname or plaintext endpoint.
+
+### Fresh Ubuntu LTS host and operator
+
+Use a fresh Ubuntu **24.04 LTS** VPS and a non-root SSH-key operator. A provisional
+starting size is 2 vCPU, 4 GiB RAM and 40 GiB SSD; measure actual memory, disk growth,
+IO, backup duration and worker backlog before increasing the test population.
+There is one retained staging installation per VPS. A trusted host/Docker operator
+can read its secrets; Docker-group membership is effectively host-root authority.
+
+1. In the provider console create `loomop` with a locked password, a private home,
+   and `~loomop/.ssh` mode 0700. Install the public key from
+   `/ABSOLUTE/PRIVATE/operator-key.pub` into that account's `authorized_keys`
+   (mode 0600, owned by `loomop`). This is an **SSH public key**, not a backup key.
+   Keep the private counterpart on the operator's machine. Verify the SSH host key
+   through the provider console before connecting. Do not commit either SSH key.
+2. Restrict inbound SSH TCP22 to the operator's known source IP in the provider
+   firewall/security group. Permit public TCP80 and TCP443 only. No UDP443 is
+   required. Keep all database, S3, admin, fixture and debugger ports closed.
+   Docker publishing can bypass UFW: enforce the provider firewall and inspect
+   Docker rules/listeners; UFW alone is not this deployment's ingress boundary.
+3. Install supported Docker Engine and the Compose plugin from Docker's signed
+   Ubuntu repository. In the console or existing administrator session:
+
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y ca-certificates curl git gnupg openssl python3 xz-utils ripgrep
+   sudo install -m 0755 -d /etc/apt/keyrings
+   sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+   sudo chmod a+r /etc/apt/keyrings/docker.asc
+   . /etc/os-release
+   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" | sudo tee /etc/apt/sources.list.d/docker.list
+   sudo apt-get update
+   sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+   sudo usermod -aG docker loomop
+   ```
+
+   Reconnect as `loomop`. Record `docker version` and `docker compose version` for
+   the deployment record. See [Docker's Ubuntu installation instructions](https://docs.docker.com/engine/install/ubuntu/)
+   and [Docker firewall behavior](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
+   Never expose the Docker daemon remotely. Do not run Loom as root.
+4. Point the actual domain's A record at the VPS IPv4 address. Add AAAA only when
+   IPv6 routing and ingress are available and init explicitly uses `--ipv6 enabled`.
+   That immutable option publishes TCP80/443 on IPv6 as well as IPv4; check both
+   families with ordinary TLS verification after start. Omit AAAA for IPv4-only
+   installations. Remove stale records rather than letting some clients reach a
+   different host. Wait for DNS
+   propagation. This task has not made those changes.
+5. As `loomop`, install Node **24.19.0** privately and check its official checksum:
+
+   ```bash
+   umask 077
+   mkdir -p "$HOME/setup" "$HOME/.local" "$HOME/loom-private"
+   chmod 700 "$HOME/loom-private"
+   cd "$HOME/setup"
+   case "$(uname -m)" in x86_64) node_arch=x64;; aarch64) node_arch=arm64;; *) exit 1;; esac
+   curl -fsSLO "https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-$node_arch.tar.xz"
+   curl -fsSLO https://nodejs.org/dist/v24.19.0/SHASUMS256.txt
+   rg " node-v24.19.0-linux-$node_arch.tar.xz$" SHASUMS256.txt | sha256sum -c -
+   tar -xJf "node-v24.19.0-linux-$node_arch.tar.xz" -C "$HOME/.local"
+   export PATH="$HOME/.local/node-v24.19.0-linux-$node_arch/bin:$PATH"
+   node --version
+   ```
+
+   Persist the exact PATH in the operator's shell.
+   Clone this repository, select the reviewed release commit (do not deploy a moving
+   branch), then run `npm ci --ignore-scripts --no-audit --no-fund`, `npm run check`
+   and `npm run staging -- doctor`. Install Chromium only if running browser tests
+   on that host. `npm run app:build` must match the current source before init/upgrade.
+
+### Initialize, obtain HTTPS and admit participants
+
+All private instance and backup paths must be absolute, outside git and outside
+shared temporary directories. Their parent must exist and be owner-controlled.
+Do not use `.env.local`. Init generates independent database roles/passwords,
+provider credentials, private buckets, offline bootstrap/recovery proofs, release
+custody and labels. No passwords or deployment proofs belong in command arguments.
+
+```bash
+umask 077
+staging_path="$HOME/loom-private/staging"
+npm run staging -- init --instance "$staging_path" --origin https://loom-staging.example.com --nickname staging_admin --acknowledge vps-staging-1
+npm run staging -- start --instance "$staging_path"
+npm run staging -- status --instance "$staging_path"
+curl --fail --show-error https://loom-staging.example.com/health/ready
+```
+
+The default private subnet is `172.30.42.0/24`. If it overlaps another network,
+choose a free RFC1918 `/24` explicitly with `init --subnet 172.30.44.0/24` **before**
+initialization. A later conflict refuses; the controller never renumbers a community.
+The proxy is the fixed `.2` peer, API `.3`, PostgreSQL `.4`, SeaweedFS `.5`, with
+workers on other fixed addresses. The backend network is internal. Only Caddy
+joins an additional egress bridge and publishes TCP80/443. Add `--ipv6 enabled`
+to init when the domain advertises an AAAA record. Quarantine remains loopback-only.
+All retained volumes are external to Compose: normal start/recreate cannot fabricate missing storage.
+There is no Docker socket, maintenance mount, S3 admin URL or fixture port in the
+public app. Private networking does not authenticate a participant.
+
+Caddy **2.11.2** is pinned by immutable multi-platform digest, as are the existing
+PostgreSQL18.4, SeaweedFS4.48 and Node24.19.0 images. The selected application uses
+an immutable image ID plus private source/build/dependency/migration hashes; the
+checkout's `dist` is never mounted into running containers. Retain the release image
+with `docker image save --output /ABSOLUTE/PRIVATE/staging-release.tar IMAGE_ID`
+using the exact image from `status`. Keep that file private and available on the
+same platform for recovery. Do not prune retained images or volumes.
+
+Caddy obtains and renews a publicly trusted certificate for the **actual DNS
+hostname**, using its private retained `proxy-data` volume. TCP80 is available for
+ACME validation and HTTP-to-HTTPS redirects. Certificate/renewal errors are visible
+through `logs --service proxy`, status and independent HTTPS probes; no ignored
+validation or plaintext fallback exists. No access log is enabled. See
+[Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https). The fixed
+Host, Origin, raw proxy peer and forwarded-header envelope are checked; incoming
+forwarded headers are refused. Do not place a CDN or second proxy in front without
+a separate reviewed trust design. Cookies remain Secure/HttpOnly/SameSite=Strict,
+CSRF checks and WebAuthn use the exact HTTPS origin/RP. Files transfer through the
+authenticated app with exact native versions and integrity checks, never public S3.
+
+Init writes the offline, one-time administrator ticket to
+`$staging_path/enrollment/enrollment.json` (owner-readable0600); runtime API/workers
+cannot read deployment proofs. Read it privately, open `https://loom-staging.example.com/loom`, choose
+**Set up an admitted account**, supply the ticket and create a passkey, then sign in
+normally. Complete community setup. New staging enrollment and recovery tickets last
+**four hours**. The private JSON includes database-issued UTC `issuedAt` and
+`expiresAt` timestamps alongside `ticket`, `administratorId` and `credentialId`.
+An abandoned or unavailable browser passkey ceremony does not consume the ticket;
+successful binding consumes it. The five-minute WebAuthn challenge lifetime is
+separate from the ticket lifetime. An expired,
+lost or uncertain handoff requires the explicit audited offline
+`recover-administrator --confirm-instance INSTANCE_ID` operation; it preserves the
+administrator identity and redemption revokes old passkeys/sessions. Never expose
+an enrollment endpoint or replace this path with an administrator password.
+
+Run recovery from the reviewed checkout on the VPS:
+
+```bash
+npm run staging -- recover-administrator --instance "$staging_path" --confirm-instance INSTANCE_ID
+```
+
+Read the **new private enrollment path printed by recovery**; the original
+`enrollment/enrollment.json` is not overwritten. Copy only the `ticket` value into
+**Set up an admitted account → Create passkey**, then use **Sign in with passkey**.
+Ticket expiry is enforced by the database; editing the JSON cannot extend it.
+Existing tickets keep their original expiry. Older immutable releases still issue
+one-hour tickets without these metadata fields: upgrade before issuing a four-hour
+replacement. Pilot and synthetic-preview enrollment lifetimes remain one hour.
+
+In Administration create a **dedicated human participant** with role participant
+and issue its ordinary one-time enrollment ticket. Verify the intended tester,
+hand the ticket over through an approved private channel, and have that person
+create their own passkey at the real origin. Separately create an ordinary agent
+participant/credential for API review, also without administrator role. Use the
+normal account/credential audit and resource permissions. Keep enrollment tickets,
+agent secrets and browser sessions out of authored Loom material, screenshots,
+issues and review reports. Revoke the agent credential and suspend/revoke the test
+human's credentials when review ends; audit those ordinary administration actions.
+
+For ChatGPT Work, first open the staging URL in its browser with no host/VPS access.
+Use **user-assisted sign-in/takeover**: the human controls passkey enrollment or
+sign-in in that browser, returns control only after the dedicated participant is
+signed in, and the reviewer confirms its participant role. Do not assume the
+operator's physical Mac passkey is available to a cloud browser. If ordinary
+assisted login is incompatible, record the exact browser/device failure and stop
+that trial; a staging-only alternative requires a **separate approved review**.
+There is no permanent testing backdoor, cookie export or database access handoff.
+Web-interface UX tests require this browser session; an agent API credential does
+not sign a human account into the browser. The initial administrator is a human
+passkey account. Keep a dedicated browser test account and its revocation separate
+from ordinary agent API access, even for a one-off test.
+
+### Daily lifecycle, upgrade and cold recovery
+
+```bash
+npm run staging -- doctor --instance "$staging_path"
+npm run staging -- status --instance "$staging_path"
+npm run staging -- logs --instance "$staging_path" --service proxy
+npm run staging -- logs --instance "$staging_path" --service api
+npm run staging -- worker-stop --instance "$staging_path" --service search
+npm run staging -- worker-start --instance "$staging_path" --service search
+npm run staging -- stop --instance "$staging_path"
+npm run staging -- start --instance "$staging_path"
+npm run staging -- restart --instance "$staging_path"
+npm run staging -- recreate --instance "$staging_path"
+```
+
+Worker names are `search`, `notifications` and `file-text`. Logs return at most100
+fixed sanitized events, never raw provider/SQL/Caddy error bodies. Status separates
+TLS/API availability from container state; use authenticated **Administration →
+Operational health** for qualified processing observations and bounded failures.
+No running state proves completeness. Check disk, certificate expiry, backup
+age and worker progress as part of the operator's manual monitoring. Ordinary
+commands have no volume deletion, global prune or reseed. Missing custody/volumes,
+changed ownership, schema or release mismatch fail closed. SSH logout leaves
+containers running. Containers use explicit lifecycle (no restart loop); after a
+VPS/Docker restart inspect `doctor`/`status` and start deliberately.
+
+Commands serialize with a private lifecycle lock and a labeled maintenance slot.
+After an interrupted controller inspect that slot and `status`; `recover-lock`
+only releases a provably dead controller, never declares an ambiguous operation
+complete. `recover-initialization --confirm-instance INSTANCE_ID` can finish
+complete existing initialization material; it does not fabricate missing custody.
+Retained installations have no destructive command. `destroy-test` accepts only
+an exact acceptance owner/instance plus the separate `delete-acceptance-data`
+confirmation; it cannot select a retained staging installation or localhost pilot.
+
+Use a deliberate maintenance window for upgrades and backups. Generate an independent
+random encryption key outside both instance and backup directories:
+
+```bash
+umask 077
+openssl rand -base64 48 > /ABSOLUTE/PRIVATE/SEPARATE/backup.key
+npm run staging -- backup --instance "$staging_path" --backup /ABSOLUTE/PRIVATE/snapshot --key-file /ABSOLUTE/PRIVATE/SEPARATE/backup.key
+npm run staging -- inspect --instance "$staging_path" --backup /ABSOLUTE/PRIVATE/snapshot --key-file /ABSOLUTE/PRIVATE/SEPARATE/backup.key
+```
+
+Store the key independently/off-host with restricted access. A verified capture
+stops/drains API/transfers and all workers, refuses foreign DB/volume activity,
+inventories every table and exact native version, cleanly stops both providers and
+checks PostgreSQL control state before encrypted native capture. The private config
+component also protects proxy ACME state. Existing1GiB archive/ciphertext and16MiB
+configuration bounds remain; capture refuses if exceeded. Completion is written
+last after independent decrypt/hash/archive admission. **The source stays stopped**;
+restart explicitly only when maintenance is complete. The instance directory alone
+is not a backup. No scheduled/hourly backup or automatic failover is provided.
+
+Before capture, independently record expected authenticated reads using the existing
+witness format with `format: "loom-staging-witness-1"` and entries containing `path`,
+`credential_file`, `expected_status`, and optional read-only query/status `body`:
+
+```bash
+npm run staging -- witness --instance "$staging_path" --requests /ABSOLUTE/PRIVATE/witness-requests.json --output /ABSOLUTE/PRIVATE/expectations.json
+npm run staging -- restore --instance "$staging_path" --backup /ABSOLUTE/PRIVATE/snapshot --key-file /ABSOLUTE/PRIVATE/SEPARATE/backup.key --destination "$HOME/loom-private/quarantine" --port 3445 --subnet 172.30.43.0/24
+npm run staging -- verify --instance "$HOME/loom-private/quarantine" --expectations /ABSOLUTE/PRIVATE/expectations.json
+```
+
+Expectations contain credentials and exact expected bodies; protect them like keys.
+Restore requires a new directory, different subnet, fresh labeled resources, exact
+release/platform and an unavailable source. It uses a fresh private quarantine CA,
+installation cookie namespace and a distinct `.invalid` origin bound only to
+loopback. Its verifier resolves that hostname **only within its own HTTPS client**
+and validates its CA; it never edits hosts or system trust. The original public
+origin, ACME identity and browser sessions are not adopted. Whole-table/native
+inventory equality precedes authenticated independent expectations and VERIFIED;
+failed verification stops the destination. Original narrow verifier accounting
+allowances remain. Workers resume only by an explicit start after verification.
+This validates a snapshot, not a live cutover. Snapshots can omit later revocations,
+deletions, publications, outcomes and private checkpoints; missing status remains
+uncertainty. An old binary is **not** data rollback. Live replacement/reconciliation,
+provider upgrades, production retention/erasure and cross-version restore are excluded.
+
+After selecting/building a reviewed candidate in the checkout, perform a backed-up
+additive upgrade with the exact instance ID from status:
+
+```bash
+npm run staging -- upgrade --instance "$staging_path" --confirm-instance INSTANCE_ID --backup /ABSOLUTE/PRIVATE/pre-upgrade --key-file /ABSOLUTE/PRIVATE/SEPARATE/backup.key
+npm run staging -- start --instance "$staging_path"
+```
+
+The candidate is frozen before cold capture. Provider/platform pins and the applied
+migration prefix must match; schema changes use the existing transactional runner.
+Interrupted `update.json` custody retains both releases and the backup. Use
+`resume-upgrade --confirm-instance INSTANCE_ID` only for that recorded transition;
+ambiguous migration/recovery leaves the source stopped. Never switch an older image
+against newer data and call it rollback.
+
+### Staging acceptance and evidence tiers
+
+`npm run test:staging:postgres` exercises the actual generated Compose deployment,
+compiled release, real PostgreSQL and pinned SeaweedFS with test-owned labels.
+`npm run test:e2e -- staging.spec.ts` adds ordinary non-admin Chromium enrollment,
+API/browser authorization, staging presentation and committed-response recovery.
+CI fixture DNS is scoped to the test client/browser; its private CA/key trust is
+**not evidence of a publicly trusted real certificate**. Normal regression and
+coverage commands include both suites; unchanged gates and source identity apply.
+
+After a separately authorized deployment, record these **manual, unexecuted here**
+evidence tiers with UTC time, release/image identity, client/browser/platform and
+sanitized outcomes (no credentials or private authored bodies):
+
+- **Live VPS, public read-only smoke:** from an independent machine resolve A/AAAA,
+  verify chain/hostname/expiry with normal system trust (`curl --fail --show-error
+  https://loom-staging.example.com/health/ready` and `openssl s_client -connect loom-staging.example.com:443 -servername
+  loom-staging.example.com -verify_hostname loom-staging.example.com -verify_return_error`); verify HTTP redirects to
+  this exact HTTPS origin, wrong Host/Origin/forwarded-header refusals, no public
+  DB/S3/admin ports, certificate renewal observability and non-destructive restart.
+  Do not use `-k`, ignored certificate errors or a fixture CA for this tier.
+- **Actual remote browser:** record user-assisted ordinary non-admin sign-in,
+  shared discussion create/read/revise, two file versions and exact historical
+  download, private state isolation, failed/uncertain request recovery, keyboard
+  interaction and a narrow viewport. Record physical/cloud passkey limitations
+  honestly. The operator then revokes the dedicated test identity.
+- **Independent client on another machine:** securely supply the separately
+  revocable non-admin agent credential, use normal TLS validation and the existing
+  `scripts/*-client.mjs` private journals, verify same-origin exact bytes, safe
+  retry, negative authorization and revocation. Record the distinct machine.
+  Local Docker, local Chromium and virtual WebAuthn alone do not qualify.
+
+No actual VPS deployment, public certificate, DNS change, remote browser takeover,
+cross-machine trial or production acceptance is claimed by this implementation.
 
 ## Retained-data limits
 

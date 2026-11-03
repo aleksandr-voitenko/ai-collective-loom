@@ -2,7 +2,7 @@ import { writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { run } from '../../scripts/lib/pilot-files.mjs';
-export function expiredLeaf(parent, tls) {
+export function expiredLeaf(parent, tls, hostname = 'localhost') {
   const root = join(parent, 'expired-' + randomUUID());
   mkdirSync(root, { mode: 0o700 });
   try {
@@ -20,13 +20,13 @@ export function expiredLeaf(parent, tls) {
       '-key',
       join(root, 'key'),
       '-subj',
-      '/CN=localhost',
+      '/CN=' + hostname,
       '-out',
       join(root, 'csr'),
     ]);
     writeFileSync(
       join(root, 'openssl.cnf'),
-      `[ca]\ndefault_ca=local\n[local]\ndir=${root}\ndatabase=$dir/index\nserial=$dir/serial\nnew_certs_dir=$dir\ncertificate=$dir/ca\nprivate_key=$dir/ca-key\ndefault_md=sha256\npolicy=names\n[names]\ncommonName=supplied\n[leaf]\nsubjectAltName=DNS:localhost\n`,
+      `[ca]\ndefault_ca=local\n[local]\ndir=${root}\ndatabase=$dir/index\nserial=$dir/serial\nnew_certs_dir=$dir\ncertificate=$dir/ca\nprivate_key=$dir/ca-key\ndefault_md=sha256\npolicy=names\n[names]\ncommonName=supplied\n[leaf]\nsubjectAltName=DNS:${hostname}\n`,
       { mode: 0o600 },
     );
     run('openssl', [

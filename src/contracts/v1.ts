@@ -14,7 +14,11 @@ export const RuntimeResponse = Type.Object(
   {
     name: Type.Literal('AI Collective Loom'),
     api_version: Type.Literal('v1'),
-    stage: Type.Union([Type.Literal('foundation'), Type.Literal('synthetic-participation')]),
+    stage: Type.Union([
+      Type.Literal('foundation'),
+      Type.Literal('synthetic-participation'),
+      Type.Literal('staging-participation'),
+    ]),
     capabilities: Type.Object(
       {
         participant_authentication: Type.Boolean(),

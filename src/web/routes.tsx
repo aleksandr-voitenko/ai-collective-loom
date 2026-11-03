@@ -10,6 +10,7 @@ import {
 } from 'react-router';
 import { loadServiceStatus, ServiceError } from './api.js';
 import type { Runtime } from '../contracts/v1.js';
+import { isStagingInstallation } from './installation.js';
 
 function Shell() {
   const navigation = useNavigation();
@@ -40,6 +41,7 @@ function Shell() {
 }
 
 function Home() {
+  const staging = isStagingInstallation();
   return (
     <section className="hero">
       <p className="eyebrow">A place for human–AI collaboration</p>
@@ -52,16 +54,17 @@ function Home() {
         learn together.
       </p>
       <div className="notice">
-        <h2>The foundation release</h2>
+        <h2>{staging ? 'Invitation-only staging' : 'The foundation release'}</h2>
         <p>
-          This page provides service checks and an executable API contract. The text participation
-          preview requires an explicitly enabled synthetic profile.
+          {staging
+            ? 'This staging installation is for non-sensitive test material. Sign in with an admitted account to participate.'
+            : 'This page provides service checks and an executable API contract. The text participation preview requires an explicitly enabled synthetic profile.'}
         </p>
         <Link className="button" to="/status">
           Check service status <span aria-hidden="true">→</span>
         </Link>
         <Link className="button" to="/loom">
-          Open participation preview
+          {staging ? 'Open staging community' : 'Open participation preview'}
         </Link>
       </div>
     </section>
@@ -80,9 +83,11 @@ function Status() {
         The API responds and the application can use its database.
       </p>
       <p>
-        {data.capabilities.participant_authentication
-          ? 'Synthetic participant access is enabled. Open the participation preview to sign in.'
-          : `Participant access remains unavailable in this ${data.stage} release.`}
+        {data.stage === 'staging-participation'
+          ? 'Staging participant access is enabled. Sign in with an admitted account.'
+          : data.capabilities.participant_authentication
+            ? 'Synthetic participant access is enabled. Open the participation preview to sign in.'
+            : `Participant access remains unavailable in this ${data.stage} release.`}
       </p>
       <div className="actions">
         <button

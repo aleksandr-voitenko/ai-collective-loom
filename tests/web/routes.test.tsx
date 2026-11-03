@@ -97,3 +97,16 @@ test("browser API loading validates responses and preserves cancellation and saf
   t.mock.method(globalThis, "fetch", async () => { throw abort; });
   await assert.rejects(loadServiceStatus({ request: new Request("http://localhost/status", { signal: controller.signal }) }), { name: "AbortError" });
 });
+
+test('public staging landing and status pages identify ordinary admitted access', async t => {
+  const marker = document.createElement('meta');
+  marker.name = 'loom-deployment'; marker.content = 'staging'; document.head.append(marker);
+  t.after(() => marker.remove());
+  const router = createMemoryRouter(routesWithLoader(async () => ({...runtime, stage: 'staging-participation'})), {initialEntries: ['/']});
+  t.after(() => router.dispose());
+  render(<RouterProvider router={router}/>);
+  assert.ok(screen.getByRole('heading', {name: 'Invitation-only staging'}));
+  assert.ok(screen.getByRole('link', {name: 'Open staging community'}));
+  await act(async () => router.navigate('/status'));
+  assert.ok(screen.getByText('Staging participant access is enabled. Sign in with an admitted account.'));
+});

@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { passkey } from './participation-client.js';
 import { ErrorText } from './participation-ui.js';
 
-export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignIn({
+  onSignedIn,
+  staging = false,
+}: {
+  onSignedIn: () => void;
+  staging?: boolean;
+}) {
   const [ticket, setTicket] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
@@ -54,8 +60,9 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         </details>
       </div>
       <p className="fineprint">
-        This preview uses synthetic accounts and content while identity and recovery policies are
-        being evaluated.
+        {staging
+          ? 'Invitation-only staging for non-sensitive test material.'
+          : 'This preview uses synthetic accounts and content while identity and recovery policies are being evaluated.'}
       </p>
     </section>
   );

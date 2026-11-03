@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { readConfiguration, ConfigurationError } from './config.js';
+import { requireWorkerProfile } from './participation-profile.js';
 import { PostgresDatabase } from './db/postgres.js';
 import { FileStorage, type StorageConfiguration } from './modules/participation/file-storage.js';
 import { FileTextWorker } from './modules/search/file-worker.js';
@@ -14,7 +15,8 @@ process.once('SIGTERM', () => {
   stopping = true;
 });
 try {
-  if (process.env.LOOM_PARTICIPATION_PROFILE !== 'synthetic' || !process.env.LOOM_FILE_STORAGE)
+  requireWorkerProfile();
+  if (!process.env.LOOM_FILE_STORAGE)
     throw new ConfigurationError('The file worker requires isolated synthetic storage.');
   const args = process.argv.slice(2);
   if (args.length && !(args.length === 1 && args[0] === '--once'))

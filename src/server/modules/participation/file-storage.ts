@@ -48,6 +48,7 @@ export class FileError extends Error {
 }
 export type StorageConfiguration = {
   endpoint: string;
+  deployment?: 'staging';
   accessKeyId: string;
   secretAccessKey: string;
   stagingBucket: string;
@@ -74,11 +75,14 @@ export class FileStorage {
       endpoint.password ||
       endpoint.search ||
       endpoint.hash ||
-      !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname) ||
+      !(configuration.deployment === 'staging'
+        ? configuration.endpoint === 'http://s3:8333'
+        : configuration.deployment === undefined &&
+          ['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) ||
       configuration.stagingBucket === configuration.finalBucket
     )
       throw new Error(
-        'File storage requires distinct private synthetic buckets on a local endpoint.',
+        'File storage requires distinct private buckets on an admitted deployment endpoint.',
       );
     this.client = new S3Client({
       endpoint: configuration.endpoint,

@@ -1,10 +1,10 @@
-import Fastify, { LogController, type FastifyServerOptions } from 'fastify';
+import Fastify, { LogController, type FastifyServerOptions, type FastifyReply } from 'fastify';
 import swagger from '@fastify/swagger';
 import staticFiles from '@fastify/static';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Value } from '@sinclair/typebox/value';
 import { randomUUID } from 'node:crypto';
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   EmptyInput,
@@ -19,6 +19,7 @@ import type { DatabaseHealth } from '../db/postgres.js';
 import { classifyError, safeFailure } from './errors.js';
 import { registerParticipation, type ParticipationServices } from './participation.js';
 import { participationRateRoute } from './rate-policy.js';
+import { validateStagingProxy, stagingRequestAllowed, type StagingProxy } from './staging-proxy.js';
 
 export async function createApplication(options: {
   database: DatabaseHealth;
@@ -26,7 +27,9 @@ export async function createApplication(options: {
   logger?: FastifyServerOptions['logger'];
   participation?: ParticipationServices | undefined;
   tls?: { key: string; cert: string };
+  stagingProxy?: StagingProxy;
 }) {
+  if (options.stagingProxy) validateStagingProxy(options.stagingProxy);
   const app = Fastify({
     ...(options.tls ? { https: options.tls } : {}),
     logger: options.logger ?? true,
@@ -54,6 +57,9 @@ export async function createApplication(options: {
   });
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id).header('cache-control', 'no-store');
+    if (options.stagingProxy && !stagingRequestAllowed(request, options.stagingProxy)) {
+      return reply.code(400).send(safeFailure('invalid_request', request.id).body);
+    }
     reply
       .header('x-content-type-options', 'nosniff')
       .header('x-frame-options', 'DENY')
@@ -192,7 +198,10 @@ export async function createApplication(options: {
       options.participation
         ? {
             ...runtime,
-            stage: 'synthetic-participation' as const,
+            stage:
+              options.participation.installationMode === 'staging'
+                ? ('staging-participation' as const)
+                : ('synthetic-participation' as const),
             capabilities: {
               participant_authentication: true,
               participant_mutations: true,
@@ -225,18 +234,22 @@ export async function createApplication(options: {
     await access(join(options.browserRoot, 'index.html'));
     const browserRoot = options.browserRoot;
     await app.register(staticFiles, { root: join(browserRoot, 'assets'), prefix: '/assets/' });
-    app.get('/', { schema: { hide: true } }, async (_request, reply) =>
-      reply.sendFile('index.html', browserRoot),
-    );
-    app.get('/status', { schema: { hide: true } }, async (_request, reply) =>
-      reply.sendFile('index.html', browserRoot),
-    );
-    app.get('/loom', { schema: { hide: true } }, async (_request, reply) =>
-      reply.sendFile('index.html', browserRoot),
-    );
-    app.get('/loom/*', { schema: { hide: true } }, async (_request, reply) =>
-      reply.sendFile('index.html', browserRoot),
-    );
+    let stagingHtml: string | undefined;
+    if (options.participation?.installationMode === 'staging') {
+      const html = await readFile(join(browserRoot, 'index.html'), 'utf8');
+      if (!html.includes('</head>')) throw new Error('Staging browser document lacks a head.');
+      // Public presentation only; no identity, provider custody or authority is embedded.
+      stagingHtml = html.replace(
+        '</head>',
+        '<meta name="loom-deployment" content="staging"></head>',
+      );
+    }
+    const sendBrowser = (reply: FastifyReply) =>
+      stagingHtml === undefined
+        ? reply.sendFile('index.html', browserRoot)
+        : reply.type('text/html; charset=utf-8').send(stagingHtml);
+    for (const path of ['/', '/status', '/loom', '/loom/*'])
+      app.get(path, { schema: { hide: true } }, async (_request, reply) => sendBrowser(reply));
   }
   app.setNotFoundHandler((request, reply) => {
     const failure = safeFailure('not_found', request.id);

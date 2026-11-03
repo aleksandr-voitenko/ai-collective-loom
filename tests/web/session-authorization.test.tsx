@@ -29,6 +29,21 @@ const self:Self={participant_id:randomUUID(),credential_id:randomUUID(),nickname
 const browsingPage=(items:unknown[])=>({contract:'administration-pages-1',scope:{collection:'accounts',participant_id:null,order:'id',consistency:'restart-on-change'},items,next_cursor:null,complete:true,expires_at:'2090-01-01Z'});
 const denied=()=>Response.json({error:{code:'unauthenticated',message:'Sign in required.'}},{status:401});
 
+test('anonymous staging presentation uses only the server HTML marker and retains ordinary session discovery',async t=>{
+ const marker=document.createElement('meta');marker.name='loom-deployment';marker.content='staging';document.head.append(marker);t.after(()=>marker.remove());
+ const calls:string[]=[];
+ t.mock.method(globalThis,'fetch',async(path:string)=>{calls.push(path);return denied();});
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom']});t.after(()=>router.dispose());
+ await act(async()=>render(<StrictMode><RouterProvider router={router}/></StrictMode>));
+ assert.ok(screen.queryByText('Staging test',{exact:true}));
+ assert.ok(screen.queryByText('Invitation-only staging for non-sensitive test material.'));
+ assert.equal(screen.queryByText('Local evaluation',{exact:true}),null);
+ assert.equal(screen.queryByText(/This preview uses synthetic/),null);
+ assert.deepEqual(calls,['/api/v1/identity/self','/api/v1/identity/self']);
+ assert.ok(screen.queryByRole('button',{name:'Sign in with passkey'}));
+ assert.equal(screen.queryByRole('navigation',{name:'Community navigation'}),null);
+});
+
 test('the production shell settles anonymous discovery and retains a failed sign-in form across navigation',async t=>{
  const calls:{path:string;resolve:(r:Response)=>void}[]=[];
  t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(resolve=>calls.push({path,resolve})));

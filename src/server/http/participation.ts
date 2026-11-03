@@ -54,7 +54,7 @@ import { participationRecoveryPolicy } from './recovery-policy.js';
 
 export interface ParticipationServices {
   cookieNamespace?: string;
-  installationMode?: 'synthetic-preview' | 'local-pilot';
+  installationMode?: 'synthetic-preview' | 'local-pilot' | 'staging';
   database: Transactions;
   fileStorage?: FileStorage;
   authentication: IdentityAuthentication;

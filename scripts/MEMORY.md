@@ -142,3 +142,48 @@ migrations. `update.json` and both release copies retain interrupted selection c
 explicit resume can only select the recorded candidate. Old binaries are not rollback.
 Private `witness` output records caller-selected read expectations before backup; it
 contains credentials and must never enter source control or diagnostic artifacts.
+
+## Independent VPS staging (ADR-042; LC-20261103-0X9N)
+
+`staging.mjs`/`lib/staging*.mjs` own a distinct vps-staging-1 controller and
+org.loom.vps-staging namespace, never pilot/synthetic/dev selection. Only the
+immutable release builder's optional runtime-file list and existing native
+inventory/encrypted archive/verifier are shared. Their defaults and ownership
+admission remain unchanged. Generated private compose.json is the real topology;
+all volumes/networks are external and validated before start. An internal fixed
+RFC1918 bridge admits only the designated Caddy peer to the API; only Caddy has
+egress and public IPv4 TCP80/443. Explicit immutable init --ipv6 enabled adds
+IPv6 TCP80/443 for AAAA deployments; quarantine remains loopback-only.
+No public DB/S3/admin/test/socket listener.
+Caddy's pinned image owns real certificate issuance/renewal and retained ACME state.
+
+The runtime has a distinct acknowledged staging profile, origin/RP and presentation.
+FileStorage accepts exactly http://s3:8333 with explicit staging selection; unchanged
+local endpoints remain the default. API/workers see runtime custody only; offline
+ticket helpers retain the established one-time0600 inode handoff and identity audit.
+New staging enrollment/recovery tickets use a four-hour policy and include committed
+database issuedAt/expiresAt timestamps in their private handoff JSON. Existing ticket
+expiry is not extended. Recovery writes a new path; an older selected immutable
+release retains its old lifetime/file format. Pilot/preview remain one hour.
+Start/recreate never provision or replace missing storage, change origin or reseed.
+Native custody is recorded before migration/bootstrap; later root probes refuse
+empty persistence, including interrupted initialization.
+Upgrade requires unchanged provider/platform pins and migration prefix, cold backup
+and explicit selection; interrupted journals remain stopped until deliberate resume.
+
+Cold capture includes all PG/native versions and encrypted private proxy ACME state
+inside the bounded config component. Restore creates fresh private quarantine TLS,
+.invalid loopback origin, cookie namespace, subnet and resources; no live cutover.
+Scoped verifier DNS changes neither hosts nor system trust. Source unavailability,
+whole inventory equality and existing narrow request/observation allowances remain.
+Destroy-test requires exact acceptance kind/owner/identity and separate data-loss
+confirmation; retained staging has no delete operation. Logs expose fixed events
+only. README owns executable host setup, lifecycle, secure reviewer handoff and
+manual real-VPS/remote-browser evidence tiers. Public staging examples use reserved
+hostnames; concrete hostnames, SSH details and key paths stay in a private handoff
+outside Git and public artifacts.
+
+The proxy drops capabilities except NET_BIND_SERVICE and DAC_OVERRIDE; the latter
+lets root read independent-UID0600 configuration on native Linux. All host binds
+remain read-only and topology verifies the exact capability set. Never widen host
+file modes to solve the UID boundary.
