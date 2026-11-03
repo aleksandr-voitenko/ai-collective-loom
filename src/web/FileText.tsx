@@ -207,13 +207,7 @@ export function FileTextPage({
 }
 
 export function FileTextAdministration({ context }: { context: Context }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>File text processing administration</summary>
-      {open && <FileTextAdministrationControls context={context} />}
-    </details>
-  );
+  return <FileTextAdministrationControls context={context} />;
 }
 function FileTextAdministrationControls({ context }: { context: Context }) {
   const [after, setAfter] = useState(''),

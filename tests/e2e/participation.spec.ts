@@ -13,6 +13,7 @@ import type { syntheticServer } from "../helpers/participation-server.js";
 import { test, expect } from "../helpers/browser-fixtures.js";
 import { httpClient } from "../helpers/participation-http.js";
 import { admissionReview } from "../helpers/admission-review.js";
+import { adminNavigationReview } from '../helpers/admin-navigation-review.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
 async function authenticator(page: Page, context: BrowserContext) {
@@ -64,12 +65,17 @@ async function setup(page: Page) {
     .click();
   await expect(page.getByRole("heading", { name: "Topics", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Administration", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Community settings", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Community", exact: true })).toBeVisible();
+  await page.getByRole("link",{name:"Participants",exact:true}).click();
+}
+async function backToLoom(page:Page){
+ const back=page.getByRole('link',{name:/Back to Loom/});if(await back.isVisible())await back.click();
 }
 async function createDiscussion(
   page: Page,
   title = "Reading the actual context",
 ) {
+  await backToLoom(page);
   await page.getByRole("link", { name: "Topics", exact: true }).first().click();
   await page.getByRole("link").filter({ hasText: "General" }).first().click();
   await page.getByRole("button", { name: "Start a discussion" }).click();
@@ -688,6 +694,7 @@ test("overview uses ordinary artifact history/editors; text-artifact drafts surv
 }, testInfo) => {
   await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
+  await backToLoom(page);
   await page
     .getByRole("link", { name: /Research commons — Community overview/ })
     .first()
@@ -708,6 +715,7 @@ test("overview uses ordinary artifact history/editors; text-artifact drafts surv
   await expect(
     page.getByRole("link").filter({ hasText: "Revision 1" }),
   ).toBeVisible();
+  await backToLoom(page);
   await page.getByRole("link", { name: "Topics", exact: true }).first().click();
   await page.getByRole("link").filter({ hasText: "General" }).first().click();
   await page.getByRole("button", { name: "Artifacts", exact: true }).click();
@@ -748,6 +756,7 @@ test("overview uses ordinary artifact history/editors; text-artifact drafts surv
     path: testInfo.outputPath("artifacts-desktop.png"),
     contentType: "image/png",
   });
+  await backToLoom(page);
   await page.getByRole("link", { name: "Topics", exact: true }).first().click();
   await page.getByRole("link").filter({ hasText: "General" }).first().click();
   await page.getByText("About this topic", { exact: true }).click();
@@ -895,8 +904,8 @@ test("review regression: definitive setup rejection can be corrected after reloa
   await page
     .getByRole("button", { name: "Create community", exact: true })
     .click();
-  await expect(page.getByRole("link", { name: "Community settings", exact: true })).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/loom/admin");
+  await expect(page.getByRole("link", { name: "Community", exact: true })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/loom/admin/community");
   expect(new URL(page.url()).searchParams.get("intent")).toBe(corrected.key);
 });
 
@@ -1075,6 +1084,7 @@ test("review regression: rejected admission preserves editable correction and un
 
 async function reviewAgentAccess(page:Page,server:Awaited<ReturnType<typeof syntheticServer>>){
  const review=await admissionReview(page,'follow-up'),heading=page.getByRole('heading',{name:'Managing @corrected_agent',exact:true});
+ const navigationReview=await adminNavigationReview(page,'participant-recovery');
  await expect(heading).toBeVisible();
  await expect(page.getByText('Account created for @corrected_agent.',{exact:true})).toBeVisible();
  await expect(page.getByText('Access has not been issued yet. Issue an agent credential next.',{exact:true})).toBeVisible();
@@ -1124,7 +1134,10 @@ async function reviewAgentAccess(page:Page,server:Awaited<ReturnType<typeof synt
   if(metadataReads===1){lookupEntered();await lookupHeld;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Synthetic participant lookup unavailable',recovery:{action:'retry_same_request'}}})});}
   else{const response=await route.fetch();expect(response.status()).toBe(200);await route.fulfill({response});}
  });
- await page.reload();
+ await page.getByRole('link',{name:'Overview',exact:true}).click();
+ await page.goto(server.origin+'/loom/help');
+ await page.getByRole('link',{name:/credential.issue/}).click();
+ await expect(page).toHaveURL(server.origin+'/loom/admin/participants?intent='+pending.key);
  await lookupReady;
  try{
   await expect(page.getByText('Loading participant details…',{exact:true})).toBeVisible();
@@ -1147,6 +1160,7 @@ async function reviewAgentAccess(page:Page,server:Awaited<ReturnType<typeof synt
  expect((await server.observer.query('SELECT id FROM loom.participants WHERE id=$1',[pending.body.participant_id])).rowCount).toBe(1);
  expect((await server.observer.query('SELECT count(*)::int n FROM loom.participant_credentials WHERE participant_id=$1',[pending.body.participant_id])).rows[0].n).toBe(1);
  await review.capture('off-page-issuance-recovered',heading,['Earlier committed issuance response was dropped; exact reconciliation and the retried authorized ID lookup are live. No issuance replay or duplicate credential.']);
+ await navigationReview.capture('retained-issuance-recovered',[{width:1440,height:1000},{width:390,height:844}],['26 fixture-only lower-ID accounts exclude the target from page one. A real committed credential response was dropped. Navigation left Participants and returned through its Local drafts recovery link. The first exact-ID metadata lookup was held then returned fixture HTTP 503; explicit retry and reconciliation used live authorized endpoints.']);
  await page.unroute('**/api/v1/identity/accounts/lookup');
  await page.getByText('Credentials for this account',{exact:true}).click();
  const credentials=page.getByText('Credentials for this account',{exact:true}).locator('..');
@@ -1159,12 +1173,16 @@ async function reviewAgentAccess(page:Page,server:Awaited<ReturnType<typeof synt
  expect(await page.getByText('Agent credential for corrected_agent — shown once',{exact:true}).count()===1).toBe(true);
  const secret=await page.getByLabel('Issued secret',{exact:true}).inputValue();
  expect(secret.length>0).toBe(true);expect(JSON.stringify(await savedIntents(page)).includes(secret)).toBe(false);
+ page.once('dialog',d=>{expect(d.message()).toContain('one-time credential handoff');return d.dismiss();});
+ // The one-time value stays only in the mounted handoff after cancelled navigation.
+ await page.getByRole('link',{name:'Overview',exact:true}).click();await expect(page).toHaveURL(server.origin+'/loom/admin/participants?intent='+pending.key);
+ expect(await page.getByLabel('Issued secret',{exact:true}).inputValue()===secret).toBe(true);
  await page.getByRole('button',{name:'Select credential to copy',exact:true}).click();
  expect(await page.getByLabel('Issued secret',{exact:true}).evaluate((element:HTMLTextAreaElement)=>document.activeElement===element&&element.selectionStart===0&&element.selectionEnd===element.value.length)).toBe(true);
  await page.keyboard.press('Tab');await page.keyboard.press('Tab');
  expect(await page.getByRole('button',{name:'Done',exact:true}).evaluate(element=>document.activeElement===element)).toBe(true);
  await page.keyboard.press('Enter');expect(await page.getByLabel('Issued secret',{exact:true}).count()).toBe(0);
- await page.getByRole('link',{name:'Topics',exact:true}).click();await page.getByRole('link',{name:'Administration',exact:true}).click();
+ await backToLoom(page);await page.getByRole('link',{name:'Topics',exact:true}).click();await page.getByRole('link',{name:'Administration',exact:true}).click();await page.getByRole('link',{name:'Participants',exact:true}).click();
  await page.getByText('Participant accounts',{exact:true}).click();
  const lookup=page.getByLabel('Exact account ID or nickname');await lookup.fill('corrected_agent');await lookup.press('Enter');
  const row=page.locator('.list-row').filter({hasText:'corrected_agent · agent · active'});

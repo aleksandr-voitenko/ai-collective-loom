@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useBeforeUnload, useBlocker, useLocation } from 'react-router';
+import { useBeforeUnload, useBlocker, useLocation } from 'react-router';
 import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import {
@@ -366,11 +366,6 @@ export function CommunitySettings({ context }: { context: Context }) {
     draft && (draft.values.overview === undefined || draft.values.proposal === undefined);
   return (
     <section className="community-settings" aria-labelledby="community-settings-title">
-      <nav className="breadcrumb" aria-label="Breadcrumb">
-        <Link to="/loom/admin">Administration</Link>
-        <span aria-hidden="true"> › </span>
-        <span aria-current="page">Community</span>
-      </nav>
       <h1 id="community-settings-title">Community settings</h1>
       <p className="subtitle">Help people find their way and share proposals.</p>
       <form

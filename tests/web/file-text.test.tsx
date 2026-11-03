@@ -6,7 +6,6 @@ import {StrictMode} from 'react';
 import {createMemoryRouter} from 'react-router';
 import {RouterProvider} from 'react-router/dom';
 import {ActiveView} from '../../src/web/ParticipationRoutes.js';
-import {FileTextAdministration} from '../../src/web/FileText.js';
 import {AuthorizationBoundary,useAuthorization} from '../../src/web/AuthorizationBoundary.js';
 import {invalidateIdentity,IntentStore} from '../../src/web/participation-client.js';
 import type {Context} from '../../src/web/participation-state.js';
@@ -72,12 +71,12 @@ test('Files mode retains query/filter intent, starts a separate traversal and re
   await act(async()=>fireEvent.click(screen.getByRole('link',{name:'Open exact text preview'})));await m.answer(base+'/text',value());
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Back'})));await m.answer('/api/v1/search/files?q=quartzneedle',search());assert.ok(screen.getByRole('heading',{name:'Search results'}));
 });
-test('file administration loads only when opened and retains explicit bounded maintenance',async t=>{
+test('selected file-processing route loads its controls immediately and retains explicit bounded maintenance',async t=>{
   const calls:{path:string;finish:(r:Response)=>void}[]=[];t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(finish=>calls.push({path,finish})));
   const c={community:{settings_version:1},store:new IntentStore(randomUUID(),person.id,localStorage,dom.window.location.origin),self:{participant_id:person.id,role:'administrator'}} as Context;
-  render(<StrictMode><AuthorizationBoundary sourcePolicy="settings"><FileTextAdministration context={c}/></AuthorizationBoundary></StrictMode>);assert.equal(calls.length,0);
-  const details=screen.getByText('File text processing administration').parentElement as HTMLDetailsElement;
-  await act(async()=>{details.open=true;fireEvent(details,new dom.window.Event('toggle'));});await waitFor(()=>assert.ok(calls.length));
+  const router=createMemoryRouter([{path:'/loom/*',element:<ActiveView context={c}/>}],{initialEntries:['/loom/admin/file-processing']});t.after(()=>router.dispose());
+  render(<StrictMode><RouterProvider router={router}/></StrictMode>);await waitFor(()=>assert.ok(calls.length));
+  assert.ok(calls.every(c=>c.path==='/api/v1/admin/file-text/health'));assert.ok(screen.queryByRole('heading',{name:'File processing'}));
   await act(async()=>calls.splice(0).forEach(c=>c.finish(Response.json({generation:1,worker:'online',retained_bytes:0,reserved_bytes:0,items:[{file_id:file,claim_generation:3,reason:'storage'}],next_after:file}))));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry file processing'})));await act(async()=>calls.splice(0).forEach(c=>c.finish(Response.json({accepted:true}))));
   await waitFor(()=>assert.ok(calls.length));await act(async()=>calls.splice(0).forEach(c=>c.finish(Response.json({generation:1,worker:'online',retained_bytes:0,reserved_bytes:0,items:[],next_after:null}))));

@@ -32,7 +32,7 @@ AuthoredText/Reading, parsers, embeds or executable blob previews. Files.tsx ret
 participant-bound folder/page in the existing history entry's state, leaving source URL/reading episode
 unchanged. Search's Files mode has independent schemas/cursors; switching preserves
 query/filter intent and starts a fresh traversal. Exact links preserve search URLs
-on back. File processing administration loads only when deliberately opened.
+on back. File processing administration loads only on its selected `/loom/admin/file-processing` route.
 Exact preview context_url is a structured API read; browser_context_url is separate.
 Expired preview cursors retain a First text page action. Independent status reads
 sequence their local observations while all same-owner denials still propagate.
@@ -47,8 +47,9 @@ name edits and first dispatch; older drafts/corrections and uncertain retries mu
 retain their authored content and exact recovery identity. An uncertain setup remains focused even when discovery sees
 settings_version > 0: that observation cannot settle the original command. Successful
 confirmation reveals the current workspace route. Corrected drafts retain the existing
-`/loom/admin?intent=...` recovery link; no automatic POST or new key is introduced.
-`ParticipationAdministration.tsx` owns post-setup management only. Additive server
+`/loom/admin/community?intent=...` recovery link; legacy root links still resolve
+the retained kind. No automatic POST or new key is introduced.
+`ParticipationAdministration.tsx` owns section routing and explicit saved setup recovery. Additive server
 installation_mode distinguishes Local pilot, Synthetic preview and Staging test
 (ADR-042); staging has its own runtime/profile and preserves the same finite policies.
 Staging HTML alone includes a public deployment meta marker, so anonymous sign-in
@@ -141,7 +142,7 @@ the loaded account page. Its local loading/error/retry and lifetime/sequence/own
 fences never edit the saved command. Automatic lookup stops at withdrawn authority;
 an explicit metadata retry can check access. In-flight command presentation hides
 check/retry guidance while the durable journal remains uncertain.
-`CommunitySettings.tsx` owns `/loom/admin/community`; Administration links to it.
+`CommunitySettings.tsx` owns `/loom/admin/community`; the shared Administration navigation links to it.
 Its instance/participant-bound in-memory draft outlives query reads. Dirty reads
 retain both IDs, community name and expected version. Cancel restores the accepted
 baseline locally; conflict reload confirms and replaces it only after success.
@@ -168,7 +169,7 @@ checks verify the current administrator role before fresh protected reads; priva
 input and receipts never reauthorize content. Page/API limits are documented in
 `CommunitySettings.md`; no global query, authorization or server contract changes.
 
-`SearchAdministration.tsx` owns `/loom/admin/search`; Administration links to it.
+`SearchAdministration.tsx` owns `/loom/admin/search`; the shared Administration navigation links to it.
 Health and the exact requested failed-job page load on entry and Refresh status.
 One leased page replaces prior rows; failed continuations remain exact, First page
 stays reachable and explicit pagination focuses its heading. Health counts are
@@ -226,7 +227,7 @@ cursor positions; failed loads keep the page and exact retry continuation. Contr
 use aria-disabled plus busy guards to preserve native focus. Credential components
 are keyed by selected account; lifetime/sequence/identity/authority checks fence
 late rows and post-command refreshes after departure. Exact lookup adds at most one
-leased account; audit is mounted only when deliberately opened. User-entered lookup
+leased account; audit mounts only on its selected section route. User-entered lookup
 intent stays independent of protected result/selection copies. Existing one-time
 secret leases and exact private command journals retain their prior semantics.
 See ADR-035 and the production-host mounted/compiled administration tests.
@@ -252,10 +253,32 @@ retain drafts/exact attempts; only definitive first refusals allow explicit corr
 The four fields use exact bytes/counts and separate over-limit usage. No file bytes
 or credentials enter journals; ordinary file reselection/digest checks remain.
 
-Operational health (ADR-040) mounts on demand in Administration and performs explicit
+Operational health (ADR-040) mounts on entry to Administration Overview and performs explicit
 protected reads only. `OperationalHealth.tsx` displays independent source observations,
 unknown/unavailable states, safe failure references and incomplete request samples.
 `useBoundedAdministrationPage` shares existing one-page/16-position history, exact
 failed-page retry/focus and authority/request/route fences with account/audit browsing.
 No polling, automatic worker recovery or private collection query is introduced.
 The response catalogue classifies all five operational routes as protected reads.
+
+`ParticipationAdministration.tsx` selects exactly one of seven routed sections;
+`administration-navigation.ts` owns their short ordered link list and exact retained
+operation destinations. Community/Search keep their URLs; admission moves to
+`/loom/admin/participants`, both independent limit controls to `/limits`, file text
+to `/file-processing`, and identity-only audit to `/audit`. Unknown children are
+unavailable. Root legacy `?intent` links resolve the actual retained kind, retaining
+all query/hash values; unknown/missing intents remain explicit and reviewable.
+`intentUrl` also uses that mapping. Selected setup recovery retains CommunitySetup;
+uncertain initial setup still owns the focused shell. No mount replays a command.
+
+The shell replaces ordinary navigation for the admin route segment, reusing its
+branding/account/sign-out controls and linking Back to Loom to Updates. Only one
+navigation tree mounts. At <=960px, a native modal drawer overlays full-width
+content, with explicit Tab wrapping, Escape/close, opener restoration and heading
+focus after successful navigation. Resizing releases the modal without remounting
+the active page. Community's blocker retains cancelled drafts and current links.
+Admission adds one-time handoff route/unload protection without secret persistence;
+late issuance after departure retains the exact attempt for deliberate reconciliation.
+Identical session probes retain the same Self snapshot so route discovery cannot
+restart a pending/failed selected-account read; actual identity/role/CSRF changes still update it.
+`Administration.md` records the bounded route/layout and compatibility contract.

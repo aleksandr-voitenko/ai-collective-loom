@@ -21,6 +21,8 @@ import { ReadingRecovery, exportReadingRecovery } from './reading-recovery.js';
 import './participation.css';
 import './community-settings.css';
 import './search-administration.css';
+import './administration.css';
+import { administrationSections } from './administration-navigation.js';
 import { Avatar, ErrorText, Icon } from './participation-ui.js';
 import { ActiveView } from './ParticipationRoutes.js';
 import { needsCommunitySetup } from './CommunitySetup.js';
@@ -41,6 +43,31 @@ export function ParticipationApp() {
   const dialog = useRef<HTMLDialogElement>(null),
     signoutDialog = useRef<HTMLDialogElement>(null),
     mobileButton = useRef<HTMLButtonElement>(null);
+  const administration = /^\/loom\/admin(?:\/|$)/.test(location.pathname);
+  const [narrow, setNarrow] = useState(
+    () => window.matchMedia(`(max-width: ${administration ? 960 : 760}px)`).matches,
+  );
+  const drawerDestination = useRef(false);
+  useEffect(() => {
+    const media = window.matchMedia(`(max-width: ${administration ? 960 : 760}px)`);
+    const changed = () => {
+      setNarrow(media.matches);
+      if (!media.matches && dialog.current?.open) {
+        dialog.current.close();
+        setDrawer(false);
+        // The dialog is removed on desktop; its queued close event may no longer
+        // have a listener. Move focus to the surviving content explicitly.
+        requestAnimationFrame(() => {
+          const heading = document.querySelector<HTMLElement>('#loom-main h1');
+          heading?.setAttribute('tabindex', '-1');
+          heading?.focus();
+        });
+      }
+    };
+    changed();
+    media.addEventListener('change', changed);
+    return () => media.removeEventListener('change', changed);
+  }, [administration]);
   useEffect(() => {
     const changed = () => {
       setDiscoveryThrottled(false);
@@ -70,7 +97,19 @@ export function ParticipationApp() {
           schema: Onboarding,
         });
         if (active && owner === identityGeneration()) {
-          setSelf(value);
+          // Route discovery rechecks the session. An identical account snapshot
+          // must not restart the selected page's pending/failed metadata reads.
+          setSelf((prior) =>
+            prior &&
+            prior.participant_id === value.participant_id &&
+            prior.credential_id === value.credential_id &&
+            prior.nickname === value.nickname &&
+            prior.kind === value.kind &&
+            prior.role === value.role &&
+            prior.csrf === value.csrf
+              ? prior
+              : value,
+          );
           setCommunity(info);
           setError('');
           setUnavailable(false);
@@ -102,14 +141,15 @@ export function ParticipationApp() {
     };
   }, [epoch, location.key]);
   useEffect(() => {
-    if (drawer) dialog.current?.showModal();
+    if (drawer && narrow) dialog.current?.showModal();
     else dialog.current?.close();
-  }, [drawer]);
+  }, [drawer, narrow]);
   useEffect(() => {
     if (signout) signoutDialog.current?.showModal();
     else signoutDialog.current?.close();
   }, [signout]);
   useEffect(() => {
+    if (dialog.current?.open) drawerDestination.current = true;
     setDrawer(false);
   }, [location.key]);
   let store: IntentStore | undefined,
@@ -245,76 +285,97 @@ export function ParticipationApp() {
           <small>AI Collective</small>Loom
         </span>
       </Link>
-      <Link
-        className="community-name"
-        aria-label={`${community?.community_name ?? 'Community'} — Community overview · Start here`}
-        to="/loom/overview"
-      >
-        {community?.community_name ?? 'Collective Loom'}
-      </Link>
-      <nav aria-label="Community navigation">
-        <NavLink to="/loom/updates">
-          <Icon name="discussion" />
-          Updates
-        </NavLink>
-        <NavLink to="/loom" end>
-          <Icon name="topic" />
-          Topics
-        </NavLink>
-        <NavLink to="/loom/artifacts">
-          <Icon name="artifact" />
-          Artifacts
-        </NavLink>
-        <NavLink to="/loom/following">
-          <Icon name="topic" />
-          Following
-        </NavLink>
-        <NavLink to="/loom/notes">
-          <Icon name="saved" />
-          Private notes
-        </NavLink>
-        <NavLink to="/loom/saved">
-          <Icon name="saved" />
-          Saved items
-        </NavLink>
-        <NavLink to="/loom/attention">
-          <Icon name="discussion" />
-          Attention settings
-        </NavLink>
-        <NavLink to="/loom/reading">
-          <Icon name="discussion" />
-          Reading progress
-        </NavLink>
-        <NavLink to="/loom/notifications">
-          <Icon name="discussion" />
-          Mentions/replies
-        </NavLink>
-        <NavLink to="/loom/search">
-          <Icon name="search" />
-          Search
-        </NavLink>
-        <NavLink to="/loom/summaries">
-          <Icon name="discussion" />
-          Summary maintenance
-        </NavLink>
-        {self?.role === 'administrator' && (
-          <>
-            <NavLink to="/loom/admin">
-              <Icon name="topic" />
-              Administration
+      {administration ? (
+        <>
+          <Link className="admin-back" to="/loom/updates">
+            ← Back to Loom
+          </Link>
+          <p className="admin-context">Administration</p>
+          <nav aria-label="Administration sections">
+            {administrationSections.map((section) => (
+              <NavLink key={section.path} to={section.path} end>
+                <Icon name={section.icon} />
+                {section.label}
+              </NavLink>
+            ))}
+          </nav>
+        </>
+      ) : (
+        <>
+          <Link
+            className="community-name"
+            aria-label={`${community?.community_name ?? 'Community'} — Community overview · Start here`}
+            to="/loom/overview"
+          >
+            {community?.community_name ?? 'Collective Loom'}
+          </Link>
+          <nav aria-label="Community navigation">
+            <NavLink to="/loom/updates">
+              <Icon name="discussion" />
+              Updates
             </NavLink>
-            <NavLink to="/loom/moderation">
+            <NavLink to="/loom" end>
               <Icon name="topic" />
-              Content moderation
+              Topics
             </NavLink>
-          </>
-        )}
-      </nav>
+            <NavLink to="/loom/artifacts">
+              <Icon name="artifact" />
+              Artifacts
+            </NavLink>
+            <NavLink to="/loom/following">
+              <Icon name="topic" />
+              Following
+            </NavLink>
+            <NavLink to="/loom/notes">
+              <Icon name="saved" />
+              Private notes
+            </NavLink>
+            <NavLink to="/loom/saved">
+              <Icon name="saved" />
+              Saved items
+            </NavLink>
+            <NavLink to="/loom/attention">
+              <Icon name="discussion" />
+              Attention settings
+            </NavLink>
+            <NavLink to="/loom/reading">
+              <Icon name="discussion" />
+              Reading progress
+            </NavLink>
+            <NavLink to="/loom/notifications">
+              <Icon name="discussion" />
+              Mentions/replies
+            </NavLink>
+            <NavLink to="/loom/search">
+              <Icon name="search" />
+              Search
+            </NavLink>
+            <NavLink to="/loom/summaries">
+              <Icon name="discussion" />
+              Summary maintenance
+            </NavLink>
+            {self?.role === 'administrator' && (
+              <>
+                <NavLink to="/loom/admin">
+                  <Icon name="topic" />
+                  Administration
+                </NavLink>
+                <NavLink to="/loom/moderation">
+                  <Icon name="topic" />
+                  Content moderation
+                </NavLink>
+              </>
+            )}
+          </nav>
+        </>
+      )}
       <div className="side-spacer" />
-      <Link className="help-link" to="/loom/help">
-        <Icon name="help" />
-        Participation guide
-      </Link>
+      {!administration && (
+        <Link className="help-link" to="/loom/help">
+          <Icon name="help" />
+          Participation guide
+        </Link>
+      )}
       {self && (
         <div className="account">
           <Avatar person={self} />
@@ -330,19 +391,54 @@ export function ParticipationApp() {
     </>
   );
   return (
-    <div className={focused ? 'loom-app setup-shell' : 'loom-app'}>
+    <div
+      className={
+        focused
+          ? 'loom-app setup-shell'
+          : administration
+            ? 'loom-app administration-shell'
+            : 'loom-app'
+      }
+    >
       <a className="skip-link" href="#loom-main">
         Skip to content
       </a>
-      {!focused && <aside className="sidebar">{navigation}</aside>}
-      {!focused && (
+      {!focused && !narrow && <aside className="sidebar">{navigation}</aside>}
+      {!focused && narrow && (
         <dialog
           ref={dialog}
           className="navigation-drawer"
+          aria-label={administration ? 'Administration menu' : 'Community menu'}
+          onKeyDown={(event) => {
+            if (event.key !== 'Tab') return;
+            const controls = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), [tabindex="0"]',
+              ),
+            );
+            const first = controls[0],
+              last = controls.at(-1);
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first?.focus();
+            }
+          }}
           onCancel={() => setDrawer(false)}
           onClose={() => {
             setDrawer(false);
-            mobileButton.current?.focus();
+            if (drawerDestination.current) {
+              drawerDestination.current = false;
+              requestAnimationFrame(() => {
+                const target =
+                  document.querySelector<HTMLElement>('#loom-main h1') ??
+                  document.getElementById('loom-main');
+                target?.setAttribute('tabindex', '-1');
+                target?.focus();
+              });
+            } else mobileButton.current?.focus();
           }}
         >
           <button className="drawer-close" onClick={() => setDrawer(false)}>
@@ -376,12 +472,17 @@ export function ParticipationApp() {
               <button
                 ref={mobileButton}
                 className="mobile-menu"
-                aria-label="Open navigation"
-                onClick={() => setDrawer(true)}
+                aria-label={administration ? 'Administration menu' : 'Open navigation'}
+                aria-expanded={drawer}
+                aria-haspopup="dialog"
+                onClick={() => {
+                  drawerDestination.current = false;
+                  setDrawer(true);
+                }}
               >
-                ☰
+                {administration ? '☰ Administration menu' : '☰'}
               </button>
-              <span>
+              <span className="workspace-context">
                 {location.pathname.includes('/notes')
                   ? 'Private notes'
                   : location.pathname.includes('/admin')

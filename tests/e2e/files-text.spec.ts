@@ -102,7 +102,7 @@ test('Operational health observes a stopped file worker independently and refres
   const bytes=Buffer.from('Exact original retained through inspection'),member=await prepareText(f.admin,{kind:'area',resource_id:f.area},'inspection.txt',bytes);
   const publication=await f.admin.call('/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'File worker observation',content:{format:'loom-markdown-v3',text:'',mentions:[],references:[]},change_note:null,change_account:null,file_set:{version:'artifact-files-v1',files:[member]}});expect(publication.status).toBe(201);
   expect((await f.admin.call('/health/ready')).status).toBe(200);
-  await page.goto(server.origin+'/loom/admin');await page.getByText('Operational health',{exact:true}).click();
+  await page.goto(server.origin+'/loom/admin');
   const file=page.getByRole('region',{name:'File indexing health'});await expect(file).toContainText('Undiscovered contexts: true');
   await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('not established');
   await worker.start();await worker.observeUntil(async()=>(await f.admin.call('/api/v1/admin/operational-health')).body.files.value?.jobs.complete===1);await worker.stop();

@@ -35,16 +35,16 @@ async function fixture(t:TestContext){
     policy={...policy,...(body.ordinary_requests?{ordinary_requests:body.ordinary_requests}:{}),version:2};return Response.json(receipt());
   });
   let router:ReturnType<typeof createMemoryRouter>,view:ReturnType<typeof render>;
-  const mount=()=>{router=createMemoryRouter([{path:'/loom/admin',element:<AuthorizationBoundary scope="administration" sourcePolicy="settings"><ParticipationRates context={context}/></AuthorizationBoundary>},{path:'/away',element:<p>Another view</p>}],{initialEntries:['/loom/admin']});view=render(<StrictMode><RouterProvider router={router}/></StrictMode>);};
+  const mount=()=>{router=createMemoryRouter([{path:'/loom/admin/limits',element:<AuthorizationBoundary scope="administration" sourcePolicy="settings"><ParticipationRates context={context}/></AuthorizationBoundary>},{path:'/away',element:<p>Another view</p>}],{initialEntries:['/loom/admin/limits']});view=render(<StrictMode><RouterProvider router={router}/></StrictMode>);};
   const unmount=()=>{view.unmount();router.dispose();};t.after(unmount);mount();
   const click=async(name:string)=>{await act(async()=>fireEvent.click(screen.getByRole('button',{name})));};
-  const open=async()=>{await click('Inspect participation limits');await screen.findByText(/Current policy version 1/);};
+  const open=async()=>{await screen.findByText(/Current policy version 1/);};
   const input=async(value:string)=>{await act(async()=>fireEvent.change(screen.getByLabelText(/Ordinary requests per minute/),{target:{value}}));await waitFor(()=>assert.equal(store.all()[0]?.body.ordinary_requests,Number(value)));};
   return {store,calls,click,open,input,context,receipt,setMode:(m:string)=>{mode=m;},setPolicy:(p:typeof initial)=>{policy=p;},
     remount:()=>{unmount();mount();},depart:async()=>act(async()=>{await router.navigate('/away');}),finish:async(r:Response)=>act(async()=>held!(r))};
 }
 test('administrator drafts, temporary refusal, remount, status miss, exact retry and audit are deliberate',async t=>{
-  const f=await fixture(t);assert.equal(f.calls.length,0);await f.open();await f.input('7');
+  const f=await fixture(t);assert.ok(f.calls.length>0);assert.ok(f.calls.every(c=>c.path===path));await f.open();await f.input('7');
   const draft=f.store.all()[0]!;f.setMode('throttle');const owner=identityGeneration();await f.click('Save participation limits');
   await screen.findByText('temporarily_throttled');assert.equal(identityGeneration(),owner);assert.equal(f.store.all()[0]!.state,'uncertain');
   assert.deepEqual(f.store.all()[0]!.body,draft.body);assert.equal(f.calls.filter(c=>c.path===path+'/state').length,1);

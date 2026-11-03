@@ -1,6 +1,10 @@
 # Participant admission review (UI-04)
 
-Admission and credential management remain on `/loom/admin`. Create the account,
+UI-05 now hosts admission and credential management at `/loom/admin/participants`
+inside the shared Administration workspace. Legacy root intent URLs still resolve
+the retained account/credential operation. A one-time display warns before route
+or unload departure without persisting the secret. The UI-04 ledger below records
+the earlier presentation increment. Create the account,
 then issue access. Find an existing account by nickname under **Participant
 accounts → Manage credentials**. Creation, issuance and revocation remain separate.
 
@@ -42,7 +46,8 @@ instructions appear after the attempt finishes without confirmation.
 
 The regression uses 26 lower-ID fixture accounts so the target is absent from
 page one, selects it through normal nickname lookup, drops the issuance reply,
-reloads, holds/fails its metadata lookup, reconciles and retries only metadata.
+leaves and returns through Local drafts, holds/fails its metadata lookup, reconciles
+and retries only metadata.
 It asserts named context after lookup, unchanged request identity, bounded first
 pages and one participant/credential before deliberate revoke/new issuance.
 Mounted cases also cover metadata arriving after navigation, identity/authority

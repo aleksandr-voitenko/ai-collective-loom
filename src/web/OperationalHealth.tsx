@@ -134,7 +134,7 @@ function Health({ context }: { context: Context }) {
       {data && (
         <>
           <section aria-label="Upload health">
-            <h3>Uploads</h3>
+            <h2>Uploads</h2>
             <p>
               {readable(data.uploads.state)} · {data.uploads.observed_at}
             </p>
@@ -150,7 +150,7 @@ function Health({ context }: { context: Context }) {
             )}
           </section>
           <section aria-label="Authored indexing health">
-            <h3>Authored indexing</h3>
+            <h2>Authored indexing</h2>
             <p>
               {readable(data.authored.state)} · {data.authored.observed_at}
             </p>
@@ -176,7 +176,7 @@ function Health({ context }: { context: Context }) {
             <FailureDetails subject="authored" context={context} />
           </section>
           <section aria-label="File indexing health">
-            <h3>File indexing</h3>
+            <h2>File indexing</h2>
             <p>
               {readable(data.files.state)} · {data.files.observed_at}
             </p>
@@ -203,7 +203,7 @@ function Health({ context }: { context: Context }) {
             <FailureDetails subject="files" context={context} />
           </section>
           <section aria-label="Activity recovery health">
-            <h3>Activity recovery</h3>
+            <h2>Activity recovery</h2>
             <p>
               {readable(data.activity.state)} · {data.activity.observed_at}
             </p>
@@ -236,11 +236,9 @@ function Health({ context }: { context: Context }) {
   );
 }
 export function OperationalHealth({ context }: { context: Context }) {
-  const [open, setOpen] = useState(false);
   return (
-    <details className="card admin-card" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>Operational health</summary>
-      {open && <Health context={context} />}
-    </details>
+    <section className="admin-health" aria-label="Operational health">
+      <Health context={context} />
+    </section>
   );
 }

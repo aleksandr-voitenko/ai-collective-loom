@@ -107,7 +107,7 @@ test('author picker retains a suspended publication author through search and re
 test('search indexing observations, failed-page recovery and retry preserve bounded reads and processing meaning',async({page,context,server})=>{
  const data=await setup(page,context,server,28),review=await searchIndexingReview(page,'observations');
  const writes:any[]=[];page.on('request',request=>{if(/\/admin\/search\/(retry|rebuild)$/.test(request.url())&&request.method()==='POST')writes.push(request.postDataJSON());});
- await page.goto(server.origin+'/loom/admin');await expect(page.getByRole('link',{name:'Community settings',exact:true})).toBeVisible();await page.getByRole('link',{name:'Search indexing',exact:true}).click();
+ await page.goto(server.origin+'/loom/admin');await expect(page.getByRole('link',{name:'Community',exact:true})).toBeVisible();await page.getByRole('link',{name:'Search indexing',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Search indexing',exact:true})).toBeVisible();await expect(page.getByText('No queued work observed',{exact:true})).toBeVisible();
  await review.capture('normal-status');
  const before=(await server.observer.query('SELECT generation FROM loom.search_state')).rows[0].generation;
@@ -152,7 +152,8 @@ test('search indexing rebuild confirmation, exact recovery and authority withdra
  await page.route('**/api/v1/admin/search/rebuild',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
  await open();await dialog.getByRole('button',{name:'Rebuild index',exact:true}).click();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();expect(writes.at(-1)).toEqual({expected_generation:2});
  await review.capture('unresolved-maintenance',['The real rebuild response is deliberately dropped after the endpoint commits generation 3.'],page.getByRole('region',{name:'Maintenance',exact:true}));
- await page.reload();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();expect(writes).toHaveLength(2);await page.getByRole('button',{name:'Refresh status',exact:true}).click();expect(writes).toHaveLength(2);
+ await page.getByRole('link',{name:'Overview',exact:true}).click();await expect(page.getByRole('heading',{name:'Overview',exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'Search indexing',exact:true}).click();await page.reload();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();expect(writes).toHaveLength(2);await page.getByRole('button',{name:'Refresh status',exact:true}).click();expect(writes).toHaveLength(2);
  await page.getByRole('button',{name:'Retry same request',exact:true}).click();await expect(page.getByText('Rebuild request acknowledged',{exact:true})).toBeVisible();expect(writes[2]).toEqual(writes[1]);expect((await server.observer.query('SELECT generation FROM loom.search_state')).rows[0].generation).toBe(3);
  await page.route('**/api/v1/admin/search/rebuild',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
  await open();await dialog.getByRole('button',{name:'Rebuild index',exact:true}).click();await expect(page.getByText('Outcome not confirmed',{exact:true})).toBeVisible();

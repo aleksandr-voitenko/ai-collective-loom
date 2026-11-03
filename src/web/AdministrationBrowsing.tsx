@@ -191,15 +191,13 @@ function AuditPage({ self }: { self: Self }) {
   );
 }
 export function IdentityAuditBrowsing({ self }: { self: Self }) {
-  const [open, setOpen] = useState(false);
   return (
-    <details className="card admin-card" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>Identity administration audit</summary>
+    <section className="admin-audit" aria-label="Identity administration audit">
       <p>
         Read-only identity and admission history. Refresh after concurrent changes; this is not an
         export checkpoint.
       </p>
-      {open && <AuditPage self={self} />}
-    </details>
+      <AuditPage self={self} />
+    </section>
   );
 }

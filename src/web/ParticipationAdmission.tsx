@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router';
+import { useLocation, useBlocker, useBeforeUnload } from 'react-router';
 import {
   type Intent,
   type Self,
@@ -54,6 +54,37 @@ export function Admission({ context }: { context: Context }) {
     [busy, setBusy] = useState(false);
   const account =
     (pending?.body.participant_id as string | undefined) ?? createdAccount ?? selected?.id;
+  const handoffOpen = !!issued && authority.current(issued.generation);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      handoffOpen &&
+      (currentLocation.pathname !== nextLocation.pathname ||
+        currentLocation.search !== nextLocation.search),
+  );
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+    if (
+      window.confirm(
+        'Leave the one-time credential handoff? Its secret will be hidden permanently. Stay to finish copying and delivering it.',
+      )
+    )
+      blocker.proceed();
+    else blocker.reset();
+  }, [blocker]);
+  useBeforeUnload((event) => {
+    if (handoffOpen) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+  const live = useRef(false),
+    owner = useRef(identityGeneration());
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
   const accounts = useAdministrationPage<AdministrativeAccountView>('accounts', context.self);
   const details = useAdmissionAccount(account, context.self, !!selected);
   const displayNickname = account
@@ -165,6 +196,9 @@ export function Admission({ context }: { context: Context }) {
         self: context.self,
         body: check ? { operation_kind: record.kind, idempotency_key: record.key } : record.body,
       });
+      // Departure does not undo a dispatched write. Leave its exact attempt for
+      // deliberate reconciliation rather than consuming a secret in a dead view.
+      if (!live.current || owner.current !== identityGeneration()) return;
       if (result.operation_state === 'committed') {
         if (
           record.kind === 'credential.issue' &&

@@ -19,8 +19,6 @@ import { ModerationPage } from './Moderation.js';
 import { SearchPageViewComponent } from './Search.js';
 import { SummaryMaintenance } from './Summaries.js';
 import { Collection, ResourceRow } from './participation-ui.js';
-import { SearchAdministration } from './SearchAdministration.js';
-import { CommunitySettings } from './CommunitySettings.js';
 import { Administration } from './ParticipationAdministration.js';
 import { DiscussionPage } from './ParticipationDiscussion.js';
 import { Help } from './ParticipationHelp.js';
@@ -132,29 +130,7 @@ function RouteView({ context }: { context: Context }) {
       </>
     );
   if (kind === 'admin')
-    return context.self.role === 'administrator' ? (
-      id === 'search' && path.length === 2 ? (
-        <SearchAdministration
-          key={context.community.instance_id + ':' + context.self.participant_id}
-          context={context}
-        />
-      ) : id === 'community' && path.length === 2 ? (
-        <CommunitySettings
-          key={
-            context.community.instance_id +
-            ':' +
-            context.self.participant_id +
-            ':' +
-            location.search
-          }
-          context={context}
-        />
-      ) : (
-        <Administration context={context} />
-      )
-    ) : (
-      <p role="alert">Administrator access is required.</p>
-    );
+    return <Administration key={location.pathname + location.search} context={context} />;
   if (kind === 'help') return <Help context={context} />;
   return (
     <>
