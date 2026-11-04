@@ -934,6 +934,10 @@ states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifi
 deliberate children503. The suppressed-parent journey retains traversal after body loss.
 Readable-mention regressions compare display names with canonical journal IDs, preserve
 untouched repeated bindings, remove edited consent and leave typed names literal.
+The successive summary-revision journey asserts readable labels after restore and
+replaces only the prose prefix, while still comparing the complete canonical stored
+and published content with its original marker/recipient ID. Full-field plain-label
+replacement deliberately removes consent and is not a way to retain a binding.
 Mounted composition/history input and queued-write failure cases check undo and honest
 save feedback; Drafts status recovery performs no source read. The participation journey
 uses native keyboard undo/redo and clipboard copy/paste, Drafts resume, a current parent
