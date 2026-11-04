@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 import * as N from '../contracts/notes.js';
 import { UUID, closed } from '../contracts/participation.js';
 import { validUnicode } from '../contracts/authored.js';
-import type { Intent } from './participation-client.js';
+import type { Intent } from './intent-store.js';
 const draftLink = Type.Object(
   {
     kind: Type.Union(
