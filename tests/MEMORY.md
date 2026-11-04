@@ -563,6 +563,8 @@ cursors and offsets, suppresses duplicate requests and retries transient failure
 without advancing the saved view. Failed or held collapse saves retain expansion;
 successful close restores focus and fences a late reason response. Independent
 publication and routine-view journals remain byte-for-byte unchanged.
+Changing next-page size also preserves the mounted expansion/reason disclosure,
+its separately paged reasons and deliberate focus without modifying saved views.
 `e2e/updates.spec.ts` uses the normal Chromium runner, real API/native worker,
 twenty-reply group, summary context/exact history, reload/back, focus, narrow layout
 and sign-out blocked on cleanup. Deliberate screenshots use
@@ -942,6 +944,8 @@ correction until rejection is durably saved. Independent drafts stay untouched.
 Settlement barriers also keep confirmation, exact-revision links and callbacks
 hidden until the committed journal write finishes. Busy/uncertain feedback changes
 retain the same editor/disclosure nodes, their open state and exact stored bytes.
+Title autosave independently retains text-editor identity, selection, undo history
+and an open formatting disclosure, then undo saves the complete current draft body.
 Mention regressions cover quote/fence endings, deliberate opening focus and deletion
 of one marker; the pure insertion suite covers caret/selection, Unicode, links,
 unclosed code and byte limits. Browser workflows open native disclosures through
