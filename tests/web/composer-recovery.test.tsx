@@ -409,3 +409,16 @@ test('composition edits undo as one unit and native history input can redo witho
   assert.deepEqual((f.record().body.content as AuthoredContent).mentions,[]);
   f.assertIndependent();
 });
+
+test('forward word deletion cannot swap two recipients with unresolved display names', async t => {
+  const area=randomUUID(),first={token:'first',participant_id:randomUUID()},second={token:'second',participant_id:randomUUID()};
+  const body={area_id:area,title:'Ambiguous labels',content:{format:'loom-markdown-v1',text:'[[mention:first]]\n[[mention:second]]',mentions:[first,second]}};
+  const f=await fixture(t,{kind:'artifact.create',areaId:area},'/api/v1/artifacts',body);
+  const input=screen.getByLabelText('Text') as HTMLTextAreaElement;
+  assert.equal(input.value,'@participant\n@participant');input.setSelectionRange(0,0);
+  input.dispatchEvent(new dom.window.InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'deleteWordForward'}));
+  const saved=f.nextSave();
+  await act(async()=>{fireEvent.change(input,{target:{value:'@participant',selectionStart:0,selectionEnd:0}});await saved;});
+  assert.deepEqual(f.record().body.content,{format:'loom-markdown-v1',text:'[[mention:second]]',mentions:[second]});
+  f.assertIndependent();
+});

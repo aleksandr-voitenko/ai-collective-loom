@@ -934,7 +934,8 @@ states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifi
 deliberate children503. The suppressed-parent journey retains traversal after body loss.
 Readable-mention regressions compare display names with canonical journal IDs, preserve
 untouched repeated bindings, remove edited consent and leave typed names literal.
-CRLF/CR regression offsets match native textarea LF normalization without rewriting
+The mounted word-deletion regression leaves the correct stable ID when two generic
+recipient labels look identical. CRLF/CR offsets match native textarea LF normalization without rewriting
 retained wire text; native clipboard checks include Windows line endings.
 The successive summary-revision journey asserts readable labels after restore and
 replaces only the prose prefix, while still comparing the complete canonical stored

@@ -126,7 +126,8 @@ without rewriting the original Markdown. Failed placement leaves the draft intac
 MentionEditor presents readable labels while composer-mentions maps display/wire
 offsets, including native CRLF/CR-to-LF display normalization; retained wire bytes
 stay unchanged until editing. Edits through a binding remove it, and plain text
-paste never adds consent.
+paste never adds consent. Collapsed word/line deletions use the resulting caret
+and removed length so identical unresolved labels cannot swap recipient identity.
 A bounded100-step mounted undo history retains canonical bindings, groups composition
 and handles keyboard/native history input. Chips remove all occurrences of a token.
 Editable restored mentions resolve names from one authorized12-item directory page;

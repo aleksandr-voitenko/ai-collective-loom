@@ -90,13 +90,7 @@ export function MentionEditor({
       return;
     }
     const input = inputRef.current!;
-    let start = input.selectionStart,
-      end = input.selectionEnd;
-    if (start === end && event.inputType === 'deleteContentBackward')
-      start = Math.max(0, start - 1);
-    if (start === end && event.inputType === 'deleteContentForward')
-      end = Math.min(presentation.text.length, end + 1);
-    replaced.current = { start, end };
+    replaced.current = { start: input.selectionStart, end: input.selectionEnd };
   };
   useEffect(() => {
     const input = inputRef.current;
@@ -145,7 +139,17 @@ export function MentionEditor({
         }
       }}
       onChange={(event) => {
-        const next = editMentionPresentation(value, names, event.target.value, replaced.current);
+        let range = replaced.current;
+        const removed = presentation.text.length - event.target.value.length;
+        if (range && range.start === range.end && removed > 0) {
+          // Word/line deletion ranges are collapsed in textarea beforeinput.
+          // The resulting caret disambiguates identical displayed recipients.
+          range = {
+            start: event.target.selectionStart,
+            end: event.target.selectionStart + removed,
+          };
+        }
+        const next = editMentionPresentation(value, names, event.target.value, range);
         replaced.current = undefined;
         if (!composing.current || !compositionSaved.current) remember(current.current);
         compositionSaved.current = composing.current;
