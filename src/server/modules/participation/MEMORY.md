@@ -150,6 +150,13 @@ Do not add a network call, parser callback or newly contested guard after the cl
 Setup/config use advisory class 3, identity administration class 2 and containment
 class 1. Editor changes take the target exclusive guard and expected list version.
 
+`publications.ts` derives its closed `PublicationKind` and discriminated
+`PublicationRequest` from the runtime schema map. Absent fields are optional-never;
+required fields narrow with the operation kind. Unknown bodies still pass through
+Value.Check before cloning or SQL. The kind stays outside the normalized body and
+semantic digest; the prepared discriminant/body pair stays correlated into the
+transaction. Reconciliation also accepts the separately owned attachment promotion.
+
 The digest includes the operation/version and all accepted semantic fields except
 the key; lower-case UUIDs, sort entity tokens and object keys, preserve text exactly.
 Old internal digest rows are not rewritten. Exact replay checks current action
@@ -406,6 +413,12 @@ Guide10/community discovery advertises `combined-updates-1` and its query URL.
 projection and personal exact-source policy in one guarded transaction. It preserves
 PR11's contribution-only focused-context rule; summaries open their discussion.
 `http/recovery-policy.ts` explicitly classifies every participation method/template.
+`http/participation-errors.ts` owns the shared HTTP error adapter, separating domain
+classification, ordered recovery overrides and schema-typed wire serialization.
+Updates, Following and notification error maps exhaust their code unions; their
+different retry/resynchronization actions must remain distinct. Route registration
+does not own error policy. Throttling overrides family defaults; mutation POST5xx
+uncertainty takes precedence over a definitive file/summary marker.
 All retrieval 5xx failures, including routine Updates and POST lookup/status reads,
 advertise retrying that retrieval without a new operation outcome. A failed status
 read does not settle its original command. Mutations retain reconciliation/unknown

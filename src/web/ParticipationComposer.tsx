@@ -1,3 +1,8 @@
+import {
+  PublicationConfirmation,
+  SubmissionRecovery,
+  SubmissionCorrection,
+} from './ComposerFeedback.js';
 import { MentionEditor } from './MentionEditor.js';
 import { mentionPresentation } from './composer-mentions.js';
 import { EditingIntent } from './EditingIntent.js';
@@ -5,7 +10,7 @@ import { insertMention } from './composer-mentions.js';
 import { FileEditor } from './Files.js';
 import { type PublicationFileSet, normalizeFileSet } from '../contracts/files.js';
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { useLocation, Link } from 'react-router';
+import { useLocation } from 'react-router';
 import {
   type AuthoredContent,
   type CommittedView,
@@ -26,7 +31,7 @@ import {
 import { type Context, useIntent, useQuery, SeparateDraft } from './participation-state.js';
 import { AuthoredText } from './AuthoredText.js';
 import { ChangeNoteEditor, ChangeAccountEditor } from './Changes.js';
-import { ReferenceEditor, ReferenceViews } from './References.js';
+import { ReferenceEditor } from './References.js';
 import type {
   ReferenceValue,
   ChangeAccountValue,
@@ -223,13 +228,8 @@ export function Composer({
     account,
     fileSet,
   };
-  const {
-    comparisonRevision,
-    comparisonReady,
-    adoptsBaseReferences,
-    adoptsFileReferences,
-    requiresComparison,
-  } = draftCorrection({ operation, record, comparison: compare });
+  const correction = draftCorrection({ operation, record, comparison: compare });
+  const { comparisonRevision, comparisonReady, requiresComparison } = correction;
   useEffect(() => {
     setCompare(undefined);
     setComparisonError('');
@@ -543,6 +543,29 @@ export function Composer({
     setReferences(nextReferences);
     void persist({ references: nextReferences, note: nextNote, account: nextAccount });
   };
+  function writeAnother() {
+    void update((current) =>
+      context.store.replace(
+        current!,
+        draftBody({
+          text: '',
+          title: '',
+          mentions: [],
+          references: [],
+          note: null,
+          account: null,
+          ...(canFiles
+            ? {
+                fileSet: {
+                  version: canNote ? 'artifact-files-v1' : 'contribution-attachments-v1',
+                  files: [],
+                },
+              }
+            : {}),
+        }),
+      ),
+    ).catch((failure) => setError(failure.message));
+  }
   return (
     <section
       ref={section}
@@ -583,93 +606,36 @@ export function Composer({
         {record?.state === 'committed' ? 'Publication confirmed.' : status}
       </p>
       {record?.state === 'committed' ? (
-        <div className="publication-confirmed">
-          <p>
-            <span>
-              {status ||
-                (kind === 'reply.create' ? 'Your reply was posted.' : 'Your publication is saved.')}
-            </span>{' '}
-            <Link to={`/loom/resource/${record.result!.resource_id}/${record.result!.revision_id}`}>
-              Inspect exact revision
-            </Link>
-          </p>
-          {['summary.revise', 'revision.publish'].includes(kind) && (
-            <>
-              <button disabled={busy} onClick={() => void startNextRevision()}>
-                Start another revision
-              </button>
-              <p className="fineprint">
-                Start from current content, keep existing declarations, and author a new optional
-                note. The previous note is not copied.
-              </p>
-            </>
-          )}
-          {onClose && <button onClick={onClose}>Close composer</button>}
-          {!summaryDiscussion && kind !== 'revision.publish' && (
-            <button
-              onClick={() =>
-                void update((current) =>
-                  context.store.replace(
-                    current!,
-                    draftBody({
-                      text: '',
-                      title: '',
-                      mentions: [],
-                      references: [],
-                      note: null,
-                      account: null,
-                      ...(canFiles
-                        ? {
-                            fileSet: {
-                              version: canNote
-                                ? 'artifact-files-v1'
-                                : 'contribution-attachments-v1',
-                              files: [],
-                            },
-                          }
-                        : {}),
-                    }),
-                  ),
-                ).catch((failure) => setError(failure.message))
-              }
-            >
-              Write another
-            </button>
-          )}
-        </div>
+        <PublicationConfirmation
+          kind={kind}
+          result={record.result!}
+          status={status}
+          busy={busy}
+          onStartNextRevision={
+            ['summary.revise', 'revision.publish'].includes(kind)
+              ? () => void startNextRevision()
+              : undefined
+          }
+          onWriteAnother={
+            !summaryDiscussion && kind !== 'revision.publish' ? writeAnother : undefined
+          }
+          onClose={onClose}
+        />
       ) : (
         <>
           {busy && <p role="status">Waiting for confirmation…</p>}
           {record?.state === 'uncertain' && !busy && (
-            <div
-              className="notice"
-              ref={recovery}
-              role="group"
-              aria-label="Submission recovery"
-              tabIndex={-1}
-            >
-              <strong>
-                We couldn’t confirm whether your {kind === 'reply.create' ? 'reply' : 'publication'}{' '}
-                was posted.
-              </strong>
-              <p>Your original text and target are saved on this browser.</p>
-              <button
-                onClick={() => {
-                  revealRecovery.current = true;
-                  void check();
-                }}
-              >
-                Check status
-              </button>
-              <button onClick={() => void send()}>
-                Retry same {kind === 'reply.create' ? 'reply' : 'publication'}
-              </button>
-              <details>
-                <summary>Submission details</summary>
-                <code>{record.key}</code>
-                <p>{typeof fixed.parent_id === 'string' ? 'Parent: ' + fixed.parent_id : ''}</p>
-              </details>
-            </div>
+            <SubmissionRecovery
+              kind={kind}
+              attemptKey={record.key}
+              parentId={fixed.parent_id}
+              recoveryRef={recovery}
+              onCheck={() => {
+                revealRecovery.current = true;
+                void check();
+              }}
+              onRetry={() => void send()}
+            />
           )}
           {titleField && (
             <label>
@@ -891,75 +857,15 @@ export function Composer({
             />
           )}
           {record?.state === 'rejected' && (
-            <div className="notice">
-              <strong>Your draft is preserved.</strong>
-              {comparisonReady && compare && (
-                <>
-                  <p>
-                    Current revision {compare.revision_number} by {compare.publisher.nickname}
-                  </p>
-                  <AuthoredText
-                    content={compare.content}
-                    participants={compare.mentioned_participants}
-                  />
-                  <ReferenceViews
-                    sourceId={compare.resource_id}
-                    sourceRevision={compare.revision_id}
-                    target={{
-                      kind:
-                        compare.kind === 'summary'
-                          ? 'summary'
-                          : compare.kind === 'artifact'
-                            ? 'artifact'
-                            : 'contribution',
-                      resource_id: compare.resource_id,
-                      revision_id: compare.revision_id,
-                    }}
-                  />
-                </>
-              )}
-              <p>
-                Review your text and the current version, then prepare a corrected submission to
-                unlock editing. Your changes will be saved as a new draft.
-              </p>
-              {requiresComparison && !comparisonReady && !comparisonError && (
-                <p role="status">Loading the comparison revision before correction…</p>
-              )}
-              {comparisonError && (
-                <>
-                  <p role="alert">{comparisonError}</p>
-                  <button
-                    disabled={busy}
-                    onClick={() => setComparisonAttempt((value) => value + 1)}
-                  >
-                    Retry comparison revision
-                  </button>
-                </>
-              )}
-              {adoptsBaseReferences && compare?.content.format !== 'loom-markdown-v1' && (
-                <p>
-                  The comparison revision’s references will be copied into your corrected draft.
-                  Review or remove them before publishing.
-                </p>
-              )}
-              {adoptsFileReferences && (
-                <p>
-                  The comparison revision’s exact file references will also be copied. Your
-                  attempted references stay in the draft; a conflicting older assertion is copied
-                  with a new identity. Review the combined list and keep at most 16 before
-                  publishing.
-                </p>
-              )}
-              {summaryDiscussion && (
-                <p>
-                  A corrected summary draft needs an explicit source declaration. Later material is
-                  never added automatically.
-                </p>
-              )}
-              <button disabled={busy || (requiresComparison && !comparisonReady)} onClick={correct}>
-                Prepare corrected submission
-              </button>
-            </div>
+            <SubmissionCorrection
+              compare={compare}
+              correction={correction}
+              comparisonError={comparisonError}
+              summaryDiscussion={summaryDiscussion}
+              busy={busy}
+              onRetryComparison={() => setComparisonAttempt((value) => value + 1)}
+              onCorrect={correct}
+            />
           )}
           <p role="status" className="fineprint draft-save-status">
             {saveState}

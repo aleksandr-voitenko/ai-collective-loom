@@ -9,6 +9,18 @@ import { adminNavigationReview } from '../helpers/admin-navigation-review.js';
 const click=(page:Page,name:string)=>page.getByRole('button',{name,exact:true}).click();
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return{promise,release};}
 
+async function answerDeparturePrompt(page:Page, options:{decision:'cancel'|'discard';navigate:()=>Promise<void>}) {
+ // The URL, dirty form and open drawer are unchanged while the native prompt is
+ // pending. They cannot prove it has closed before the next keyboard action.
+ const closed=page.waitForEvent('dialogclosed');
+ const answered=page.waitForEvent('dialog').then(async prompt=>{
+  expect(prompt.type()).toBe('confirm');
+  expect(prompt.message()).toBe('Discard unsaved Community settings changes and leave this page?');
+  if(options.decision==='cancel')await prompt.dismiss();else await prompt.accept();
+ });
+ await Promise.all([options.navigate(),answered,closed]);
+}
+
 test('administration workspace routes, isolated pages and accessible responsive navigation',async({page,context,server})=>{
  const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
  await page.goto(server.origin+'/loom/admin');
@@ -74,14 +86,19 @@ test('administration workspace routes, isolated pages and accessible responsive 
  await page.keyboard.press('Tab');await expect(drawer.getByRole('button',{name:'Close navigation ×'})).toBeFocused();
  for(let i=0;i<23;i++){await page.keyboard.press('Tab');expect(await drawer.evaluate(d=>d.contains(document.activeElement))).toBe(true);}
  await page.getByRole('button',{name:'Save changes',exact:true}).evaluate(b=>b.focus());expect(await drawer.evaluate(d=>d.contains(document.activeElement))).toBe(true);
- page.once('dialog',d=>d.dismiss());await drawer.getByRole('link',{name:'Participants',exact:true}).click();
+ await answerDeparturePrompt(page,{decision:'cancel',navigate:()=>drawer.getByRole('link',{name:'Participants',exact:true}).click()});
  await expect(page).toHaveURL(server.origin+'/loom/admin/community');await expect(drawer).toBeVisible();await expect(form).toContainText('Unsaved changes');
  await expect(drawer.getByRole('link',{name:'Community',exact:true})).toHaveAttribute('aria-current','page');
- await page.keyboard.press('Escape');await expect(menu).toBeFocused();await expect(drawer).not.toBeVisible();expect(await handle!.evaluate(el=>el.isConnected)).toBe(true);
+ await expect(drawer.getByRole('link',{name:'Participants',exact:true})).toBeFocused();
+ await page.keyboard.press('Escape');
+ await expect(menu).toBeFocused();
+ await expect(drawer).not.toBeVisible();
+ expect(await handle!.evaluate(el=>el.isConnected)).toBe(true);
  await review.capture('dirty-departure-cancelled',[{width:390,height:844}]);
  await menu.click();await page.setViewportSize({width:1440,height:1000});await expect(page.getByRole('dialog',{name:'Administration menu'})).toHaveCount(0);await expect(page.locator('.sidebar')).toBeVisible();
  await page.getByRole('button',{name:'Save changes',exact:true}).focus();await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeFocused();expect(await handle!.evaluate(el=>el.isConnected)).toBe(true);
- await page.setViewportSize({width:390,height:844});await menu.click();page.once('dialog',d=>d.accept());await drawer.getByRole('link',{name:'Participants',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});await menu.click();
+ await answerDeparturePrompt(page,{decision:'discard',navigate:()=>drawer.getByRole('link',{name:'Participants',exact:true}).click()});
  await expect(page.getByRole('heading',{name:'Participants',exact:true})).toBeFocused();await expect(drawer).not.toBeVisible();
  await review.capture('mobile-destination',[{width:390,height:844}]);
  expect(writes).toEqual([]);

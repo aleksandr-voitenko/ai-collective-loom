@@ -103,7 +103,7 @@ async function fixture(t: TestContext, operation: ComposerOperation, path: strin
     assert.equal(context.store.all().length, 2);
   };
   mount();
-  return { context, original, calls, committed, request, answer, remount, nextSave, raw, record, assertIndependent, closed: () => closed };
+  return { context, original, calls, committed, request, answer, remount, nextSave, nextSettlement, raw, record, assertIndependent, closed: () => closed };
 }
 
 test('close composer keeps the visible draft open when local persistence fails', async t => {
@@ -420,5 +420,70 @@ test('forward word deletion cannot swap two recipients with unresolved display n
   const saved=f.nextSave();
   await act(async()=>{fireEvent.change(input,{target:{value:'@participant',selectionStart:0,selectionEnd:0}});await saved;});
   assert.deepEqual(f.record().body.content,{format:'loom-markdown-v1',text:'[[mention:second]]',mentions:[second]});
+  f.assertIndependent();
+});
+
+for (const reply of [false, true]) test('confirmation appears only after durable settlement and retains explicit next-draft controls: reply=' + reply, async t => {
+  const area = randomUUID(), discussion = randomUUID(), parent = randomUUID();
+  const body = reply
+    ? { discussion_id: discussion, parent_id: parent, content: authored('Exact reply awaiting settlement') }
+    : { area_id: area, title: 'Exact artifact title', content: authored('Exact artifact awaiting settlement') };
+  const f = await fixture(t, reply ? { kind: 'reply.create', discussionId: discussion, parentId: parent } : { kind: 'artifact.create', areaId: area },
+    reply ? '/api/v1/replies' : '/api/v1/artifacts', body);
+  let reached!: () => void, release!: () => void;
+  const entered = new Promise<void>(resolve => { reached = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const settle = f.context.store.settle.bind(f.context.store);
+  t.mock.method(f.context.store, 'settle', async (...args: Parameters<typeof settle>) => {
+    reached();
+    await gate;
+    return settle(...args);
+  });
+  t.after(() => release());
+  const call = await f.request(reply ? 'Post reply' : 'Publish');
+  const committed: CommittedView = { publication_state: 'committed', idempotency: 'created', operation_id: randomUUID(), resource_id: randomUUID(), revision_id: randomUUID() };
+  await act(async () => { call.finish(Response.json(committed)); await entered; });
+  assert.ok(screen.getByText('Waiting for confirmation…'));
+  assert.equal(screen.queryByText('Publication confirmed.'), null);
+  assert.equal(screen.queryByRole('link', { name: 'Inspect exact revision' }), null);
+  assert.deepEqual(f.committed, []);
+  assert.equal(f.record().state, 'uncertain');
+  const settled = f.nextSettlement();
+  await act(async () => { release(); await settled; });
+  assert.ok(screen.getByText('Publication confirmed.'));
+  assert.equal(screen.getByRole('link', { name: 'Inspect exact revision' }).getAttribute('href'), `/loom/resource/${committed.resource_id}/${committed.revision_id}`);
+  assert.deepEqual(f.committed, [committed]);
+  assert.equal(f.record().state, 'committed');
+  assert.deepEqual(f.record().body, { ...body, idempotency_key: f.original.key });
+  assert.equal(screen.queryByRole('group', { name: 'Submission recovery' }), null);
+  assert.equal(screen.queryByLabelText(reply ? 'Your reply' : 'Text'), null);
+  assert.ok(screen.getByRole('button', { name: 'Write another' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close composer' })); });
+  assert.equal(f.closed(), 1);
+  assert.equal(f.calls.length, 1, 'Displaying or closing confirmation cannot dispatch again');
+  f.assertIndependent();
+});
+
+test('status recovery preserves mounted editor and disclosure state through busy and uncertain feedback', async t => {
+  const discussion = randomUUID(), parent = randomUUID();
+  const body = { discussion_id: discussion, parent_id: parent, content: authored('Frozen reply through recovery rendering') };
+  const f = await fixture(t, { kind: 'reply.create', discussionId: discussion, parentId: parent }, '/api/v1/replies', body, true);
+  const input = screen.getByLabelText('Your reply') as HTMLTextAreaElement;
+  const preview = screen.getByText('Preview', { exact: true }).closest('details')!;
+  preview.open = true;
+  const original = f.raw();
+  screen.getByRole('button', { name: 'Check status' }).focus();
+  const call = await f.request('Check status');
+  assert.equal(screen.queryByRole('group', { name: 'Submission recovery' }), null);
+  assert.ok(screen.getByLabelText('Your reply') === input);
+  assert.ok(preview.open);
+  await f.answer(call, failure('service_unavailable', 'Status is temporarily unavailable.'));
+  assert.ok(screen.getByLabelText('Your reply') === input);
+  assert.ok(screen.getByText('Preview', { exact: true }).closest('details') === preview);
+  assert.ok(preview.open);
+  assert.ok(input.disabled);
+  assert.equal(input.value, body.content.text);
+  assert.ok(document.activeElement === screen.getByRole('group', { name: 'Submission recovery' }));
+  assert.equal(f.raw(), original);
   f.assertIndependent();
 });

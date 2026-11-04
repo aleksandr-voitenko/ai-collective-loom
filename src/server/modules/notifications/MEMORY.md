@@ -75,7 +75,9 @@ stops if a later identity change takes ownership. The standalone HTTPS reader
 fsyncs its private record including displayed page size and exact successor tokens;
 next uses that saved boundary with any requested new size, without reconstructing
 the previous page's membership. Independent journals do
-not consume each other's deliveries. Native supervisor supports notifications
+not consume each other's deliveries. Journal ownership uses the shared SQLite
+lock described in `scripts/MEMORY.md`, including process-death recovery and
+legacy-lock refusal. Native supervisor supports notifications
 stop/start separately from search. Build before tests that launch compiled files.
 
 See `tests/MEMORY.md` for real PostgreSQL/HTTPS/native

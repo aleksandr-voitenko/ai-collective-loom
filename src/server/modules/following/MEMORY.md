@@ -98,7 +98,9 @@ Owner refusal fences the identity even after same-owner navigation; older identi
 cannot revoke replacements. Repeated transitions, sibling and pending responses,
 blocked journal settlement and real server evaluation order are regression cases.
 The native shared-changes-client fsyncs a separate0600 journal; next uses its exact
-saved successor even when resized. Build before native API/browser tests.
+saved successor even when resized. Journal ownership uses the shared SQLite lock
+described in `scripts/MEMORY.md`, including process-death recovery and legacy-lock
+refusal. Build before native API/browser tests.
 
 `tests/integration/following*.test.ts`, `tests/web/following.test.tsx` and
 `tests/e2e/following.spec.ts` cover these boundaries with owned synthetic resources.

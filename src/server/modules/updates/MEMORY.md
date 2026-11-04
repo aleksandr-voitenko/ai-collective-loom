@@ -91,10 +91,9 @@ Recovery boundary rationale and regressions: `LC-20261017-5QRE`.
 separate overview/member positions, resizing successors and credential continuity.
 Member retry reauthorizes a withdrawn overview before the attempted expansion;
 interim saves retain the previous displayed detail until its successor succeeds.
-Native journal ownership uses built-in Node24 SQLite BEGIN EXCLUSIVE on a private
-`.lock.sqlite` sidecar. OS locks release on process death; never unlink the sidecar
-and split its inode ownership. Share journals only between clients using that
-protocol. Legacy `.lock` files have unknown ownership and are explicitly refused.
+Native journal ownership shares `scripts/lib/client-journal-lock.mjs` with the
+notifications and shared-changes readers. `scripts/MEMORY.md` owns its SQLite
+process-death recovery, persistent sidecar and legacy-lock compatibility rules.
 
 Tests: `integration/updates*.test.ts`, `web/updates.test.tsx`, `e2e/updates.spec.ts`.
 Build before compiled API/browser checks. Use the normal browser runner; retain
