@@ -20,24 +20,32 @@ function storage(t: TestContext) {
   });
   let reversed = false;
   const value = new Proxy(records, {
-    ownKeys: (target) => reversed ? Reflect.ownKeys(target).reverse() : Reflect.ownKeys(target),
+    ownKeys: (target) => (reversed ? Reflect.ownKeys(target).reverse() : Reflect.ownKeys(target)),
   });
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value });
-  return { records, reorder: () => { reversed = true; } };
+  return {
+    records,
+    reorder: () => {
+      reversed = true;
+    },
+  };
 }
 
-test('journal preservation ignores enumeration changes after an unrelated storage insertion', t => {
+test('journal preservation ignores enumeration changes after an unrelated storage insertion', (t) => {
   const fixture = storage(t);
   const before = publicationJournalBytes();
   fixture.records['loom.search-maintenance.v1:fixture'] = '{"state":"uncertain"}';
   fixture.reorder();
-  assert.deepEqual({ [draftKey]: fixture.records[draftKey], [committedKey]: fixture.records[committedKey] },
-    { [draftKey]: draft, [committedKey]: committed }, 'Every original key and stored byte is unchanged');
+  assert.deepEqual(
+    { [draftKey]: fixture.records[draftKey], [committedKey]: fixture.records[committedKey] },
+    { [draftKey]: draft, [committedKey]: committed },
+    'Every original key and stored byte is unchanged',
+  );
   assert.deepEqual(publicationJournalBytes(), before);
   assert.deepEqual(before, { [draftKey]: draft, [committedKey]: committed });
 });
 
-test('journal preservation detects changed raw bytes even when parsed JSON is identical', t => {
+test('journal preservation detects changed raw bytes even when parsed JSON is identical', (t) => {
   const fixture = storage(t);
   const before = publicationJournalBytes();
   const compact = JSON.stringify(JSON.parse(draft));
@@ -48,11 +56,12 @@ test('journal preservation detects changed raw bytes even when parsed JSON is id
 });
 
 for (const mutation of ['content', 'addition', 'removal'] as const)
-test('journal preservation detects record ' + mutation, t => {
-  const fixture = storage(t);
-  const before = publicationJournalBytes();
-  if (mutation === 'content') fixture.records[draftKey] = '{"state":"draft","body":{"text":"Changed"}}';
-  if (mutation === 'addition') fixture.records['loom.intent.v1:fixture:extra'] = draft;
-  if (mutation === 'removal') delete fixture.records[committedKey];
-  assert.notDeepEqual(publicationJournalBytes(), before);
-});
+  test('journal preservation detects record ' + mutation, (t) => {
+    const fixture = storage(t);
+    const before = publicationJournalBytes();
+    if (mutation === 'content')
+      fixture.records[draftKey] = '{"state":"draft","body":{"text":"Changed"}}';
+    if (mutation === 'addition') fixture.records['loom.intent.v1:fixture:extra'] = draft;
+    if (mutation === 'removal') delete fixture.records[committedKey];
+    assert.notDeepEqual(publicationJournalBytes(), before);
+  });

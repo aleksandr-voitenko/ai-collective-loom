@@ -126,22 +126,52 @@ test(
         .status,
       200,
     );
-    let verified = inventory(restored); const rateTable = 'loom.participation_rate_windows';
+    let verified = inventory(restored);
+    const rateTable = 'loom.participation_rate_windows';
     // Restore compared every captured byte. The verifier validates its bounded read
     // charges and identified samples; these three extra probes only charge reads.
-    assert.equal(verified.tables[rateTable].publicationSha256, before.tables[rateTable].publicationSha256);
-    assert.deepEqual({...verified,tables:{...verified.tables,[rateTable]:verifiedSnapshot.tables[rateTable]}},verifiedSnapshot,
-      'Verification must preserve every prior table, policy/decision and native version');
-    const diagnostics = JSON.parse(readFileSync(restored.path + '/VERIFIED.json','utf8')).observedRequests;
-    const {normalizeVerifierObservations} = await import('../../scripts/lib/recovery-observations.mjs');
-    const allowed = new Map(diagnostics.map(({request_id,...fields}:any)=>[request_id,fields]));
-    const normalized = normalizeVerifierObservations(before.tables, verifiedSnapshot.tables, allowed, 0, Date.now());
+    assert.equal(
+      verified.tables[rateTable].publicationSha256,
+      before.tables[rateTable].publicationSha256,
+    );
+    assert.deepEqual(
+      {
+        ...verified,
+        tables: { ...verified.tables, [rateTable]: verifiedSnapshot.tables[rateTable] },
+      },
+      verifiedSnapshot,
+      'Verification must preserve every prior table, policy/decision and native version',
+    );
+    const diagnostics = JSON.parse(
+      readFileSync(restored.path + '/VERIFIED.json', 'utf8'),
+    ).observedRequests;
+    const { normalizeVerifierObservations } =
+      await import('../../scripts/lib/recovery-observations.mjs');
+    const allowed = new Map(
+      diagnostics.map(({ request_id, ...fields }: any) => [request_id, fields]),
+    );
+    const normalized = normalizeVerifierObservations(
+      before.tables,
+      verifiedSnapshot.tables,
+      allowed,
+      0,
+      Date.now(),
+    );
     assert.ok(normalized, 'Only identified verifier outcomes may alter observational slots');
-    assert.deepEqual({...verifiedSnapshot,tables:{...normalized,[rateTable]:before.tables[rateTable]}}, before);
-    const health = await httpsCall(c.origin,c.tls.cert,'/api/v1/admin/operational-health',undefined,f.adminToken);
-    assert.equal(health.status,200);
-    assert.ok(['unknown','prior_runtime'].includes(health.body.authored.value.worker.state));
-    assert.equal(health.body.storage_reachability,'unverified');
+    assert.deepEqual(
+      { ...verifiedSnapshot, tables: { ...normalized, [rateTable]: before.tables[rateTable] } },
+      before,
+    );
+    const health = await httpsCall(
+      c.origin,
+      c.tls.cert,
+      '/api/v1/admin/operational-health',
+      undefined,
+      f.adminToken,
+    );
+    assert.equal(health.status, 200);
+    assert.ok(['unknown', 'prior_runtime'].includes(health.body.authored.value.worker.state));
+    assert.equal(health.body.storage_reachability, 'unverified');
     verified = inventory(restored);
     // Same native worker programs resume; existing signals and source/private rows cannot multiply.
     docker(['stop', '--time', '60', restored.id + '-runtime']);
@@ -161,7 +191,7 @@ test(
       if (expected.classification === 'authoritative-captured') {
         assert.equal(
           JSON.stringify(after.tables[table]),
-          JSON.stringify(table===rateTable?verified.tables[rateTable]:expected),
+          JSON.stringify(table === rateTable ? verified.tables[rateTable] : expected),
           'Authoritative state changed: ' + table,
         );
       }

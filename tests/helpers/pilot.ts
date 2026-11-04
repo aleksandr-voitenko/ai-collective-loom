@@ -120,11 +120,7 @@ export async function populatePilot(f: PilotFixture) {
     enrollment = JSON.parse(readFileSync(join(f.path, 'enrollment/enrollment.json'), 'utf8'));
   const admin = httpClient(c.origin, c.tls.ca);
   const human = await admin.enroll(enrollment.ticket);
-  const accepted = async (
-    client: ReturnType<typeof httpClient>,
-    path: string,
-    body?: unknown,
-  ) => {
+  const accepted = async (client: ReturnType<typeof httpClient>, path: string, body?: unknown) => {
     const r = await client.call(path, body);
     assert.ok(
       r.status >= 200 && r.status < 300,

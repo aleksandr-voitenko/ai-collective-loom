@@ -6,12 +6,24 @@ import { actorFromVerifiedIdentity } from '../../dist/server/modules/publication
 import { PublicationOperation } from '../../dist/server/modules/publication/publication.js';
 
 const database = new PostgresDatabase(readConfiguration().database);
-process.once('message', async message => {
+process.once('message', async (message) => {
   try {
-    const committed = await new PublicationOperation(database).publish(actorFromVerifiedIdentity(message), message.input);
+    const committed = await new PublicationOperation(database).publish(
+      actorFromVerifiedIdentity(message),
+      message.input,
+    );
     process.send?.({ stage: 'committed_before_response' });
     // Keep the response behind a separate controlled barrier. The test kills this
     // process after persisted commit and before any logical result reaches it.
-    process.once('message', async () => { process.send?.(committed); await database.close(); process.disconnect(); });
-  } catch { process.send?.({ stage: 'failed' }); await database.close(); process.exitCode = 1; process.disconnect(); }
+    process.once('message', async () => {
+      process.send?.(committed);
+      await database.close();
+      process.disconnect();
+    });
+  } catch {
+    process.send?.({ stage: 'failed' });
+    await database.close();
+    process.exitCode = 1;
+    process.disconnect();
+  }
 });

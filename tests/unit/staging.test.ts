@@ -20,34 +20,57 @@ test('public staging HTML carries presentation metadata while existing deploymen
   await writeFile(join(directory, 'index.html'), html);
   try {
     for (const mode of ['staging', 'local-pilot', 'synthetic-preview', undefined] as const) {
-      const participation = mode === undefined ? undefined : {
-        installationMode: mode,
-        database: { transaction: async () => { throw new Error('HTML must not query SQL.'); } },
-        authentication: { policy: { origin: 'https://loom-staging.example.com' } },
-        administration: {},
-      } as unknown as ParticipationServices;
+      const participation =
+        mode === undefined
+          ? undefined
+          : ({
+              installationMode: mode,
+              database: {
+                transaction: async () => {
+                  throw new Error('HTML must not query SQL.');
+                },
+              },
+              authentication: { policy: { origin: 'https://loom-staging.example.com' } },
+              administration: {},
+            } as unknown as ParticipationServices);
       const app = await createApplication({
         database: { isReady: async () => true, close: async () => {} },
-        logger: false, browserRoot: directory, participation,
+        logger: false,
+        browserRoot: directory,
+        participation,
       });
       try {
         for (const url of ['/', '/status', '/loom', '/loom/saved']) {
           const response = await app.inject({ url });
           assert.equal(response.statusCode, 200);
           assert.match(response.headers['content-type']!, /^text\/html/);
-          assert.equal(response.body, mode === 'staging'
-            ? html.replace('</head>', '<meta name="loom-deployment" content="staging"></head>')
-            : html);
+          assert.equal(
+            response.body,
+            mode === 'staging'
+              ? html.replace('</head>', '<meta name="loom-deployment" content="staging"></head>')
+              : html,
+          );
         }
-      } finally { await app.close(); }
+      } finally {
+        await app.close();
+      }
     }
     await writeFile(join(directory, 'index.html'), '<html>Invalid browser build</html>');
-    await assert.rejects(createApplication({
-      database: { isReady: async () => true, close: async () => {} }, logger: false,
-      browserRoot: directory,
-      participation: { installationMode: 'staging', authentication: { policy: { origin: 'https://loom-staging.example.com' } } } as unknown as ParticipationServices,
-    }), /browser document lacks a head/);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+    await assert.rejects(
+      createApplication({
+        database: { isReady: async () => true, close: async () => {} },
+        logger: false,
+        browserRoot: directory,
+        participation: {
+          installationMode: 'staging',
+          authentication: { policy: { origin: 'https://loom-staging.example.com' } },
+        } as unknown as ParticipationServices,
+      }),
+      /browser document lacks a head/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 test('staging requires its own acknowledgement and exact RP HTTPS domain', () => {
   const p = stagingIdentityPolicy('https://loom-staging.example.com', 'vps-staging-1');

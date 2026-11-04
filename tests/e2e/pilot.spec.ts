@@ -442,7 +442,11 @@ test('pilot first-run setup is focused, retains exact recovery, and opens the co
     await page.getByLabel('Community name', { exact: true }).fill('First-run commons');
     await expect
       .poll(async () => (await journals(page)).find((r: any) => r.slot === 'setup')?.body)
-      .toEqual({ ...defaults, community_name: 'First-run commons', idempotency_key: expect.any(String) });
+      .toEqual({
+        ...defaults,
+        community_name: 'First-run commons',
+        idempotency_key: expect.any(String),
+      });
     const draft = (await journals(page)).find((r: any) => r.slot === 'setup');
     await page.reload();
     await expect(page.getByLabel('Community name', { exact: true })).toHaveValue(
@@ -458,9 +462,7 @@ test('pilot first-run setup is focused, retains exact recovery, and opens the co
     };
     await captureReview('desktop');
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(
-      page.getByRole('button', { name: 'Create community', exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create community', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
@@ -494,16 +496,22 @@ test('pilot first-run setup is focused, retains exact recovery, and opens the co
     await page.getByRole('button', { name: 'Close navigation ×', exact: true }).click();
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Topics', exact: true })).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Create community', exact: true }),
-    ).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Create community', exact: true })).toHaveCount(
+      0,
+    );
     const initialized = await (await page.request.get(c.origin + '/api/v1/community')).json();
     expect(initialized.instance_id).toBe(info.instance_id);
     expect(initialized.community_name).toBe('First-run commons');
     expect(initialized.settings_version).toBe(1);
     const areas = await (await page.request.get(c.origin + '/api/v1/areas')).json();
-    expect(areas.items.map((area: any) => area.title).sort()).toEqual(['Community organization', 'General']);
-    const overview = await page.request.get(c.origin + `/api/v1/resources/${initialized.overview.resource_id}/revisions/${initialized.overview.revision_id}`);
+    expect(areas.items.map((area: any) => area.title).sort()).toEqual([
+      'Community organization',
+      'General',
+    ]);
+    const overview = await page.request.get(
+      c.origin +
+        `/api/v1/resources/${initialized.overview.resource_id}/revisions/${initialized.overview.revision_id}`,
+    );
     expect(overview.status()).toBe(200);
     expect((await overview.json()).content).toEqual(defaults.overview);
   } finally {

@@ -3,7 +3,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, cpSync, unlinkSync, lstatSync, realpathSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  cpSync,
+  unlinkSync,
+  lstatSync,
+  realpathSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import {
   pilotFixture,
@@ -106,7 +114,11 @@ test(
     assert.equal((await admin.call('/api/v1/identity/self')).status, 401);
     await f.command('restart');
     assert.ok(readFileSync(recovery.enrollment, 'utf8') === replacement.bytes);
-    assert.equal(f.instance().release.image, d.release.image, 'handoff preserves the selected image');
+    assert.equal(
+      f.instance().release.image,
+      d.release.image,
+      'handoff preserves the selected image',
+    );
     for (const service of [
       'anchor',
       'postgres',
@@ -227,10 +239,7 @@ test(
       'snapshot does not automatically accept source browser cookies',
     );
     assert.equal(
-      sql(
-        readInstance(destination),
-        'SELECT instance_id FROM loom.community_settings WHERE id=1',
-      ),
+      sql(readInstance(destination), 'SELECT instance_id FROM loom.community_settings WHERE id=1'),
       sqlFromSnapshot(p),
     );
     const incomplete = join(f.directory, 'incomplete');
@@ -312,16 +321,15 @@ test(
     ).body.items;
     assert.equal((await p.alice.client.call(files[0].download_url)).body, 'workerpendingtoken');
     assert.equal(
-      (await p.alice.client.call('/api/v1/search/files?q=workerpendingtoken')).body.items
-        .length,
+      (await p.alice.client.call('/api/v1/search/files?q=workerpendingtoken')).body.items.length,
       0,
     );
     await f.command('worker-start', { service: 'file-text' });
     await until(
       async () =>
-        (
-          await p.alice.client.call('/api/v1/search/files?q=workerpendingtoken')
-        ).body.items.some((x: any) => x.file_id === files[0].file_id),
+        (await p.alice.client.call('/api/v1/search/files?q=workerpendingtoken')).body.items.some(
+          (x: any) => x.file_id === files[0].file_id,
+        ),
       'exact extracted file',
     );
     assert.equal(
@@ -426,8 +434,7 @@ test(
   `,
     });
     assert.equal(
-      (await httpsCall(p.c.origin, p.c.tls.ca, p.downloads[0], undefined, p.alice.token))
-        .status,
+      (await httpsCall(p.c.origin, p.c.tls.ca, p.downloads[0], undefined, p.alice.token)).status,
       503,
     );
     assert.equal(
@@ -459,9 +466,7 @@ test(
     await assert.rejects(
       f.command('destroy-test', { 'test-owner': randomUUID(), 'confirm-instance': d.id }),
     );
-    const volumes = ['postgres-data', 's3-data'].map(
-      (s) => owned(d, 'volume', name(d, s)).Name,
-    );
+    const volumes = ['postgres-data', 's3-data'].map((s) => owned(d, 'volume', name(d, s)).Name);
     await assert.rejects(
       f.command('init', {
         port: String(await freePort()),
@@ -672,7 +677,11 @@ test(
       f = x;
     });
     const compilerCache = join(old.checkout, 'node_modules/.vite-temp');
-    assert.equal(realpathSync(compilerCache), compilerCache, 'historical compiler cache stays in its own checkout');
+    assert.equal(
+      realpathSync(compilerCache),
+      compilerCache,
+      'historical compiler cache stays in its own checkout',
+    );
     f = old.f;
     const p = await populatePilot(f);
     assert.equal(p.d.release.revision, previousPilotSource);

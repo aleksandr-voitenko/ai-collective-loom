@@ -17,14 +17,16 @@ export async function verifyNativeReaderLockRecovery<Page extends ReaderPage>({
   journal: string;
   gate: ReturnType<typeof gates>;
 }) {
-  const run = async (action: string, file = journal) => JSON.parse(
-    (await promisify(execFile)(process.execPath, args(action, file), { timeout: 20000 })).stdout,
-  ) as Page;
+  const run = async (action: string, file = journal) =>
+    JSON.parse(
+      (await promisify(execFile)(process.execPath, args(action, file), { timeout: 20000 })).stdout,
+    ) as Page;
   const displayed = await run('read');
   const saved = await readFile(journal, 'utf8');
   // The native client already owns its journal at its first authentication read.
   // Pause before SQL guards so a different journal can still authenticate/read.
-  const authentication = (sql: string) => sql.includes('FROM loom.participant_credentials WHERE id = $1');
+  const authentication = (sql: string) =>
+    sql.includes('FROM loom.participant_credentials WHERE id = $1');
   const held = gate.pause(authentication, 'before');
   const child = spawn(process.execPath, args('next'), { stdio: 'ignore' });
   const exited = once(child, 'exit');
@@ -40,7 +42,11 @@ export async function verifyNativeReaderLockRecovery<Page extends ReaderPage>({
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     await exited;
   }
-  assert.equal(await readFile(journal, 'utf8'), saved, 'an interrupted next must retain the exact saved page');
+  assert.equal(
+    await readFile(journal, 'utf8'),
+    saved,
+    'an interrupted next must retain the exact saved page',
+  );
   const recovered = await run('read');
   assert.deepEqual(recovered.items, displayed.items);
   assert.equal(recovered.limit, displayed.limit);
@@ -54,8 +60,16 @@ export async function verifyNativeReaderLockRecovery<Page extends ReaderPage>({
   failed.release.release();
   await assert.rejects(run('read'), /HTTP 503/);
   assert.equal(await readFile(journal, 'utf8'), beforeFailure);
-  assert.deepEqual((await run('read')).items, displayed.items, 'a failed read must release ownership too');
-  assert.equal((await stat(journal + '.lock.sqlite')).ino, sidecar.ino, 'lock ownership must keep one inode');
+  assert.deepEqual(
+    (await run('read')).items,
+    displayed.items,
+    'a failed read must release ownership too',
+  );
+  assert.equal(
+    (await stat(journal + '.lock.sqlite')).ino,
+    sidecar.ino,
+    'lock ownership must keep one inode',
+  );
 
   const legacy = journal + '.legacy';
   const legacyBytes = 'Synthetic older reader with unverified ownership';

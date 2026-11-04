@@ -62,8 +62,7 @@ function keyMaterial(keyFile, paths) {
   if (paths.some((path) => inside(path, keyFile)))
     fail('backup key must be separate from instance and backup');
   const value = readPrivateText(keyFile, 256).trim();
-  if (!/^[A-Za-z0-9_+\/-]{43,128}={0,2}$/.test(value))
-    fail('separate random backup key required');
+  if (!/^[A-Za-z0-9_+\/-]{43,128}={0,2}$/.test(value)) fail('separate random backup key required');
   return value + '\n';
 }
 function bundle(d) {
@@ -115,8 +114,7 @@ function archive(d, volume, output) {
 }
 export async function capture(d, path, keyFile) {
   privatePath(path, { fresh: true });
-  if (inside(d.path, path) || inside(path, d.path))
-    fail('backup must be separate from instance');
+  if (inside(d.path, path) || inside(path, d.path)) fail('backup must be separate from instance');
   const key = keyMaterial(keyFile, [d.path, path]);
   const c = preflight(d);
   if (!['ready', 'verified-snapshot'].includes(d.state))
@@ -226,8 +224,7 @@ export async function restoreSnapshot(source, options) {
   try {
     const { manifest: m, config: c } = bundle(source).read(backup, key, scratch);
     sourceStopped(m);
-    if ('https://localhost:' + port === m.source.origin)
-      fail('restore requires a separate origin');
+    if ('https://localhost:' + port === m.source.origin) fail('restore requires a separate origin');
     mkdirSync(path, { mode: 0o700 });
     d = {
       ...source,
@@ -401,8 +398,7 @@ async function recoverAdministrator(d, options) {
   };
 }
 async function update(d, options) {
-  if (options['confirm-instance'] !== d.id)
-    fail('explicit instance identity required for update');
+  if (options['confirm-instance'] !== d.id) fail('explicit instance identity required for update');
   configuration(d);
   // Freeze the candidate before stopping the source. Provider/platform changes are unsupported.
   const candidatePath = join(d.path, 'update-' + randomUUID());
@@ -625,8 +621,7 @@ export async function maintenance(action, options) {
         if (resourceExists('container', name(d, s))) owned(d, 'container', name(d, s));
       for (const s of ['postgres-data', 's3-data'])
         if (resourceExists('volume', name(d, s))) owned(d, 'volume', name(d, s));
-      if (resourceExists('network', name(d, 'network')))
-        owned(d, 'network', name(d, 'network'));
+      if (resourceExists('network', name(d, 'network'))) owned(d, 'network', name(d, 'network'));
       for (const s of [...services, 'maintenance', 'postgres', 's3', 'anchor'])
         if (resourceExists('container', name(d, s))) docker(['rm', '--force', name(d, s)]);
       for (const s of ['postgres-data', 's3-data'])

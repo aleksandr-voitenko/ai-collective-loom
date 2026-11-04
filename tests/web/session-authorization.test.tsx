@@ -1,509 +1,1446 @@
 import assert from 'node:assert/strict';
-import {afterEach,test} from 'node:test';
-import {randomUUID} from 'node:crypto';
-import {registerHooks} from 'node:module';
-import {JSDOM} from 'jsdom';
-import {StrictMode,useState} from 'react';
-import {createMemoryRouter} from 'react-router';
-import {RouterProvider} from 'react-router/dom';
-import {AuthorizationBoundary,useAuthorization} from '../../src/web/AuthorizationBoundary.js';
-import {sessionRequest,commandRequest,invalidateIdentity,identityGeneration,IntentStore,isDefinitiveRejection,type Self} from '../../src/web/participation-client.js';
-import {FollowPage} from '../../src/contracts/private-controls.js';
-import {useQuery} from '../../src/web/participation-state.js';
-import {Value} from '@sinclair/typebox/value';
-import {AccountInput} from '../../src/server/modules/identity/contracts.js';
+import { afterEach, test } from 'node:test';
+import { randomUUID } from 'node:crypto';
+import { registerHooks } from 'node:module';
+import { JSDOM } from 'jsdom';
+import { StrictMode, useState } from 'react';
+import { createMemoryRouter } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
+import { AuthorizationBoundary, useAuthorization } from '../../src/web/AuthorizationBoundary.js';
+import {
+  sessionRequest,
+  commandRequest,
+  invalidateIdentity,
+  identityGeneration,
+  IntentStore,
+  isDefinitiveRejection,
+  type Self,
+} from '../../src/web/participation-client.js';
+import { FollowPage } from '../../src/contracts/private-controls.js';
+import { useQuery } from '../../src/web/participation-state.js';
+import { Value } from '@sinclair/typebox/value';
+import { AccountInput } from '../../src/server/modules/identity/contracts.js';
 
-const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://loom.example/'});
-for(const key of ['window','document','navigator','HTMLElement','MutationObserver','location','localStorage','Event','CustomEvent'] as const)
- Object.defineProperty(globalThis,key,{value:dom.window[key],configurable:true});
-Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true,writable:true});
-dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
-dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
-Object.defineProperty(window,'matchMedia',{value:()=>({matches:false,addEventListener(){},removeEventListener(){}}),configurable:true});
-Object.defineProperty(navigator,'locks',{value:{request:async(_name:string,work:()=>unknown)=>work()},configurable:true});
-const {render,screen,fireEvent,cleanup,act,within}=await import('@testing-library/react');
+const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+  url: 'https://loom.example/',
+});
+for (const key of [
+  'window',
+  'document',
+  'navigator',
+  'HTMLElement',
+  'MutationObserver',
+  'location',
+  'localStorage',
+  'Event',
+  'CustomEvent',
+] as const)
+  Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true });
+Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
+  value: true,
+  configurable: true,
+  writable: true,
+});
+dom.window.HTMLDialogElement.prototype.close = function () {
+  this.removeAttribute('open');
+};
+dom.window.HTMLDialogElement.prototype.showModal = function () {
+  this.setAttribute('open', '');
+};
+Object.defineProperty(window, 'matchMedia', {
+  value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+  configurable: true,
+});
+Object.defineProperty(navigator, 'locks', {
+  value: { request: async (_name: string, work: () => unknown) => work() },
+  configurable: true,
+});
+const { render, screen, fireEvent, cleanup, act, within } = await import('@testing-library/react');
 // JSDOM exercises the real shell's state/effects; Vite handles CSS in Chromium.
-const css=registerHooks({load(url,context,next){return url.endsWith('.css')?{format:'module',source:'',shortCircuit:true}:next(url,context);}});
-const {ParticipationApp}=await import('../../src/web/ParticipationApp.js');css.deregister();
-afterEach(()=>{cleanup();invalidateIdentity();localStorage.clear();});
-const self:Self={participant_id:randomUUID(),credential_id:randomUUID(),nickname:'Reader',kind:'human',role:'participant'};
-const browsingPage=(items:unknown[])=>({contract:'administration-pages-1',scope:{collection:'accounts',participant_id:null,order:'id',consistency:'restart-on-change'},items,next_cursor:null,complete:true,expires_at:'2090-01-01Z'});
-const denied=()=>Response.json({error:{code:'unauthenticated',message:'Sign in required.'}},{status:401});
+const css = registerHooks({
+  load(url, context, next) {
+    return url.endsWith('.css')
+      ? { format: 'module', source: '', shortCircuit: true }
+      : next(url, context);
+  },
+});
+const { ParticipationApp } = await import('../../src/web/ParticipationApp.js');
+css.deregister();
+afterEach(() => {
+  cleanup();
+  invalidateIdentity();
+  localStorage.clear();
+});
+const self: Self = {
+  participant_id: randomUUID(),
+  credential_id: randomUUID(),
+  nickname: 'Reader',
+  kind: 'human',
+  role: 'participant',
+};
+const browsingPage = (items: unknown[]) => ({
+  contract: 'administration-pages-1',
+  scope: {
+    collection: 'accounts',
+    participant_id: null,
+    order: 'id',
+    consistency: 'restart-on-change',
+  },
+  items,
+  next_cursor: null,
+  complete: true,
+  expires_at: '2090-01-01Z',
+});
+const denied = () =>
+  Response.json(
+    { error: { code: 'unauthenticated', message: 'Sign in required.' } },
+    { status: 401 },
+  );
 
-test('anonymous staging presentation uses only the server HTML marker and retains ordinary session discovery',async t=>{
- const marker=document.createElement('meta');marker.name='loom-deployment';marker.content='staging';document.head.append(marker);t.after(()=>marker.remove());
- const calls:string[]=[];
- t.mock.method(globalThis,'fetch',async(path:string)=>{calls.push(path);return denied();});
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom']});t.after(()=>router.dispose());
- await act(async()=>render(<StrictMode><RouterProvider router={router}/></StrictMode>));
- assert.ok(screen.queryByText('Staging test',{exact:true}));
- assert.ok(screen.queryByText('Invitation-only staging for non-sensitive test material.'));
- assert.equal(screen.queryByText('Local evaluation',{exact:true}),null);
- assert.equal(screen.queryByText(/This preview uses synthetic/),null);
- assert.deepEqual(calls,['/api/v1/identity/self','/api/v1/identity/self']);
- assert.ok(screen.queryByRole('button',{name:'Sign in with passkey'}));
- assert.equal(screen.queryByRole('navigation',{name:'Community navigation'}),null);
+test('anonymous staging presentation uses only the server HTML marker and retains ordinary session discovery', async (t) => {
+  const marker = document.createElement('meta');
+  marker.name = 'loom-deployment';
+  marker.content = 'staging';
+  document.head.append(marker);
+  t.after(() => marker.remove());
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (path: string) => {
+    calls.push(path);
+    return denied();
+  });
+  const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+    initialEntries: ['/loom'],
+  });
+  t.after(() => router.dispose());
+  await act(async () =>
+    render(
+      <StrictMode>
+        <RouterProvider router={router} />
+      </StrictMode>,
+    ),
+  );
+  assert.ok(screen.queryByText('Staging test', { exact: true }));
+  assert.ok(screen.queryByText('Invitation-only staging for non-sensitive test material.'));
+  assert.equal(screen.queryByText('Local evaluation', { exact: true }), null);
+  assert.equal(screen.queryByText(/This preview uses synthetic/), null);
+  assert.deepEqual(calls, ['/api/v1/identity/self', '/api/v1/identity/self']);
+  assert.ok(screen.queryByRole('button', { name: 'Sign in with passkey' }));
+  assert.equal(screen.queryByRole('navigation', { name: 'Community navigation' }), null);
 });
 
-test('the production shell settles anonymous discovery and retains a failed sign-in form across navigation',async t=>{
- const calls:{path:string;resolve:(r:Response)=>void}[]=[];
- t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(resolve=>calls.push({path,resolve})));
- let events=0;const changed=()=>{events++;};window.addEventListener('loom-identity',changed);
- t.after(()=>window.removeEventListener('loom-identity',changed));
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom']});
- t.after(()=>router.dispose());
- render(<StrictMode><RouterProvider router={router}/></StrictMode>);
- const initial=[...calls];assert.equal(initial.length,2);
- await act(async()=>{for(const call of initial)call.resolve(denied());});
- assert.ok(screen.queryByRole('button',{name:'Sign in with passkey'}));
- assert.equal(calls.length,2,'Settled anonymous discovery must not schedule another probe.');
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Sign in with passkey'})));
- assert.equal(calls.at(-1)!.path,'/api/v1/identity/signin/start');
- await act(async()=>calls.at(-1)!.resolve(denied()));
- assert.ok(screen.queryByText('Sign in required.'));
- assert.equal(calls.length,3,'A ceremony failure must not restart session discovery.');
- await act(async()=>router.navigate('/loom/saved'));
- assert.equal(calls.length,4);
- await act(async()=>calls.at(-1)!.resolve(denied()));
- assert.ok(screen.queryByRole('button',{name:'Sign in with passkey'}));
- assert.equal(calls.length,4);assert.equal(events,0);
+test('the production shell settles anonymous discovery and retains a failed sign-in form across navigation', async (t) => {
+  const calls: { path: string; resolve: (r: Response) => void }[] = [];
+  t.mock.method(
+    globalThis,
+    'fetch',
+    (path: string) => new Promise<Response>((resolve) => calls.push({ path, resolve })),
+  );
+  let events = 0;
+  const changed = () => {
+    events++;
+  };
+  window.addEventListener('loom-identity', changed);
+  t.after(() => window.removeEventListener('loom-identity', changed));
+  const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+    initialEntries: ['/loom'],
+  });
+  t.after(() => router.dispose());
+  render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  );
+  const initial = [...calls];
+  assert.equal(initial.length, 2);
+  await act(async () => {
+    for (const call of initial) call.resolve(denied());
+  });
+  assert.ok(screen.queryByRole('button', { name: 'Sign in with passkey' }));
+  assert.equal(calls.length, 2, 'Settled anonymous discovery must not schedule another probe.');
+  await act(async () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with passkey' })),
+  );
+  assert.equal(calls.at(-1)!.path, '/api/v1/identity/signin/start');
+  await act(async () => calls.at(-1)!.resolve(denied()));
+  assert.ok(screen.queryByText('Sign in required.'));
+  assert.equal(calls.length, 3, 'A ceremony failure must not restart session discovery.');
+  await act(async () => router.navigate('/loom/saved'));
+  assert.equal(calls.length, 4);
+  await act(async () => calls.at(-1)!.resolve(denied()));
+  assert.ok(screen.queryByRole('button', { name: 'Sign in with passkey' }));
+  assert.equal(calls.length, 4);
+  assert.equal(events, 0);
 });
 
-const hosts=[['area','withdraw'],['discussion','projections'],['resource','withdraw'],['overview','withdraw'],
- ['following','settings'],['updates','withdraw'],['notifications','withdraw'],['attention','settings']] as const;
-for(const [host,sourcePolicy] of hosts)
-test(`${host}: ceremony and identity-record failures retain independent protected content`,async t=>{
- t.mock.method(globalThis,'fetch',async()=>Response.json(self));await sessionRequest('/api/v1/identity/self');
- let authority!:ReturnType<typeof useAuthorization>;
- function Content(){authority=useAuthorization();return <p>Still authorized body</p>;}
- render(<StrictMode><AuthorizationBoundary sourcePolicy={sourcePolicy}><Content/></AuthorizationBoundary></StrictMode>);
- const before=identityGeneration();
- for(const [path,code] of [['/api/v1/identity/signin/finish','unauthenticated'],['/api/v1/identity/register/start','unavailable'],['/api/v1/identity/revoke','unavailable']] as const){
-  t.mock.method(globalThis,'fetch',async()=>Response.json({error:{code,message:'Local refusal.'}},{status:code==='unavailable'?404:401}));
-  await act(async()=>assert.rejects(path.endsWith('/revoke')?commandRequest(path,{body:{}}):sessionRequest(path,{body:{}}),{code}));
-  assert.ok(screen.queryByText('Still authorized body'));assert.equal(identityGeneration(),before);
- }
- // A missing identity record reached through the protected-read capability has
- // the same meaning as one reached through a command.
- await act(async()=>assert.rejects(authority.read('/api/v1/identity/credentials?participant_id=missing'),{code:'unavailable'}));
- assert.ok(screen.queryByText('Still authorized body'));assert.equal(identityGeneration(),before);
-});
-for(const [host,sourcePolicy] of hosts)for(const path of ['discovery','community','command','private-read','boundary-receipt'] as const)
-test(`${host}: ${path} authority loss withdraws settled and pending siblings exactly once`,async t=>{
- const calls:{path:string;resolve:(r:Response)=>void}[]=[];
- t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(resolve=>calls.push({path,resolve})));
- const establish=sessionRequest('/api/v1/identity/self');calls.at(-1)!.resolve(Response.json(self));await establish;
- let authority!:ReturnType<typeof useAuthorization>;
- function Content(){authority=useAuthorization();const [late,setLate]=useState(false);return <><p>Protected body</p>
-  <button onClick={()=>void authority.read('/api/v1/guide').then(()=>setLate(true),()=>{})}>Hold protected response</button>
-  {late&&<p>Late protected body</p>}</>;}
- render(<StrictMode><AuthorizationBoundary scope={host} sourcePolicy={sourcePolicy}><Content/></AuthorizationBoundary>
-  <AuthorizationBoundary scope="sibling"><p>Settled sibling</p></AuthorizationBoundary></StrictMode>);
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Hold protected response'})));
- const held=calls.at(-1)!;
- const body={idempotency_key:randomUUID()},before=identityGeneration();
- const failure=path==='discovery'?sessionRequest('/api/v1/identity/self'):
-  path==='community'?sessionRequest('/api/v1/community'):
-  path==='command'?commandRequest('/api/v1/replies',{body,self}):
-  path==='private-read'?authority.privateRead('/api/v1/me/following/private',{schema:FollowPage}):authority.savedCommand(body,'status',self);
- const rejected=assert.rejects(failure,{code:'unauthenticated'});
- await act(async()=>{calls.at(-1)!.resolve(denied());await rejected;});
- assert.equal(identityGeneration(),before+1);
- assert.equal(!!screen.queryByText('Protected body'),false);assert.equal(!!screen.queryByText('Settled sibling'),false);
- await act(async()=>held.resolve(Response.json({guide:'late'})));
- assert.equal(!!screen.queryByText('Late protected body'),false);
- // The shell's follow-up probe is ordinary anonymous discovery, not a second
- // authority event. This also holds while old boundary objects are retained.
- const anonymous=sessionRequest('/api/v1/identity/self'),settled=assert.rejects(anonymous,{code:'unauthenticated'});
- await act(async()=>{calls.at(-1)!.resolve(denied());await settled;});
- assert.equal(identityGeneration(),before+1);
-});
+const hosts = [
+  ['area', 'withdraw'],
+  ['discussion', 'projections'],
+  ['resource', 'withdraw'],
+  ['overview', 'withdraw'],
+  ['following', 'settings'],
+  ['updates', 'withdraw'],
+  ['notifications', 'withdraw'],
+  ['attention', 'settings'],
+] as const;
+for (const [host, sourcePolicy] of hosts)
+  test(`${host}: ceremony and identity-record failures retain independent protected content`, async (t) => {
+    t.mock.method(globalThis, 'fetch', async () => Response.json(self));
+    await sessionRequest('/api/v1/identity/self');
+    let authority!: ReturnType<typeof useAuthorization>;
+    function Content() {
+      authority = useAuthorization();
+      return <p>Still authorized body</p>;
+    }
+    render(
+      <StrictMode>
+        <AuthorizationBoundary sourcePolicy={sourcePolicy}>
+          <Content />
+        </AuthorizationBoundary>
+      </StrictMode>,
+    );
+    const before = identityGeneration();
+    for (const [path, code] of [
+      ['/api/v1/identity/signin/finish', 'unauthenticated'],
+      ['/api/v1/identity/register/start', 'unavailable'],
+      ['/api/v1/identity/revoke', 'unavailable'],
+    ] as const) {
+      t.mock.method(globalThis, 'fetch', async () =>
+        Response.json(
+          { error: { code, message: 'Local refusal.' } },
+          { status: code === 'unavailable' ? 404 : 401 },
+        ),
+      );
+      await act(async () =>
+        assert.rejects(
+          path.endsWith('/revoke')
+            ? commandRequest(path, { body: {} })
+            : sessionRequest(path, { body: {} }),
+          { code },
+        ),
+      );
+      assert.ok(screen.queryByText('Still authorized body'));
+      assert.equal(identityGeneration(), before);
+    }
+    // A missing identity record reached through the protected-read capability has
+    // the same meaning as one reached through a command.
+    await act(async () =>
+      assert.rejects(authority.read('/api/v1/identity/credentials?participant_id=missing'), {
+        code: 'unavailable',
+      }),
+    );
+    assert.ok(screen.queryByText('Still authorized body'));
+    assert.equal(identityGeneration(), before);
+  });
+for (const [host, sourcePolicy] of hosts)
+  for (const path of [
+    'discovery',
+    'community',
+    'command',
+    'private-read',
+    'boundary-receipt',
+  ] as const)
+    test(`${host}: ${path} authority loss withdraws settled and pending siblings exactly once`, async (t) => {
+      const calls: { path: string; resolve: (r: Response) => void }[] = [];
+      t.mock.method(
+        globalThis,
+        'fetch',
+        (path: string) => new Promise<Response>((resolve) => calls.push({ path, resolve })),
+      );
+      const establish = sessionRequest('/api/v1/identity/self');
+      calls.at(-1)!.resolve(Response.json(self));
+      await establish;
+      let authority!: ReturnType<typeof useAuthorization>;
+      function Content() {
+        authority = useAuthorization();
+        const [late, setLate] = useState(false);
+        return (
+          <>
+            <p>Protected body</p>
+            <button
+              onClick={() =>
+                void authority.read('/api/v1/guide').then(
+                  () => setLate(true),
+                  () => {},
+                )
+              }
+            >
+              Hold protected response
+            </button>
+            {late && <p>Late protected body</p>}
+          </>
+        );
+      }
+      render(
+        <StrictMode>
+          <AuthorizationBoundary scope={host} sourcePolicy={sourcePolicy}>
+            <Content />
+          </AuthorizationBoundary>
+          <AuthorizationBoundary scope="sibling">
+            <p>Settled sibling</p>
+          </AuthorizationBoundary>
+        </StrictMode>,
+      );
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: 'Hold protected response' })),
+      );
+      const held = calls.at(-1)!;
+      const body = { idempotency_key: randomUUID() },
+        before = identityGeneration();
+      const failure =
+        path === 'discovery'
+          ? sessionRequest('/api/v1/identity/self')
+          : path === 'community'
+            ? sessionRequest('/api/v1/community')
+            : path === 'command'
+              ? commandRequest('/api/v1/replies', { body, self })
+              : path === 'private-read'
+                ? authority.privateRead('/api/v1/me/following/private', { schema: FollowPage })
+                : authority.savedCommand(body, 'status', self);
+      const rejected = assert.rejects(failure, { code: 'unauthenticated' });
+      await act(async () => {
+        calls.at(-1)!.resolve(denied());
+        await rejected;
+      });
+      assert.equal(identityGeneration(), before + 1);
+      assert.equal(!!screen.queryByText('Protected body'), false);
+      assert.equal(!!screen.queryByText('Settled sibling'), false);
+      await act(async () => held.resolve(Response.json({ guide: 'late' })));
+      assert.equal(!!screen.queryByText('Late protected body'), false);
+      // The shell's follow-up probe is ordinary anonymous discovery, not a second
+      // authority event. This also holds while old boundary objects are retained.
+      const anonymous = sessionRequest('/api/v1/identity/self'),
+        settled = assert.rejects(anonymous, { code: 'unauthenticated' });
+      await act(async () => {
+        calls.at(-1)!.resolve(denied());
+        await settled;
+      });
+      assert.equal(identityGeneration(), before + 1);
+    });
 
-for(const [host,sourcePolicy] of hosts)for(const path of ['publication','administration','organization','restricted-read'] as const)
-test(`${host}: ${path} refusal preserves journal ownership through blocked settlement and pending responses`,async t=>{
- const calls:{path:string;body:unknown;resolve:(r:Response)=>void}[]=[];
- t.mock.method(globalThis,'fetch',(path:string,options:RequestInit)=>new Promise<Response>(resolve=>calls.push({path,body:options.body,resolve})));
- const establish=sessionRequest('/api/v1/identity/self');calls.at(-1)!.resolve(Response.json(self));await establish;
- let authority!:ReturnType<typeof useAuthorization>;
- function Content(){authority=useAuthorization();return <p>Protected body</p>;}
- render(<StrictMode><AuthorizationBoundary scope={host} sourcePolicy={sourcePolicy}><Content/></AuthorizationBoundary>
-  <AuthorizationBoundary scope="sibling"><p>Settled sibling</p></AuthorizationBoundary></StrictMode>);
- const store=new IntentStore(randomUUID(),self.participant_id),body={text:'Exact\r\nsaved bytes',resource_id:randomUUID().toUpperCase()};
- const first=await store.prepareDispatch(store.create('first','reply.create','/api/v1/replies',body),body);
- const uncertain=await store.prepareDispatch(store.create('retry','reply.create','/api/v1/replies',body),body);
- const retry=await store.prepareDispatch(uncertain,{text:'Must never replace exact bytes'});
- const before=identityGeneration(),held=authority.read('/api/v1/guide');const heldCall=calls.at(-1)!;
- const heldRead=path!=='publication'?assert.rejects(held,{name:'AbortError'}):held;
- const receipt=commandRequest('/api/v1/replies',{body:retry.body,self});const receiptCall=calls.at(-1)!;
- const failure=path==='publication'?commandRequest('/api/v1/replies',{body:first.body,self}):
-  path==='administration'?commandRequest('/api/v1/identity/accounts',{body:first.body,self}):
-  path==='organization'?authority.organizationCommand(first.body,'changes',self):authority.read('/api/v1/identity/credentials');
- const rejected=assert.rejects(failure,{code:'forbidden'});
- await act(async()=>{calls.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'Action refused.'}},{status:403}));await rejected;});
- assert.equal(identityGeneration(),before);
- assert.equal(!!screen.queryByText('Settled sibling'),path==='publication');
- let release!:()=>void;const barrier=new Promise<void>(resolve=>{release=resolve;});
- t.mock.method(navigator.locks,'request',async(_name:string,work:()=>unknown)=>{await barrier;return work();});
- const settlement=store.settle(first,{state:'rejected'});
- try{
-  assert.deepEqual(store.all().find(r=>r.key===first.key),first);
-  await act(async()=>{heldCall.resolve(Response.json({text:'Late content'}));await heldRead;});
-  receiptCall.resolve(Response.json({operation_state:'committed'}));await receipt;
-  assert.equal(identityGeneration(),before);
- }finally{release();}
- const settled=await settlement;
- assert.equal(settled.state,'rejected');assert.deepEqual(settled.body,first.body);
- assert.deepEqual(store.all().find(r=>r.key===retry.key),retry);
- assert.deepEqual(retry.body,uncertain.body);
- // A later refusal never proves an uncertain earlier dispatch was rejected.
- const later=new (await import('../../src/web/participation-client.js')).ApiError('forbidden','Refused');
- assert.equal(isDefinitiveRejection(later,true),false);
- await store.complete(retry);assert.deepEqual(store.all(),[settled]);
-});
+for (const [host, sourcePolicy] of hosts)
+  for (const path of ['publication', 'administration', 'organization', 'restricted-read'] as const)
+    test(`${host}: ${path} refusal preserves journal ownership through blocked settlement and pending responses`, async (t) => {
+      const calls: { path: string; body: unknown; resolve: (r: Response) => void }[] = [];
+      t.mock.method(
+        globalThis,
+        'fetch',
+        (path: string, options: RequestInit) =>
+          new Promise<Response>((resolve) => calls.push({ path, body: options.body, resolve })),
+      );
+      const establish = sessionRequest('/api/v1/identity/self');
+      calls.at(-1)!.resolve(Response.json(self));
+      await establish;
+      let authority!: ReturnType<typeof useAuthorization>;
+      function Content() {
+        authority = useAuthorization();
+        return <p>Protected body</p>;
+      }
+      render(
+        <StrictMode>
+          <AuthorizationBoundary scope={host} sourcePolicy={sourcePolicy}>
+            <Content />
+          </AuthorizationBoundary>
+          <AuthorizationBoundary scope="sibling">
+            <p>Settled sibling</p>
+          </AuthorizationBoundary>
+        </StrictMode>,
+      );
+      const store = new IntentStore(randomUUID(), self.participant_id),
+        body = { text: 'Exact\r\nsaved bytes', resource_id: randomUUID().toUpperCase() };
+      const first = await store.prepareDispatch(
+        store.create('first', 'reply.create', '/api/v1/replies', body),
+        body,
+      );
+      const uncertain = await store.prepareDispatch(
+        store.create('retry', 'reply.create', '/api/v1/replies', body),
+        body,
+      );
+      const retry = await store.prepareDispatch(uncertain, {
+        text: 'Must never replace exact bytes',
+      });
+      const before = identityGeneration(),
+        held = authority.read('/api/v1/guide');
+      const heldCall = calls.at(-1)!;
+      const heldRead = path !== 'publication' ? assert.rejects(held, { name: 'AbortError' }) : held;
+      const receipt = commandRequest('/api/v1/replies', { body: retry.body, self });
+      const receiptCall = calls.at(-1)!;
+      const failure =
+        path === 'publication'
+          ? commandRequest('/api/v1/replies', { body: first.body, self })
+          : path === 'administration'
+            ? commandRequest('/api/v1/identity/accounts', { body: first.body, self })
+            : path === 'organization'
+              ? authority.organizationCommand(first.body, 'changes', self)
+              : authority.read('/api/v1/identity/credentials');
+      const rejected = assert.rejects(failure, { code: 'forbidden' });
+      await act(async () => {
+        calls
+          .at(-1)!
+          .resolve(
+            Response.json(
+              { error: { code: 'forbidden', message: 'Action refused.' } },
+              { status: 403 },
+            ),
+          );
+        await rejected;
+      });
+      assert.equal(identityGeneration(), before);
+      assert.equal(!!screen.queryByText('Settled sibling'), path === 'publication');
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      t.mock.method(navigator.locks, 'request', async (_name: string, work: () => unknown) => {
+        await barrier;
+        return work();
+      });
+      const settlement = store.settle(first, { state: 'rejected' });
+      try {
+        assert.deepEqual(
+          store.all().find((r) => r.key === first.key),
+          first,
+        );
+        await act(async () => {
+          heldCall.resolve(Response.json({ text: 'Late content' }));
+          await heldRead;
+        });
+        receiptCall.resolve(Response.json({ operation_state: 'committed' }));
+        await receipt;
+        assert.equal(identityGeneration(), before);
+      } finally {
+        release();
+      }
+      const settled = await settlement;
+      assert.equal(settled.state, 'rejected');
+      assert.deepEqual(settled.body, first.body);
+      assert.deepEqual(
+        store.all().find((r) => r.key === retry.key),
+        retry,
+      );
+      assert.deepEqual(retry.body, uncertain.body);
+      // A later refusal never proves an uncertain earlier dispatch was rejected.
+      const later = new (await import('../../src/web/participation-client.js')).ApiError(
+        'forbidden',
+        'Refused',
+      );
+      assert.equal(isDefinitiveRejection(later, true), false);
+      await store.complete(retry);
+      assert.deepEqual(store.all(), [settled]);
+    });
 
-
-test('a refused administrative action withdraws role-protected account data while its exact journal still settles',async t=>{
- const calls:{path:string;resolve:(r:Response)=>void}[]=[];
- t.mock.method(globalThis,'fetch',(path:string)=>new Promise<Response>(resolve=>calls.push({path,resolve})));
- const establish=sessionRequest('/api/v1/identity/self');calls.at(-1)!.resolve(Response.json({...self,role:'administrator'}));await establish;
- // This is the same protected query used by the production Admission component.
- // requireAdministrator guards both this read and the command below; a role
- // demotion returns forbidden, while identity/self still authenticates the owner.
- function Accounts(){const accounts=useQuery<{id:string;nickname:string}[]>('/api/v1/identity/accounts');
-  return <>{accounts.data?.map(a=><p key={a.id}>{a.nickname}</p>)}</>;}
- render(<StrictMode><AuthorizationBoundary scope="administration"><Accounts/></AuthorizationBoundary></StrictMode>);
- await act(async()=>{for(const c of calls.filter(c=>c.path.endsWith('/accounts')))c.resolve(Response.json([{id:randomUUID(),nickname:'Administrator-only account'}]));});
- assert.ok(screen.queryByText('Administrator-only account'));
- const store=new IntentStore(randomUUID(),self.participant_id),body={nickname:'ReviewAccount',kind:'agent',role:'participant'};
- const exact=await store.prepareDispatch(store.create('admission','account.create','/api/v1/identity/accounts',body),body),before=identityGeneration();
- assert.ok(Value.Check(AccountInput,exact.body),'The regression must send a valid administrative command.');
- const command=commandRequest(exact.path,{body:exact.body,self}),refused=assert.rejects(command,{code:'forbidden'});
- await act(async()=>{calls.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'This action requires current administrator authority.'}},{status:403}));await refused;});
- const settled=await store.settle(exact,{state:'rejected'});
- assert.equal(identityGeneration(),before);assert.equal(settled.state,'rejected');assert.deepEqual(settled.body,exact.body);
- assert.equal(!!screen.queryByText('Administrator-only account'),false,'Lost administrator authority must withdraw its cached account data without changing the private journal owner.');
-});
-
-for(const path of ['first','status','retry'] as const)
-test(`production administration: ${path} refusal withdraws metadata before journal settlement and preserves private recovery`,async t=>{
- const {Onboarding}=await import('../../src/contracts/participation.js');
- const {SearchHealth}=await import('../../src/contracts/search.js');
- const instance=randomUUID(),admin={...self,role:'administrator'};
- const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});
- community.settings_version=1;
- const store=new IntentStore(instance,self.participant_id),body={nickname:'PrivateDraft',kind:'agent',role:'participant'};
- const draft=await store.saveDraft(store.create('admission','account.create','/api/v1/identity/accounts',body),body);
- if(path!=='first')await store.prepareDispatch(draft,body);
- const commands:{path:string;body:unknown;resolve:(r:Response)=>void}[]=[];
- t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
-  if(url==='/api/v1/identity/self')return Promise.resolve(Response.json(admin));
-  if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([{id:randomUUID(),nickname:'ProtectedAccount',kind:'agent',state:'suspended',role:'participant'}])));
-  if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
-  if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
-  throw new Error('Unexpected request: '+url);
- });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/participants']});t.after(()=>router.dispose());
- await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
- assert.ok(screen.queryByText('ProtectedAccount · agent · suspended'));
- const before=identityGeneration();
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:path==='first'?'Create account':path==='status'?'Check account operation':'Retry same account creation'})));
- assert.equal(commands.length,1);const exact=store.all()[0]!;assert.deepEqual(exact.body,{...body,idempotency_key:exact.key});
- assert.deepEqual(commands[0]!.body,path==='status'?{operation_kind:exact.kind,idempotency_key:exact.key}:exact.body);
- let release!:()=>void;const barrier=new Promise<void>(resolve=>{release=resolve;});
- t.mock.method(navigator.locks,'request',async(_name:string,work:()=>unknown)=>{await barrier;return work();});
- try{
-  await act(async()=>commands[0]!.resolve(Response.json({error:{code:'forbidden',message:'Administrator permission was removed.'}},{status:403})));
-  assert.equal(!!screen.queryByText('ProtectedAccount · agent · suspended'),false);
-  assert.equal(identityGeneration(),before);
-  assert.equal((screen.getByLabelText('Nickname',{exact:true}) as HTMLInputElement).value,'PrivateDraft');
-  assert.deepEqual(store.all()[0],exact,'Content withdrawal must precede the blocked private journal settlement.');
- }finally{await act(async()=>release());}
- assert.equal(store.all()[0]!.state,path==='first'?'rejected':'uncertain');
- assert.deepEqual(store.all()[0]!.body,exact.body);
- assert.ok(screen.queryByText('Administrator permission was removed.'));
- assert.ok(screen.queryByRole('button',{name:path==='first'?'Prepare corrected account operation':'Check account operation'}));
-});
-
-for(const arrival of ['selected','issued','pending-secret'] as const)
-test(`production administration: ${arrival} copies cannot outlive their content lease`,async t=>{
- const {Onboarding}=await import('../../src/contracts/participation.js');
- const {SearchHealth}=await import('../../src/contracts/search.js');
- const instance=randomUUID(),account=randomUUID(),credential=randomUUID(),admin={...self,role:'administrator'};
- const accountKind=arrival==='issued'?'agent':'human';
- const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});community.settings_version=1;
- const commands:{path:string;body:unknown;resolve:(r:Response)=>void}[]=[];
- const reads:{resolve:(r:Response)=>void}[]=[];
- t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
-  if(url==='/api/v1/identity/self')return Promise.resolve(Response.json(admin));
-  if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([{id:account,nickname:'ProtectedSelection',kind:accountKind,state:'active',role:'participant'}])));
-  if(url==='/api/v1/identity/credentials/query')return new Promise<Response>(resolve=>reads.push({resolve}));
-  if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
-  if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
-  throw new Error('Unexpected request: '+url);
- });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/participants']});t.after(()=>router.dispose());
- await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
- assert.equal((screen.getByLabelText('Nickname') as HTMLInputElement).value,'ProtectedSelection');
- const response=()=>Response.json({operation_state:'committed',participant_id:account,credential_id:credential,secret:'Synthetic_one_time_value'});
- if(arrival!=='selected'){
-  await act(async()=>fireEvent.click(screen.getByRole('button',{name:accountKind==='agent'?'Issue agent credential':'Issue enrollment ticket'})));
-  assert.equal(commands.length,1);
-  if(arrival==='issued'){
-   await act(async()=>commands[0]!.resolve(response()));
-   assert.equal((screen.getByLabelText('Issued secret') as HTMLTextAreaElement).value,'Synthetic_one_time_value');
+test('a refused administrative action withdraws role-protected account data while its exact journal still settles', async (t) => {
+  const calls: { path: string; resolve: (r: Response) => void }[] = [];
+  t.mock.method(
+    globalThis,
+    'fetch',
+    (path: string) => new Promise<Response>((resolve) => calls.push({ path, resolve })),
+  );
+  const establish = sessionRequest('/api/v1/identity/self');
+  calls.at(-1)!.resolve(Response.json({ ...self, role: 'administrator' }));
+  await establish;
+  // This is the same protected query used by the production Admission component.
+  // requireAdministrator guards both this read and the command below; a role
+  // demotion returns forbidden, while identity/self still authenticates the owner.
+  function Accounts() {
+    const accounts = useQuery<{ id: string; nickname: string }[]>('/api/v1/identity/accounts');
+    return (
+      <>
+        {accounts.data?.map((a) => (
+          <p key={a.id}>{a.nickname}</p>
+        ))}
+      </>
+    );
   }
- }
- const store=new IntentStore(instance,self.participant_id),before=identityGeneration(),exact=store.all()[0];
- const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'credential.issue',idempotency_key:randomUUID()},self:admin});
- const rejected=assert.rejects(refusal,{code:'forbidden'});
- await act(async()=>{commands.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'Administrator permission was removed.'}},{status:403}));await rejected;});
- if(arrival==='pending-secret'){
-  assert.ok(screen.queryByRole('button',{name:'Issue enrollment ticket'}),'Pending recovery must use the immutable command kind, not withdrawn selection metadata.');
-  await act(async()=>commands[0]!.resolve(response()));
- }
- await act(async()=>{for(const read of reads)read.resolve(Response.json(browsingPage([{id:credential,kind:'agent',label:'ProtectedCredential',state:'active'}])));});
- assert.equal(identityGeneration(),before);
- assert.equal(!!screen.queryByLabelText('Issued secret'),false);
- assert.equal(!!screen.queryByDisplayValue('ProtectedSelection'),false);
- assert.equal(!!screen.queryByText(/ProtectedCredential/),false);
- assert.equal(!!screen.queryByText('ProtectedSelection · '+accountKind+' · active'),false);
- if(arrival==='pending-secret'){
-  assert.deepEqual(store.all(),[exact],'An undeliverable one-time response must keep exact non-secret recovery.');
-  assert.equal(JSON.stringify(store.all()).includes('Synthetic_one_time_value'),false);
-  assert.ok(screen.queryByRole('button',{name:'Check account operation'}));
-  assert.ok(screen.queryByRole('button',{name:'Issue enrollment ticket'}),'The private issuance kind must survive without copying withdrawn account metadata.');
- }else assert.deepEqual(store.all(),[],'A completed handoff retains no secret in recovery.');
+  render(
+    <StrictMode>
+      <AuthorizationBoundary scope="administration">
+        <Accounts />
+      </AuthorizationBoundary>
+    </StrictMode>,
+  );
+  await act(async () => {
+    for (const c of calls.filter((c) => c.path.endsWith('/accounts')))
+      c.resolve(Response.json([{ id: randomUUID(), nickname: 'Administrator-only account' }]));
+  });
+  assert.ok(screen.queryByText('Administrator-only account'));
+  const store = new IntentStore(randomUUID(), self.participant_id),
+    body = { nickname: 'ReviewAccount', kind: 'agent', role: 'participant' };
+  const exact = await store.prepareDispatch(
+      store.create('admission', 'account.create', '/api/v1/identity/accounts', body),
+      body,
+    ),
+    before = identityGeneration();
+  assert.ok(
+    Value.Check(AccountInput, exact.body),
+    'The regression must send a valid administrative command.',
+  );
+  const command = commandRequest(exact.path, { body: exact.body, self }),
+    refused = assert.rejects(command, { code: 'forbidden' });
+  await act(async () => {
+    calls.at(-1)!.resolve(
+      Response.json(
+        {
+          error: {
+            code: 'forbidden',
+            message: 'This action requires current administrator authority.',
+          },
+        },
+        { status: 403 },
+      ),
+    );
+    await refused;
+  });
+  const settled = await store.settle(exact, { state: 'rejected' });
+  assert.equal(identityGeneration(), before);
+  assert.equal(settled.state, 'rejected');
+  assert.deepEqual(settled.body, exact.body);
+  assert.equal(
+    !!screen.queryByText('Administrator-only account'),
+    false,
+    'Lost administrator authority must withdraw its cached account data without changing the private journal owner.',
+  );
 });
 
-for(const action of ['account','recovery','state','revoke','search'] as const)
-test(`production administration: late ${action} success cannot start protected reads after withdrawal`,async t=>{
- const {Onboarding}=await import('../../src/contracts/participation.js');
- const {SearchHealth}=await import('../../src/contracts/search.js');
- const instance=randomUUID(),account=randomUUID(),credential=randomUUID(),admin={...self,role:'administrator'};
- const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});community.settings_version=1;
- const store=new IntentStore(instance,self.participant_id);
- if(action==='account'||action==='recovery'){
-  const body={nickname:'PrivateCreation',kind:'human',role:'participant'};
-  const draft=await store.saveDraft(store.create('admission','account.create','/api/v1/identity/accounts',body),body);
-  if(action==='recovery')await store.prepareDispatch(draft,body);
- }else if(action==='revoke'){
-  const body={participant_id:account,kind:'enrollment',purpose:'enroll',label:'Synthetic participation',replace_credential_id:null};
-  await store.prepareDispatch(store.create('admission','credential.issue','/api/v1/identity/credentials',body),body);
- }
- const commands:{path:string;resolve:(r:Response)=>void}[]=[],reads:string[]=[];
- t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,resolve}));
-  reads.push(url);
-  if(url==='/api/v1/identity/self')return Promise.resolve(Response.json(admin));
-  if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([{id:account,nickname:'ProtectedAccount',kind:'human',state:'active',role:'participant'}])));
-  if(url==='/api/v1/identity/credentials/query')return Promise.resolve(Response.json(browsingPage([{id:credential,kind:'enrollment',label:'ProtectedCredential',state:'active'}])));
-  if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json({...Value.Create(SearchHealth),generation:1}));
-  if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
-  throw new Error('Unexpected request: '+url);
- });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:[action==='search'?'/loom/admin/search':'/loom/admin/participants']});t.after(()=>router.dispose());
- await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
- const refuse=async()=>{
-  const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'account.create',idempotency_key:randomUUID()},self:admin});
-  const rejected=assert.rejects(refusal,{code:'forbidden'});
-  await act(async()=>{commands.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'Recheck protected access.'}},{status:403}));await rejected;});
- };
- // Recovery initiated after withdrawal still has no metadata authority.
- if(action==='recovery')await refuse();
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:{account:'Create account',recovery:'Check account operation',state:'Suspend',revoke:'Revoke',search:'Rebuild index'}[action]})));
- if(action==='search')await act(async()=>fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'Rebuild index'})));
- const pending=commands.at(-1)!;
- if(action!=='recovery')await refuse();
- const before=[...reads];
- await act(async()=>pending.resolve(Response.json(action==='search'?{generation:2}:{operation_state:'committed',participant_id:account,credential_id:credential})));
- assert.deepEqual(reads,before,'A late receipt cannot implicitly request replacement metadata, including when it mounts credential recovery.');
- assert.equal(!!screen.queryByText(/ProtectedCredential/),false);
- assert.equal(!!screen.queryByText('ProtectedAccount · human · active'),false);
- if(action==='account'||action==='recovery'){
-  assert.deepEqual(store.all(),[]);
-  assert.ok(screen.queryByRole('button',{name:'Issue enrollment ticket'}));
- }
- const refresh=action==='account'||action==='recovery'?'Refresh credentials':action==='search'?'Check access':'Refresh accounts';
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:refresh})));
- assert.ok(reads.length>before.length,'An explicit refresh must still obtain new authorization.');
- assert.ok(screen.queryByText(action==='account'||action==='recovery'?/ProtectedCredential/:action==='search'?/No queued work observed|Worker unavailable/: 'ProtectedAccount · human · active'));
-});
+for (const path of ['first', 'status', 'retry'] as const)
+  test(`production administration: ${path} refusal withdraws metadata before journal settlement and preserves private recovery`, async (t) => {
+    const { Onboarding } = await import('../../src/contracts/participation.js');
+    const { SearchHealth } = await import('../../src/contracts/search.js');
+    const instance = randomUUID(),
+      admin = { ...self, role: 'administrator' };
+    const community = Value.Create({
+      ...Onboarding,
+      properties: {
+        ...Onboarding.properties,
+        instance_id: { ...Onboarding.properties.instance_id, default: instance },
+      },
+    });
+    community.settings_version = 1;
+    const store = new IntentStore(instance, self.participant_id),
+      body = { nickname: 'PrivateDraft', kind: 'agent', role: 'participant' };
+    const draft = await store.saveDraft(
+      store.create('admission', 'account.create', '/api/v1/identity/accounts', body),
+      body,
+    );
+    if (path !== 'first') await store.prepareDispatch(draft, body);
+    const commands: { path: string; body: unknown; resolve: (r: Response) => void }[] = [];
+    t.mock.method(globalThis, 'fetch', (url: string, options?: RequestInit) => {
+      if (options?.method === 'POST' && !url.endsWith('/query'))
+        return new Promise<Response>((resolve) =>
+          commands.push({ path: url, body: JSON.parse(String(options.body)), resolve }),
+        );
+      if (url === '/api/v1/identity/self') return Promise.resolve(Response.json(admin));
+      if (url === '/api/v1/community') return Promise.resolve(Response.json(community));
+      if (url === '/api/v1/identity/accounts/query')
+        return Promise.resolve(
+          Response.json(
+            browsingPage([
+              {
+                id: randomUUID(),
+                nickname: 'ProtectedAccount',
+                kind: 'agent',
+                state: 'suspended',
+                role: 'participant',
+              },
+            ]),
+          ),
+        );
+      if (url === '/api/v1/admin/search/health')
+        return Promise.resolve(Response.json(Value.Create(SearchHealth)));
+      if (url === '/api/v1/admin/search/failures')
+        return Promise.resolve(Response.json({ items: [], next_after: null }));
+      throw new Error('Unexpected request: ' + url);
+    });
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: ['/loom/admin/participants'],
+    });
+    t.after(() => router.dispose());
+    await act(async () => {
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      );
+    });
+    assert.ok(screen.queryByText('ProtectedAccount · agent · suspended'));
+    const before = identityGeneration();
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole('button', {
+          name:
+            path === 'first'
+              ? 'Create account'
+              : path === 'status'
+                ? 'Check account operation'
+                : 'Retry same account creation',
+        }),
+      ),
+    );
+    assert.equal(commands.length, 1);
+    const exact = store.all()[0]!;
+    assert.deepEqual(exact.body, { ...body, idempotency_key: exact.key });
+    assert.deepEqual(
+      commands[0]!.body,
+      path === 'status' ? { operation_kind: exact.kind, idempotency_key: exact.key } : exact.body,
+    );
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    t.mock.method(navigator.locks, 'request', async (_name: string, work: () => unknown) => {
+      await barrier;
+      return work();
+    });
+    try {
+      await act(async () =>
+        commands[0]!.resolve(
+          Response.json(
+            { error: { code: 'forbidden', message: 'Administrator permission was removed.' } },
+            { status: 403 },
+          ),
+        ),
+      );
+      assert.equal(!!screen.queryByText('ProtectedAccount · agent · suspended'), false);
+      assert.equal(identityGeneration(), before);
+      assert.equal(
+        (screen.getByLabelText('Nickname', { exact: true }) as HTMLInputElement).value,
+        'PrivateDraft',
+      );
+      assert.deepEqual(
+        store.all()[0],
+        exact,
+        'Content withdrawal must precede the blocked private journal settlement.',
+      );
+    } finally {
+      await act(async () => release());
+    }
+    assert.equal(store.all()[0]!.state, path === 'first' ? 'rejected' : 'uncertain');
+    assert.deepEqual(store.all()[0]!.body, exact.body);
+    assert.ok(screen.queryByText('Administrator permission was removed.'));
+    assert.ok(
+      screen.queryByRole('button', {
+        name: path === 'first' ? 'Prepare corrected account operation' : 'Check account operation',
+      }),
+    );
+  });
 
-for(const outcome of ['current','withdrawn'] as const)
-test(`production configuration: ${outcome} success refreshes only with current content authority`,async t=>{
- const {Onboarding}=await import('../../src/contracts/participation.js');
- const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});community.settings_version=1;
- community.community_name='Synthetic community';
- const topic=randomUUID(),other=randomUUID();
- const resource=(id:string)=>({resource_id:id,kind:'area',parent_id:null,version:1,hierarchy_version:1,title:id===topic?'Proposals':'Suggestions',description:null,metadata_version:null,local_open:true,publication_open:true,can_organize:true,ancestors:[],contacts_url:'/api/v1/contacts',proposal_route_url:'/api/v1/proposals'});
- const commands:{path:string;body:Record<string,unknown>;resolve:(r:Response)=>void}[]=[],reads:string[]=[];
- t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({path:url,body:JSON.parse(String(options.body)),resolve}));
-  reads.push(url);
-  if(url==='/api/v1/identity/self')return Promise.resolve(Response.json({...self,role:'administrator'}));
-  if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url.startsWith('/api/v1/organization/resources/'))return Promise.resolve(Response.json(resource(url.split('/').at(-1)!)));
-  if(url.startsWith('/api/v1/organization/destinations?'))return Promise.resolve(Response.json({items:[resource(topic),resource(other)],hierarchy_version:1,next_cursor:null,complete:true,work_budget_reached:false,scope:'destinations',limit:12,max_response_bytes:131072}));
-  throw new Error('Unexpected request: '+url);
- });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/community']});t.after(()=>router.dispose());
- await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
- const click=async(name:string)=>act(async()=>fireEvent.click(screen.getByRole('button',{name})));
- await click('Change proposal topic');await click('Choose Proposals in Proposals');await click('Save changes');
- assert.equal(commands[0]!.body.expected_version,1);const first=commands[0]!.body;
- if(outcome==='withdrawn'){
-  const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'account.create',idempotency_key:randomUUID()},self});
-  const rejected=assert.rejects(refusal,{code:'forbidden'});
-  await act(async()=>{commands[1]!.resolve(Response.json({error:{code:'forbidden',message:'Recheck access.'}},{status:403}));await rejected;});
- }
- const before=[...reads];community.settings_version=2;community.proposal_area={state:'ready',resource_id:topic};
- await act(async()=>commands[0]!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:2})));
- if(outcome==='withdrawn'){
-  assert.deepEqual(reads,before,'Late configuration success must not restart shell discovery or a protected query.');
-  assert.equal((screen.getByRole('button',{name:'Retry same save'}) as HTMLButtonElement).disabled,true);
-  await click('Check access');await click('Retry same save');assert.deepEqual(commands.at(-1)!.body,first);
-  await act(async()=>commands.at(-1)!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:2})));
- }
- await click('Change proposal topic');await click('Choose Suggestions in Suggestions');await click('Save changes');
- assert.equal(commands.at(-1)!.body.expected_version,2,'Repeated saves must use the newly authorized configuration version.');
- await act(async()=>commands.at(-1)!.resolve(Response.json({operation_state:'committed',operation_id:randomUUID(),version:3})));
-});
+for (const arrival of ['selected', 'issued', 'pending-secret'] as const)
+  test(`production administration: ${arrival} copies cannot outlive their content lease`, async (t) => {
+    const { Onboarding } = await import('../../src/contracts/participation.js');
+    const { SearchHealth } = await import('../../src/contracts/search.js');
+    const instance = randomUUID(),
+      account = randomUUID(),
+      credential = randomUUID(),
+      admin = { ...self, role: 'administrator' };
+    const accountKind = arrival === 'issued' ? 'agent' : 'human';
+    const community = Value.Create({
+      ...Onboarding,
+      properties: {
+        ...Onboarding.properties,
+        instance_id: { ...Onboarding.properties.instance_id, default: instance },
+      },
+    });
+    community.settings_version = 1;
+    const commands: { path: string; body: unknown; resolve: (r: Response) => void }[] = [];
+    const reads: { resolve: (r: Response) => void }[] = [];
+    t.mock.method(globalThis, 'fetch', (url: string, options?: RequestInit) => {
+      if (options?.method === 'POST' && !url.endsWith('/query'))
+        return new Promise<Response>((resolve) =>
+          commands.push({ path: url, body: JSON.parse(String(options.body)), resolve }),
+        );
+      if (url === '/api/v1/identity/self') return Promise.resolve(Response.json(admin));
+      if (url === '/api/v1/community') return Promise.resolve(Response.json(community));
+      if (url === '/api/v1/identity/accounts/query')
+        return Promise.resolve(
+          Response.json(
+            browsingPage([
+              {
+                id: account,
+                nickname: 'ProtectedSelection',
+                kind: accountKind,
+                state: 'active',
+                role: 'participant',
+              },
+            ]),
+          ),
+        );
+      if (url === '/api/v1/identity/credentials/query')
+        return new Promise<Response>((resolve) => reads.push({ resolve }));
+      if (url === '/api/v1/admin/search/health')
+        return Promise.resolve(Response.json(Value.Create(SearchHealth)));
+      if (url === '/api/v1/admin/search/failures')
+        return Promise.resolve(Response.json({ items: [], next_after: null }));
+      throw new Error('Unexpected request: ' + url);
+    });
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: ['/loom/admin/participants'],
+    });
+    t.after(() => router.dispose());
+    await act(async () => {
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      );
+    });
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Manage credentials' })),
+    );
+    assert.equal(
+      (screen.getByLabelText('Nickname') as HTMLInputElement).value,
+      'ProtectedSelection',
+    );
+    const response = () =>
+      Response.json({
+        operation_state: 'committed',
+        participant_id: account,
+        credential_id: credential,
+        secret: 'Synthetic_one_time_value',
+      });
+    if (arrival !== 'selected') {
+      await act(async () =>
+        fireEvent.click(
+          screen.getByRole('button', {
+            name: accountKind === 'agent' ? 'Issue agent credential' : 'Issue enrollment ticket',
+          }),
+        ),
+      );
+      assert.equal(commands.length, 1);
+      if (arrival === 'issued') {
+        await act(async () => commands[0]!.resolve(response()));
+        assert.equal(
+          (screen.getByLabelText('Issued secret') as HTMLTextAreaElement).value,
+          'Synthetic_one_time_value',
+        );
+      }
+    }
+    const store = new IntentStore(instance, self.participant_id),
+      before = identityGeneration(),
+      exact = store.all()[0];
+    const refusal = commandRequest('/api/v1/identity/reconcile', {
+      body: { operation_kind: 'credential.issue', idempotency_key: randomUUID() },
+      self: admin,
+    });
+    const rejected = assert.rejects(refusal, { code: 'forbidden' });
+    await act(async () => {
+      commands
+        .at(-1)!
+        .resolve(
+          Response.json(
+            { error: { code: 'forbidden', message: 'Administrator permission was removed.' } },
+            { status: 403 },
+          ),
+        );
+      await rejected;
+    });
+    if (arrival === 'pending-secret') {
+      assert.ok(
+        screen.queryByRole('button', { name: 'Issue enrollment ticket' }),
+        'Pending recovery must use the immutable command kind, not withdrawn selection metadata.',
+      );
+      await act(async () => commands[0]!.resolve(response()));
+    }
+    await act(async () => {
+      for (const read of reads)
+        read.resolve(
+          Response.json(
+            browsingPage([
+              { id: credential, kind: 'agent', label: 'ProtectedCredential', state: 'active' },
+            ]),
+          ),
+        );
+    });
+    assert.equal(identityGeneration(), before);
+    assert.equal(!!screen.queryByLabelText('Issued secret'), false);
+    assert.equal(!!screen.queryByDisplayValue('ProtectedSelection'), false);
+    assert.equal(!!screen.queryByText(/ProtectedCredential/), false);
+    assert.equal(!!screen.queryByText('ProtectedSelection · ' + accountKind + ' · active'), false);
+    if (arrival === 'pending-secret') {
+      assert.deepEqual(
+        store.all(),
+        [exact],
+        'An undeliverable one-time response must keep exact non-secret recovery.',
+      );
+      assert.equal(JSON.stringify(store.all()).includes('Synthetic_one_time_value'), false);
+      assert.ok(screen.queryByRole('button', { name: 'Check account operation' }));
+      assert.ok(
+        screen.queryByRole('button', { name: 'Issue enrollment ticket' }),
+        'The private issuance kind must survive without copying withdrawn account metadata.',
+      );
+    } else assert.deepEqual(store.all(), [], 'A completed handoff retains no secret in recovery.');
+  });
 
-for(const path of ['first','status','retry'] as const)
-test(`production setup: ${path} settlement leaves reauthorization to an explicit refresh`,async t=>{
- const {Onboarding,Committed}=await import('../../src/contracts/participation.js');
- const {SearchHealth}=await import('../../src/contracts/search.js');
- const instance=randomUUID(),community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});community.settings_version=0;
- const store=new IntentStore(instance,self.participant_id),body={community_name:'PrivateSetup',ordinary_area_name:'General',proposal_area_name:'Proposals',overview:{format:'loom-markdown-v1',text:'Setup draft',mentions:[]}};
- const draft=await store.saveDraft(store.create('setup','community.setup','/api/v1/community/setup',body),body);
- if(path!=='first')await store.prepareDispatch(draft,body);
- const commands:{resolve:(r:Response)=>void}[]=[],reads:string[]=[];
- t.mock.method(globalThis,'fetch',(url:string,options?:RequestInit)=>{
-  if(options?.method==='POST' && !url.endsWith('/query'))return new Promise<Response>(resolve=>commands.push({resolve}));
-  reads.push(url);
-  if(url==='/api/v1/identity/self')return Promise.resolve(Response.json({...self,role:'administrator'}));
-  if(url==='/api/v1/community')return Promise.resolve(Response.json(community));
-  if(url==='/api/v1/identity/accounts/query')return Promise.resolve(Response.json(browsingPage([])));
-  if(url==='/api/v1/admin/search/health')return Promise.resolve(Response.json(Value.Create(SearchHealth)));
-  if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
-  throw new Error('Unexpected request: '+url);
- });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/participants']});t.after(()=>router.dispose());
- await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
- const refuse=async()=>{
-  const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'account.create',idempotency_key:randomUUID()},self});
-  const rejected=assert.rejects(refusal,{code:'forbidden'});
-  await act(async()=>{commands.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'Recheck access.'}},{status:403}));await rejected;});
- };
- if(path!=='first')await refuse();
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:path==='first'?'Create community':path==='status'?'Check setup status':'Retry same setup'})));
- const pending=commands.at(-1)!,exact=store.all()[0]!;
- if(path==='first')await refuse();
- const before=[...reads];community.settings_version=1;
- const receipt={publication_state:'committed',idempotency:path==='first'?'created':'replayed',operation_id:randomUUID(),resource_id:randomUUID(),revision_id:randomUUID()};
- assert.ok(Value.Check(Committed,receipt));
- await act(async()=>pending.resolve(Response.json(receipt)));
- assert.deepEqual(reads,before,'Private setup completion cannot restart shell discovery after withdrawal.');
- assert.deepEqual(store.all(),[]);
- assert.equal(exact.body.community_name,'PrivateSetup');
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh administration'})));
- assert.ok(reads.length>before.length);
- assert.equal(!!screen.queryByText('Initialize the community'),false);
- assert.ok(screen.queryByRole('link',{name:'Community'}));
- await act(async()=>router.navigate('/loom/admin/community'));
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check access'})));
- assert.ok(screen.queryByRole('button',{name:'Save changes'}));
-});
+for (const action of ['account', 'recovery', 'state', 'revoke', 'search'] as const)
+  test(`production administration: late ${action} success cannot start protected reads after withdrawal`, async (t) => {
+    const { Onboarding } = await import('../../src/contracts/participation.js');
+    const { SearchHealth } = await import('../../src/contracts/search.js');
+    const instance = randomUUID(),
+      account = randomUUID(),
+      credential = randomUUID(),
+      admin = { ...self, role: 'administrator' };
+    const community = Value.Create({
+      ...Onboarding,
+      properties: {
+        ...Onboarding.properties,
+        instance_id: { ...Onboarding.properties.instance_id, default: instance },
+      },
+    });
+    community.settings_version = 1;
+    const store = new IntentStore(instance, self.participant_id);
+    if (action === 'account' || action === 'recovery') {
+      const body = { nickname: 'PrivateCreation', kind: 'human', role: 'participant' };
+      const draft = await store.saveDraft(
+        store.create('admission', 'account.create', '/api/v1/identity/accounts', body),
+        body,
+      );
+      if (action === 'recovery') await store.prepareDispatch(draft, body);
+    } else if (action === 'revoke') {
+      const body = {
+        participant_id: account,
+        kind: 'enrollment',
+        purpose: 'enroll',
+        label: 'Synthetic participation',
+        replace_credential_id: null,
+      };
+      await store.prepareDispatch(
+        store.create('admission', 'credential.issue', '/api/v1/identity/credentials', body),
+        body,
+      );
+    }
+    const commands: { path: string; resolve: (r: Response) => void }[] = [],
+      reads: string[] = [];
+    t.mock.method(globalThis, 'fetch', (url: string, options?: RequestInit) => {
+      if (options?.method === 'POST' && !url.endsWith('/query'))
+        return new Promise<Response>((resolve) => commands.push({ path: url, resolve }));
+      reads.push(url);
+      if (url === '/api/v1/identity/self') return Promise.resolve(Response.json(admin));
+      if (url === '/api/v1/community') return Promise.resolve(Response.json(community));
+      if (url === '/api/v1/identity/accounts/query')
+        return Promise.resolve(
+          Response.json(
+            browsingPage([
+              {
+                id: account,
+                nickname: 'ProtectedAccount',
+                kind: 'human',
+                state: 'active',
+                role: 'participant',
+              },
+            ]),
+          ),
+        );
+      if (url === '/api/v1/identity/credentials/query')
+        return Promise.resolve(
+          Response.json(
+            browsingPage([
+              { id: credential, kind: 'enrollment', label: 'ProtectedCredential', state: 'active' },
+            ]),
+          ),
+        );
+      if (url === '/api/v1/admin/search/health')
+        return Promise.resolve(Response.json({ ...Value.Create(SearchHealth), generation: 1 }));
+      if (url === '/api/v1/admin/search/failures')
+        return Promise.resolve(Response.json({ items: [], next_after: null }));
+      throw new Error('Unexpected request: ' + url);
+    });
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: [action === 'search' ? '/loom/admin/search' : '/loom/admin/participants'],
+    });
+    t.after(() => router.dispose());
+    await act(async () => {
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      );
+    });
+    const refuse = async () => {
+      const refusal = commandRequest('/api/v1/identity/reconcile', {
+        body: { operation_kind: 'account.create', idempotency_key: randomUUID() },
+        self: admin,
+      });
+      const rejected = assert.rejects(refusal, { code: 'forbidden' });
+      await act(async () => {
+        commands
+          .at(-1)!
+          .resolve(
+            Response.json(
+              { error: { code: 'forbidden', message: 'Recheck protected access.' } },
+              { status: 403 },
+            ),
+          );
+        await rejected;
+      });
+    };
+    // Recovery initiated after withdrawal still has no metadata authority.
+    if (action === 'recovery') await refuse();
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: {
+            account: 'Create account',
+            recovery: 'Check account operation',
+            state: 'Suspend',
+            revoke: 'Revoke',
+            search: 'Rebuild index',
+          }[action],
+        }),
+      ),
+    );
+    if (action === 'search')
+      await act(async () =>
+        fireEvent.click(
+          within(screen.getByRole('dialog')).getByRole('button', { name: 'Rebuild index' }),
+        ),
+      );
+    const pending = commands.at(-1)!;
+    if (action !== 'recovery') await refuse();
+    const before = [...reads];
+    await act(async () =>
+      pending.resolve(
+        Response.json(
+          action === 'search'
+            ? { generation: 2 }
+            : { operation_state: 'committed', participant_id: account, credential_id: credential },
+        ),
+      ),
+    );
+    assert.deepEqual(
+      reads,
+      before,
+      'A late receipt cannot implicitly request replacement metadata, including when it mounts credential recovery.',
+    );
+    assert.equal(!!screen.queryByText(/ProtectedCredential/), false);
+    assert.equal(!!screen.queryByText('ProtectedAccount · human · active'), false);
+    if (action === 'account' || action === 'recovery') {
+      assert.deepEqual(store.all(), []);
+      assert.ok(screen.queryByRole('button', { name: 'Issue enrollment ticket' }));
+    }
+    const refresh =
+      action === 'account' || action === 'recovery'
+        ? 'Refresh credentials'
+        : action === 'search'
+          ? 'Check access'
+          : 'Refresh accounts';
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: refresh })));
+    assert.ok(
+      reads.length > before.length,
+      'An explicit refresh must still obtain new authorization.',
+    );
+    assert.ok(
+      screen.queryByText(
+        action === 'account' || action === 'recovery'
+          ? /ProtectedCredential/
+          : action === 'search'
+            ? /No queued work observed|Worker unavailable/
+            : 'ProtectedAccount · human · active',
+      ),
+    );
+  });
 
-for(const initialThrottle of [false,true])test('shell temporary discovery throttling preserves session and journals without automatic retries: '+initialThrottle,async t=>{
- const {Onboarding}=await import('../../src/contracts/participation.js');const instance=randomUUID();
- const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});community.settings_version=1;
- const store=new IntentStore(instance,self.participant_id);const saved=await store.prepareDispatch(store.create('retained','reply.create','/api/v1/replies',{text:'Exact saved intent'}),{text:'Exact saved intent'});
- let throttled=initialThrottle,probes=0;
- t.mock.method(globalThis,'fetch',async(url:string)=>{if(url==='/api/v1/identity/self'){probes++;return throttled?Response.json({error:{code:'temporarily_throttled',message:'Wait before community discovery.'}},{status:429}):Response.json(self);}if(url==='/api/v1/community')return Response.json(community);if(url==='/api/v1/guide')return Response.json({text:'Retained authorized guide'});throw new Error(url);});
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/help']});t.after(()=>router.dispose());
- await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
- if(!initialThrottle){assert.ok(screen.queryByText('Retained authorized guide'));throttled=true;await act(async()=>router.navigate('/loom/help?again=1'));}
- assert.equal(!!screen.queryByRole('button',{name:'Sign in with passkey'}),false,'Throttling must not render a signed-out shell');
- assert.ok(screen.queryByRole('button',{name:'Retry community discovery'}));assert.deepEqual(store.all(),[saved]);
- if(!initialThrottle){assert.ok(screen.queryByText('Retained authorized guide'));assert.ok(screen.queryAllByRole('button',{name:'Sign out'}).length);}
- const calls=probes;await act(async()=>Promise.resolve());assert.equal(probes,calls);
- throttled=false;await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry community discovery'})));
- assert.ok(screen.queryByText('Retained authorized guide'));assert.equal(!!screen.queryByRole('button',{name:'Retry community discovery'}),false);assert.deepEqual(store.all(),[saved]);
-});
+for (const outcome of ['current', 'withdrawn'] as const)
+  test(`production configuration: ${outcome} success refreshes only with current content authority`, async (t) => {
+    const { Onboarding } = await import('../../src/contracts/participation.js');
+    const community = Value.Create({
+      ...Onboarding,
+      properties: {
+        ...Onboarding.properties,
+        instance_id: { ...Onboarding.properties.instance_id, default: randomUUID() },
+      },
+    });
+    community.settings_version = 1;
+    community.community_name = 'Synthetic community';
+    const topic = randomUUID(),
+      other = randomUUID();
+    const resource = (id: string) => ({
+      resource_id: id,
+      kind: 'area',
+      parent_id: null,
+      version: 1,
+      hierarchy_version: 1,
+      title: id === topic ? 'Proposals' : 'Suggestions',
+      description: null,
+      metadata_version: null,
+      local_open: true,
+      publication_open: true,
+      can_organize: true,
+      ancestors: [],
+      contacts_url: '/api/v1/contacts',
+      proposal_route_url: '/api/v1/proposals',
+    });
+    const commands: {
+        path: string;
+        body: Record<string, unknown>;
+        resolve: (r: Response) => void;
+      }[] = [],
+      reads: string[] = [];
+    t.mock.method(globalThis, 'fetch', (url: string, options?: RequestInit) => {
+      if (options?.method === 'POST' && !url.endsWith('/query'))
+        return new Promise<Response>((resolve) =>
+          commands.push({ path: url, body: JSON.parse(String(options.body)), resolve }),
+        );
+      reads.push(url);
+      if (url === '/api/v1/identity/self')
+        return Promise.resolve(Response.json({ ...self, role: 'administrator' }));
+      if (url === '/api/v1/community') return Promise.resolve(Response.json(community));
+      if (url.startsWith('/api/v1/organization/resources/'))
+        return Promise.resolve(Response.json(resource(url.split('/').at(-1)!)));
+      if (url.startsWith('/api/v1/organization/destinations?'))
+        return Promise.resolve(
+          Response.json({
+            items: [resource(topic), resource(other)],
+            hierarchy_version: 1,
+            next_cursor: null,
+            complete: true,
+            work_budget_reached: false,
+            scope: 'destinations',
+            limit: 12,
+            max_response_bytes: 131072,
+          }),
+        );
+      throw new Error('Unexpected request: ' + url);
+    });
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: ['/loom/admin/community'],
+    });
+    t.after(() => router.dispose());
+    await act(async () => {
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      );
+    });
+    const click = async (name: string) =>
+      act(async () => fireEvent.click(screen.getByRole('button', { name })));
+    await click('Change proposal topic');
+    await click('Choose Proposals in Proposals');
+    await click('Save changes');
+    assert.equal(commands[0]!.body.expected_version, 1);
+    const first = commands[0]!.body;
+    if (outcome === 'withdrawn') {
+      const refusal = commandRequest('/api/v1/identity/reconcile', {
+        body: { operation_kind: 'account.create', idempotency_key: randomUUID() },
+        self,
+      });
+      const rejected = assert.rejects(refusal, { code: 'forbidden' });
+      await act(async () => {
+        commands[1]!.resolve(
+          Response.json(
+            { error: { code: 'forbidden', message: 'Recheck access.' } },
+            { status: 403 },
+          ),
+        );
+        await rejected;
+      });
+    }
+    const before = [...reads];
+    community.settings_version = 2;
+    community.proposal_area = { state: 'ready', resource_id: topic };
+    await act(async () =>
+      commands[0]!.resolve(
+        Response.json({ operation_state: 'committed', operation_id: randomUUID(), version: 2 }),
+      ),
+    );
+    if (outcome === 'withdrawn') {
+      assert.deepEqual(
+        reads,
+        before,
+        'Late configuration success must not restart shell discovery or a protected query.',
+      );
+      assert.equal(
+        (screen.getByRole('button', { name: 'Retry same save' }) as HTMLButtonElement).disabled,
+        true,
+      );
+      await click('Check access');
+      await click('Retry same save');
+      assert.deepEqual(commands.at(-1)!.body, first);
+      await act(async () =>
+        commands
+          .at(-1)!
+          .resolve(
+            Response.json({ operation_state: 'committed', operation_id: randomUUID(), version: 2 }),
+          ),
+      );
+    }
+    await click('Change proposal topic');
+    await click('Choose Suggestions in Suggestions');
+    await click('Save changes');
+    assert.equal(
+      commands.at(-1)!.body.expected_version,
+      2,
+      'Repeated saves must use the newly authorized configuration version.',
+    );
+    await act(async () =>
+      commands
+        .at(-1)!
+        .resolve(
+          Response.json({ operation_state: 'committed', operation_id: randomUUID(), version: 3 }),
+        ),
+    );
+  });
 
-for (const role of ['administrator','participant'] as const)
-test(`first-run ${role} gets focused setup without workspace queries or navigation`,async t=>{
- const {Onboarding}=await import('../../src/contracts/participation.js');
- const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});community.settings_version=0;
- const reads:string[]=[];
- t.mock.method(globalThis,'fetch',async(url:string)=>{
-  reads.push(url);
-  if(url==='/api/v1/identity/self')return Response.json({...self,role});
-  if(url==='/api/v1/community')return Response.json(community);
-  return Response.json({items:[],next_after:null});
- });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom']});t.after(()=>router.dispose());
- await act(async()=>render(<StrictMode><RouterProvider router={router}/></StrictMode>));
- assert.ok(screen.queryByRole('heading',{name:role==='administrator'?'Set up your community':'Your community is being set up'}));
- assert.equal(screen.queryByRole('navigation',{name:'Community navigation'}),null);
- assert.equal(screen.queryByRole('link',{name:'Create root topic'}),null);
- assert.equal(!!screen.queryByRole('button',{name:'Create community'}),role==='administrator');
- assert.ok(reads.every(path=>['/api/v1/identity/self','/api/v1/community'].includes(path)));
- assert.ok(screen.queryByRole('button',{name:'Sign out'}));
-});
+for (const path of ['first', 'status', 'retry'] as const)
+  test(`production setup: ${path} settlement leaves reauthorization to an explicit refresh`, async (t) => {
+    const { Onboarding, Committed } = await import('../../src/contracts/participation.js');
+    const { SearchHealth } = await import('../../src/contracts/search.js');
+    const instance = randomUUID(),
+      community = Value.Create({
+        ...Onboarding,
+        properties: {
+          ...Onboarding.properties,
+          instance_id: { ...Onboarding.properties.instance_id, default: instance },
+        },
+      });
+    community.settings_version = 0;
+    const store = new IntentStore(instance, self.participant_id),
+      body = {
+        community_name: 'PrivateSetup',
+        ordinary_area_name: 'General',
+        proposal_area_name: 'Proposals',
+        overview: { format: 'loom-markdown-v1', text: 'Setup draft', mentions: [] },
+      };
+    const draft = await store.saveDraft(
+      store.create('setup', 'community.setup', '/api/v1/community/setup', body),
+      body,
+    );
+    if (path !== 'first') await store.prepareDispatch(draft, body);
+    const commands: { resolve: (r: Response) => void }[] = [],
+      reads: string[] = [];
+    t.mock.method(globalThis, 'fetch', (url: string, options?: RequestInit) => {
+      if (options?.method === 'POST' && !url.endsWith('/query'))
+        return new Promise<Response>((resolve) => commands.push({ resolve }));
+      reads.push(url);
+      if (url === '/api/v1/identity/self')
+        return Promise.resolve(Response.json({ ...self, role: 'administrator' }));
+      if (url === '/api/v1/community') return Promise.resolve(Response.json(community));
+      if (url === '/api/v1/identity/accounts/query')
+        return Promise.resolve(Response.json(browsingPage([])));
+      if (url === '/api/v1/admin/search/health')
+        return Promise.resolve(Response.json(Value.Create(SearchHealth)));
+      if (url === '/api/v1/admin/search/failures')
+        return Promise.resolve(Response.json({ items: [], next_after: null }));
+      throw new Error('Unexpected request: ' + url);
+    });
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: ['/loom/admin/participants'],
+    });
+    t.after(() => router.dispose());
+    await act(async () => {
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      );
+    });
+    const refuse = async () => {
+      const refusal = commandRequest('/api/v1/identity/reconcile', {
+        body: { operation_kind: 'account.create', idempotency_key: randomUUID() },
+        self,
+      });
+      const rejected = assert.rejects(refusal, { code: 'forbidden' });
+      await act(async () => {
+        commands
+          .at(-1)!
+          .resolve(
+            Response.json(
+              { error: { code: 'forbidden', message: 'Recheck access.' } },
+              { status: 403 },
+            ),
+          );
+        await rejected;
+      });
+    };
+    if (path !== 'first') await refuse();
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole('button', {
+          name:
+            path === 'first'
+              ? 'Create community'
+              : path === 'status'
+                ? 'Check setup status'
+                : 'Retry same setup',
+        }),
+      ),
+    );
+    const pending = commands.at(-1)!,
+      exact = store.all()[0]!;
+    if (path === 'first') await refuse();
+    const before = [...reads];
+    community.settings_version = 1;
+    const receipt = {
+      publication_state: 'committed',
+      idempotency: path === 'first' ? 'created' : 'replayed',
+      operation_id: randomUUID(),
+      resource_id: randomUUID(),
+      revision_id: randomUUID(),
+    };
+    assert.ok(Value.Check(Committed, receipt));
+    await act(async () => pending.resolve(Response.json(receipt)));
+    assert.deepEqual(
+      reads,
+      before,
+      'Private setup completion cannot restart shell discovery after withdrawal.',
+    );
+    assert.deepEqual(store.all(), []);
+    assert.equal(exact.body.community_name, 'PrivateSetup');
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh administration' })),
+    );
+    assert.ok(reads.length > before.length);
+    assert.equal(!!screen.queryByText('Initialize the community'), false);
+    assert.ok(screen.queryByRole('link', { name: 'Community' }));
+    await act(async () => router.navigate('/loom/admin/community'));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Check access' })));
+    assert.ok(screen.queryByRole('button', { name: 'Save changes' }));
+  });
 
-for(const state of ['fresh','draft','rejected','uncertain'] as const)
-test(`name-only setup preserves defaults or the exact retained ${state} request`,async t=>{
- const {Onboarding}=await import('../../src/contracts/participation.js');
- const instance=randomUUID(),community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:instance}}});
- community.settings_version=state==='uncertain'?1:0;
- const store=new IntentStore(instance,self.participant_id);
- const defaults={ordinary_area_name:'General',proposal_area_name:'Community organization',overview:{format:'loom-markdown-v1',text:'Welcome to our shared workspace.\n\nUse General for questions and ongoing work. Propose organizational changes in Community organization.',mentions:[]}};
- const priorBody={community_name:'Earlier name',ordinary_area_name:'Earlier questions',proposal_area_name:'Earlier proposals',overview:{format:'loom-markdown-v2',text:'Earlier welcome',mentions:[],references:[]}};
- let prior:ReturnType<IntentStore['create']>|undefined;
- if(state!=='fresh'){
-  prior=await store.saveDraft(store.create('setup','community.setup','/api/v1/community/setup',priorBody),priorBody);
-  if(state!=='draft')prior=await store.save({...prior,state});
- }
- const sent:{path:string;body:Record<string,unknown>}[]=[];
- t.mock.method(globalThis,'fetch',async(path:string,options?:RequestInit)=>{
-  if(options?.method==='POST'){
-   sent.push({path,body:JSON.parse(String(options.body))});
-   if(path==='/api/v1/operations/status')return Response.json({operation_state:'not_recorded'});
-   return Response.json({error:{code:'service_unavailable',message:'Keep the saved request.'}},{status:503});
-  }
-  if(path==='/api/v1/identity/self')return Response.json({...self,role:'administrator'});
-  if(path==='/api/v1/community')return Response.json(community);
-  throw new Error('Unexpected setup read: '+path);
- });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom']});t.after(()=>router.dispose());
- await act(async()=>render(<StrictMode><RouterProvider router={router}/></StrictMode>));
- assert.equal(screen.getAllByRole('textbox').length,1);
- assert.ok(screen.getByRole('textbox',{name:'Community name'}));
- assert.equal(screen.queryByRole('complementary',{name:'What setup creates'}),null);
- assert.equal(sent.length,0,'Loading a saved setup must not dispatch it.');
- if(state==='uncertain'){
-  assert.equal((screen.getByRole('textbox',{name:'Community name'}) as HTMLInputElement).disabled,true);
-  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check setup status'})));
-  assert.deepEqual(sent[0],{path:'/api/v1/operations/status',body:{operation_kind:prior!.kind,idempotency_key:prior!.key}});
-  assert.deepEqual(store.all(),[prior],'Missing status must preserve the exact uncertain request.');
- }else{
-  if(state==='rejected')await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Prepare corrected setup'})));
-  await act(async()=>fireEvent.change(screen.getByRole('textbox',{name:'Community name'}),{target:{value:'Chosen name'}}));
- }
- await act(async()=>fireEvent.click(screen.getByRole('button',{name:state==='uncertain'?'Retry same setup':'Create community'})));
- const request=sent.at(-1)!,key=String(request.body.idempotency_key);
- assert.equal(request.path,'/api/v1/community/setup');
- assert.deepEqual(request.body,state==='fresh'?{...defaults,community_name:'Chosen name',idempotency_key:key}:state==='uncertain'?prior!.body:{...prior!.body,community_name:'Chosen name',idempotency_key:key});
- if(state==='draft'||state==='uncertain')assert.equal(key,prior!.key);
- if(state==='rejected')assert.notEqual(key,prior!.key,'Only explicit correction can replace a rejected key.');
- assert.deepEqual(store.all().find(r=>r.key===key)!.body,request.body);
- assert.equal(store.all().find(r=>r.key===key)!.state,'uncertain');
-});
+for (const initialThrottle of [false, true])
+  test(
+    'shell temporary discovery throttling preserves session and journals without automatic retries: ' +
+      initialThrottle,
+    async (t) => {
+      const { Onboarding } = await import('../../src/contracts/participation.js');
+      const instance = randomUUID();
+      const community = Value.Create({
+        ...Onboarding,
+        properties: {
+          ...Onboarding.properties,
+          instance_id: { ...Onboarding.properties.instance_id, default: instance },
+        },
+      });
+      community.settings_version = 1;
+      const store = new IntentStore(instance, self.participant_id);
+      const saved = await store.prepareDispatch(
+        store.create('retained', 'reply.create', '/api/v1/replies', { text: 'Exact saved intent' }),
+        { text: 'Exact saved intent' },
+      );
+      let throttled = initialThrottle,
+        probes = 0;
+      t.mock.method(globalThis, 'fetch', async (url: string) => {
+        if (url === '/api/v1/identity/self') {
+          probes++;
+          return throttled
+            ? Response.json(
+                {
+                  error: {
+                    code: 'temporarily_throttled',
+                    message: 'Wait before community discovery.',
+                  },
+                },
+                { status: 429 },
+              )
+            : Response.json(self);
+        }
+        if (url === '/api/v1/community') return Response.json(community);
+        if (url === '/api/v1/guide') return Response.json({ text: 'Retained authorized guide' });
+        throw new Error(url);
+      });
+      const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+        initialEntries: ['/loom/help'],
+      });
+      t.after(() => router.dispose());
+      await act(async () => {
+        render(
+          <StrictMode>
+            <RouterProvider router={router} />
+          </StrictMode>,
+        );
+      });
+      if (!initialThrottle) {
+        assert.ok(screen.queryByText('Retained authorized guide'));
+        throttled = true;
+        await act(async () => router.navigate('/loom/help?again=1'));
+      }
+      assert.equal(
+        !!screen.queryByRole('button', { name: 'Sign in with passkey' }),
+        false,
+        'Throttling must not render a signed-out shell',
+      );
+      assert.ok(screen.queryByRole('button', { name: 'Retry community discovery' }));
+      assert.deepEqual(store.all(), [saved]);
+      if (!initialThrottle) {
+        assert.ok(screen.queryByText('Retained authorized guide'));
+        assert.ok(screen.queryAllByRole('button', { name: 'Sign out' }).length);
+      }
+      const calls = probes;
+      await act(async () => Promise.resolve());
+      assert.equal(probes, calls);
+      throttled = false;
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: 'Retry community discovery' })),
+      );
+      assert.ok(screen.queryByText('Retained authorized guide'));
+      assert.equal(!!screen.queryByRole('button', { name: 'Retry community discovery' }), false);
+      assert.deepEqual(store.all(), [saved]);
+    },
+  );
+
+for (const role of ['administrator', 'participant'] as const)
+  test(`first-run ${role} gets focused setup without workspace queries or navigation`, async (t) => {
+    const { Onboarding } = await import('../../src/contracts/participation.js');
+    const community = Value.Create({
+      ...Onboarding,
+      properties: {
+        ...Onboarding.properties,
+        instance_id: { ...Onboarding.properties.instance_id, default: randomUUID() },
+      },
+    });
+    community.settings_version = 0;
+    const reads: string[] = [];
+    t.mock.method(globalThis, 'fetch', async (url: string) => {
+      reads.push(url);
+      if (url === '/api/v1/identity/self') return Response.json({ ...self, role });
+      if (url === '/api/v1/community') return Response.json(community);
+      return Response.json({ items: [], next_after: null });
+    });
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: ['/loom'],
+    });
+    t.after(() => router.dispose());
+    await act(async () =>
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      ),
+    );
+    assert.ok(
+      screen.queryByRole('heading', {
+        name: role === 'administrator' ? 'Set up your community' : 'Your community is being set up',
+      }),
+    );
+    assert.equal(screen.queryByRole('navigation', { name: 'Community navigation' }), null);
+    assert.equal(screen.queryByRole('link', { name: 'Create root topic' }), null);
+    assert.equal(
+      !!screen.queryByRole('button', { name: 'Create community' }),
+      role === 'administrator',
+    );
+    assert.ok(reads.every((path) => ['/api/v1/identity/self', '/api/v1/community'].includes(path)));
+    assert.ok(screen.queryByRole('button', { name: 'Sign out' }));
+  });
+
+for (const state of ['fresh', 'draft', 'rejected', 'uncertain'] as const)
+  test(`name-only setup preserves defaults or the exact retained ${state} request`, async (t) => {
+    const { Onboarding } = await import('../../src/contracts/participation.js');
+    const instance = randomUUID(),
+      community = Value.Create({
+        ...Onboarding,
+        properties: {
+          ...Onboarding.properties,
+          instance_id: { ...Onboarding.properties.instance_id, default: instance },
+        },
+      });
+    community.settings_version = state === 'uncertain' ? 1 : 0;
+    const store = new IntentStore(instance, self.participant_id);
+    const defaults = {
+      ordinary_area_name: 'General',
+      proposal_area_name: 'Community organization',
+      overview: {
+        format: 'loom-markdown-v1',
+        text: 'Welcome to our shared workspace.\n\nUse General for questions and ongoing work. Propose organizational changes in Community organization.',
+        mentions: [],
+      },
+    };
+    const priorBody = {
+      community_name: 'Earlier name',
+      ordinary_area_name: 'Earlier questions',
+      proposal_area_name: 'Earlier proposals',
+      overview: {
+        format: 'loom-markdown-v2',
+        text: 'Earlier welcome',
+        mentions: [],
+        references: [],
+      },
+    };
+    let prior: ReturnType<IntentStore['create']> | undefined;
+    if (state !== 'fresh') {
+      prior = await store.saveDraft(
+        store.create('setup', 'community.setup', '/api/v1/community/setup', priorBody),
+        priorBody,
+      );
+      if (state !== 'draft') prior = await store.save({ ...prior, state });
+    }
+    const sent: { path: string; body: Record<string, unknown> }[] = [];
+    t.mock.method(globalThis, 'fetch', async (path: string, options?: RequestInit) => {
+      if (options?.method === 'POST') {
+        sent.push({ path, body: JSON.parse(String(options.body)) });
+        if (path === '/api/v1/operations/status')
+          return Response.json({ operation_state: 'not_recorded' });
+        return Response.json(
+          { error: { code: 'service_unavailable', message: 'Keep the saved request.' } },
+          { status: 503 },
+        );
+      }
+      if (path === '/api/v1/identity/self')
+        return Response.json({ ...self, role: 'administrator' });
+      if (path === '/api/v1/community') return Response.json(community);
+      throw new Error('Unexpected setup read: ' + path);
+    });
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: ['/loom'],
+    });
+    t.after(() => router.dispose());
+    await act(async () =>
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      ),
+    );
+    assert.equal(screen.getAllByRole('textbox').length, 1);
+    assert.ok(screen.getByRole('textbox', { name: 'Community name' }));
+    assert.equal(screen.queryByRole('complementary', { name: 'What setup creates' }), null);
+    assert.equal(sent.length, 0, 'Loading a saved setup must not dispatch it.');
+    if (state === 'uncertain') {
+      assert.equal(
+        (screen.getByRole('textbox', { name: 'Community name' }) as HTMLInputElement).disabled,
+        true,
+      );
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: 'Check setup status' })),
+      );
+      assert.deepEqual(sent[0], {
+        path: '/api/v1/operations/status',
+        body: { operation_kind: prior!.kind, idempotency_key: prior!.key },
+      });
+      assert.deepEqual(
+        store.all(),
+        [prior],
+        'Missing status must preserve the exact uncertain request.',
+      );
+    } else {
+      if (state === 'rejected')
+        await act(async () =>
+          fireEvent.click(screen.getByRole('button', { name: 'Prepare corrected setup' })),
+        );
+      await act(async () =>
+        fireEvent.change(screen.getByRole('textbox', { name: 'Community name' }), {
+          target: { value: 'Chosen name' },
+        }),
+      );
+    }
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: state === 'uncertain' ? 'Retry same setup' : 'Create community',
+        }),
+      ),
+    );
+    const request = sent.at(-1)!,
+      key = String(request.body.idempotency_key);
+    assert.equal(request.path, '/api/v1/community/setup');
+    assert.deepEqual(
+      request.body,
+      state === 'fresh'
+        ? { ...defaults, community_name: 'Chosen name', idempotency_key: key }
+        : state === 'uncertain'
+          ? prior!.body
+          : { ...prior!.body, community_name: 'Chosen name', idempotency_key: key },
+    );
+    if (state === 'draft' || state === 'uncertain') assert.equal(key, prior!.key);
+    if (state === 'rejected')
+      assert.notEqual(key, prior!.key, 'Only explicit correction can replace a rejected key.');
+    assert.deepEqual(store.all().find((r) => r.key === key)!.body, request.body);
+    assert.equal(store.all().find((r) => r.key === key)!.state, 'uncertain');
+  });

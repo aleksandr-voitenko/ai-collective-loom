@@ -13,8 +13,7 @@ export function applicationInputs(root) {
     for (const name of readdirSync(join(root, directory)).sort()) {
       const path = directory + '/' + name,
         stat = lstatSync(join(root, path));
-      if (stat.isSymbolicLink())
-        throw new Error('Application build input must not be a symlink.');
+      if (stat.isSymbolicLink()) throw new Error('Application build input must not be a symlink.');
       if (stat.isDirectory()) visit(path);
       else if (/\.(ts|tsx|css)$/.test(path)) files[path] = digest(path);
     }
