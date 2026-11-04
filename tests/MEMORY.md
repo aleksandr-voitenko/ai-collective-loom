@@ -670,6 +670,12 @@ schema-required fields, wrong-operation bodies and exhaustive branch narrowing.
 `unit/participation-publications.test.ts` keeps runtime validation independent:
 unknown/missing/extra fields fail before SQL for all seven operations, accepted
 bodies reach preparation without caller mutation, and untyped unknown kinds fail.
+`unit/publication-preparation.test.ts` compares complete normalized bodies, versions
+and baseline digests for all seven operations across v1–v4 and file/attachment
+envelopes, preserving exact text, canonical entities/paths and key independence.
+`unit/publication-transaction.test.ts` checks replay authority/error precedence and
+no new-write admission, rollback on replay denial, and committed expiry refusal
+before service error conversion. Native suites retain SQL concurrency/tail coverage.
 
 Summary tests use the same runner and closed diagnostics (`summaries.spec.ts` and
 summary route templates; no raw IDs/bodies added). `summaries*.test.ts` covers

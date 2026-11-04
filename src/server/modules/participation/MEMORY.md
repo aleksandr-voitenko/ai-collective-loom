@@ -150,12 +150,18 @@ Do not add a network call, parser callback or newly contested guard after the cl
 Setup/config use advisory class 3, identity administration class 2 and containment
 class 1. Editor changes take the target exclusive guard and expected list version.
 
-`publications.ts` derives its closed `PublicationKind` and discriminated
+`publication-preparation.ts` derives its closed `PublicationKind` and discriminated
 `PublicationRequest` from the runtime schema map. Absent fields are optional-never;
 required fields narrow with the operation kind. Unknown bodies still pass through
 Value.Check before cloning or SQL. The kind stays outside the normalized body and
 semantic digest; the prepared discriminant/body pair stays correlated into the
-transaction. Reconciliation also accepts the separately owned attachment promotion.
+transaction. `publications.ts` retains the public service, transaction ownership and
+post-commit domain-error conversion; `publication-attempt.ts` shares the scoped
+lookup with read-only reconciliation (including separately owned attachment promotion).
+`publication-transaction.ts` coordinates replay, admission, guard planning and revision
+assembly in their required order. `publication-resource.ts` owns operation-specific
+current-base checks and atomic resource/companion/editor construction; it introduces
+no independent transaction or clock. Pure preparation never imports SQL or guards.
 
 The digest includes the operation/version and all accepted semantic fields except
 the key; lower-case UUIDs, sort entity tokens and object keys, preserve text exactly.
