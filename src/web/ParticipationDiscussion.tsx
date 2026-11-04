@@ -1,6 +1,6 @@
 import { AddPrivateNote } from './PrivateNotes.js';
 import { FileBrowser } from './Files.js';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { useLocation, Link } from 'react-router';
 import {
   type ResourceView,
@@ -153,6 +153,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               <Children
                 key={opening.current! + reload}
                 id={opening.current!}
+                parent={data?.opening}
                 discussionId={id}
                 context={context}
                 depth={0}
@@ -218,7 +219,14 @@ function FocusedBranch({
         </h2>
         <span>Oldest first</span>
       </div>
-      <Children key={id + reload} id={id} discussionId={discussionId} context={context} depth={0} />
+      <Children
+        key={id + reload}
+        id={id}
+        parent={'state' in data ? undefined : data}
+        discussionId={discussionId}
+        context={context}
+        depth={0}
+      />
     </>
   );
 }
@@ -256,6 +264,7 @@ type ContributionProps = {
   id: string;
   context: Context;
   opening?: boolean;
+  parent?: ResourceView | undefined;
   onPosted?: () => void;
 };
 
@@ -280,6 +289,7 @@ function ContributionBody({
   data,
   context,
   opening = false,
+  parent,
   onPosted,
 }: ContributionProps & { data: ContributionContextView }) {
   const [reply, setReply] = useState(() =>
@@ -312,7 +322,12 @@ function ContributionBody({
       </div>
       {data.parent_id && (
         <p className="parent-context">
-          Replying to <Link to={'/loom/resource/' + data.parent_id}>the parent contribution</Link>
+          Replying to{' '}
+          <Link to={`/loom/discussion/${data.discussion_id}?focus=${data.parent_id}`}>
+            {parent?.resource_id === data.parent_id
+              ? '@' + parent.author.nickname
+              : 'parent message'}
+          </Link>
         </p>
       )}
       {/* Both siblings reset for a new revision, but their keys must remain distinct. */}
@@ -396,23 +411,27 @@ function ContributionBody({
 
 function Children({
   id,
+  parent,
   discussionId,
   context,
   depth,
   refreshVersion = 0,
 }: {
   id: string;
+  parent?: ResourceView | undefined;
   discussionId: string;
   context: Context;
   depth: number;
   refreshVersion?: number;
 }) {
   const authority = useAuthorization();
+  const treeId = useId();
   const [projection, setPage] = useState<{ value: PageView; generation?: number | undefined }>(),
     [cursor, setCursor] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [expanded, setExpanded] = useState<string[]>([]),
+    [opened, setOpened] = useState<string[]>([]),
     [branchVersions, setBranchVersions] = useState<Record<string, number>>({}),
     [reload, setReload] = useState(0);
   const page =
@@ -434,7 +453,12 @@ function Children({
         (value) => {
           if (active) {
             setPage(value);
-            setExpanded([]);
+            const retained = (ids: string[]) =>
+              ids.filter((id) =>
+                value.value.items.some((item) => 'resource_id' in item && item.resource_id === id),
+              );
+            setExpanded(retained);
+            setOpened(retained);
           }
         },
         (failure) => {
@@ -449,8 +473,24 @@ function Children({
       controller.abort();
     };
   }, [id, cursor, reload, refreshVersion]);
+  const refreshControl = page && !error && (
+    <button className="text-button" disabled={busy} onClick={() => setReload((n) => n + 1)}>
+      {busy ? 'Checking replies…' : 'Refresh replies'}
+    </button>
+  );
   return (
     <div className="comment-tree" aria-busy={busy}>
+      {page && page.items.length > 0 && (
+        <div className="reply-page-toolbar">
+          <p className="reply-page-summary" role="status">
+            {error ? 'Earlier page: ' : ''}
+            {page.items.length} direct {page.items.length === 1 ? 'reply' : 'replies'}
+            {cursor || !page.complete ? ' on this page' : ''}
+            {page.next_cursor ? ' · More replies available' : ''}
+          </p>
+          {refreshControl}
+        </div>
+      )}
       {page?.items.map((item) => {
         const resource = item as ResourceView;
         return (
@@ -462,6 +502,7 @@ function Children({
             ) : (
               <Contribution
                 id={resource.resource_id}
+                parent={parent}
                 context={context}
                 onPosted={() => {
                   setExpanded((value) => [...new Set([...value, resource.resource_id])]);
@@ -477,35 +518,47 @@ function Children({
                 className="branch-link"
                 to={`/loom/discussion/${discussionId}?focus=${resource.resource_id}`}
               >
-                Focus this branch →
+                Open reply thread →
               </Link>
             ) : (
               <>
                 <button
                   className="text-button branch-link"
-                  onClick={() =>
+                  aria-expanded={expanded.includes(resource.resource_id)}
+                  aria-controls={`${treeId}-${resource.resource_id}`}
+                  onClick={() => {
+                    setOpened((value) => [...new Set([...value, resource.resource_id])]);
                     setExpanded((value) =>
                       value.includes(resource.resource_id)
                         ? value.filter((key) => key !== resource.resource_id)
                         : [...value, resource.resource_id],
-                    )
-                  }
+                    );
+                  }}
                 >
                   {expanded.includes(resource.resource_id)
-                    ? 'Hide nested replies'
-                    : 'Show nested replies'}
+                    ? 'Hide replies'
+                    : opened.includes(resource.resource_id)
+                      ? 'Show loaded replies'
+                      : 'Check replies'}
                 </button>
-                {expanded.includes(resource.resource_id) && (
-                  <div className="comment-children">
+                {/* Hiding retains mounted drafts/cursors; reads still use the current lease. */}
+                <div
+                  className="comment-children"
+                  id={`${treeId}-${resource.resource_id}`}
+                  hidden={!expanded.includes(resource.resource_id)}
+                >
+                  {(opened.includes(resource.resource_id) ||
+                    expanded.includes(resource.resource_id)) && (
                     <Children
                       id={resource.resource_id}
+                      parent={'state' in item ? undefined : resource}
                       discussionId={discussionId}
                       context={context}
                       depth={depth + 1}
                       refreshVersion={branchVersions[resource.resource_id] ?? 0}
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -518,9 +571,16 @@ function Children({
         </div>
       )}
       {!page && !error && <p role="status">Loading replies…</p>}
-      {page && !page.items.length && page.complete && (
-        <p className="empty-replies">No replies yet.</p>
+      {page && !page.items.length && (
+        <p className="empty-replies">
+          {error
+            ? 'Earlier check: no replies on this page.'
+            : !cursor && page.complete
+              ? 'No replies yet.'
+              : 'No replies on this page.'}
+        </p>
       )}
+      {page && !page.items.length && refreshControl}
       {page?.next_cursor && (
         <button disabled={busy} onClick={() => setCursor(page.next_cursor!)}>
           Next replies →

@@ -338,6 +338,12 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
   const agentPost = page.locator(
     `[data-resource-id="${reply.body.resource_id}"]`,
   );
+  await expect(agentPost.getByRole('link', { name: '@maya', exact: true })).toHaveAttribute(
+    'href', `/loom/discussion/${discussion.discussion}?focus=${discussion.resource}`,
+  );
+  const agentBranch = agentPost.locator('..');
+  await expect(agentBranch.getByRole('button', { name: 'Check replies', exact: true }))
+    .toHaveAttribute('aria-expanded', 'false');
   await agentPost.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(agentPost.getByLabel('Your reply', { exact: true })).toBeFocused();
   await agentPost.getByLabel('Your reply', { exact: true }).fill('A draft kept when the composer closes.');
@@ -364,9 +370,15 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
   );
   expect(children.body.items).toHaveLength(1);
   expect(children.body.items[0].parent_id).toBe(reply.body.resource_id);
+  const nestedReplies = agentBranch.locator(':scope > .comment-children');
+  await expect(nestedReplies.getByText('1 direct reply', { exact: true })).toBeVisible();
+  await expect(nestedReplies.getByRole('link', { name: '@lyra', exact: true })).toHaveAttribute(
+    'href', `/loom/discussion/${discussion.discussion}?focus=${reply.body.resource_id}`,
+  );
   await agentPost
     .getByRole("button", { name: "Write another", exact: true })
     .click();
+  await expect(page).toHaveURL(new RegExp(`focus=${reply.body.resource_id}`));
   await agentPost
     .getByLabel("Your reply", { exact: true })
     .fill("A second reply in the already open branch.");
@@ -378,11 +390,33 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
       .locator(".comment-tree .prose")
       .getByText("A second reply in the already open branch.", { exact: true }),
   ).toBeVisible();
-  await agentPost.getByRole('button', { name: 'Reply', exact: true }).first().click();
+  await expect(page.getByText('2 direct replies', {exact:true})).toBeVisible();
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  await agentBranch.getByRole('button', { name: 'Check replies', exact: true }).click();
+  await expect(nestedReplies.getByText('2 direct replies', { exact: true })).toBeVisible();
+  const nestedPost = nestedReplies.locator('article.comment').first();
+  await nestedPost.getByRole('button', { name: 'Reply', exact: true }).click();
+  await nestedPost.getByLabel('Your reply', { exact: true }).fill('A nested draft survives hiding the branch.');
+  await agentBranch.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  await expect(nestedReplies).toBeHidden();
+  await agentBranch.getByRole('button', { name: 'Show loaded replies', exact: true }).click();
+  await expect(nestedReplies.getByText('2 direct replies', { exact: true })).toBeVisible();
+  await expect(nestedPost.getByLabel('Your reply', { exact: true })).toHaveValue('A nested draft survives hiding the branch.');
+  const refreshedRoot = page.waitForResponse(response => response.url().includes(`/contributions/${discussion.resource}/children?limit=6`) && response.status() === 200);
+  await page.locator('.reading-grid > div > .comment-tree > .reply-page-toolbar')
+    .getByRole('button', {name:'Refresh replies',exact:true}).click();
+  await refreshedRoot;
+  await expect(page.locator('.reading-grid > div > .comment-tree')).toHaveAttribute('aria-busy', 'false');
+  await expect(nestedPost.getByLabel('Your reply', { exact: true })).toHaveValue('A nested draft survives hiding the branch.');
+  await nestedPost.getByRole('button', { name: 'Close composer', exact: true }).click();
+  await expect(agentPost.locator('.composer')).toHaveCount(0);
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
-    await agentPost.locator('.prose').first().scrollIntoViewIfNeeded();
+    await agentPost.evaluate(node => node.scrollIntoView({block:'start'}));
     await captureMessaging(page, 'conversation');
+    await captureMessaging(page, 'reply-context');
+    await nestedReplies.evaluate(node => node.scrollIntoView({block:'start'}));
+    await captureMessaging(page, 'reply-thread');
     const more = agentPost.locator(':scope > .post-footer > .message-details');
     await more.locator('summary').click();
     await expect(more.getByText('Inspect editing intent', { exact: true })).toBeVisible();
@@ -451,6 +485,50 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
     `/api/v1/resources/${discussion.resource}/revisions/${discussion.revision}`,
   );
   expect(old.body.content.text).toContain("shared question");
+  // A bounded page is not a whole-thread count, including when only one row
+  // remains on a continuation. Refresh also rechecks an observed empty branch.
+  for (let index = 0; index < 6; index++) {
+    const extra = await client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(), discussion_id: discussion.discussion,
+      parent_id: discussion.resource, content: text(`Another direct reply ${index + 1}.`),
+    });
+    expect(extra.status).toBe(201);
+  }
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  await expect(page.getByText('6 direct replies on this page · More replies available', { exact: true })).toBeVisible();
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.locator('.discussion-controls').evaluate(node => node.scrollIntoView({block:'start'}));
+    await captureMessaging(page, 'reply-page');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.getByRole('button', { name: 'Next replies', exact: false }).click();
+  await expect(page.getByText('1 direct reply on this page', { exact: true })).toBeVisible();
+  const leaf = children.body.items[0].resource_id;
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}?focus=${leaf}`);
+  await expect(page.getByText('No replies yet.', { exact: true })).toBeVisible();
+  await page.getByRole('button', {name:'Close composer',exact:true}).click();
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.locator('.discussion-controls').evaluate(node => node.scrollIntoView({block:'start'}));
+    await captureMessaging(page, 'reply-empty');
+  }
+  const childrenRoute = `**/api/v1/contributions/${leaf}/children?limit=6`;
+  await page.route(childrenRoute, route => route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Replies temporarily unavailable'}})}));
+  await page.getByRole('button', { name: 'Refresh replies', exact: true }).click();
+  await expect(page.getByText('Replies temporarily unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByText('Earlier check: no replies on this page.', { exact: true })).toBeVisible();
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.getByRole('button', {name:'Retry replies',exact:true}).scrollIntoViewIfNeeded();
+    await captureMessaging(page, 'reply-error',
+      ['One explicit children refresh returns service_unavailable503; the earlier empty observation remains qualified.'],
+      ['GET /api/v1/contributions/{leaf}/children?limit=6 returns service_unavailable503 during the explicit refresh.']);
+  }
+  await page.unroute(childrenRoute);
+  await page.getByRole('button', { name: 'Retry replies', exact: true }).click();
+  await expect(page.getByText('Replies temporarily unavailable', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('No replies yet.', { exact: true })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 
@@ -1619,7 +1697,7 @@ test("review regression: suppressed parents preserve browser branches and eligib
   await page.waitForLoadState('networkidle');
   await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1",[d.discussion]);
   const deniedChildren=page.waitForResponse(r=>r.url().includes(`/contributions/${parent.resource_id}/children`)&&r.status()===404);
-  await page.getByRole('button',{name:'Show nested replies',exact:true}).click();
+  await page.getByRole('button',{name:'Check replies',exact:true}).click();
   expect((await deniedChildren).status()).toBe(404);
   await expect(page.getByRole('heading',{name:'Reading the actual context',exact:true})).toHaveCount(0);
   await expect(page.getByText('Suppressed parent text',{exact:true})).toHaveCount(0);
@@ -1637,7 +1715,7 @@ test("review regression: suppressed parents preserve browser branches and eligib
     .locator(".comment-branch")
     .filter({ hasText: "Contribution unavailable" });
   await branch
-    .getByRole("button", { name: "Show nested replies", exact: true })
+    .getByRole("button", { name: "Check replies", exact: true })
     .click();
   await expect(
     page

@@ -926,6 +926,12 @@ message-detail and failed-save PNGs plus provenance under `/tmp/loom-review-evid
 The journey uses ordinary non-admin WebAuthn and asserts mention publication,
 explicit focus, close/reopen custody and unchanged actual reply parentage. Mounted
 close tests refuse dismissal after failed storage and preserve the visible fields.
+The same compiled participation journey checks named parent destinations, accessible
+reply disclosure state, nested draft retention while hidden, bounded first/continuation
+counts and an empty branch's failed-refresh/retry. `LOOM_REPLY_REVIEW=1` uses the same
+command to capture desktop/mobile reply-context, thread, page, empty and refresh-error
+states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifies the
+deliberate children503. The suppressed-parent journey retains traversal after body loss.
 The Chromium conflict-correction restart case waits for the replacement URL, holds
 the real journal lock across text/title edits, and verifies the complete saved body
 before reload. A replacement key/base alone does not prove later autosaves finished;

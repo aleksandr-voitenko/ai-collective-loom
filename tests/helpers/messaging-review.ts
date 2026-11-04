@@ -5,14 +5,16 @@ import type { Page } from '@playwright/test';
 import { applicationInputs } from '../../scripts/lib/release-identity.mjs';
 
 const screenshots: unknown[] = [];
-export async function captureMessaging(page: Page, state: string, faults: string[] = []) {
-  if (process.env.LOOM_MESSAGING_REVIEW !== '1') return;
-  const directory = '/tmp/loom-review-evidence/messaging';
+export async function captureMessaging(page: Page, state: string, faults: string[] = [], mockedResponses: string[] = []) {
+  const replyReview = process.env.LOOM_REPLY_REVIEW === '1' && state.startsWith('reply-');
+  if (process.env.LOOM_MESSAGING_REVIEW !== '1' && !replyReview) return;
+  const directory = '/tmp/loom-review-evidence/' + (replyReview ? 'reply-navigation' : 'messaging');
   const inputs = applicationInputs(process.cwd());
   const build = JSON.parse(await readFile('dist/release.json', 'utf8'));
   if (inputs.sha256 !== build.sha256) throw new Error('Messaging review source and build differ.');
   if (await page.getByLabel('Issued secret', { exact: true }).count()) throw new Error('Credential display cannot enter review evidence.');
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  await page.waitForLoadState('networkidle');
   await page.evaluate(async () => { await document.fonts.ready; });
   const viewport = page.viewportSize()!;
   const filename = `${state}-${viewport.width}x${viewport.height}.png`;
@@ -22,9 +24,9 @@ export async function captureMessaging(page: Page, state: string, faults: string
     application_input_sha256: inputs.sha256, build_sha256: build.sha256, route: new URL(page.url()).pathname,
     viewport, browser: { name: 'Chromium', version: page.context().browser()!.version() },
     test_account_role: 'participant', authentication: 'Ordinary synthetic WebAuthn enrollment and sign-in',
-    mocked_responses: [], injected_failures: faults, full_viewport: true,
+    mocked_responses: mockedResponses, injected_failures: faults, full_viewport: true,
     sha256: createHash('sha256').update(bytes).digest('hex') });
   await writeFile(directory + '/manifest.json', JSON.stringify({ screenshots,
-    reproduction: 'LOOM_MESSAGING_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"',
+    reproduction: `${replyReview ? 'LOOM_REPLY_REVIEW' : 'LOOM_MESSAGING_REVIEW'}=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"`,
     isolation: 'Actual compiled React app, disposable PostgreSQL/HTTPS and virtual passkey. No staging/pilot, cookies, credentials or authentication exports.' }, null, 2) + '\n', { mode: 0o600 });
 }

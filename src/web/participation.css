@@ -526,6 +526,22 @@
   color: var(--muted);
   margin: 0 0 12px;
 }
+.loom-app .comment .parent-context {
+  margin-left: 39px;
+}
+.loom-app .reply-page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 12px 0 4px;
+}
+.loom-app .reply-page-summary {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
 .loom-app .focus-banner {
   display: flex;
   justify-content: space-between;

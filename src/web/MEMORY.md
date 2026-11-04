@@ -73,6 +73,13 @@ disclosure and reveals pending/conflict/error controls. Empty summaries use a sm
 invitation. Reading disclosures retain the user's open choice after settlement;
 only a new pending/error/conflict opens them automatically. The
 available/unavailable/error summary states retain their existing meaning.
+Reply parent labels reuse only current leased parent metadata with a matching ID;
+otherwise the link stays generic. They open the actual parent in discussion context
+without extra reads. Children remain on-demand and six-item bounded: counts describe
+that page, never an inferred thread total. Opened branches stay mounted while hidden,
+preserving nested drafts/cursors; same-page refresh retains surviving branch IDs.
+Failed refresh qualifies retained observations. Projection withdrawal still removes
+all page-derived labels/counts and older bodies before fresh structural responses.
 
 Discussion headers distinguish local closure from inherited topic closure; only
 administrators receive the contextual close/reopen organization links. The existing

@@ -34,6 +34,9 @@ and maintenance tools behind disclosures. Mention selection respects the cursor,
 uses a separate prose paragraph when Markdown would prevent notification, and
 names the selected participant in Preview. Deleting a mention marker from an
 editable draft removes its declaration; dispatched requests retain their exact bytes.
+Reply links name an already loaded parent and open its discussion context. **Check
+replies** loads a branch on demand; hiding it keeps nested drafts. Reply counts
+describe the loaded direct-reply page, with explicit continuation and refresh controls.
 Production identity, capacity and retention policies still require review. Use synthetic
 content in disposable previews; retained trials follow the local-pilot limits below.
 **Administration** has dedicated Overview, Community, Participants, Limits, Search
