@@ -636,6 +636,13 @@ under the system temporary directory `loom-review-evidence/notifications`, separ
 from approved diagnostics. Following, Updates and attention use sibling directories.
 Do not write review evidence into a repository development folder.
 
+Publication type checks live in `types/publication-operations.ts`, included by
+`app:typecheck` but never executed as requests. They cover the closed kind union,
+schema-required fields, wrong-operation bodies and exhaustive branch narrowing.
+`unit/participation-publications.test.ts` keeps runtime validation independent:
+unknown/missing/extra fields fail before SQL for all seven operations, accepted
+bodies reach preparation without caller mutation, and untyped unknown kinds fail.
+
 Summary tests use the same runner and closed diagnostics (`summaries.spec.ts` and
 summary route templates; no raw IDs/bodies added). `summaries*.test.ts` covers
 pre-0010 populated upgrade, source snapshot boundaries, both authority/suppression

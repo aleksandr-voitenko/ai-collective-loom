@@ -1,9 +1,5 @@
 import { admitPublication, chargeRate } from '../rates/accounting.js';
-import {
-  normalizeFileSet,
-  type AttachmentSetValue,
-  type FileSetValue,
-} from '../../../contracts/files.js';
+import { normalizeFileSet } from '../../../contracts/files.js';
 import {
   fileGuard,
   prepareFiles,
@@ -15,16 +11,13 @@ import { hasAttachmentSchema } from '../../db/schema-capabilities.js';
 import { FileError } from './file-storage.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
-import type { TSchema } from '@sinclair/typebox';
+import type { Static, TSchema } from '@sinclair/typebox';
 import {
   DiscussionInput,
   ReplyInput,
   ArtifactInput,
   RevisionInput,
   SetupInput,
-  type AuthoredContent,
-  type NoteContent,
-  type ChangeAccountValue,
 } from '../../../contracts/participation.js';
 import {
   parseAuthored,
@@ -52,11 +45,7 @@ import {
 } from '../publication/publication.js';
 import { structureGuard, advanceHierarchy, OrganizationError } from './organization-context.js';
 import { lockReferencePlan, prepareReferences } from './reference-context.js';
-import {
-  SummaryCreateInput,
-  SummaryRevisionInput,
-  type CoverageDeclarationValue,
-} from '../../../contracts/summaries.js';
+import { SummaryCreateInput, SummaryRevisionInput } from '../../../contracts/summaries.js';
 import {
   SummaryError,
   preparationGuard,
@@ -69,7 +58,7 @@ import {
 import type { PreparedCoverage } from '../publication/summary-storage.js';
 import { changeMembers, prepareChangeAccount } from './change-context.js';
 
-const schemas: Record<string, TSchema> = {
+const schemas = {
   'discussion.create': DiscussionInput,
   'reply.create': ReplyInput,
   'artifact.create': ArtifactInput,
@@ -77,29 +66,23 @@ const schemas: Record<string, TSchema> = {
   'community.setup': SetupInput,
   'summary.create': SummaryCreateInput,
   'summary.revise': SummaryRevisionInput,
-};
+} satisfies Record<string, TSchema>;
 export type PublicationKind = keyof typeof schemas;
 export const participationSemanticVersion = 'participation-text-v1';
-type Request = {
-  idempotency_key: string;
-  area_id?: string;
-  discussion_id?: string;
-  parent_id?: string;
-  resource_id?: string;
-  expected_revision_id?: string;
-  title?: string | null;
-  content?: AuthoredContent;
-  file_set?: FileSetValue;
-  attachment_set?: AttachmentSetValue;
-  overview?: AuthoredContent;
-  community_name?: string;
-  ordinary_area_name?: string;
-  proposal_area_name?: string;
-  proposal_context?: { affected_area_id?: string; expected_settings_version: number };
-  coverage?: CoverageDeclarationValue;
-  change_note?: NoteContent | null;
-  change_account?: ChangeAccountValue | null;
+type Inputs = {
+  [Kind in PublicationKind]: Static<(typeof schemas)[Kind]>;
 };
+type InputField = { [Kind in PublicationKind]: keyof Inputs[Kind] }[PublicationKind];
+// Absent fields can be read by shared preparation but cannot be supplied. Each
+// operation retains the required/optional fields of its actual runtime schema.
+export type PublicationRequest = {
+  [Kind in PublicationKind]: {
+    kind: Kind;
+    input: Inputs[Kind] & {
+      [Field in Exclude<InputField, keyof Inputs[Kind]>]?: never;
+    };
+  };
+}[PublicationKind];
 
 function ordered(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(ordered);
@@ -120,14 +103,18 @@ export function digestRequest(
     .update(JSON.stringify([version, kind, ordered(value)]))
     .digest('hex');
 }
-function prepare(kind: string, value: unknown) {
+function prepare(kind: PublicationKind, value: unknown) {
   const schema = schemas[kind];
   if (!schema || !Value.Check(schema, value)) throw new PublicationError('invalid_input');
-  const input = structuredClone(value) as Request;
+  // Validation selects the schema by this same kind; keep that correlation
+  // outside the body so it cannot enter the retained semantic digest.
+  const request = { kind, input: structuredClone(value) } as PublicationRequest;
+  const { input } = request;
   for (const [key, field] of Object.entries(input))
     if ((key.endsWith('_id') || key === 'idempotency_key') && typeof field === 'string')
       (input as Record<string, unknown>)[key] = field.toLowerCase();
-  const content = input.content ?? input.overview!;
+  const content =
+    request.kind === 'community.setup' ? request.input.overview : request.input.content;
   if (input.coverage)
     for (const key of Object.keys(input.coverage)) {
       const coverage = input.coverage as Record<string, string>;
@@ -217,7 +204,7 @@ function prepare(kind: string, value: unknown) {
               : content.format === 'loom-markdown-v2'
                 ? 'participation-text-v2'
                 : participationSemanticVersion;
-  return { input, content, version, digest: digestRequest(kind, semantic, version) };
+  return { ...request, content, version, digest: digestRequest(kind, semantic, version) };
 }
 async function outcome(tx: SqlTransaction, participant: string, kind: string, key: string) {
   await lockAttempt(tx, participant, kind, key);
@@ -234,8 +221,8 @@ function open(chain: Resource[]) {
 export class ParticipationPublications {
   constructor(private readonly database: Transactions) {}
 
-  async publish(actorContext: ActorContext, kind: string, value: unknown) {
-    const { input, content, digest, version } = prepare(kind, value),
+  async publish(actorContext: ActorContext, operation: PublicationKind, value: unknown) {
+    const { kind, input, content, digest, version } = prepare(operation, value),
       identity = identityOf(actorContext);
     try {
       const completed = await this.database.transaction(async (tx) => {
@@ -428,7 +415,7 @@ export class ParticipationPublications {
           resourceId: string,
           title = input.title ?? null;
         if (kind === 'revision.publish' || kind === 'summary.revise') {
-          chain = await lockContext(tx, input.resource_id!, 'publication');
+          chain = await lockContext(tx, input.resource_id, 'publication');
           const resource = chain[0]!;
           if (resource.kind === 'summary' && kind !== 'summary.revise')
             throw new SummaryError('summary_coverage_required');
@@ -503,7 +490,7 @@ export class ParticipationPublications {
             throw new PublicationError('invalid_input');
           resourceId = resource.id;
         } else if (kind === 'summary.create') {
-          const owners = await lockContext(tx, input.discussion_id!, 'resolution', ['discussion']);
+          const owners = await lockContext(tx, input.discussion_id, 'resolution', ['discussion']);
           if (
             !coverage ||
             coverage.discussion_id !== input.discussion_id ||
@@ -529,7 +516,7 @@ export class ParticipationPublications {
             tx,
             actor.participantId,
             'summary',
-            input.discussion_id!,
+            input.discussion_id,
           );
           await tx.query('INSERT INTO loom.summaries(id,discussion_id) VALUES ($1,$2)', [
             resourceId,
@@ -556,8 +543,8 @@ export class ParticipationPublications {
           const areaId = randomUUID(),
             proposalId = randomUUID();
           for (const [id, name, description] of [
-            [areaId, input.ordinary_area_name!, 'Shared work, questions, and ideas.'],
-            [proposalId, input.proposal_area_name!, 'Proposals and feedback about this community.'],
+            [areaId, input.ordinary_area_name, 'Shared work, questions, and ideas.'],
+            [proposalId, input.proposal_area_name, 'Proposals and feedback about this community.'],
           ]) {
             await tx.query("INSERT INTO loom.resources(id,kind) VALUES ($1,'area')", [id]);
             await tx.query('INSERT INTO loom.areas(id,title,description) VALUES ($1,$2,$3)', [
@@ -598,9 +585,9 @@ export class ParticipationPublications {
         } else {
           const owners =
             kind === 'reply.create'
-              ? await lockContext(tx, input.parent_id!, 'resolution')
-              : await lockContext(tx, input.area_id!, 'resolution', ['area']);
-          let ownerId = input.area_id!;
+              ? await lockContext(tx, input.parent_id, 'resolution')
+              : await lockContext(tx, input.area_id, 'resolution', ['area']);
+          let ownerId: string;
           if (kind === 'reply.create') {
             const parent = owners[0]!;
             const row = (
@@ -619,13 +606,14 @@ export class ParticipationPublications {
             ownerId = row!.discussion_id;
           } else if (kind !== 'discussion.create' && kind !== 'artifact.create')
             throw new PublicationError('invalid_input');
+          else ownerId = input.area_id;
           open(owners);
           if (kind === 'discussion.create') {
             ownerId = await this.createResource(
               tx,
               actor.participantId,
               'discussion',
-              input.area_id!,
+              input.area_id,
             );
           }
           const resourceKind = kind === 'artifact.create' ? 'artifact' : 'contribution';
@@ -707,9 +695,9 @@ export class ParticipationPublications {
               actor.participantId,
               resourceId,
               kind === 'discussion.create'
-                ? { kind: 'opening', resource_id: input.area_id! }
+                ? { kind: 'opening', resource_id: input.area_id }
                 : kind === 'reply.create'
-                  ? { kind: 'reply', resource_id: input.parent_id! }
+                  ? { kind: 'reply', resource_id: input.parent_id }
                   : { kind: 'contribution', resource_id: resourceId },
               input.attachment_set,
             )
@@ -767,7 +755,7 @@ export class ParticipationPublications {
     return id;
   }
   async reconcile(actor: ActorContext, kind: string, key: string): Promise<Reconciliation> {
-    if (!schemas[kind] && kind !== 'attachment.promote')
+    if (!schemas[kind as PublicationKind] && kind !== 'attachment.promote')
       throw new PublicationError('invalid_input');
     key = canonicalAttemptKey(key);
     try {

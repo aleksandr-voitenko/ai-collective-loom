@@ -11,7 +11,10 @@ import { PublicationClosedError, PublicationError } from '../modules/publication
 import { IdentityError } from '../modules/identity/errors.js';
 import type { IdentityAuthentication } from '../modules/identity/authentication.js';
 import type { IdentityAdministration } from '../modules/identity/administration.js';
-import { ParticipationPublications } from '../modules/participation/publications.js';
+import {
+  ParticipationPublications,
+  type PublicationKind,
+} from '../modules/participation/publications.js';
 import {
   ParticipationRetrieval,
   RetrievalError,
@@ -342,7 +345,7 @@ export async function registerParticipation(app: FastifyInstance, services: Part
   const errors = Object.fromEntries(
     [400, 401, 403, 404, 409, 413, 415, 429, 500, 503].map((code) => [code, C.ParticipationError]),
   );
-  function command(path: string, kind: string, schema: TSchema) {
+  function command(path: string, kind: PublicationKind, schema: TSchema) {
     app.post(
       '/api/v1/' + path,
       {
