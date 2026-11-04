@@ -119,7 +119,7 @@ mounted through busy/uncertain feedback changes.
 operation union and owns draft construction/comparison/correction transitions.
 Named draft patches preserve undefined-as-unchanged and explicit null/empty values;
 loaded journal bodies remain opaque; uncertain dispatch sends the retained body unchanged.
-Keep its journal sequencing in `participation-state.tsx`/`participation-client.ts`;
+Keep its journal sequencing in `participation-state.tsx`/`intent-store.ts`;
 after an explicit busy action ends uncertain, focus its existing recovery group only
 while authorization is active and focus remains on the body or within that group.
 Do not retarget restored drafts or deliberate focus elsewhere; focus also reveals
@@ -133,8 +133,12 @@ caret insertion with the shared parser, then tries a separate prose paragraph
 without rewriting the original Markdown. Failed placement leaves the draft intact.
 MentionEditor presents readable labels while composer-mentions maps display/wire
 offsets, including native CRLF/CR-to-LF display normalization; retained wire bytes
-stay unchanged until editing. Edits through a binding remove it, and plain text
-paste never adds consent. Collapsed word/line deletions use the resulting caret
+stay unchanged until editing. A private wrapper-free snapshot lifecycle captures
+native selection before React mutates the controlled textarea for a label-only
+name update, then maps/restores its range and direction through canonical offsets.
+Queued selection notifications cannot collapse a pending replacement; labels do
+not author content or create undo entries. Edits through a binding remove it, and
+plain text paste never adds consent. Collapsed word/line deletions use the resulting caret
 and removed length so identical unresolved labels cannot swap recipient identity.
 A bounded100-step mounted undo history retains canonical bindings, groups composition
 and handles keyboard/native history input. Chips remove all occurrences of a token.
@@ -258,6 +262,14 @@ UTF-8 bytes; replacement capacity counts reserialized other records. Adapters ow
 schemas, limits, prefixes, locks, transitions, messages and success events. Reading
 automatic preferences and Updates partial clear keep their separate write paths.
 Feed map construction, sequence checks and tokens remain in each feed adapter.
+
+`participation-client.ts` is the compatibility facade for existing explicit client APIs.
+`browser-transport.ts` owns endpoint requests, single error consumption and definitive
+rejection policy; components keep facade imports and protected reads use
+AuthorizationBoundary. `intent-store.ts` owns draft schemas and journal custody,
+including the unchanged v1 storage prefix, legacy sequence adoption and Web Locks.
+`webauthn.ts` owns only ceremony decoding/encoding and uses the session transport.
+No journal operation performs a network request.
 
 `tests/unit/protected-read-architecture.test.ts` enforces boundary-based transport
 throughout this directory. Mounted StrictMode tests cover late ownership/authority

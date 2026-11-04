@@ -353,6 +353,8 @@ test('a competing Saved retry prevents a late first quota refusal from releasing
   const url = server.origin + '/loom/discussion/' + d.discussion;
   await page.goto(url);
   const other = await context.newPage(); await other.goto(url);
+  // Start the race with both ordinary views mounted, not merely their documents loaded.
+  await expect(control(other, 'discussion', d.discussion).getByRole('button', { name: 'Save discussion', exact: true })).toBeEnabled();
   const refused = barrier(), release = barrier();
   await page.route('**' + saved + '/state', async route => {
     const response = await route.fetch();

@@ -7,6 +7,7 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { AuthorizationBoundary } from '../../src/web/AuthorizationBoundary.js';
 import { Composer } from '../../src/web/ParticipationComposer.js';
+import { MentionEditor } from '../../src/web/MentionEditor.js';
 import { IntentStore } from '../../src/web/participation-client.js';
 import type { ComposerOperation } from '../../src/web/composer-draft.js';
 import type { Context } from '../../src/web/participation-state.js';
@@ -510,4 +511,42 @@ test('title autosave retains the text editor undo history, selection and open fo
   assert.deepEqual(f.record().body, { ...body, title: 'Changed title', idempotency_key: f.original.key });
   assert.equal(f.calls.length, 0, 'Local field changes cannot dispatch a publication');
   f.assertIndependent();
+});
+
+for (const [name, focused, start, end, direction, expected] of [
+  ['selection before focus', false, 0, 26, 'forward', [0,18]],
+  ['already focused full selection', true, 0, 26, 'forward', [0,18]],
+  ['backward suffix selection', true, 19, 26, 'backward', [11,18]],
+  ['caret after mention', true, 19, 19, 'none', [11,11]],
+] as const) test('late mention names preserve native '+name+' before queued selection delivery', () => {
+  const person = randomUUID(), value = { text: 'Before [[mention:person]] after.', mentions: [{token:'person',participant_id:person}] };
+  const original=structuredClone(value),changes:unknown[]=[];
+  const inputRef: {current: HTMLTextAreaElement | null} = {current:null};
+  const editor = (names: Record<string,string>) => <StrictMode><MentionEditor value={value} names={names} disabled={false} label="Native editor" inputRef={inputRef} onChange={next=>changes.push(next)} onSelection={()=>{}}/></StrictMode>;
+  const view=render(editor({})), input=screen.getByLabelText('Native editor') as HTMLTextAreaElement;
+  if(focused)input.focus();
+  input.setSelectionRange(start,end,direction);
+  if(!focused)input.focus();
+  view.rerender(editor({[person]:'Ada'}));
+  assert.equal(screen.getByLabelText('Native editor'),input);
+  assert.equal(document.activeElement,input);
+  assert.equal(input.value,'Before @Ada after.');
+  assert.deepEqual([input.selectionStart,input.selectionEnd],expected);
+  assert.equal(input.selectionDirection,direction);
+  assert.deepEqual(changes,[], 'A presentation-only name update cannot author or save content');
+  assert.deepEqual(value,original, 'Canonical bytes and recipient bindings stay unchanged');
+});
+
+test('late mention names keep a disabled editor mounted without authoring or stealing focus', () => {
+  const person=randomUUID(), value={text:'Before [[mention:person]] after.',mentions:[{token:'person',participant_id:person}]};
+  const original=structuredClone(value),changes:unknown[]=[],inputRef:{current:HTMLTextAreaElement|null}={current:null};
+  const editor=(names:Record<string,string>)=><StrictMode><MentionEditor value={value} names={names} disabled={true} label="Disabled native editor" inputRef={inputRef} onChange={next=>changes.push(next)} onSelection={()=>{}}/></StrictMode>;
+  const view=render(editor({})),input=screen.getByLabelText('Disabled native editor') as HTMLTextAreaElement;
+  input.setSelectionRange(19,26,'backward');
+  const focus=document.activeElement;
+  view.rerender(editor({[person]:'Ada'}));
+  assert.equal(screen.getByLabelText('Disabled native editor'),input);
+  assert.equal(input.disabled,true);assert.equal(document.activeElement,focus);
+  assert.deepEqual([input.selectionStart,input.selectionEnd,input.selectionDirection],[11,18,'backward']);
+  assert.deepEqual(changes,[]);assert.deepEqual(value,original);
 });
