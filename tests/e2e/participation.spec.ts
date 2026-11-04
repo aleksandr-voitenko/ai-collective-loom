@@ -99,7 +99,34 @@ async function createDiscussion(
     await page.getByRole('button', { name: 'Mention a participant', exact: true }).click();
     await page.getByRole('button', { name: '@lyra', exact: true }).click();
     await expect(input).toBeFocused();
-    await expect(input).toHaveValue(/> A quoted ending\n\n\[\[mention:/);
+    await expect(input).toHaveValue(/> A quoted ending\n\n@lyra/);
+    const withMention = await input.inputValue();
+    await input.press('ControlOrMeta+z');
+    await expect(input).not.toHaveValue(/@lyra/);
+    await input.press('ControlOrMeta+Shift+z');
+    await expect(input).toHaveValue(withMention);
+    await input.press('ControlOrMeta+End');
+    await input.press('Backspace');
+    await expect(page.getByRole('button', { name: 'Remove mention @lyra', exact: true })).toHaveCount(0);
+    await input.press('ControlOrMeta+z');
+    await expect(input).toHaveValue(withMention);
+    await expect(page.getByRole('button', { name: 'Remove mention @lyra', exact: true })).toBeVisible();
+    await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin:new URL(page.url()).origin});
+    await input.press('ControlOrMeta+a');await input.press('ControlOrMeta+c');
+    expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(withMention);
+    await input.press('ArrowRight');
+    await page.evaluate(()=>navigator.clipboard.writeText(' @lyra'));
+    await input.press('ControlOrMeta+v');
+    await expect(input).toHaveValue(withMention+' @lyra');
+    await expect(page.getByRole('button',{name:'Remove mention @lyra',exact:true})).toHaveCount(1);
+    await input.press('ControlOrMeta+z');await expect(input).toHaveValue(withMention);
+    await page.getByText('Formatting help', {exact:true}).click();
+    await expect(page.getByText('Plain @names do not notify anyone.', {exact:false})).toBeVisible();
+    for (const viewport of [{width:1440,height:1000},{width:390,height:844}]) {
+      await page.setViewportSize(viewport);await input.scrollIntoViewIfNeeded();await captureMessaging(page,'formatting-help');
+    }
+    await page.setViewportSize({width:1440,height:1000});
+    await page.getByText('Formatting help', {exact:true}).click();
     await page.getByText('Preview', { exact: true }).click();
     await expect(page.locator('.composer .mention')).toHaveText('@lyra');
     for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
@@ -130,7 +157,7 @@ async function createDiscussion(
     await page.getByRole('button', { name: 'Close composer', exact: true }).click();
     const failure = page.getByRole('alert').filter({ hasText: 'Synthetic draft save failure' });
     await expect(failure).toBeVisible();
-    await expect(input).toHaveValue(/\[\[mention:/);
+    await expect(input).toHaveValue(/@lyra/);
     for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       await failure.scrollIntoViewIfNeeded();
@@ -143,6 +170,12 @@ async function createDiscussion(
   await expect(
     page.getByText("Your publication is saved.", { exact: true }),
   ).toBeVisible();
+  if (reviewMessaging) {
+    for (const viewport of [{width:1440,height:1000},{width:390,height:844}]) {
+      await page.setViewportSize(viewport);await page.locator('.composer-confirmed').scrollIntoViewIfNeeded();await captureMessaging(page,'publication-confirmed');
+    }
+    await page.setViewportSize({width:1440,height:1000});
+  }
   await page.getByRole("link", { name: "Inspect exact revision" }).click();
   const path = new URL(page.url()).pathname.split("/");
   const resource = path[3]!,
@@ -344,11 +377,33 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
   const agentBranch = agentPost.locator('..');
   await expect(agentBranch.getByRole('button', { name: 'Check replies', exact: true }))
     .toHaveAttribute('aria-expanded', 'false');
+  await agentPost.getByRole('button',{name:'Preview parent',exact:true}).click();
+  const parentPreview=page.getByRole('complementary',{name:'Parent preview'});
+  await expect(parentPreview).toBeFocused();
+  await expect(parentPreview).toContainText('@maya');
+  await expect(parentPreview).toContainText('shared question');
+  for (const viewport of [{width:1440,height:1000},{width:390,height:844}]) {
+    await page.setViewportSize(viewport);await parentPreview.scrollIntoViewIfNeeded();await captureMessaging(page,'parent-preview');
+  }
+  await parentPreview.getByRole('button',{name:'Close preview'}).click();
+  await expect(agentPost.getByRole('button',{name:'Preview parent',exact:true})).toBeFocused();
+  await page.setViewportSize({width:1440,height:1000});
   await agentPost.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(agentPost.getByLabel('Your reply', { exact: true })).toBeFocused();
   await agentPost.getByLabel('Your reply', { exact: true }).fill('A draft kept when the composer closes.');
   await agentPost.getByRole('button', { name: 'Close composer', exact: true }).click();
   await expect(agentPost.getByRole('button', { name: 'Reply', exact: true })).toBeFocused();
+  await page.getByRole('link',{name:'Drafts',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Drafts',exact:true})).toBeVisible();
+  for (const viewport of [{width:1440,height:1000},{width:390,height:844}]) {
+    await page.setViewportSize(viewport);await captureMessaging(page,'drafts');
+  }
+  await page.getByRole('link',{name:/Resume draft · Reply/}).click();
+  await expect(page.getByLabel('Your reply',{exact:true})).toHaveValue('A draft kept when the composer closes.');
+  await page.goto(server.origin+`/loom/discussion/${discussion.discussion}`);
+  await page.setViewportSize({width:1440,height:1000});
+  await agentPost.getByRole('button',{name:'Close composer',exact:true}).click();
+
   await agentPost.getByRole('button', { name: 'Reply', exact: true }).click();
   await expect(agentPost.getByLabel('Your reply', { exact: true })).toHaveValue('A draft kept when the composer closes.');
   await agentPost
@@ -403,11 +458,20 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
   await expect(nestedReplies.getByText('2 direct replies', { exact: true })).toBeVisible();
   await expect(nestedPost.getByLabel('Your reply', { exact: true })).toHaveValue('A nested draft survives hiding the branch.');
   const refreshedRoot = page.waitForResponse(response => response.url().includes(`/contributions/${discussion.resource}/children?limit=6`) && response.status() === 200);
-  await page.locator('.reading-grid > div > .comment-tree > .reply-page-toolbar')
+  await page.locator('.conversation-content > .comment-tree > .reply-page-toolbar')
     .getByRole('button', {name:'Refresh replies',exact:true}).click();
   await refreshedRoot;
-  await expect(page.locator('.reading-grid > div > .comment-tree')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.locator('.conversation-content > .comment-tree')).toHaveAttribute('aria-busy', 'false');
   await expect(nestedPost.getByLabel('Your reply', { exact: true })).toHaveValue('A nested draft survives hiding the branch.');
+  const threadLink=nestedPost.locator('..').getByRole('link',{name:'Open reply thread →',exact:true});
+  await threadLink.scrollIntoViewIfNeeded();
+  const beforeTop=await nestedPost.evaluate(node=>node.getBoundingClientRect().top);
+  await threadLink.click();
+  await expect(page.getByText('Focused branch',{exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'Back to conversation',exact:true}).click();
+  await expect(nestedPost.getByLabel('Your reply',{exact:true})).toHaveValue('A nested draft survives hiding the branch.');
+  await expect(nestedPost).toBeFocused();
+  await expect.poll(async()=>Math.abs((await nestedPost.evaluate(node=>node.getBoundingClientRect().top))-beforeTop)).toBeLessThan(3);
   await nestedPost.getByRole('button', { name: 'Close composer', exact: true }).click();
   await expect(agentPost.locator('.composer')).toHaveCount(0);
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
@@ -1722,6 +1786,10 @@ test("review regression: suppressed parents preserve browser branches and eligib
       .locator(`[data-resource-id="${child.resource_id}"]`)
       .getByText("Eligible nested reply", { exact: true }),
   ).toBeVisible();
+  await page.locator(`[data-resource-id="${child.resource_id}"]`).getByRole('button',{name:'Preview parent',exact:true}).click();
+  await expect(page.getByRole('complementary',{name:'Parent preview'})).toContainText('Parent unavailable.');
+  await expect(page.getByText('Suppressed parent text',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('Eligible nested reply',{exact:true})).toHaveCount(0);
   await page.goto(
     server.origin +
       `/loom/discussion/${d.discussion}?focus=${parent.resource_id}`,

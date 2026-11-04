@@ -75,7 +75,15 @@ only a new pending/error/conflict opens them automatically. The
 available/unavailable/error summary states retain their existing meaning.
 Reply parent labels reuse only current leased parent metadata with a matching ID;
 otherwise the link stays generic. They open the actual parent in discussion context
-without extra reads. Children remain on-demand and six-item bounded: counts describe
+without extra reads. Preview parent separately reads current context only on demand,
+shows an excerpt capped at360 UTF-16 units and never registers ReadingText. Explicit
+preview opening reveals/focuses its panel; closing restores a surviving trigger. Its host
+survives an unavailable-parent response so fresh negative evidence stays visible;
+older projections still withdraw. App-scoped discussion navigation stores only up to64
+branch control snapshots and a return anchor, scoped to account/instance/path. It
+survives query remounts while preserving their authorization and composer isolation;
+return waits for the fresh message DOM before restoring offset/focus. Leaving the
+path or identity discards it. Children remain on-demand and six-item bounded: counts describe
 that page, never an inferred thread total. Opened branches stay mounted while hidden,
 preserving nested drafts/cursors; same-page refresh retains surviving branch IDs.
 Failed refresh qualifies retained observations. Projection withdrawal still removes
@@ -115,8 +123,16 @@ save keeps the editor open with focused feedback. Native composer disclosures re
 file/recovery state and show configured fields. `composer-mentions.ts` validates
 caret insertion with the shared parser, then tries a separate prose paragraph
 without rewriting the original Markdown. Failed placement leaves the draft intact.
-Editable text deletion removes absent mention declarations; uncertain requests stay
-opaque. Selected names are in-memory presentation only, never notification identity.
+MentionEditor presents readable labels while composer-mentions maps display/wire
+offsets; edits through a binding remove it, and plain text paste never adds consent.
+A bounded100-step mounted undo history retains canonical bindings, groups composition
+and handles keyboard/native history input. Chips remove all occurrences of a token.
+Editable restored mentions resolve names from one authorized12-item directory page;
+unknown recipients stay generic. Names remain in memory, never notification identity.
+Uncertain requests stay opaque. Local-save feedback is sequence/owner/lifetime gated:
+only the latest queued write reports saved. Confirmed results use a compact row;
+uncertainty remains prominent. Drafts reuses Help's local journal controls under a
+settings boundary, without guide/source hydration; legacy Help entry remains.
 Delayed coverage/account selections use latest-draft callbacks. Explicit correction
 of a rejected v1 draft may adopt the exact comparison revision's references;
 v2-to-v3 correction preserves attempted references (LC-20261016-BA7H).
@@ -267,8 +283,8 @@ versioned policy commands/status and a leased audit view. No automatic retry/re-
 Mounted composer, shell and policy tests plus compiled administration cases cover
 reload/lost acknowledgement and original/current policy recovery. See ADR-038.
 
-Local drafts on the Participation guide offers explicit publication status without
-opening an ordinary source read. A confirmed journal remains retained with its exact
+Drafts and the legacy Local drafts section in Participation guide offer explicit
+publication status without opening an ordinary source read. A confirmed journal remains retained with its exact
 command; throttled, missing or failed status keeps uncertainty. Late responses after
 navigation/identity change cannot settle the journal.
 

@@ -932,6 +932,17 @@ counts and an empty branch's failed-refresh/retry. `LOOM_REPLY_REVIEW=1` uses th
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error
 states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifies the
 deliberate children503. The suppressed-parent journey retains traversal after body loss.
+Readable-mention regressions compare display names with canonical journal IDs, preserve
+untouched repeated bindings, remove edited consent and leave typed names literal.
+Mounted composition/history input and queued-write failure cases check undo and honest
+save feedback; Drafts status recovery performs no source read. The participation journey
+uses native keyboard undo/redo and clipboard copy/paste, Drafts resume, a current parent
+preview and fresh-read branch return with focus/offset/draft retention. Suppressed-parent
+preview asserts unavailable evidence and withdrawal of older visible bodies.
+`LOOM_NEXT_REVIEW=1` with the same administrator setup/admission selection captures
+composer, formatting, local-save failure, confirmation, Drafts and parent-preview
+1440x1000/390x844 viewports under `/tmp/loom-review-evidence/messaging-next`.
+Only the fixed `/loom/drafts` route extends diagnostic vocabulary; limits remain.
 The Chromium conflict-correction restart case waits for the replacement URL, holds
 the real journal lock across text/title edits, and verifies the complete saved body
 before reload. A replacement key/base alone does not prove later autosaves finished;

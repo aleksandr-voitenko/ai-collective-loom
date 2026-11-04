@@ -142,7 +142,17 @@ test('mention picker produces publishable prose after Markdown: ' + text, async 
   const content = f.record().body.content as AuthoredContent;
   assert.doesNotThrow(() => parseAuthored(content), 'Picker-created mentions must be valid authored content');
   assert.equal(content.mentions[0]!.participant_id, person.id);
+  assert.ok(input.value.includes('@Ada'), 'The editing field names the participant');
+  assert.ok(!input.value.includes('[[mention:'), 'Wire markers stay out of the editing field');
   assert.ok(content.text.startsWith(text), 'Existing Markdown is preserved');
+  input.setSelectionRange(0,input.value.length);
+  const pasted=f.nextSave();
+  await act(async()=>{fireEvent.paste(input,{clipboardData:{getData:()=>input.value}});await pasted;});
+  assert.deepEqual((f.record().body.content as AuthoredContent).mentions,[],'Pasting the identical displayed label cannot create or retain a hidden binding');
+  const undone=f.nextSave();
+  await act(async()=>{fireEvent.keyDown(input,{key:'z',ctrlKey:true});await undone;});
+  assert.deepEqual(f.record().body.content,content,'Undo explicitly restores the original binding');
+
   fireEvent.click(screen.getByText('Preview', { exact: true }));
   assert.ok(screen.getByText('@Ada', { exact: true }), 'Preview names the selected participant');
   f.assertIndependent();
@@ -164,7 +174,7 @@ test('deleting a mention marker removes only its declaration from an editable dr
   } };
   const f = await fixture(t, { kind: 'discussion.create', areaId: area }, '/api/v1/discussions', body);
   const saved = f.nextSave();
-  await act(async () => { fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Hello Ada and [[mention:bo]].' } }); await saved; });
+  await act(async () => { fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Hello Ada and @participant.' } }); await saved; });
   const content = f.record().body.content as AuthoredContent;
   assert.deepEqual(content.mentions, [body.content.mentions[1]]);
   assert.doesNotThrow(() => parseAuthored(content));
@@ -244,26 +254,27 @@ test('participant selection saves exact mentions before remount and removal pres
   // A draft may contain a duplicated marker; removal must clear every occurrence before publishing.
   const duplicated = 'Opening text [[mention:m111111111111]] [[mention:m222222222222]]\nTail [[mention:m111111111111]] stays.';
   const saved = f.nextSave();
-  await act(async () => { fireEvent.change(screen.getByLabelText('Text'), { target: { value: duplicated } }); await saved; });
+  await act(async () => { await f.context.store.saveDraft(f.record(), { ...f.record().body, content: { format: 'loom-markdown-v1', text: duplicated, mentions } }); await saved; });
+  f.remount();
   const expected = { ...body, content: { format: 'loom-markdown-v1', text: duplicated, mentions }, idempotency_key: f.original.key };
   assert.deepEqual(f.record(), { ...f.original, sequence: f.original.sequence + 3, body: expected });
   f.remount();
-  assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value, duplicated);
+  assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value, 'Opening text @participant @participant\nTail @participant stays.');
   assert.equal((screen.getByLabelText('Title') as HTMLInputElement).value, 'Authored title');
-  assert.ok(screen.getByRole('button', { name: 'Remove mention m111111111111' }));
-  assert.ok(screen.getByRole('button', { name: 'Remove mention m222222222222' }));
+  assert.equal(screen.getAllByRole('button', { name: 'Remove mention @participant' }).length, 2);
   const removed = f.nextSave();
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Remove mention m111111111111' })); await removed; });
+  await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Remove mention @participant' })[0]!); await removed; });
   const remaining = 'Opening text  [[mention:m222222222222]]\nTail  stays.';
   assert.deepEqual(f.record(), { ...f.original, sequence: f.original.sequence + 4,
     body: { ...body, content: { format: 'loom-markdown-v1', text: remaining, mentions: [mentions[1]] }, idempotency_key: f.original.key } });
   f.remount();
-  assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value, remaining);
-  assert.equal(!!screen.queryByRole('button', { name: 'Remove mention m111111111111' }), false);
-  assert.ok(screen.getByRole('button', { name: 'Remove mention m222222222222' }));
+  assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value, 'Opening text  @participant\nTail  stays.');
+  assert.equal(screen.getAllByRole('button', { name: 'Remove mention @participant' }).length, 1);
   assert.ok(f.calls.length >= 2);
   assert.deepEqual([...new Set(f.calls.map(call => call.method + ' ' + call.path))], ['GET /api/v1/participants']);
+  await act(async () => { for (const call of f.calls.filter(call => !call.done)) call.finish(Response.json(people)); });
   assert.ok(f.calls.every(call => call.done));
+  assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value, 'Opening text  @Bo\nTail  stays.');
   f.assertIndependent();
 });
 
@@ -337,5 +348,64 @@ for (const action of ['status', 'retry'] as const) test(`recorded file expiry th
   assert.equal(!!screen.queryByRole('button', { name: 'Retry same publication' }), false);
   assert.deepEqual(f.committed, []);
   assert.deepEqual(f.calls.map(call => ({ path: call.path, method: call.method, raw: call.raw })), [expectedRequest, expectedRequest]);
+  f.assertIndependent();
+});
+
+test('local save feedback waits for the latest queued edit and reports its failure', async t => {
+  const area=randomUUID(), body={area_id:area,title:'Save state',content:authored('Before')};
+  const f=await fixture(t,{kind:'artifact.create',areaId:area},'/api/v1/artifacts',body);
+  const save=f.context.store.saveDraft.bind(f.context.store);
+  let release!:()=>void, second!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;}), started=new Promise<void>(resolve=>{second=resolve;});
+  let count=0;
+  t.mock.method(f.context.store,'saveDraft',async (...args:Parameters<typeof save>)=>{
+    if(++count===1){await gate;return save(...args);}
+    second();throw new Error('Latest edit could not be stored');
+  });
+  await act(async()=>{
+    fireEvent.change(screen.getByLabelText('Text'),{target:{value:'First'}});
+    fireEvent.change(screen.getByLabelText('Text'),{target:{value:'Latest'}});
+  });
+  assert.ok(screen.getByText('Saving…',{exact:true}));
+  await act(async()=>{release();await started;});
+  assert.ok(screen.getByText('Couldn’t save on this device',{exact:true}));
+  assert.equal(screen.queryByText('Saved on this device',{exact:true}),null);
+  assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value,'Latest');
+  assert.equal((f.record().body.content as AuthoredContent).text,'First');
+});
+
+test('Drafts checks an uncertain publication without fetching its source or changing retained bytes', async t => {
+  const { Drafts }=await import('../../src/web/ParticipationHelp.js');
+  const discussion=randomUUID(),parent=randomUUID(),body={discussion_id:discussion,parent_id:parent,content:authored('Exact uncertain text')};
+  const f=await fixture(t,{kind:'reply.create',discussionId:discussion,parentId:parent},'/api/v1/replies',body,true);
+  const raw=f.raw();
+  const router=createMemoryRouter([{path:'/loom/drafts',element:<AuthorizationBoundary sourcePolicy="settings"><Drafts context={f.context}/></AuthorizationBoundary>}],{initialEntries:['/loom/drafts']});
+  const view=render(<RouterProvider router={router}/>);t.after(()=>{view.unmount();router.dispose();});
+  assert.equal(f.calls.length,0,'Draft discovery does not hydrate source content');
+  assert.ok(screen.getByRole('link',{name:/Review submission · Reply/}));
+  const status=await f.request('Check publication status');
+  assert.equal(status.path,'/api/v1/operations/status');
+  await f.answer(status,Response.json({operation_state:'not_recorded'}));
+  assert.equal(f.raw(),raw);
+  assert.ok(screen.getByText(/Confirmation is still unavailable; the earlier attempt may still commit/));
+  f.assertIndependent();
+});
+
+test('composition edits undo as one unit and native history input can redo without binding pasted names', async t => {
+  const area=randomUUID(),body={area_id:area,title:'Composition',content:authored('Hello')};
+  const f=await fixture(t,{kind:'artifact.create',areaId:area},'/api/v1/artifacts',body);
+  const input=screen.getByLabelText('Text') as HTMLTextAreaElement;
+  fireEvent.compositionStart(input);
+  for(const value of ['Hello 日','Hello 日本 @Ada']) {
+    const saved=f.nextSave();await act(async()=>{fireEvent.change(input,{target:{value}});await saved;});
+  }
+  fireEvent.compositionEnd(input);
+  let saved=f.nextSave();await act(async()=>{fireEvent.keyDown(input,{key:'z',ctrlKey:true});await saved;});
+  assert.equal(input.value,'Hello');
+  saved=f.nextSave();await act(async()=>{
+    input.dispatchEvent(new dom.window.InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'historyRedo'}));await saved;
+  });
+  assert.equal(input.value,'Hello 日本 @Ada');
+  assert.deepEqual((f.record().body.content as AuthoredContent).mentions,[]);
   f.assertIndependent();
 });

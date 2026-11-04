@@ -38,3 +38,19 @@ test('unclosed code and over-limit content fail without changing the authored in
     assert.deepEqual(original, copy);
   }
 });
+
+test('readable mention editing retains stable bindings only outside the replaced range', async () => {
+  const { mentionPresentation, editMentionPresentation } = await import('../../src/web/composer-mentions.js');
+  const bound = { ...content('Hi [[mention:ada]] / [[mention:ada]]!'), mentions: [mention] };
+  const names = { [mention.participant_id]: 'Ada' };
+  const view = mentionPresentation(bound, names);
+  assert.equal(view.text, 'Hi @Ada / @Ada!');
+  assert.equal(view.wireOffset(7), 'Hi [[mention:ada]]'.length);
+  assert.equal(view.displayOffset('Hi [[mention:ada]]'.length), 7);
+  assert.deepEqual(editMentionPresentation(bound, names, 'Hi @Ada / @Ada!?'), { text: bound.text + '?', mentions: [mention] });
+  assert.deepEqual(editMentionPresentation(bound, names, 'Hi @Ada / @Ada!', { start: 3, end: 7 }), {
+    text: 'Hi @Ada / [[mention:ada]]!', mentions: [mention],
+  });
+  assert.deepEqual(editMentionPresentation({ text: 'Hi [[mention:ada]]', mentions: [mention] }, names, 'Hi @Ana'), { text: 'Hi @Ana', mentions: [] });
+  assert.deepEqual(editMentionPresentation(content('Hi '), names, 'Hi @Ada'), { text: 'Hi @Ada', mentions: [] });
+});

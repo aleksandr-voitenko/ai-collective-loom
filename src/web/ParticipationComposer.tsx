@@ -1,3 +1,5 @@
+import { MentionEditor } from './MentionEditor.js';
+import { mentionPresentation } from './composer-mentions.js';
 import { EditingIntent } from './EditingIntent.js';
 import { insertMention } from './composer-mentions.js';
 import { FileEditor } from './Files.js';
@@ -10,6 +12,8 @@ import {
   type RevisionView,
   Revision,
   Committed,
+  Page,
+  type PageView,
 } from '../contracts/participation.js';
 import { parseAuthored, validateChangeFields } from '../contracts/authored.js';
 import {
@@ -19,7 +23,7 @@ import {
   isDefinitiveRejection,
   ApiError,
 } from './participation-client.js';
-import { type Context, useIntent, SeparateDraft } from './participation-state.js';
+import { type Context, useIntent, useQuery, SeparateDraft } from './participation-state.js';
 import { AuthoredText } from './AuthoredText.js';
 import { ChangeNoteEditor, ChangeAccountEditor } from './Changes.js';
 import { ReferenceEditor, ReferenceViews } from './References.js';
@@ -130,6 +134,10 @@ export function Composer({
   const [coverage, setCoverage] = useState<CoverageDeclarationValue | undefined>(
     record ? (record.body.coverage as CoverageDeclarationValue | undefined) : initialCoverage,
   );
+  const saveSequence = useRef(0);
+  const [saveState, setSaveState] = useState(
+    record?.state === 'draft' ? 'Saved on this device' : '',
+  );
   const [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [closing, setClosing] = useState(false),
@@ -174,10 +182,13 @@ export function Composer({
   }, [error, busy]);
   useLayoutEffect(() => {
     if (pendingCaret.current !== undefined) {
-      textArea.current?.setSelectionRange(pendingCaret.current, pendingCaret.current);
+      const caret = mentionPresentation({ text, mentions }, mentionNames).displayOffset(
+        pendingCaret.current,
+      );
+      textArea.current?.setSelectionRange(caret, caret);
       pendingCaret.current = undefined;
     }
-  }, [text]);
+  }, [text, mentionNames]);
   useEffect(() => {
     const completed = wasBusy.current && !busy;
     wasBusy.current = busy;
@@ -254,17 +265,26 @@ export function Composer({
     return buildDraftBody({ operation, fields, patch });
   }
   async function persist(patch: DraftPatch = {}) {
+    const sequence = ++saveSequence.current;
+    const owner = identityGeneration();
+    const current = () =>
+      live.current && owner === identityGeneration() && sequence === saveSequence.current;
+    setSaveState('Saving…');
     try {
       const body = draftBody(patch);
       const next = await update((current) =>
         context.store.saveDraft(current ?? context.store.create(slot, kind, path, body), body),
       );
-      if (live.current) {
+      if (current()) {
         setError('');
+        setSaveState('Saved on this device');
       }
       return next;
     } catch (failure) {
-      setError((failure as Error).message);
+      if (current()) {
+        setError((failure as Error).message);
+        setSaveState('Couldn’t save on this device');
+      }
       return undefined;
     }
   }
@@ -460,13 +480,12 @@ export function Composer({
       if (live.current && owner === identityGeneration()) setBusy(false);
     }
   }
-  function editText(value: string) {
-    setText(value);
-    if (!locked && record?.state !== 'rejected') {
-      const next = mentions.filter((mention) => value.includes(`[[mention:${mention.token}]]`));
-      setMentions(next);
-      void persist({ text: value, mentions: next });
-    }
+  function editText(value: { text: string; mentions: AuthoredContent['mentions'] }) {
+    if (locked) return;
+    setText(value.text);
+    setMentions(value.mentions);
+    if (record?.state !== 'rejected') void persist(value);
+    else setSaveState('Unsaved correction — prepare a corrected submission to keep it');
   }
   async function closeComposer() {
     if (busy || closing) return;
@@ -525,8 +544,12 @@ export function Composer({
     void persist({ references: nextReferences, note: nextNote, account: nextAccount });
   };
   return (
-    <section ref={section} className="composer card" aria-label={heading}>
-      <h2>{heading}</h2>
+    <section
+      ref={section}
+      className={record?.state === 'committed' ? 'composer composer-confirmed' : 'composer card'}
+      aria-label={heading}
+    >
+      {record?.state !== 'committed' && <h2>{heading}</h2>}
       {(kind === 'revision.publish' || kind === 'summary.revise') &&
         typeof fixed.resource_id === 'string' &&
         typeof base === 'string' && (
@@ -549,11 +572,23 @@ export function Composer({
           }).catch((failure) => setError(failure.message))
         }
       />
-      {status && <p role="status">{status}</p>}
+      <p
+        role="status"
+        className={
+          record?.state === 'committed'
+            ? 'composer-status composer-status-confirmed'
+            : 'composer-status'
+        }
+      >
+        {record?.state === 'committed' ? 'Publication confirmed.' : status}
+      </p>
       {record?.state === 'committed' ? (
-        <div className="notice neutral">
+        <div className="publication-confirmed">
           <p>
-            Published.{' '}
+            <span>
+              {status ||
+                (kind === 'reply.create' ? 'Your reply was posted.' : 'Your publication is saved.')}
+            </span>{' '}
             <Link to={`/loom/resource/${record.result!.resource_id}/${record.result!.revision_id}`}>
               Inspect exact revision
             </Link>
@@ -569,6 +604,7 @@ export function Composer({
               </p>
             </>
           )}
+          {onClose && <button onClick={onClose}>Close composer</button>}
           {!summaryDiscussion && kind !== 'revision.publish' && (
             <button
               onClick={() =>
@@ -652,29 +688,34 @@ export function Composer({
           )}
           <label>
             {kind === 'reply.create' ? 'Your reply' : 'Text'}
-            <textarea
-              aria-label={kind === 'reply.create' ? 'Your reply' : 'Text'}
-              ref={textArea}
-              onSelect={(event) => {
-                selection.current = {
-                  start: event.currentTarget.selectionStart,
-                  end: event.currentTarget.selectionEnd,
-                };
-              }}
-              rows={7}
-              value={text}
+            <MentionEditor
+              label={kind === 'reply.create' ? 'Your reply' : 'Text'}
+              inputRef={textArea}
+              value={{ text, mentions }}
+              names={mentionNames}
               disabled={locked}
-              onChange={(event) => editText(event.target.value)}
+              onChange={editText}
+              onSelection={(value) => {
+                selection.current = value;
+              }}
             />
           </label>
+          {!locked && mentions.some((mention) => !mentionNames[mention.participant_id]) && (
+            <MentionNameLookup
+              onNames={(names) => setMentionNames((current) => ({ ...current, ...names }))}
+            />
+          )}
           {mentions.length > 0 && (
-            <div className="fineprint">
-              {mentions.length} explicit participant{' '}
-              {mentions.length === 1 ? 'mention' : 'mentions'}.
+            <div className="mention-chips">
+              <span className="fineprint">
+                {mentions.length} explicit participant{' '}
+                {mentions.length === 1 ? 'mention' : 'mentions'}.
+              </span>
               {!locked &&
                 mentions.map((mention) => (
                   <button
                     key={mention.token}
+                    title={mention.participant_id}
                     onClick={() => {
                       const next = mentions.filter((m) => m.token !== mention.token),
                         value = text.replaceAll(`[[mention:${mention.token}]]`, '');
@@ -686,7 +727,7 @@ export function Composer({
                     Remove mention{' '}
                     {mentionNames[mention.participant_id]
                       ? '@' + mentionNames[mention.participant_id]
-                      : mention.token}
+                      : '@participant'}
                   </button>
                 ))}
             </div>
@@ -694,10 +735,36 @@ export function Composer({
           {!locked && (
             <>
               <div className="composer-tools">
-                <button className="text-button" onClick={() => setPicker((value) => !value)}>
+                <button
+                  className="text-button"
+                  aria-expanded={picker}
+                  onClick={() => setPicker((value) => !value)}
+                >
                   <Icon name="mention" /> Mention a participant
                 </button>
-                <span>Markdown supported · text only</span>
+                <details className="formatting-help">
+                  <summary>Formatting help</summary>
+                  <p>Use Markdown in your text. Open Preview to check the result.</p>
+                  <ul>
+                    <li>
+                      <code>**bold**</code> and <code>*italic*</code>
+                    </li>
+                    <li>
+                      <code>[label](https://example.org)</code> for a link
+                    </li>
+                    <li>
+                      <code>`code`</code> or a block between lines of <code>```</code>
+                    </li>
+                    <li>
+                      Start a line with <code>&gt; </code> for a quote or <code>- </code> for a
+                      list.
+                    </li>
+                  </ul>
+                  <p>
+                    Plain @names do not notify anyone. Use “Mention a participant” to select a
+                    recipient. Attachments are added separately below.
+                  </p>
+                </details>
               </div>
               {picker && (
                 <Collection
@@ -733,7 +800,7 @@ export function Composer({
                             );
                             setPicker(false);
                             textArea.current?.focus();
-                            textArea.current?.setSelectionRange(inserted.caret, inserted.caret);
+
                             selection.current = { start: inserted.caret, end: inserted.caret };
                           } catch (failure) {
                             setError((failure as Error).message);
@@ -894,6 +961,9 @@ export function Composer({
               </button>
             </div>
           )}
+          <p role="status" className="fineprint draft-save-status">
+            {saveState}
+          </p>
           <div className="composer-actions">
             {(!record || record.state === 'draft') && (
               <button
@@ -936,4 +1006,22 @@ export function Composer({
       )}
     </section>
   );
+}
+
+function MentionNameLookup({ onNames }: { onNames: (names: Record<string, string>) => void }) {
+  const { data, error, refresh } = useQuery<PageView>('/api/v1/participants', Page);
+  const callback = useRef(onNames);
+  callback.current = onNames;
+  useEffect(() => {
+    if (data)
+      callback.current(
+        Object.fromEntries(
+          data.items.map((item) => {
+            const person = item as { id: string; nickname: string };
+            return [person.id, person.nickname];
+          }),
+        ),
+      );
+  }, [data]);
+  return error ? <button onClick={refresh}>Retry mention names</button> : null;
 }

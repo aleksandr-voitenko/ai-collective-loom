@@ -6,9 +6,11 @@ import { applicationInputs } from '../../scripts/lib/release-identity.mjs';
 
 const screenshots: unknown[] = [];
 export async function captureMessaging(page: Page, state: string, faults: string[] = [], mockedResponses: string[] = []) {
+  const nextReview = process.env.LOOM_NEXT_REVIEW === '1';
+  if (nextReview && !['composer','close-save-failure','formatting-help','parent-preview','drafts','publication-confirmed'].includes(state)) return;
   const replyReview = process.env.LOOM_REPLY_REVIEW === '1' && state.startsWith('reply-');
-  if (process.env.LOOM_MESSAGING_REVIEW !== '1' && !replyReview) return;
-  const directory = '/tmp/loom-review-evidence/' + (replyReview ? 'reply-navigation' : 'messaging');
+  if (process.env.LOOM_MESSAGING_REVIEW !== '1' && !replyReview && !nextReview) return;
+  const directory = '/tmp/loom-review-evidence/' + (nextReview ? 'messaging-next' : replyReview ? 'reply-navigation' : 'messaging');
   const inputs = applicationInputs(process.cwd());
   const build = JSON.parse(await readFile('dist/release.json', 'utf8'));
   if (inputs.sha256 !== build.sha256) throw new Error('Messaging review source and build differ.');
@@ -27,6 +29,6 @@ export async function captureMessaging(page: Page, state: string, faults: string
     mocked_responses: mockedResponses, injected_failures: faults, full_viewport: true,
     sha256: createHash('sha256').update(bytes).digest('hex') });
   await writeFile(directory + '/manifest.json', JSON.stringify({ screenshots,
-    reproduction: `${replyReview ? 'LOOM_REPLY_REVIEW' : 'LOOM_MESSAGING_REVIEW'}=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"`,
+    reproduction: `${nextReview ? 'LOOM_NEXT_REVIEW' : replyReview ? 'LOOM_REPLY_REVIEW' : 'LOOM_MESSAGING_REVIEW'}=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"`,
     isolation: 'Actual compiled React app, disposable PostgreSQL/HTTPS and virtual passkey. No staging/pilot, cookies, credentials or authentication exports.' }, null, 2) + '\n', { mode: 0o600 });
 }

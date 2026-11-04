@@ -1,6 +1,7 @@
+import type { DiscussionNavigationState } from './discussion-navigation.js';
 import { AddPrivateNote } from './PrivateNotes.js';
 import { FileBrowser } from './Files.js';
-import { useState, useRef, useEffect, useId } from 'react';
+import { useState, useRef, useEffect, useId, createContext, useContext } from 'react';
 import { useLocation, Link } from 'react-router';
 import {
   type ResourceView,
@@ -23,10 +24,14 @@ import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { EditingIntent } from './EditingIntent.js';
 
+type BranchNavigation = { cursor: string; opened: string[]; expanded: string[] };
+const ParentPreviewContext = createContext<((id: string) => void) | null>(null);
+const DiscussionNavigation = createContext<Map<string, BranchNavigation> | null>(null);
+
 export function DiscussionPage({ id, context }: { id: string; context: Context }) {
   return (
     <AuthorizationBoundary scope={'discussion:' + id} sourcePolicy="projections">
-      <DiscussionContent id={id} context={context} />
+      <DiscussionContent key={id} id={id} context={context} />
     </AuthorizationBoundary>
   );
 }
@@ -41,6 +46,52 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     local_open: boolean;
     publication_open: boolean;
   }>('/api/v1/discussions/' + id);
+  const [navigationState] = useState<DiscussionNavigationState>(
+    () => context.discussionNavigation ?? { branches: new Map() },
+  );
+  const navigation = useRef(navigationState.branches);
+  const [preview, setPreview] = useState<string>();
+  const previewTrigger = useRef<HTMLElement | null>(null);
+  const shouldRestore = useRef(!!navigationState.focus && !focus);
+  useEffect(() => {
+    const position = navigationState.returnPosition;
+    navigationState.focus = focus;
+    if (!shouldRestore.current || !position) return;
+    let focused = false;
+    const restore = () => {
+      const target = document.querySelector<HTMLElement>(
+        `article[data-resource-id="${position.resource}"]`,
+      );
+      if (!target) return;
+      if (!focused) {
+        target.focus({ preventScroll: true });
+        focused = true;
+      }
+      window.scrollBy({
+        top: target.getBoundingClientRect().top - position.top,
+        behavior: 'instant',
+      });
+    };
+    // Fresh sibling bodies can grow after the anchor mounts. Follow that layout
+    // until the user's next input; never fight deliberate scrolling or focus.
+    const main = document.getElementById('loom-main') ?? document.body;
+    const mutations = new MutationObserver(restore),
+      resize = new ResizeObserver(restore);
+    const stop = () => {
+      mutations.disconnect();
+      resize.disconnect();
+    };
+    mutations.observe(main, { childList: true, subtree: true });
+    resize.observe(main);
+    for (const event of ['wheel', 'touchstart', 'pointerdown', 'keydown'])
+      window.addEventListener(event, stop, { once: true, passive: true });
+    restore();
+    return () => {
+      stop();
+      for (const event of ['wheel', 'touchstart', 'pointerdown', 'keydown'])
+        window.removeEventListener(event, stop);
+    };
+  }, [focus]);
   const [reload, setReload] = useState(0),
     [summaryReload, setSummaryReload] = useState(0);
   // Retain only the immutable opening identity as a query seed. Every rendered
@@ -60,120 +111,155 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     .slice(0, 160)
     .replace(/[\uD800-\uDBFF]$/, '');
   return (
-    <>
-      {data ? (
-        <>
-          <div className="breadcrumb">
-            <Link to="/loom">Topics</Link>
-            <span>›</span>
-            <Link to={'/loom/area/' + data.area.id}>{data.area.title}</Link>
-          </div>
-          <div className="discussion-heading">
-            <h1>{data.opening.title}</h1>
-            <div className="discussion-actions">
-              <SaveControl
-                context={context}
-                target={{ kind: 'discussion', resource_id: id }}
-                label="discussion"
-              />
-              <FollowControl
-                key={'discussion:' + id}
-                context={context}
-                target={{ kind: 'discussion', resource_id: id }}
-              />
-              <details className="discussion-details">
-                <summary>Discussion details</summary>
-                <div className="discussion-details-content">
-                  <AddPrivateNote target={{ kind: 'discussion', resource_id: id }} />
-                  <Link className="button" to={'/loom/resource/' + data.opening.resource_id}>
-                    History & details
-                  </Link>
-                  <ReferenceViews key={id} target={{ kind: 'discussion', resource_id: id }} />
-                  <ReadingSelection />
-                  {context.self.role === 'administrator' && (
-                    <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
-                  )}
-                  <SuppressLink context={context} id={id} kind="discussion" />
-                </div>
-              </details>
+    <DiscussionNavigation.Provider value={navigation.current}>
+      <ParentPreviewContext.Provider
+        value={(id) => {
+          previewTrigger.current = document.activeElement as HTMLElement;
+          setPreview(id);
+        }}
+      >
+        {data ? (
+          <>
+            <div className="breadcrumb">
+              <Link to="/loom">Topics</Link>
+              <span>›</span>
+              <Link to={'/loom/area/' + data.area.id}>{data.area.title}</Link>
             </div>
-          </div>
-          {!data.publication_open && (
-            <p className="notice" role="status">
-              {data.local_open
-                ? 'This discussion is locally open, but a topic above it is closed to publication.'
-                : 'This discussion is closed to publication.'}{' '}
-              Replies, revisions and summaries are paused. Retained content stays readable.
-            </p>
-          )}
-          {data.opening.affected_area_id && (
-            <p>
-              Organizational suggestion concerning{' '}
-              <Link to={'/loom/area/' + data.opening.affected_area_id}>this topic</Link>.
-            </p>
-          )}
-          <SummarySection key={summaryReload} discussion={id} />
-          {new URLSearchParams(location.search).get('summary') === 'create' && (
-            <Composer
-              context={context}
-              operation={{ kind: 'summary.create', discussionId: id }}
-              slot={'summary.create:' + id}
-              initialTitle={summaryTitle}
-              heading="Create discussion summary"
-              onCommitted={() => setSummaryReload((n) => n + 1)}
-            />
-          )}
-        </>
-      ) : (
-        <div className="notice">
-          <p>
-            Earlier discussion details were withdrawn. Available replies are checked separately.
-          </p>
-          <button onClick={refresh}>Refresh discussion</button>
-        </div>
-      )}
-      <div className="reading-grid">
-        <div>
-          {focus ? (
-            <FocusedBranch id={focus} discussionId={id} context={context} />
-          ) : (
-            <>
-              <Contribution
-                id={opening.current!}
-                context={context}
-                opening
-                onPosted={() => setReload((n) => n + 1)}
-              />
-              <div className="discussion-controls">
-                <h2>
-                  Conversation <span>Direct replies</span>
-                </h2>
-                <span>Oldest first</span>
+            <div className="discussion-heading">
+              <h1>{data.opening.title}</h1>
+              <div className="discussion-actions">
+                <SaveControl
+                  context={context}
+                  target={{ kind: 'discussion', resource_id: id }}
+                  label="discussion"
+                />
+                <FollowControl
+                  key={'discussion:' + id}
+                  context={context}
+                  target={{ kind: 'discussion', resource_id: id }}
+                />
+                <details className="discussion-details">
+                  <summary>Discussion details</summary>
+                  <div className="discussion-details-content">
+                    <AddPrivateNote target={{ kind: 'discussion', resource_id: id }} />
+                    <Link className="button" to={'/loom/resource/' + data.opening.resource_id}>
+                      History & details
+                    </Link>
+                    <ReferenceViews key={id} target={{ kind: 'discussion', resource_id: id }} />
+                    <ReadingSelection />
+                    {context.self.role === 'administrator' && (
+                      <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
+                    )}
+                    <SuppressLink context={context} id={id} kind="discussion" />
+                  </div>
+                </details>
               </div>
-              <Children
-                key={opening.current! + reload}
-                id={opening.current!}
-                parent={data?.opening}
-                discussionId={id}
+            </div>
+            {!data.publication_open && (
+              <p className="notice" role="status">
+                {data.local_open
+                  ? 'This discussion is locally open, but a topic above it is closed to publication.'
+                  : 'This discussion is closed to publication.'}{' '}
+                Replies, revisions and summaries are paused. Retained content stays readable.
+              </p>
+            )}
+            {data.opening.affected_area_id && (
+              <p>
+                Organizational suggestion concerning{' '}
+                <Link to={'/loom/area/' + data.opening.affected_area_id}>this topic</Link>.
+              </p>
+            )}
+            <SummarySection key={summaryReload} discussion={id} />
+            {new URLSearchParams(location.search).get('summary') === 'create' && (
+              <Composer
                 context={context}
-                depth={0}
+                operation={{ kind: 'summary.create', discussionId: id }}
+                slot={'summary.create:' + id}
+                initialTitle={summaryTitle}
+                heading="Create discussion summary"
+                onCommitted={() => setSummaryReload((n) => n + 1)}
               />
-            </>
+            )}
+          </>
+        ) : (
+          <div className="notice">
+            <p>
+              Earlier discussion details were withdrawn. Available replies are checked separately.
+            </p>
+            <button onClick={refresh}>Refresh discussion</button>
+          </div>
+        )}
+        {preview && (
+          <ParentPreview
+            key={preview}
+            id={preview}
+            discussionId={id}
+            close={() => {
+              setPreview(undefined);
+              if (previewTrigger.current?.isConnected) previewTrigger.current.focus();
+            }}
+          />
+        )}
+        <div className="reading-grid">
+          <div>
+            {focus ? (
+              <FocusedBranch key={focus} id={focus} discussionId={id} context={context} />
+            ) : (
+              <div
+                className="conversation-content"
+                onClickCapture={(event) => {
+                  const target = event.target as Element;
+                  if (target.closest('a[href*="?focus="]')) {
+                    const article =
+                      target.closest('[data-resource-id]') ??
+                      target.closest('.comment-branch')?.querySelector('[data-resource-id]');
+                    if (article)
+                      navigationState.returnPosition = {
+                        resource: article.getAttribute('data-resource-id')!,
+                        top: article.getBoundingClientRect().top,
+                      };
+                  }
+                }}
+              >
+                <>
+                  <Contribution
+                    id={opening.current!}
+                    context={context}
+                    opening
+                    onPosted={() => setReload((n) => n + 1)}
+                  />
+                  <div className="discussion-controls">
+                    <h2>
+                      Conversation <span>Direct replies</span>
+                    </h2>
+                    <span>Oldest first</span>
+                  </div>
+                  <Children
+                    key={opening.current! + reload}
+                    id={opening.current!}
+                    parent={data?.opening}
+                    discussionId={id}
+                    context={context}
+                    depth={0}
+                  />
+                </>
+              </div>
+            )}
+          </div>
+          {data && (
+            <aside className="right-rail">
+              <h3>About this discussion</h3>
+              <p>{data.area.description}</p>
+              <Link to={'/loom/area/' + data.area.id}>Browse {data.area.title} →</Link>
+              <hr />
+              <p>
+                Every reply keeps its actual parent. Open a branch to follow a deeper conversation.
+              </p>
+            </aside>
           )}
         </div>
-        {data && (
-          <aside className="right-rail">
-            <h3>About this discussion</h3>
-            <p>{data.area.description}</p>
-            <Link to={'/loom/area/' + data.area.id}>Browse {data.area.title} →</Link>
-            <hr />
-            <p>
-              Every reply keeps its actual parent. Open a branch to follow a deeper conversation.
-            </p>
-          </aside>
-        )}
-      </div>
-    </>
+      </ParentPreviewContext.Provider>
+    </DiscussionNavigation.Provider>
   );
 }
 
@@ -199,7 +285,13 @@ function FocusedBranch({
         {error && <button onClick={refresh}>Retry branch</button>}
       </div>
     );
-  if (!data) return <p role="status">Opening branch…</p>;
+  if (!data)
+    return (
+      <>
+        <p role="status">Opening branch…</p>
+        <button onClick={refresh}>Refresh branch</button>
+      </>
+    );
   return (
     <>
       <div className="focus-banner">
@@ -292,6 +384,7 @@ function ContributionBody({
   parent,
   onPosted,
 }: ContributionProps & { data: ContributionContextView }) {
+  const onPreview = useContext(ParentPreviewContext);
   const [reply, setReply] = useState(() =>
     context.store
       .all()
@@ -306,7 +399,7 @@ function ContributionBody({
       </div>
     );
   return (
-    <article className={opening ? 'post card' : 'comment'} data-resource-id={id}>
+    <article className={opening ? 'post card' : 'comment'} data-resource-id={id} tabIndex={-1}>
       <div className="author-line">
         <Avatar person={data.author} />
         <strong>{data.author.nickname}</strong>
@@ -327,7 +420,10 @@ function ContributionBody({
             {parent?.resource_id === data.parent_id
               ? '@' + parent.author.nickname
               : 'parent message'}
-          </Link>
+          </Link>{' '}
+          <button className="text-button" onClick={() => onPreview?.(data.parent_id!)}>
+            Preview parent
+          </button>
         </p>
       )}
       {/* Both siblings reset for a new revision, but their keys must remain distinct. */}
@@ -426,14 +522,22 @@ function Children({
 }) {
   const authority = useAuthorization();
   const treeId = useId();
+  const navigation = useContext(DiscussionNavigation),
+    navigationKey = id + ':' + depth;
+  const initial = navigation?.get(navigationKey);
   const [projection, setPage] = useState<{ value: PageView; generation?: number | undefined }>(),
-    [cursor, setCursor] = useState(''),
+    [cursor, setCursor] = useState(initial?.cursor ?? ''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [expanded, setExpanded] = useState<string[]>([]),
-    [opened, setOpened] = useState<string[]>([]),
+    [expanded, setExpanded] = useState<string[]>(initial?.expanded ?? []),
+    [opened, setOpened] = useState<string[]>(initial?.opened ?? []),
     [branchVersions, setBranchVersions] = useState<Record<string, number>>({}),
     [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (!navigation) return;
+    navigation.set(navigationKey, { cursor, expanded, opened });
+    if (navigation.size > 64) navigation.delete(navigation.keys().next().value!);
+  }, [cursor, expanded, opened]);
   const page =
     projection && authority.current(projection.generation) ? projection.value : undefined;
   useEffect(() => {
@@ -593,4 +697,61 @@ function Children({
       )}
     </div>
   );
+}
+
+function ParentPreview({
+  id,
+  discussionId,
+  close,
+}: {
+  id: string;
+  discussionId: string;
+  close: () => void;
+}) {
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    panel.current?.focus({ preventScroll: true });
+    panel.current?.scrollIntoView({ block: 'nearest' });
+  }, []);
+  const { data, error, refresh } = useQuery<ContributionContextView>(
+    `/api/v1/contributions/${id}/context`,
+    ContributionContext,
+  );
+  const available =
+    data && !('state' in data) && data.discussion_id === discussionId ? data : undefined;
+  return (
+    <aside ref={panel} tabIndex={-1} className="parent-preview" aria-label="Parent preview">
+      <div className="publication-confirmed">
+        <strong>Parent preview</strong>
+        <button onClick={close}>Close preview</button>
+      </div>
+      {error ? (
+        <>
+          <ErrorText error={error} />
+          <button onClick={refresh}>Retry parent preview</button>
+        </>
+      ) : available ? (
+        <>
+          <p>
+            @{available.author.nickname} · revision {available.revision_number}
+          </p>
+          <p>{parentExcerpt(available)}</p>
+          <Link to={`/loom/discussion/${discussionId}?focus=${id}`}>Open parent message</Link>
+        </>
+      ) : (
+        <p role="status">{data ? 'Parent unavailable.' : 'Loading parent preview…'}</p>
+      )}
+    </aside>
+  );
+}
+
+function parentExcerpt(data: Exclude<ContributionContextView, { state: string }>) {
+  let text = data.content.text;
+  for (const mention of data.content.mentions) {
+    const nickname =
+      data.mentioned_participants.find((person) => person.id === mention.participant_id)
+        ?.nickname ?? 'participant';
+    text = text.replaceAll(`[[mention:${mention.token}]]`, '@' + nickname);
+  }
+  return text.length > 360 ? text.slice(0, 360) + '…' : text;
 }

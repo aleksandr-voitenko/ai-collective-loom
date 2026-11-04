@@ -1,3 +1,4 @@
+import type { DiscussionNavigationState } from './discussion-navigation.js';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, Link, NavLink } from 'react-router';
 import { type OnboardingView, Onboarding } from '../contracts/participation.js';
@@ -48,6 +49,13 @@ export function ParticipationApp() {
     () => window.matchMedia(`(max-width: ${administration ? 960 : 760}px)`).matches,
   );
   const drawerDestination = useRef(false);
+  const discussionNavigation = useRef<{ key: string; value: DiscussionNavigationState }>({
+    key: '',
+    value: { branches: new Map() },
+  });
+  const navigationKey = `${self?.participant_id}:${community?.instance_id}:${location.pathname}`;
+  if (discussionNavigation.current.key !== navigationKey)
+    discussionNavigation.current = { key: navigationKey, value: { branches: new Map() } };
   useEffect(() => {
     const media = window.matchMedia(`(max-width: ${administration ? 960 : 760}px)`);
     const changed = () => {
@@ -330,6 +338,10 @@ export function ParticipationApp() {
               <Icon name="saved" />
               Private notes
             </NavLink>
+            <NavLink to="/loom/drafts">
+              <Icon name="draft" />
+              Drafts
+            </NavLink>
             <NavLink to="/loom/saved">
               <Icon name="saved" />
               Saved items
@@ -499,11 +511,13 @@ export function ParticipationApp() {
                               ? 'Updates'
                               : location.pathname.includes('/notifications')
                                 ? 'Mentions/replies'
-                                : location.pathname.includes('/saved')
-                                  ? 'Saved items'
-                                  : location.pathname.includes('/search')
-                                    ? 'Search'
-                                    : 'Topics'}
+                                : location.pathname.includes('/drafts')
+                                  ? 'Drafts'
+                                  : location.pathname.includes('/saved')
+                                    ? 'Saved items'
+                                    : location.pathname.includes('/search')
+                                      ? 'Search'
+                                      : 'Topics'}
               </span>
             </>
           )}
@@ -542,6 +556,7 @@ export function ParticipationApp() {
               key={`${self.participant_id}:${community.instance_id}:${location.pathname}:${location.pathname === '/loom/changes' ? '' : location.search}`}
               context={{
                 controlsProjection: 'private-controls-1',
+                discussionNavigation: discussionNavigation.current.value,
                 self,
                 community,
                 store,
@@ -554,6 +569,7 @@ export function ParticipationApp() {
                 key={`${self.participant_id}:${community.instance_id}:${location.pathname}:${location.pathname === '/loom/changes' ? '' : location.search}`}
                 context={{
                   controlsProjection: 'private-controls-1',
+                  discussionNavigation: discussionNavigation.current.value,
                   self,
                   community,
                   store,

@@ -32,11 +32,21 @@ Discussion and reply composers focus their first field when explicitly opened;
 use expandable controls. Messages keep Reply and Save visible, with reading status
 and maintenance tools behind disclosures. Mention selection respects the cursor,
 uses a separate prose paragraph when Markdown would prevent notification, and
-names the selected participant in Preview. Deleting a mention marker from an
-editable draft removes its declaration; dispatched requests retain their exact bytes.
+shows readable labels and removable recipient chips in the editor. Editing through a
+label removes that binding; plain typed or pasted @names do not notify anyone.
+Undo/redo preserves explicit bindings. Restored drafts resolve names from one bounded
+participant page; unknown recipients keep a generic label and stable ID. Dispatched
+requests retain their exact bytes. **Formatting help** explains the supported Markdown;
+Preview checks its rendering. Confirmed publications use a compact result row, while
+uncertain submissions retain their recovery controls. **Drafts** in navigation exposes
+local drafts and status recovery; save feedback confirms only writes on this device.
 Reply links name an already loaded parent and open its discussion context. **Check
 replies** loads a branch on demand; hiding it keeps nested drafts. Reply counts
 describe the loaded direct-reply page, with explicit continuation and refresh controls.
+**Preview parent** retrieves a current, bounded text excerpt on demand, without marking
+it read. Returning from a focused thread restores the open branches, message position
+and focus after fresh content reads. Navigation state stays within the current account,
+instance and discussion, and is discarded when leaving that discussion.
 Production identity, capacity and retention policies still require review. Use synthetic
 content in disposable previews; retained trials follow the local-pilot limits below.
 **Administration** has dedicated Overview, Community, Participants, Limits, Search
@@ -72,7 +82,7 @@ discussions and artifacts, and close/reopen topics or individual discussions.
 Creating a topic asks for its name and an optional description, then opens the
 confirmed topic. Uncertain requests keep their status/retry controls; recovered
 results that have since changed still show the original and current state.
-Completed creation records remain in **Participation guide → Local drafts** for
+Completed creation records remain in **Drafts** (also in **Participation guide → Local drafts**) for
 export or explicit removal, without blocking the next topic's form.
 A closed discussion rejects new replies, opening/comment revisions and initial or
 revised summaries, including administrator publications. Eligible history stays
@@ -240,7 +250,7 @@ exact command, draft and uncertainty; explicitly check status or retry after wai
 A committed publication replay never spends another publication allowance. Ordinary
 exhaustion leaves separately bounded reconciliation and administrator capacity.
 The browser retains journals across reload without automatic retry or sign-out.
-Local drafts in the Participation guide can check publication status without
+Drafts, also available in the Participation guide, can check publication status without
 reopening its source; confirmation retains the exact command.
 The independent `scripts/participation-client.mjs` follows the same contract, including
 status recovery without a content read. Upload/storage ceilings and existing work
