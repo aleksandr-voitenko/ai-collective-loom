@@ -8,6 +8,16 @@ the earlier presentation increment. Create the account,
 then issue access. Find an existing account by nickname under **Participant
 accounts → Manage credentials**. Creation, issuance and revocation remain separate.
 
+Credential completion checks the issuing view and identity inside the serialized
+journal lock. A valid secret also requires its current authorization lease; the
+in-memory handoff and existing navigation guard are established before retirement.
+Leaving while local completion waits retains the exact non-secret request for
+deliberate reconciliation, without automatic replacement or secret persistence.
+The compiled admission journey holds that lock in a second synthetic tab after a
+committed response, leaves the section, returns through Local drafts and reconciles
+the same key. `LOOM_ADMIN_NAVIGATION_REVIEW=after` adds desktop/mobile retained and
+reconciled screenshots in `ui-05/after/handoff-completion` under the review root.
+
 ## Scope and acceptance
 
 Name the affected participant in creation, management and handoff. Explain the

@@ -825,12 +825,15 @@ export class IntentStore {
       this.storage.removeItem(this.prefix + record.key);
     });
   }
-  complete(record: Intent): Promise<void> {
+  complete(record: Intent, beforeRetire: () => boolean = () => true): Promise<void> {
     return this.locked(() => {
       this.owned(record);
       const current = this.all().find((item) => item.key === record.key);
       if (!current || current.state === 'draft' || !this.sameRequest(current, record))
         throw new StaleIntentError();
+      // Recheck after the serialized wait. A required in-memory handoff must be
+      // established synchronously here, before its exact recovery is removed.
+      if (!beforeRetire()) throw new DOMException('View changed.', 'AbortError');
       // Administrative success retains no one-time secret or intermediate
       // committed UI state. The acknowledged operation can be retired directly.
       this.storage.removeItem(this.prefix + record.key);

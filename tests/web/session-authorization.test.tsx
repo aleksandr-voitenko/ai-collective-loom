@@ -258,7 +258,7 @@ test(`production administration: ${arrival} copies cannot outlive their content 
    assert.equal((screen.getByLabelText('Issued secret') as HTMLTextAreaElement).value,'Synthetic_one_time_value');
   }
  }
- const store=new IntentStore(instance,self.participant_id),before=identityGeneration();
+ const store=new IntentStore(instance,self.participant_id),before=identityGeneration(),exact=store.all()[0];
  const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'credential.issue',idempotency_key:randomUUID()},self:admin});
  const rejected=assert.rejects(refusal,{code:'forbidden'});
  await act(async()=>{commands.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'Administrator permission was removed.'}},{status:403}));await rejected;});
@@ -272,11 +272,12 @@ test(`production administration: ${arrival} copies cannot outlive their content 
  assert.equal(!!screen.queryByDisplayValue('ProtectedSelection'),false);
  assert.equal(!!screen.queryByText(/ProtectedCredential/),false);
  assert.equal(!!screen.queryByText('ProtectedSelection · '+accountKind+' · active'),false);
- assert.deepEqual(store.all(),[],'A late private success must retire the exact record without restoring its protected display.');
  if(arrival==='pending-secret'){
-  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss credential display'})));
+  assert.deepEqual(store.all(),[exact],'An undeliverable one-time response must keep exact non-secret recovery.');
+  assert.equal(JSON.stringify(store.all()).includes('Synthetic_one_time_value'),false);
+  assert.ok(screen.queryByRole('button',{name:'Check account operation'}));
   assert.ok(screen.queryByRole('button',{name:'Issue enrollment ticket'}),'The private issuance kind must survive without copying withdrawn account metadata.');
- }
+ }else assert.deepEqual(store.all(),[],'A completed handoff retains no secret in recovery.');
 });
 
 for(const action of ['account','recovery','state','revoke','search'] as const)

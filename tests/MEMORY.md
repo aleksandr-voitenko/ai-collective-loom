@@ -6,7 +6,14 @@ query isolation, Back to Loom, dirty cancellation/confirmation and the modal dra
 keyboard/focus/resize behavior without remounting the form. Mounted recovery tests
 cover actual-kind legacy destinations, preserved query/hash, unknown intent retention,
 one-time handoff departure and late issuance/audit fences. The existing admission
-journey returns through Local drafts; Search leaves and reopens its section before
+journey also holds the native journal Web Lock in another authenticated tab after a
+valid committed issuance response, leaves the section, then releases completion.
+It returns through Local drafts and reconciles the same request without duplicate
+issuance or stored secrets. Mounted cases cover the same local-completion window
+through route, identity and authority loss, and require visible handoff before
+retirement. Existing pre-response departure and post-display cancellation remain.
+Opt-in handoff-completion PNGs supplement the original UI-05 presentation package.
+The admission journey returns through Local drafts; Search leaves and reopens its section before
 exact recovery. Moderation, organization, reading and Saved setup helpers return
 through Back to Loom before using participant navigation.
 `helpers/admin-navigation-review.ts` captures opt-in actual viewports

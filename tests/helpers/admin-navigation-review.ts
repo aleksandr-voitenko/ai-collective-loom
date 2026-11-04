@@ -6,7 +6,7 @@ import {expect} from './browser-fixtures.js';
 import {applicationInputs} from '../../scripts/lib/release-identity.mjs';
 
 // Opt-in actual application evidence, separate from diagnostic uploads.
-export async function adminNavigationReview(page:Page,series?:'participant-recovery'){
+export async function adminNavigationReview(page:Page,series?:'participant-recovery'|'handoff-completion'){
  const mode=process.env.LOOM_ADMIN_NAVIGATION_REVIEW;
  const enabled=mode==='before'||mode==='after';
  const directory='/tmp/loom-review-evidence/ui-05/'+mode+(series?'/'+series:'');

@@ -231,8 +231,14 @@ test('one-time handoff blocks cancelled departure, permits confirmed departure a
  const f=await fixture(t),target=person('handoff_agent');await f.initial([target]);
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
- const request=f.calls.find(c=>c.path.endsWith('/identity/credentials'))!;
+ const request=f.calls.find(c=>c.path.endsWith('/identity/credentials'))!,record=f.store.all()[0]!;
+ const prototype=Object.getPrototypeOf(localStorage),remove=prototype.removeItem;let handoffBeforeRetirement=false;
+ t.mock.method(prototype,'removeItem',function(this:Storage,key:string){
+  if(key===f.store.prefix+record.key){handoffBeforeRetirement=!!screen.queryByLabelText('Issued secret');assert.equal(handoffBeforeRetirement,true);}
+  return remove.call(this,key);
+ });
  await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:randomUUID(),secret:'one-time-fixture-secret'})));
+ assert.equal(handoffBeforeRetirement,true);
  let confirmations=0;const confirm=t.mock.method(window,'confirm',()=>{confirmations++;return false;});
  await act(async()=>f.router.navigate('/loom/admin/search'));
  assert.equal(confirmations,1);assert.equal(f.router.state.location.pathname,'/loom/admin/participants');
@@ -251,6 +257,40 @@ test('late credential issuance after route departure keeps the exact attempt for
  await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:randomUUID(),secret:'departed-secret'})));
  assert.deepEqual(f.store.all()[0],record);assert.equal(record.state,'uncertain');
  await act(async()=>f.router.navigate(intentUrl(record)));assert.ok(screen.queryByRole('button',{name:'Check credential issuance'}));assert.deepEqual(f.store.all()[0],record);
+});
+
+for(const departure of ['route','identity','authority'] as const)test(`credential issuance held at serialized local completion retains exact recovery after ${departure} departure`,async t=>{
+ const f=await fixture(t),target=person('completion_agent');await f.initial([target]);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ const request=f.calls.find(c=>c.path.endsWith('/identity/credentials'))!,record=f.store.all()[0]!,credential=randomUUID();
+ const saved=localStorage.getItem(f.store.prefix+record.key);
+ let release!:()=>void,entered!:()=>void;const held=new Promise<void>(r=>release=r),waiting=new Promise<void>(r=>entered=r);
+ const locks=t.mock.method(navigator.locks,'request',async(name:string,work:()=>unknown)=>{assert.equal(name,f.store.prefix);entered();await held;return work();});
+ await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:credential,secret:'held-completion-secret'})));
+ await waiting;assert.equal(locks.mock.callCount(),1);assert.equal(localStorage.getItem(f.store.prefix+record.key),saved);
+ if(departure==='route'){
+  await act(async()=>f.router.navigate('/loom/admin/audit'));
+  assert.equal(f.router.state.location.pathname,'/loom/admin/audit');
+ }else if(departure==='identity')await act(async()=>invalidateIdentity());
+ else{
+  const refused=assert.rejects(commandRequest('/api/v1/identity/accounts',{self:f.self,body:{}}),{code:'forbidden'});
+  await act(async()=>{f.calls.at(-1)!.finish(Response.json({error:{code:'forbidden',message:'Administrator permission removed'}},{status:403}));await refused;});
+ }
+ await act(async()=>release());
+ assert.equal(localStorage.getItem(f.store.prefix+record.key),saved);assert.deepEqual(f.store.all(),[record]);
+ assert.equal(JSON.stringify(Object.values(localStorage)).includes('held-completion-secret'),false);
+ assert.equal(!!screen.queryByLabelText('Issued secret'),false);
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/identity/credentials')).length,1);
+ if(departure!=='route')return;
+ await act(async()=>f.router.navigate(intentUrl(record)));assert.ok(screen.queryByRole('button',{name:'Check credential issuance'}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check credential issuance'})));
+ const status=f.calls.filter(c=>c.path.endsWith('/identity/reconcile')).at(-1)!;
+ assert.deepEqual(status.body,{operation_kind:'credential.issue',idempotency_key:record.key});
+ await act(async()=>status.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:credential})));
+ assert.ok(screen.queryByText('Credential issued — secret unavailable'));assert.deepEqual(f.store.all(),[]);
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/identity/credentials')).length,1);
+ assert.equal(JSON.stringify(Object.values(localStorage)).includes('held-completion-secret'),false);
 });
 
 test('non-administrator direct entry never reads administrative sections and neighbouring participant routes remain reachable',async t=>{

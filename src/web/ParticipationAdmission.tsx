@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useLocation, useBlocker, useBeforeUnload } from 'react-router';
 import {
   type Intent,
@@ -211,22 +212,31 @@ export function Admission({ context }: { context: Context }) {
         // after a protected account selection loses its lease.
         setKind(record.body.kind === 'enrollment' ? 'human' : String(record.body.kind));
         await update(async () => {
-          await context.store.complete(record!);
+          await context.store.complete(record!, () => {
+            if (record!.kind === 'credential.issue') {
+              if (!live.current || owner.current !== identityGeneration()) return false;
+              if (result.secret && !authority.current(generation)) return false;
+              // Publish the handoff and its route blocker before retiring the
+              // request, rather than leaving another await between the two.
+              flushSync(() => {
+                if (result.secret)
+                  setIssued({
+                    generation,
+                    secret: result.secret,
+                    participant_id: result.participant_id,
+                    credential_id: result.credential_id!,
+                    kind: String(record!.body.kind),
+                    nickname: targetNickname,
+                  });
+                else setLostCredential(result.credential_id);
+              });
+            }
+            return true;
+          });
           return undefined;
         });
+        if (!live.current || owner.current !== identityGeneration()) return;
         accounts.refreshIfCurrent();
-        if (record.kind === 'credential.issue') {
-          if (result.secret)
-            setIssued({
-              generation,
-              secret: result.secret,
-              participant_id: result.participant_id,
-              credential_id: result.credential_id!,
-              kind: String(record.body.kind),
-              nickname: targetNickname,
-            });
-          else setLostCredential(result.credential_id);
-        }
       } else
         setError(
           record.kind === 'credential.issue'

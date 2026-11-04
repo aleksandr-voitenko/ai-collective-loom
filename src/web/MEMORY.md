@@ -279,6 +279,11 @@ focus after successful navigation. Resizing releases the modal without remountin
 the active page. Community's blocker retains cancelled drafts and current links.
 Admission adds one-time handoff route/unload protection without secret persistence;
 late issuance after departure retains the exact attempt for deliberate reconciliation.
+Credential completion rechecks lifetime/identity inside the serialized journal lock.
+A secret also needs its current content lease; its in-memory handoff and existing
+departure blocker commit synchronously before request retirement. Departure while
+waiting for the lock leaves the original non-secret attempt untouched. A check only
+after awaiting completion cannot preserve that custody. No secret enters storage.
 Identical session probes retain the same Self snapshot so route discovery cannot
 restart a pending/failed selected-account read; actual identity/role/CSRF changes still update it.
 `Administration.md` records the bounded route/layout and compatibility contract.
