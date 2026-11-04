@@ -168,6 +168,26 @@ test('matching reasons page exactly through 8/8/1, reject duplicate admission an
   assert.equal(f.calls.length, 6);
 });
 
+test('changing the next page size retains the mounted expansion, disclosure and independently paged reasons', async t => {
+  const f = await fixture(t), original = f.raw();
+  const detail = within(f.expansion).getByText('Why this shared change is included').closest('details')!;
+  const call = await f.request('More matching reasons');
+  await f.answer(call, Response.json(f.detail(8)));
+  const next = screen.getByRole('button', { name: 'More matching reasons' });
+  next.focus();
+  await act(async () => { fireEvent.change(screen.getByLabelText('Next page size'), { target: { value: '5' } }); });
+  assert.equal(screen.getByRole('complementary', { name: 'Expanded changes' }), f.expansion);
+  assert.equal(within(f.expansion).getByText('Why this shared change is included').closest('details'), detail);
+  assert.ok(detail.open);
+  assert.equal(document.activeElement, next);
+  f.assertReasons(8); f.assertSource(); assert.equal(f.raw(), original); f.assertIndependent();
+  const last = await f.request('More matching reasons');
+  assert.deepEqual(requestValue(last), { path: '/api/v1/me/updates/reasons', method: 'POST',
+    raw: JSON.stringify({ cursor: 'displayed-members', event_id: f.source.event_id, reason_offset: 16 }) });
+  await f.answer(last, Response.json(f.detail(16)));
+  f.assertReasons(1); assert.equal(f.raw(), original); f.assertIndependent();
+});
+
 test('collapse retains the expanded view after a failed save, then saves before closing and fences a held reason response', async t => {
   const f = await fixture(t), original = f.raw();
   const pending = await f.request('More matching reasons');

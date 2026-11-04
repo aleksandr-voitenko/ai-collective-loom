@@ -106,10 +106,13 @@ history after closure; generic forbidden/identity/source loss still withdraws it
 Mounted `discussion-closure` tests use the actual ActiveView/resource/organization
 hosts, including contribution/summary intents and storage refusal before dispatch.
 
-`ParticipationComposer.tsx` coordinates authored drafts, correction and exact retry.
+`ParticipationComposer.tsx` renders the authored form using `usePublicationComposer.ts`.
+The hook owns draft fields, journal actions, comparison reads, mentions/caret state
+and focus effects as one coordinator; its view API exposes observations, focus refs
+and named authoring actions rather than journal setters or sequencing internals.
 `ComposerFeedback.tsx` renders confirmation, uncertain recovery and correction
-panels without owning state or adding DOM wrappers. The composer retains panel
-visibility, journal actions, comparison loading and the recovery focus ref/effects;
+panels without owning state or adding DOM wrappers. The composer coordinator retains
+panel visibility, journal actions, comparison loading and recovery focus ref/effects;
 confirmation is shown only after durable settlement. Keep editors and disclosures
 mounted through busy/uncertain feedback changes.
 `composer-draft.ts` derives routes/targets/capabilities from its six-kind caller
@@ -222,6 +225,13 @@ Withdrawal hides metadata and fences dispatch/late settlement. Explicit access
 checks verify the current administrator role before fresh protected reads; private
 input and receipts never reauthorize content. Page/API limits are documented in
 `CommunitySettings.md`; no global query, authorization or server contract changes.
+
+`Updates.tsx` keeps route/scope selection, the existing keyed view and rendered
+groups/member controls. `useUpdatesView.ts` owns overview/member reads, displayed
+recovery saves, retry/renewal actions, attention-change observations and focus refs.
+Keep its request/owner/authority fences and save-before-display order together;
+reason paging remains local to the stable `MatchingReasons` component. The pending
+expansion position stays above withdrawal in `UpdatesPage`, without source metadata.
 
 `SearchAdministration.tsx` owns `/loom/admin/search`; the shared Administration navigation links to it.
 Health and the exact requested failed-job page load on entry and Refresh status.

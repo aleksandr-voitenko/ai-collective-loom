@@ -489,6 +489,30 @@ test('status recovery preserves mounted editor and disclosure state through busy
   f.assertIndependent();
 });
 
+test('title autosave retains the text editor undo history, selection and open formatting disclosure', async t => {
+  const area = randomUUID(), body = { area_id: area, title: 'Original title', content: authored('Original prose') };
+  const f = await fixture(t, { kind: 'artifact.create', areaId: area }, '/api/v1/artifacts', body);
+  const input = screen.getByLabelText('Text') as HTMLTextAreaElement;
+  const formatting = screen.getByText('Formatting help', { exact: true }).closest('details')!;
+  formatting.open = true;
+  let saved = f.nextSave();
+  await act(async () => { fireEvent.change(input, { target: { value: 'Edited prose' } }); await saved; });
+  input.focus(); input.setSelectionRange(2, 7);
+  saved = f.nextSave();
+  await act(async () => { fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Changed title' } }); await saved; });
+  assert.equal(screen.getByLabelText('Text'), input);
+  assert.equal(screen.getByText('Formatting help', { exact: true }).closest('details'), formatting);
+  assert.ok(formatting.open);
+  assert.equal(document.activeElement, input);
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [2, 7]);
+  saved = f.nextSave();
+  await act(async () => { fireEvent.keyDown(input, { key: 'z', ctrlKey: true }); await saved; });
+  assert.equal(input.value, 'Original prose');
+  assert.deepEqual(f.record().body, { ...body, title: 'Changed title', idempotency_key: f.original.key });
+  assert.equal(f.calls.length, 0, 'Local field changes cannot dispatch a publication');
+  f.assertIndependent();
+});
+
 for (const [name, focused, start, end, direction, expected] of [
   ['selection before focus', false, 0, 26, 'forward', [0,18]],
   ['already focused full selection', true, 0, 26, 'forward', [0,18]],
