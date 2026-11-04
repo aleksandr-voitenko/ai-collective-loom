@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
+import { encryptCursor, decryptCursor } from '../../application/encrypted-cursor.js';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import {
   SavedTarget,
@@ -346,22 +347,15 @@ export class SavedItems {
     });
   }
   private encode(owner: string, version: number, after: string) {
-    const nonce = randomBytes(12),
-      cipher = createCipheriv('aes-256-gcm', this.cursorKey, nonce);
-    const data = Buffer.concat([
-      cipher.update(JSON.stringify({ owner, version, after })),
-      cipher.final(),
-    ]);
-    return Buffer.concat([nonce, cipher.getAuthTag(), data]).toString('base64url');
+    return encryptCursor(this.cursorKey, () => ({ owner, version, after }));
   }
   private decode(owner: string, value: string) {
     try {
-      const bytes = Buffer.from(value, 'base64url'),
-        cipher = createDecipheriv('aes-256-gcm', this.cursorKey, bytes.subarray(0, 12));
-      cipher.setAuthTag(bytes.subarray(12, 28));
-      const cursor = JSON.parse(
-        Buffer.concat([cipher.update(bytes.subarray(28)), cipher.final()]).toString(),
-      ) as { owner: string; version: number; after: string };
+      const cursor = decryptCursor(this.cursorKey, value) as {
+        owner: string;
+        version: number;
+        after: string;
+      };
       if (
         cursor.owner !== owner ||
         !Number.isSafeInteger(cursor.version) ||

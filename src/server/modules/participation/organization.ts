@@ -1,4 +1,5 @@
-import { createHash, randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+import { encryptCursor, decryptCursor } from '../../application/encrypted-cursor.js';
+import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../../../contracts/organization.js';
 import { limits } from '../../../contracts/participation.js';
@@ -46,23 +47,12 @@ export class TopicOrganization {
     }
   }
   private encode(binding: string, after: string) {
-    const nonce = randomBytes(12),
-      cipher = createCipheriv('aes-256-gcm', this.cursorKey, nonce);
-    const bytes = Buffer.concat([
-      cipher.update(JSON.stringify({ binding, after })),
-      cipher.final(),
-    ]);
-    return Buffer.concat([nonce, cipher.getAuthTag(), bytes]).toString('base64url');
+    return encryptCursor(this.cursorKey, () => ({ binding, after }));
   }
   private decode(binding: string, cursor?: string): string | null {
     if (!cursor) return null;
     try {
-      const bytes = Buffer.from(cursor, 'base64url'),
-        decipher = createDecipheriv('aes-256-gcm', this.cursorKey, bytes.subarray(0, 12));
-      decipher.setAuthTag(bytes.subarray(12, 28));
-      const value = JSON.parse(
-        Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString('utf8'),
-      );
+      const value = decryptCursor(this.cursorKey, cursor) as { binding: string; after: string };
       if (value.binding !== binding || typeof value.after !== 'string') throw new Error();
       return value.after as string;
     } catch {

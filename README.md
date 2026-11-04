@@ -529,7 +529,9 @@ and [retained-data limits](#retained-data-limits).
 Use Node.js 24.19.0 from `.nvmrc` and a **local Docker engine with the
 Docker Compose plugin (v2 or later)**. Application commands check the pinned Node
 version. Concrete dependencies and their resolved graph are in `package.json` and
-the actual lockfile. No cloud account or model-provider credential is needed.
+the actual lockfile. Standard checks also use OpenSSL, GnuPG and Python 3 for
+isolated HTTPS and recovery fixtures. No cloud account or model-provider credential
+is needed.
 
 ```bash
 nvm install
