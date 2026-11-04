@@ -550,13 +550,15 @@ not start the application. `app:dev` starts the API watcher on
 `http://127.0.0.1:3000` and Vite on `http://127.0.0.1:5173`, with an API proxy.
 `app:dev:api` and `app:dev:web` run either development process separately.
 
-Use `npm run format` to format application TypeScript, TSX, and CSS, and
-`npm run format:check` to check it without writing files. Both use the exact local
-Prettier version from the lockfile: 100-column target width, single quotes, two-space
-indentation, and LF endings. Embedded-language formatting is disabled to preserve
-template contents. The authored API guide, migrations, documents, tests, tooling,
-and generated output are excluded by `.prettierignore`, including for editors.
-The mechanical formatting commit is listed in `.git-blame-ignore-revs`; use
+Use `npm run format` to format application TypeScript, TSX and CSS, plus JavaScript
+and TypeScript under `scripts/` and `tests/`, including JSX and `.mjs`/`.cjs`/`.mts`/`.cts`
+modules. `npm run format:check` checks the same files without writing them. Both use
+the exact local Prettier version from the lockfile: 100-column target width, single
+quotes, two-space indentation and LF endings. Embedded-language formatting stays
+disabled to preserve template contents. The authored API guide, migrations,
+documentation, Python/shell files, dependencies and generated output remain excluded
+by `.prettierignore`, including for editors.
+The mechanical formatting commits are listed in `.git-blame-ignore-revs`; use
 `git blame --ignore-revs-file .git-blame-ignore-revs -- path/to/file` to inspect
 the earlier source history.
 

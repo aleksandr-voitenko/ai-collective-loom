@@ -1,10 +1,32 @@
-# Format application source only, including when invoked from an editor or on '.'.
+# Format application source and scripts/tests code, including editor or direct CLI use.
 *
 !src/
 !src/**/
 !src/**/*.ts
 !src/**/*.tsx
 !src/**/*.css
+
+# Maintainer scripts and tests use the same pinned JavaScript/TypeScript policy.
+!scripts/
+!scripts/**/
+!scripts/**/*.js
+!scripts/**/*.jsx
+!scripts/**/*.mjs
+!scripts/**/*.cjs
+!scripts/**/*.ts
+!scripts/**/*.tsx
+!scripts/**/*.mts
+!scripts/**/*.cts
+!tests/
+!tests/**/
+!tests/**/*.js
+!tests/**/*.jsx
+!tests/**/*.mjs
+!tests/**/*.cjs
+!tests/**/*.ts
+!tests/**/*.tsx
+!tests/**/*.mts
+!tests/**/*.cts
 
 # Authored guide template strings retain their reviewed presentation and bytes.
 src/contracts/guide.ts
