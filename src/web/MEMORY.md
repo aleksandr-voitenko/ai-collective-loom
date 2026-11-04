@@ -91,7 +91,12 @@ operation union and owns draft construction/comparison/correction transitions.
 Named draft patches preserve undefined-as-unchanged and explicit null/empty values;
 loaded journal bodies remain opaque; uncertain dispatch sends the retained body unchanged.
 Keep its journal sequencing in `participation-state.tsx`/`participation-client.ts`;
-delayed coverage/account selections use latest-draft callbacks. Explicit correction
+after an explicit busy action ends uncertain, focus its existing recovery group only
+while authorization is active and focus remains on the body or within that group.
+Do not retarget restored drafts or deliberate focus elsewhere; focus also reveals
+the controls without relocating the retained form or changing request custody.
+Automatic reconnect status reads do not request focus.
+Delayed coverage/account selections use latest-draft callbacks. Explicit correction
 of a rejected v1 draft may adopt the exact comparison revision's references;
 v2-to-v3 correction preserves attempted references (LC-20261016-BA7H).
 V4 file-aware correction copies exact comparison file declarations while preserving
@@ -273,8 +278,10 @@ uncertain initial setup still owns the focused shell. No mount replays a command
 
 The shell replaces ordinary navigation for the admin route segment, reusing its
 branding/account/sign-out controls and linking Back to Loom to Updates. Only one
-navigation tree mounts. At <=960px, a native modal drawer overlays full-width
-content, with explicit Tab wrapping, Escape/close, opener restoration and heading
+navigation tree mounts. Both desktop sidebars scroll within the available height,
+including keyboard focus on lower navigation/account controls. At <=960px, a native
+modal drawer overlays full-width content, with explicit Tab wrapping, Escape/close,
+opener restoration and heading
 focus after successful navigation. Resizing releases the modal without remounting
 the active page. Community's blocker retains cancelled drafts and current links.
 Admission adds one-time handoff route/unload protection without secret persistence;

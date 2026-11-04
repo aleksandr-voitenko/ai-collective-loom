@@ -20,7 +20,9 @@ saved corrections; unavailable replies retain access to eligible nested discussi
 context. Retrieval failures with HTTP 5xx advertise retrying the same request,
 including read-only status checks; a failed status check does not settle an
 unresolved command. Cross-tab recovery preserves dispatched requests and separates stale edits;
-the browser requires Web Locks for publishing. Retained history remains discoverable
+the browser requires Web Locks for publishing. A submission or recovery action that remains
+unconfirmed brings status/retry controls into view unless focus has moved to another task.
+Navigation remains scrollable in short windows. Retained history remains discoverable
 when the current revision is unavailable. Private Saved items use owner-scoped,
 versioned Save/Unsave with exact-revision
 references and lost-response recovery. Known first-attempt quota rejections can be
