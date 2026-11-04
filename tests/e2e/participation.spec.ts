@@ -209,7 +209,9 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
   await navigation.first().focus();
   for(let index=0;index<await navigation.count();index++){
     await expect(navigation.nth(index)).toBeFocused();
-    await expect(navigation.nth(index)).toBeInViewport({ratio:1});
+    // Native focus scrolls in whole pixels; Linux font metrics can leave a
+    // subpixel edge outside the scrollport (observed 0.27px on a 42px link).
+    await expect(navigation.nth(index)).toBeInViewport({ratio:0.99});
     await page.keyboard.press('Tab');
   }
   await expect(page.getByRole('link',{name:'Participation guide',exact:true})).toBeFocused();
@@ -969,9 +971,14 @@ test("review regression: definitive setup rejection can be corrected after reloa
   expect(rejected.state).toBe("rejected");
   await page.reload();
   await page.getByRole("button", { name: "Prepare corrected setup" }).click();
+  await expect(page.getByLabel("Community name", { exact: true })).toBeEnabled();
+  const prepared = (await savedIntents(page)).find((r) => r.slot === "setup");
   await page
     .getByLabel("Community name", { exact: true })
     .fill("Corrected community");
+  await expect
+    .poll(async () => (await savedIntents(page)).find((r) => r.slot === "setup")?.body)
+    .toEqual({ ...prepared.body, community_name: "Corrected community" });
   await page.reload();
   await expect(page.getByLabel("Community name", { exact: true })).toHaveValue(
     "Corrected community",
