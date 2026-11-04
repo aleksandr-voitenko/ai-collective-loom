@@ -16,6 +16,7 @@ import { admissionReview } from "../helpers/admission-review.js";
 import { adminNavigationReview } from '../helpers/admin-navigation-review.js';
 import { uxHighReview } from '../helpers/ux-high-review.js';
 import { captureMessaging } from '../helpers/messaging-review.js';
+import { publicationJournalBytes } from '../helpers/publication-journal-snapshot.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
 async function authenticator(page: Page, context: BrowserContext) {
@@ -2102,7 +2103,7 @@ test("publication fails closed without browser locks while retained drafts remai
           ?.body.content.text,
     )
     .toBe("Retained before browser locks unavailable");
-  const before = await savedIntents(page);
+  const before = await page.evaluate(publicationJournalBytes);
   // Retain a real maintenance request too: lack of Web Locks must prevent
   // cleanup of either owner-scoped store without preventing server sign-out.
   await page.goto(server.origin + "/loom/admin/search");
@@ -2139,7 +2140,7 @@ test("publication fails closed without browser locks while retained drafts remai
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Web Locks support");
   expect(posts).toBe(0);
-  expect(await savedIntents(page)).toEqual(before);
+  expect(await page.evaluate(publicationJournalBytes)).toEqual(before);
   await page.goto(server.origin + "/loom/help");
   await expect(
     page.getByRole("button", { name: "Export drafts" }),
@@ -2159,7 +2160,7 @@ test("publication fails closed without browser locks while retained drafts remai
   await expect(warning).toContainText("local drafts could not be cleared.");
   await expect(warning).toContainText("search maintenance recovery could not be cleared.");
   await expect(warning).toContainText("They remain scoped to this account on this browser.");
-  expect(await savedIntents(page)).toEqual(before);
+  expect(await page.evaluate(publicationJournalBytes)).toEqual(before);
   expect(await maintenanceRecords()).toEqual(maintenanceBefore);
 });
 
