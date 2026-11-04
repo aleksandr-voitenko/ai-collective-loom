@@ -15,6 +15,9 @@ Plans bind tested commit, base, run attempt, runtime/platform, all repository in
 hashes and full dist hashes. Each job regenerates the plan after building and
 rechecks inputs/build after measurement. Job labels may differ; authority does not.
 Rerun the whole workflow, not only failed jobs, because attempts cannot mix evidence.
+Artifact uploads/downloads use immutable Node24 action pins. Keep zipped uploads,
+three-day retention, the existing allowlisted paths and download digest verification;
+direct-file upload mode would change artifact names and extraction semantics.
 Hosted browser dependency setup selects the runner's existing Ubuntu archive and
 security HTTPS mirrors, excluding the slow Azure HTTP mirror. Keep suites, signing
 keys and the complete Playwright dependency install unchanged; do not extend job
