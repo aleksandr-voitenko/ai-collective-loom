@@ -948,8 +948,17 @@ hidden until the committed journal write finishes. Busy/uncertain feedback chang
 retain the same editor/disclosure nodes, their open state and exact stored bytes.
 Mention regressions cover quote/fence endings, deliberate opening focus and deletion
 of one marker; the pure insertion suite covers caret/selection, Unicode, links,
-unclosed code and byte limits. Browser workflows open native disclosures through
-`helpers/composer-controls.ts`, preserving their existing domain assertions.
+unclosed code and byte limits. Mounted late-name cases additionally preserve native
+selection before queued notification (including already-focused/backward ranges),
+disabled focus, unchanged canonical bytes/bindings and no authoring callbacks. The
+participation journey holds an actual authorized directory response unchanged and
+defers selectionchange notification across native full selection, then verifies
+native undo/redo, exact replacement, serialized saved/outgoing body and retained
+409 correction bytes. Opt-in
+LOOM_MENTION_SELECTION_REVIEW=1 curates actual desktop/mobile PNGs and provenance
+under /tmp/loom-review-evidence/mention-selection, outside approved diagnostics.
+Browser workflows open native disclosures through `helpers/composer-controls.ts`,
+preserving their existing domain assertions.
 `LOOM_MESSAGING_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"`
 captures opt-in compiled-app 1440x1000/390x844 composer, attachment, conversation,
 message-detail and failed-save PNGs plus provenance under `/tmp/loom-review-evidence/messaging`.
