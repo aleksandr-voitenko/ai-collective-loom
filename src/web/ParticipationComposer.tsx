@@ -133,7 +133,25 @@ export function Composer({
     [comparisonAttempt, setComparisonAttempt] = useState(0),
     [picker, setPicker] = useState(false);
   const live = useRef(true),
-    textArea = useRef<HTMLTextAreaElement>(null);
+    textArea = useRef<HTMLTextAreaElement>(null),
+    recovery = useRef<HTMLDivElement>(null),
+    wasBusy = useRef(false),
+    revealRecovery = useRef(false);
+  useEffect(() => {
+    const completed = wasBusy.current && !busy;
+    wasBusy.current = busy;
+    if (!completed) return;
+    const reveal = revealRecovery.current;
+    revealRecovery.current = false;
+    if (!reveal || record?.state !== 'uncertain' || !authority.active()) return;
+    // A removed submit/status button leaves focus on the body. Reveal its
+    // recovery, but do not pull focus back from another task or a restored draft.
+    if (
+      document.activeElement === document.body ||
+      recovery.current?.contains(document.activeElement)
+    )
+      recovery.current?.focus();
+  }, [busy, record?.state]);
   useEffect(() => {
     live.current = true;
     return () => {
@@ -224,6 +242,7 @@ export function Composer({
   }
   async function send() {
     if (busy || record?.blocked_by) return;
+    revealRecovery.current = true;
     setBusy(true);
     setError('');
     let intent: Intent | undefined,
@@ -523,13 +542,26 @@ export function Composer({
         <>
           {busy && <p role="status">Waiting for confirmation…</p>}
           {record?.state === 'uncertain' && !busy && (
-            <div className="notice">
+            <div
+              className="notice"
+              ref={recovery}
+              role="group"
+              aria-label="Submission recovery"
+              tabIndex={-1}
+            >
               <strong>
                 We couldn’t confirm whether your {kind === 'reply.create' ? 'reply' : 'publication'}{' '}
                 was posted.
               </strong>
               <p>Your original text and target are saved on this browser.</p>
-              <button onClick={() => void check()}>Check status</button>
+              <button
+                onClick={() => {
+                  revealRecovery.current = true;
+                  void check();
+                }}
+              >
+                Check status
+              </button>
               <button onClick={() => void send()}>
                 Retry same {kind === 'reply.create' ? 'reply' : 'publication'}
               </button>

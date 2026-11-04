@@ -103,6 +103,52 @@ async function fixture(t: TestContext, operation: ComposerOperation, path: strin
   return { context, original, calls, committed, request, answer, remount, nextSave, raw, record, assertIndependent };
 }
 
+for(const uncertain of [false,true])test('unconfirmed composer action focuses recovery without changing exact custody: '+uncertain,async t=>{
+  const discussion=randomUUID(),parent=randomUUID(),body={discussion_id:discussion,parent_id:parent,content:authored('Retained exact reply')};
+  const f=await fixture(t,{kind:'reply.create',discussionId:discussion,parentId:parent},'/api/v1/replies',body,uncertain);
+  const action=uncertain?'Check status':'Post reply';
+  screen.getByRole('button',{name:action}).focus();
+  const request=await f.request(action);
+  await f.answer(request,uncertain?Response.json({operation_state:'not_recorded'}):failure('service_unavailable','Confirmation unavailable'));
+  const recovery=screen.getByRole('group',{name:'Submission recovery'});
+  assert.ok(document.activeElement===recovery,'The unconfirmed action focuses its recovery controls');
+  assert.equal(f.record().state,'uncertain');
+  assert.deepEqual(f.record().body,{...body,idempotency_key:f.original.key});
+  assert.equal(f.calls.length,1);
+  f.assertIndependent();
+  f.remount();
+  assert.ok(document.activeElement!==screen.getByRole('group',{name:'Submission recovery'}),'Restoring a draft does not steal focus');
+});
+
+test('late unconfirmed composer action preserves focus deliberately moved elsewhere',async t=>{
+  const discussion=randomUUID(),parent=randomUUID(),body={discussion_id:discussion,parent_id:parent,content:authored('Original reply')};
+  const f=await fixture(t,{kind:'reply.create',discussionId:discussion,parentId:parent},'/api/v1/replies',body);
+  const request=await f.request('Post reply');
+  const elsewhere=document.createElement('button');elsewhere.textContent='Another task';document.body.append(elsewhere);
+  try{
+    elsewhere.focus();
+    await f.answer(request,failure('service_unavailable','Confirmation unavailable'));
+    assert.ok(document.activeElement===elsewhere,'Deliberate focus elsewhere is preserved');
+    assert.equal(f.record().state,'uncertain');
+    f.assertIndependent();
+  }finally{elsewhere.remove();}
+});
+
+test('automatic reconnect status does not move focus from the restored view',async t=>{
+  const discussion=randomUUID(),parent=randomUUID(),body={discussion_id:discussion,parent_id:parent,content:authored('Original uncertain reply')};
+  const f=await fixture(t,{kind:'reply.create',discussionId:discussion,parentId:parent},'/api/v1/replies',body,true);
+  const original=f.raw();
+  assert.ok(document.activeElement===document.body,'Restored recovery does not move focus');
+  await act(async()=>{window.dispatchEvent(new Event('online'));});
+  assert.equal(f.calls.length,1);
+  const call=f.calls[0]!;
+  assert.equal(call.path,'/api/v1/operations/status');
+  await f.answer(call,Response.json({operation_state:'not_recorded'}));
+  assert.ok(document.activeElement===document.body,'Automatic status leaves focus unchanged');
+  assert.equal(f.raw(),original);
+  f.assertIndependent();
+});
+
 test('participant selection saves exact mentions before remount and removal preserves the other declaration and text', async t => {
   const area = randomUUID(), body = { area_id: area, title: 'Authored title', content: authored('Opening text') };
   const f = await fixture(t, { kind: 'discussion.create', areaId: area }, '/api/v1/discussions', body);

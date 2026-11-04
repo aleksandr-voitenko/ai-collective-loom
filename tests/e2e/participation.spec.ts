@@ -14,6 +14,7 @@ import { test, expect } from "../helpers/browser-fixtures.js";
 import { httpClient } from "../helpers/participation-http.js";
 import { admissionReview } from "../helpers/admission-review.js";
 import { adminNavigationReview } from '../helpers/admin-navigation-review.js';
+import { uxHighReview } from '../helpers/ux-high-review.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
 async function authenticator(page: Page, context: BrowserContext) {
@@ -195,6 +196,41 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
   page.off('response',observed);
   await enter(page, context, server.origin, server.ticket, true);
   await setup(page);
+  const uxReview=uxHighReview();
+  await backToLoom(page);
+  await page.getByRole('link',{name:'Topics',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();
+  await page.setViewportSize({width:1280,height:720});
+  await page.locator('.sidebar').hover();
+  await page.mouse.wheel(0,1200);
+  await uxReview.capture(page,'navigation-short-window');
+  await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeInViewport({ratio:1});
+  const navigation=page.getByRole('navigation',{name:'Community navigation'}).getByRole('link');
+  await navigation.first().focus();
+  for(let index=0;index<await navigation.count();index++){
+    await expect(navigation.nth(index)).toBeFocused();
+    await expect(navigation.nth(index)).toBeInViewport({ratio:1});
+    await page.keyboard.press('Tab');
+  }
+  await expect(page.getByRole('link',{name:'Participation guide',exact:true})).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeFocused();
+  await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeInViewport({ratio:1});
+  await page.setViewportSize({width:1440,height:1000});
+  await uxReview.capture(page,'navigation-desktop');
+  await page.setViewportSize({width:390,height:844});
+  const opener=page.getByRole('button',{name:'Open navigation',exact:true});
+  await opener.click();
+  const drawer=page.getByRole('dialog',{name:'Community menu',exact:true});
+  await expect(drawer).toBeVisible();
+  await drawer.hover();await page.mouse.wheel(0,1200);
+  await expect(drawer.getByRole('button',{name:'Sign out',exact:true})).toBeInViewport({ratio:1});
+  await uxReview.capture(page,'navigation-mobile');
+  await page.keyboard.press('Escape');
+  await expect(opener).toBeFocused();
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('link',{name:'Administration',exact:true}).click();
+  await page.getByRole('link',{name:'Participants',exact:true}).click();
   await page.getByLabel("Nickname", { exact: true }).fill("lyra");
   await page
     .getByRole("button", { name: "Create account", exact: true })
@@ -452,6 +488,7 @@ test("lost committed response survives actual browser process restart and exact 
   server,
   diagnostics,
 }, testInfo) => {
+  const uxReview=uxHighReview();
   const directory = await mkdtemp(join(tmpdir(), "loom-browser-restart-"));
   let context = await diagnostics.launchPersistentContext(directory, {
     ignoreHTTPSErrors: true,
@@ -484,6 +521,15 @@ test("lost committed response survives actual browser process restart and exact 
       page.getByText("We couldn’t confirm whether your reply was posted."),
     ).toBeVisible();
     await aborted;
+    await uxReview.capture(page,'recovery-desktop',['Real reply POST committed; browser response aborted before receipt.']);
+    await expect(page.getByRole('button',{name:'Check status',exact:true})).toBeInViewport({ratio:1});
+    const recovery=page.getByRole('group',{name:'Submission recovery',exact:true});
+    await expect(recovery).toBeFocused();
+    await expect(recovery).toBeInViewport({ratio:1});
+    await expect(recovery.getByRole('button',{name:'Check status',exact:true})).toBeInViewport({ratio:1});
+    await page.keyboard.press('Tab');
+    await expect(recovery.getByRole('button',{name:'Check status',exact:true})).toBeFocused();
+    await uxReview.capture(page,'recovery-desktop-keyboard',['Real committed reply response was dropped; Tab enters Check status from the focused recovery group.']);
     const original = posted!;
     expect(original.idempotency_key).toBeTruthy();
     await context.close();
@@ -515,6 +561,37 @@ test("lost committed response survives actual browser process restart and exact 
       ["reply.create", original.idempotency_key],
     );
     expect(count.rows[0].count).toBe("1");
+    await page.setViewportSize({width:390,height:844});
+    const mobileOpening=page.locator(`[data-resource-id="${d.resource}"]`);
+    await mobileOpening.getByRole('button',{name:'Write another',exact:true}).click();
+    await mobileOpening.getByLabel('Your reply',{exact:true}).fill('Recover an unreceived mobile reply without changing its request.');
+    const mobileAttempts:unknown[]=[];
+    await page.route('**/api/v1/replies',async route=>{
+      mobileAttempts.push(route.request().postDataJSON());
+      if(mobileAttempts.length===1)await route.abort('connectionfailed');
+      else await route.continue();
+    });
+    await mobileOpening.getByRole('button',{name:'Post reply',exact:true}).click();
+    await expect(page.getByText('We couldn’t confirm whether your reply was posted.',{exact:true})).toBeVisible();
+    await uxReview.capture(page,'recovery-mobile',['Reply POST deliberately aborted before reaching the server.']);
+    const mobileRecovery=page.getByRole('group',{name:'Submission recovery',exact:true});
+    await expect(mobileRecovery).toBeFocused();
+    await expect(mobileRecovery).toBeInViewport({ratio:1});
+    await expect(mobileRecovery.getByRole('button',{name:'Check status',exact:true})).toBeInViewport({ratio:1});
+    await page.keyboard.press('Tab');
+    await expect(mobileRecovery.getByRole('button',{name:'Check status',exact:true})).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Confirmation is still unavailable. The original request may still commit.')).toBeVisible();
+    await expect(mobileRecovery).toBeFocused();
+    await expect(mobileRecovery).toBeInViewport({ratio:1});
+    await uxReview.capture(page,'recovery-mobile-unrecorded',['Reply POST never reached the server; explicit status read returned not_recorded without changing the saved request.']);
+    expect(mobileAttempts).toHaveLength(1);
+    await mobileRecovery.getByRole('button',{name:'Retry same reply',exact:true}).click();
+    await expect(page.getByText('Your reply was posted.',{exact:true})).toBeVisible();
+    expect(mobileAttempts).toHaveLength(2);expect(mobileAttempts[1]).toEqual(mobileAttempts[0]);
+    const mobileKey=(mobileAttempts[0] as {idempotency_key:string}).idempotency_key;
+    expect((await server.observer.query('SELECT count(*) FROM loom.idempotency_records WHERE operation_kind=$1 AND idempotency_key=$2',['reply.create',mobileKey])).rows[0].count).toBe('1');
+    await uxReview.capture(page,'recovery-mobile-confirmed');
     await page.screenshot({
       path: testInfo.outputPath("recovered-reply.png"),
       fullPage: true,

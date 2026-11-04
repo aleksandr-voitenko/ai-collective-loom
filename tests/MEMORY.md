@@ -667,6 +667,11 @@ reloading. Publication retry must also be enabled before advancing its expiry fi
 `helpers/browser-fixtures.ts` shares the existing synthetic PostgreSQL/HTTPS server
 and preserves context-before-server disposal (Lore `LC-20261014-WZF5`). Test bodies,
 normal timeouts, worker count and retry policy are unchanged by diagnostics.
+Participation checks ordinary navigation with wheel/Tab at 1280×720 and the 390px
+drawer. Its persistent-browser recovery case checks visible focused controls after
+committed desktop response loss and an unreceived mobile reply, read-only missing
+status and exact same-body retry. `LOOM_UX_HIGH_REVIEW=before|after` curates viewport
+PNGs/provenance under `/tmp/loom-review-evidence/ux-high-fixes`, outside diagnostics.
 Full invocations now use `scripts/lib/browser-batches.mjs`: the private inventory
 reporter discovers hashed test identities, then fresh sequential processes run
 whole spec files through the same containing runner. Grouping whole files preserves
