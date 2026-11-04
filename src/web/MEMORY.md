@@ -222,6 +222,13 @@ checks verify the current administrator role before fresh protected reads; priva
 input and receipts never reauthorize content. Page/API limits are documented in
 `CommunitySettings.md`; no global query, authorization or server contract changes.
 
+`Updates.tsx` keeps route/scope selection, the existing keyed view and rendered
+groups/member controls. `useUpdatesView.ts` owns overview/member reads, displayed
+recovery saves, retry/renewal actions, attention-change observations and focus refs.
+Keep its request/owner/authority fences and save-before-display order together;
+reason paging remains local to the stable `MatchingReasons` component. The pending
+expansion position stays above withdrawal in `UpdatesPage`, without source metadata.
+
 `SearchAdministration.tsx` owns `/loom/admin/search`; the shared Administration navigation links to it.
 Health and the exact requested failed-job page load on entry and Refresh status.
 One leased page replaces prior rows; failed continuations remain exact, First page
@@ -251,13 +258,6 @@ UTF-8 bytes; replacement capacity counts reserialized other records. Adapters ow
 schemas, limits, prefixes, locks, transitions, messages and success events. Reading
 automatic preferences and Updates partial clear keep their separate write paths.
 Feed map construction, sequence checks and tokens remain in each feed adapter.
-
-`Updates.tsx` keeps route/scope selection, the existing keyed view and rendered
-groups/member controls. `useUpdatesView.ts` owns overview/member reads, displayed
-recovery saves, retry/renewal actions, attention-change observations and focus refs.
-Keep its request/owner/authority fences and save-before-display order together;
-reason paging remains local to the stable `MatchingReasons` component. The pending
-expansion position stays above withdrawal in `UpdatesPage`, without source metadata.
 
 `tests/unit/protected-read-architecture.test.ts` enforces boundary-based transport
 throughout this directory. Mounted StrictMode tests cover late ownership/authority
