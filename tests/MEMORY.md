@@ -297,6 +297,10 @@ The real Saved case pre-saves both mounted targets and requires no404, preventin
 an unknown lookup from masking a missed successful denial. Saved's lease-aware
 collection retains safe Unsave when older metadata is withdrawn. Opaque hosts retain
 the conservative fallback for unavailable optional source projections.
+`unit/webauthn.test.ts` checks exact registration/sign-in option decoding and proof
+encoding through the compatibility facade, plus cancellation without a finish request.
+The protected-read architecture guard covers both facade and internal transport
+paths, including alias/namespace/re-export/dynamic-import refusal fixtures.
 `web/session-authorization.test.tsx` mounts the production shell in StrictMode:
 ordinary anonymous401 settles without another identity event or probe, including
 failed ceremonies and navigation. All eight host configurations cover discovery,
