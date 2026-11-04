@@ -1,56 +1,34 @@
 import { registerOperations } from './operations.js';
 import { registerFilePolicy } from './file-policy.js';
 import { registerRates } from './rates.js';
-import { ThrottledError } from '../modules/rates/accounting.js';
 import { registerFiles } from './files.js';
-import { FileError, type FileStorage } from '../modules/participation/file-storage.js';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FileStorage } from '../modules/participation/file-storage.js';
+import type { FastifyInstance } from 'fastify';
 import { Type, type TSchema } from '@sinclair/typebox';
 import * as C from '../../contracts/participation.js';
-import { PublicationClosedError, PublicationError } from '../modules/publication/errors.js';
-import { IdentityError } from '../modules/identity/errors.js';
 import type { IdentityAuthentication } from '../modules/identity/authentication.js';
 import type { IdentityAdministration } from '../modules/identity/administration.js';
 import { ParticipationPublications } from '../modules/participation/publications.js';
-import {
-  ParticipationRetrieval,
-  RetrievalError,
-  RevisionUnavailableError,
-  type PageOptions,
-} from '../modules/participation/retrieval.js';
+import { ParticipationRetrieval, type PageOptions } from '../modules/participation/retrieval.js';
 import { ParticipationAdministration } from '../modules/participation/administration.js';
 import type { Transactions } from '../db/postgres.js';
 import { registerIdentityRoutes } from './identity.js';
-import { classifyError } from './errors.js';
 import { participationGuide } from '../../contracts/guide.js';
 import { registerSavedItems } from './saved-items.js';
 import { registerAttention } from './attention.js';
-import { AttentionError } from '../modules/attention/controls.js';
 import { registerReading } from './reading.js';
-import { ReadingLimitError } from '../modules/participation/reading.js';
-import { SavedItemsError } from '../modules/participation/saved-items.js';
 import { registerOrganization } from './organization.js';
 import { registerModeration } from './moderation.js';
 import { registerNotes } from './notes.js';
-import { NoteError } from '../modules/notes/notes.js';
 import { registerReservations } from './reservations.js';
-import { ReservationError } from '../modules/reservations/reservations.js';
-import { ModerationError } from '../modules/participation/moderation.js';
-import { OrganizationError } from '../modules/participation/organization-context.js';
 import { registerSearch } from './search.js';
 import { registerNotifications } from './notifications.js';
-import { NotificationError } from '../modules/notifications/retrieval.js';
-import { FollowingError } from '../modules/following/context.js';
 import { registerFollowing } from './following.js';
 import { registerUpdates } from './updates.js';
-import { UpdatesError } from '../modules/updates/errors.js';
-import { SearchError } from '../modules/search/search.js';
 import { registerReferences } from './references.js';
 import { registerChanges } from './changes.js';
-import { ReferenceError } from '../modules/participation/references.js';
 import { registerSummaries } from './summaries.js';
-import { SummaryError } from '../modules/participation/summary-context.js';
-import { participationRecoveryPolicy } from './recovery-policy.js';
+import { participantError } from './participation-errors.js';
 
 export interface ParticipationServices {
   cookieNamespace?: string;
@@ -59,259 +37,6 @@ export interface ParticipationServices {
   fileStorage?: FileStorage;
   authentication: IdentityAuthentication;
   administration: IdentityAdministration;
-}
-export function participantError(error: unknown, request: FastifyRequest, reply: FastifyReply) {
-  let code: string,
-    message: string,
-    status: number,
-    action = 'correct_request',
-    current: string | null | undefined,
-    minimum: number | undefined;
-  if (error instanceof PublicationError) {
-    code = error.code;
-    message = error.message;
-    current = error.current_revision_id;
-    status = {
-      temporarily_throttled: 429,
-      file_policy_conflict: 409,
-      file_policy_capacity: 409,
-      rate_policy_conflict: 409,
-      rate_policy_capacity: 429,
-      invalid_input: 400,
-      reference_format_required: 409,
-      change_format_required: 409,
-      file_reference_format_required: 409,
-      file_format_required: 409,
-      invalid_actor: 401,
-      unavailable: 404,
-      forbidden: 403,
-      revision_conflict: 409,
-      idempotency_conflict: 409,
-      retryable: 503,
-      service_unavailable: 503,
-    }[code as PublicationError['code']];
-  } else if (error instanceof FileError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'file_storage_unavailable' ? 503 : code === 'file_capacity' ? 429 : 409;
-    action = ['file_size_limit', 'file_unfinished_capacity', 'file_reserved_capacity'].includes(
-      code,
-    )
-      ? 'retain_draft_and_inspect_file_limits'
-      : code === 'file_expired'
-        ? 'retain_draft_and_reconcile'
-        : code === 'file_mismatch'
-          ? 'reselect_original_bytes'
-          : 'retry_same_request';
-  } else if (error instanceof IdentityError) {
-    code = error.code;
-    message = error.message;
-    status = error.status;
-  } else if (error instanceof SummaryError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'summary_source_limit' || code === 'summary_preparation_limit' ? 429 : 409;
-    action =
-      code === 'summary_changed'
-        ? 'replay_view'
-        : code === 'summary_already_exists'
-          ? 'inspect_discussion_summary'
-          : code === 'summary_preparation_expired'
-            ? 'retain_draft_and_reconcile'
-            : 'review_declaration';
-  } else if (error instanceof UpdatesError) {
-    code = error.code;
-    message = error.message;
-    status =
-      code === 'updates_descriptor_expired' ||
-      code.endsWith('_history_gap') ||
-      code === 'updates_state_unavailable'
-        ? 410
-        : code === 'updates_capacity' || code === 'updates_work_limit'
-          ? 429
-          : 409;
-    action =
-      code === 'updates_attention_refresh_required' || code === 'updates_attention_preparing'
-        ? 'refresh_attention_selection'
-        : code === 'updates_descriptor_expired'
-          ? 'renew_traversal'
-          : code === 'updates_visibility_replay_required'
-            ? 'replay_retained_history'
-            : code.endsWith('_history_gap') || code === 'updates_state_unavailable'
-              ? 'resynchronize_retained_content'
-              : code === 'updates_epoch_changed'
-                ? 'deployment_recovery_required'
-                : code === 'updates_definition_changed'
-                  ? 'start_retained_history'
-                  : code === 'updates_capacity'
-                    ? 'review_synthetic_limit'
-                    : code === 'updates_token_invalid'
-                      ? 'correct_request'
-                      : 'retry_same_request';
-  } else if (error instanceof FollowingError) {
-    code = error.code;
-    message = error.message;
-    status =
-      code === 'shared_descriptor_expired' || code === 'shared_history_gap'
-        ? 410
-        : code === 'shared_work_limit' || code === 'following_limit_reached'
-          ? 429
-          : 409;
-    action =
-      code === 'shared_descriptor_expired'
-        ? 'renew_traversal'
-        : code === 'shared_visibility_replay_required'
-          ? 'replay_retained_history'
-          : code === 'shared_history_gap'
-            ? 'resynchronize_retained_content'
-            : code === 'shared_epoch_changed'
-              ? 'deployment_recovery_required'
-              : code === 'shared_definition_changed'
-                ? 'start_retained_history'
-                : code === 'following_collection_changed'
-                  ? 'replay_view'
-                  : 'retry_same_request';
-  } else if (error instanceof NotificationError) {
-    code = error.code;
-    message = error.message;
-    status =
-      code === 'notification_descriptor_expired' || code === 'notification_history_gap'
-        ? 410
-        : code === 'notification_work_limit'
-          ? 429
-          : 409;
-    action =
-      code === 'notification_descriptor_expired'
-        ? 'renew_traversal'
-        : code === 'visibility_replay_required'
-          ? 'replay_retained_history'
-          : code === 'notification_history_gap'
-            ? 'resynchronize_retained_history'
-            : code === 'notification_epoch_changed'
-              ? 'deployment_recovery_required'
-              : code === 'notification_view_changed' || code === 'notification_work_limit'
-                ? 'retry_same_request'
-                : 'correct_request';
-  } else if (error instanceof ReferenceError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'references_changed' ? 409 : 429;
-    action = code === 'references_changed' ? 'replay_view' : 'review_synthetic_limit';
-  } else if (error instanceof SearchError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'search_changed' ? 409 : code === 'search_work_limit' ? 429 : 400;
-    action =
-      code === 'search_changed'
-        ? 'replay_view'
-        : code === 'search_work_limit'
-          ? 'review_synthetic_limit'
-          : 'correct_request';
-  } else if (error instanceof NoteError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'note_limit' ? 429 : 409;
-    action = code === 'note_collection_changed' ? 'replay_view' : 'review_current_note';
-  } else if (error instanceof ReservationError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'editing_intent_limit' ? 429 : code === 'editing_intent_closed' ? 403 : 409;
-    action = code === 'editing_intent_limit' ? 'review_synthetic_limit' : 'refresh_and_review';
-  } else if (error instanceof ModerationError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'moderation_limit' ? 429 : code === 'moderation_conflict' ? 409 : 400;
-    action =
-      code === 'moderation_conflict'
-        ? 'refresh_and_review'
-        : code === 'moderation_limit'
-          ? 'review_synthetic_limit'
-          : 'correct_request';
-  } else if (error instanceof OrganizationError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'organization_limit' ? 429 : 409;
-    action = code === 'organization_limit' ? 'review_synthetic_limit' : 'refresh_and_review';
-  } else if (error instanceof AttentionError) {
-    code = error.code;
-    message = error.message;
-    status =
-      code === 'attention_selection_expired'
-        ? 410
-        : code === 'attention_collection_changed'
-          ? 409
-          : 429;
-    action =
-      code === 'attention_selection_expired'
-        ? 'reconcile_operation'
-        : code === 'attention_collection_changed'
-          ? 'refresh_collection'
-          : code === 'attention_work_limit'
-            ? 'retry_same_request'
-            : 'review_synthetic_limit';
-  } else if (error instanceof ReadingLimitError) {
-    code = error.code;
-    message = error.message;
-    status = 429;
-    action = 'review_synthetic_limit';
-  } else if (error instanceof SavedItemsError) {
-    code = error.code;
-    message = error.message;
-    status = code === 'saved_collection_changed' ? 409 : 429;
-    action = code === 'saved_collection_changed' ? 'replay_view' : 'review_synthetic_limit';
-  } else if (error instanceof RetrievalError) {
-    code = error.code;
-    message =
-      code === 'invalid_cursor'
-        ? 'This continuation is unavailable. Start this view again.'
-        : 'The requested response budget cannot hold this representation.';
-    status = 400;
-    minimum = error.minimum_response_bytes;
-  } else {
-    const failure = classifyError(error, request.id);
-    code = failure.body.error.code;
-    message = failure.body.error.message;
-    status = failure.status;
-  }
-  if (status === 401 || status === 403) action = 'reauthenticate_or_request_authority';
-  if (error instanceof PublicationClosedError) action = 'retain_draft_and_reconcile';
-  if (code === 'revision_conflict') action = 'compare_and_resubmit';
-  if (code === 'invalid_cursor') action = 'replay_view';
-  if (code === 'idempotency_conflict' || status >= 500) action = 'reconcile_operation';
-  const policy = participationRecoveryPolicy(request.method, request.routeOptions.url);
-  const retrieval = policy === 'retrieval' || policy === 'revision-retrieval';
-  if (retrieval && status >= 500) action = 'retry_same_request';
-  if (error instanceof ThrottledError) {
-    action = 'wait_then_retry_same_request';
-    reply.header('retry-after', String(error.retryAfter));
-  }
-  return reply.code(status).send({
-    error: {
-      code,
-      message,
-      request_id: request.id,
-      recovery: { action },
-      ...(error instanceof ThrottledError
-        ? { retry_after_seconds: error.retryAfter, rate_category: error.category }
-        : {}),
-      ...(error instanceof PublicationClosedError
-        ? { forbidden_reason: 'publication_closed' }
-        : {}),
-      ...(current !== undefined ? { current_revision_id: current } : {}),
-      ...(error instanceof RevisionUnavailableError &&
-      request.method === 'GET' &&
-      policy === 'revision-retrieval'
-        ? { unavailable_scope: 'revision' }
-        : {}),
-      ...(minimum ? { minimum_response_bytes: minimum } : {}),
-      ...((error instanceof SummaryError || error instanceof FileError) && error.definitive
-        ? { operation_outcome: 'rejected' }
-        : {}),
-      ...(status >= 500 && request.method === 'POST' && !retrieval
-        ? { operation_outcome: 'unknown' }
-        : {}),
-    },
-  });
 }
 export async function registerParticipation(app: FastifyInstance, services: ParticipationServices) {
   const actor = await registerIdentityRoutes(app, services);

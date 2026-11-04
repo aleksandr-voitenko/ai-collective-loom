@@ -406,6 +406,12 @@ Guide10/community discovery advertises `combined-updates-1` and its query URL.
 projection and personal exact-source policy in one guarded transaction. It preserves
 PR11's contribution-only focused-context rule; summaries open their discussion.
 `http/recovery-policy.ts` explicitly classifies every participation method/template.
+`http/participation-errors.ts` owns the shared HTTP error adapter, separating domain
+classification, ordered recovery overrides and schema-typed wire serialization.
+Updates, Following and notification error maps exhaust their code unions; their
+different retry/resynchronization actions must remain distinct. Route registration
+does not own error policy. Throttling overrides family defaults; mutation POST5xx
+uncertainty takes precedence over a definitive file/summary marker.
 All retrieval 5xx failures, including routine Updates and POST lookup/status reads,
 advertise retrying that retrieval without a new operation outcome. A failed status
 read does not settle its original command. Mutations retain reconciliation/unknown

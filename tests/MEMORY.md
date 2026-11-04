@@ -280,6 +280,12 @@ actual participation routes and injects 500/503 failures before handlers: retrie
 retry without mutation-outcome claims, while state-changing requests retain unknown
 outcomes. It covers automatic HEAD siblings, narrow revision hints, recorded
 definitive refusals, strict validation and conservative unclassified-route fallback.
+`contract/participation-errors.test.ts` covers domain error families through
+registered response schemas. Closed code tables compare complete mutation/status
+envelopes independently of the adapter maps. Specialized cases and retry headers
+preserve closure versus authority loss, explicit null revisions,
+optional byte budgets, definitive refusals versus POST5xx uncertainty, throttling
+categories/bounds and safe framework messages.
 `web/saved-authorization.test.tsx` covers successful Saved
 denials across eight hosts, private receipt settlement behind a blocked Web Lock,
 Reading receipts, and mixed-response publication without restoring older content.
