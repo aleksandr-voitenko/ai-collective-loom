@@ -711,6 +711,13 @@ binds each parsed script synchronously to the built asset's SHA-256, UTF-16 leng
 and zero source offset. Fetching script text afterward races navigation: Chromium
 can report `No script for id` even though the parse event has the matching hash.
 Missing/mismatched identity still refuses coverage; URLs alone never prove source.
+Related tabs can share an isolate's V8 counters while Debugger parse events remain
+target-scoped. Unseen script IDs may use another tracked target's verified parse
+only after Chromium confirms the same isolate (or its final recorded isolate after
+closure). A rejected local parse cannot borrow a sibling identity, and a sample
+refuses isolate changes. Global-object replacement clears the target's old parse
+identities before they can authorize a replacement isolate. The real coverage probe opens an actual related tab;
+independent newPage siblings alone do not exercise this boundary.
 `unit/browser-coverage.test.ts` reproduces retired source retrieval and checks
 fail-closed identities; the real Chromium probe checks Unicode, repeated navigation
 counters and same-URL/same-length changed bytes. Retained failed assertion steps can

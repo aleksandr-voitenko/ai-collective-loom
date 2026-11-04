@@ -39,7 +39,7 @@ writeFileSync(join(root,'src/main.ts'), `import {choose,unused} from './fixture'
 (globalThis as any).answer=choose(false);
 (globalThis as any).uncalled=unused;
 `);
-writeFileSync(join(root,'src/index.html'),'<script type="module" src="./main.ts"></script>');
+writeFileSync(join(root,'src/index.html'),'<a href="/" target="_blank" rel="opener">Open related page</a><script type="module" src="./main.ts"></script>');
 writeFileSync(join(root,'run-node.ts'),"import assert from 'node:assert/strict'; import {choose} from './src/fixture.js'; assert.equal(choose(true),'yes');");
 const info = { testId:'coverage-measurement-probe',repeatEachIndex:0,retry:0 } as TestInfo;
 let server: ReturnType<typeof createServer> | undefined;
@@ -111,6 +111,14 @@ try {
     await page.evaluate(()=>{ localStorage.setItem('coverage-storage-canary','private'); (globalThis as any).coverageAnonymousCanary='private'; });
     assert.equal(await page.evaluate(()=>(globalThis as any).answer),'no');
     await page.reload(); assert.equal(await page.evaluate(()=>(globalThis as any).answer),'no');
+    const opened=context.waitForEvent('page');
+    await page.getByRole('link',{name:'Open related page'}).click();
+    const related=await opened;await related.waitForLoadState();
+    assert.equal(await related.evaluate(()=>(globalThis as any).answer),'no');
+    assert.equal(await related.evaluate(()=>!!window.opener),true);
+    await collector.flush(related,false);
+    await related.close();await page.reload();
+    assert.equal(await page.evaluate(()=>(globalThis as any).answer),'no');
     const sibling=await context.newPage(); await sibling.goto(origin);
     await page.close(); await context.close();
     const explicit=collector.track(await browser.newContext(),'explicit'),native=await explicit.newPage();
