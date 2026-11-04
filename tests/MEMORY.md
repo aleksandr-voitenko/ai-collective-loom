@@ -3,9 +3,13 @@
 UI-05's production-shell administration journey checks seven direct routes/reloads,
 Back/Forward, another tab, unknown children, one exact current link/navigation tree,
 query isolation, Back to Loom, dirty cancellation/confirmation and the modal drawer's
-keyboard/focus/resize behavior without remounting the form. Mounted recovery tests
-cover actual-kind legacy destinations, preserved query/hash, unknown intent retention,
-one-time handoff departure and late issuance/audit fences. The existing admission
+keyboard/focus/resize behavior without remounting the form.
+The dirty-departure step awaits the exact native confirmation and its `dialogclosed`
+event for Cancel and Discard before keyboard/destination checks. An unchanged URL,
+dirty form and open drawer cannot establish that the native prompt has closed.
+After cancellation, focus must be back inside the drawer before testing Escape.
+Mounted recovery tests cover actual-kind legacy destinations, preserved query/hash,
+unknown intent retention, one-time handoff departure and late issuance/audit fences. The existing admission
 journey also holds the native journal Web Lock in another authenticated tab after a
 valid committed issuance response, leaves the section, then releases completion.
 It returns through Local drafts and reconciles the same request without duplicate
