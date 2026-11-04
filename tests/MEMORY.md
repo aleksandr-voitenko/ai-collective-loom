@@ -1,5 +1,14 @@
 # Browser test diagnostics
 
+`unit/encrypted-cursor.test.ts` checks a retained pre-extraction cursor fixture,
+legacy-reader compatibility, independent nonces, tampering and wrong-key refusal.
+A deterministic moderation regression retains nonce/cipher creation before expiry
+timestamp evaluation; payload factories preserve that existing order.
+`bootstrap/administrative-read-client.test.mjs` uses real loopback verified TLS to
+check exact GET/POST bytes, the32KiB boundary, private-file admission, safe errors,
+no redirects/retries and untrusted-certificate refusal. The existing identity
+browsing and operations PostgreSQL journeys exercise both independent CLI readers.
+
 UI-05's production-shell administration journey checks seven direct routes/reloads,
 Back/Forward, another tab, unknown children, one exact current link/navigation tree,
 query isolation, Back to Loom, dirty cancellation/confirmation and the modal drawer's
