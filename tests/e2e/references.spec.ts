@@ -1,3 +1,4 @@
+import {expandComposer} from '../helpers/composer-controls.js';
 import { randomUUID } from 'node:crypto';
 import { readFile,mkdtemp,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -27,7 +28,7 @@ async function setup(page:Page,context:BrowserContext,server:Awaited<ReturnType<
   return {admin,area,target:target.body,person:person.body.participant_id};
 }
 async function addReference(page:Page,target:{resource_id:string;revision_id:string},exact=true){
-  const editor=page.locator('.reference-editor');await editor.getByRole('button',{name:'Add reference',exact:true}).click();
+  await expandComposer(page,'advanced');const editor=page.locator('.reference-editor');await editor.getByRole('button',{name:'Add reference',exact:true}).click();
   await expect(editor.getByLabel('Target ID or Loom link')).toBeFocused();await editor.getByLabel('Target ID or Loom link').fill(target.resource_id);
   if(exact){await editor.getByLabel('Citation scope').selectOption('revision');await editor.getByLabel('Exact revision ID (or include it in the link)').fill(target.revision_id);}
   await editor.getByRole('button',{name:'Check target',exact:true}).click();await editor.getByRole('button',{name:exact?'Use this exact revision':'Use this resource',exact:true}).click();
@@ -40,12 +41,12 @@ async function draft(page:Page,server:Awaited<ReturnType<typeof syntheticServer>
 test('ordinary human and agent reference publication share targets; exact browsing, keyboard and narrow layout preserve scope',async({page,context,server},info)=>{
   const f=await setup(page,context,server);await draft(page,server,f.area);
   const count=(await server.observer.query('SELECT count(*)::int n FROM loom.shared_activity')).rows[0].n;
-  await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(randomUUID());await page.getByRole('button',{name:'Check target',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unavailable');
+  await expandComposer(page,'advanced');await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(randomUUID());await page.getByRole('button',{name:'Check target',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unavailable');
   await expect(page.getByLabel('Target ID or Loom link')).toHaveCount(0);
   await page.getByRole('button',{name:'Retry protected view'}).click();
   await expect(page.getByLabel('Title',{exact:true})).toHaveValue('Browser synthesis');
   await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Source authored text <script>inert</script>');
-  await page.getByRole('button',{name:'Add reference',exact:true}).click();
+  await expandComposer(page,'advanced');await page.getByRole('button',{name:'Add reference',exact:true}).click();
   await page.getByLabel('Target ID or Loom link').fill(server.origin+`/loom/resource/${f.target.resource_id}/${f.target.revision_id}`);await page.getByLabel('Citation scope').selectOption('revision');
   await page.getByRole('button',{name:'Check target',exact:true}).click();await page.getByRole('button',{name:'Use this exact revision',exact:true}).focus();await page.keyboard.press('Enter');
   await page.getByRole('combobox',{name:'Relationship 1',exact:true}).selectOption('contradicts');await page.getByLabel('Rationale 1 (required)',{exact:true}).fill('The synthetic measurement differs.');
@@ -130,7 +131,7 @@ test('failed autosave cannot dispatch stale references and picker responses belo
   expect((await server.observer.query('SELECT count(*)::int n FROM loom.revision_references')).rows[0].n).toBe(0);
   await page.evaluate(()=>(window as any).restoreReferenceStorage());await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
   expect((await server.observer.query('SELECT rationale FROM loom.revision_references')).rows[0].rationale).toBe('Visible unsaved rationale');
-  await page.getByRole('button',{name:'Write another',exact:true}).click();await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(f.target.resource_id);
+  await page.getByRole('button',{name:'Write another',exact:true}).click();await expandComposer(page,'advanced');await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(f.target.resource_id);
   const entered=barrier(),release=barrier();await page.route('**/api/v1/references/target?**',async route=>{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response}).catch(()=>{});});
   try{await page.getByRole('button',{name:'Check target',exact:true}).click();await entered.promise;await page.getByRole('link',{name:'Artifacts',exact:true}).first().click();release.release();await expect(page.getByRole('heading',{name:'Artifacts',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Use this resource',exact:true})).toHaveCount(0);}
   finally{release.release();await page.unrouteAll({behavior:'wait'});}

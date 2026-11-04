@@ -67,6 +67,15 @@ export function SummarySection({ discussion }: { discussion: string }) {
     `/api/v1/discussions/${discussion}/summary`,
     SummaryLookup,
   );
+  if (result.data?.state === 'absent')
+    return (
+      <section className="summary-invitation" aria-label="Discussion summary">
+        {result.data.can_create && (
+          <Link to={`/loom/discussion/${discussion}?summary=create`}>Create first summary</Link>
+        )}
+        <Link to="/loom/summaries">Summary maintenance</Link>
+      </section>
+    );
   return (
     <section className="summary-card card" aria-label="Discussion summary">
       <h2>Summary</h2>
@@ -77,16 +86,6 @@ export function SummarySection({ discussion }: { discussion: string }) {
             The summary could not be checked. Discussion reading and replies remain available.
           </p>
           <button onClick={result.refresh}>Retry summary</button>
-        </>
-      )}
-      {result.data?.state === 'absent' && (
-        <>
-          <p>No summary has been published.</p>
-          {result.data.can_create && (
-            <Link className="button" to={`/loom/discussion/${discussion}?summary=create`}>
-              Create first summary
-            </Link>
-          )}
         </>
       )}
       {result.data?.state === 'unavailable' && (

@@ -317,17 +317,20 @@ export function ReadingText({
   content,
   participants,
   selectable = false,
+  compact = false,
 }: {
   target: ReadingTargetView;
   number: string;
   content: AuthoredContent;
   participants: { id: string; nickname: string }[];
   selectable?: boolean;
+  compact?: boolean;
 }) {
   const authority = useAuthorization();
   const session = useContext(ReadingContext),
     node = useRef<HTMLDivElement>(null),
     observed = useRef<{ version: number; bands: PresentedBands } | undefined>(undefined);
+  const [expanded, setExpanded] = useState(false);
   const latest = useRef(session);
   latest.current = session;
   const register = session?.register;
@@ -385,6 +388,75 @@ export function ReadingText({
     (r) =>
       r.state === 'conflicted' && r.body.targets.some((v) => v.revision_id === target.revision_id),
   );
+  useEffect(() => {
+    if (compact && (pending || conflicted || session?.error || state?.error)) setExpanded(true);
+  }, [compact, pending, conflicted, session?.error, state?.error]);
+  const controls = session && (
+    <div className="reading-controls">
+      <span role="status">
+        {pending
+          ? 'Pending reading change'
+          : state?.error
+            ? 'Reading status unavailable'
+            : !item
+              ? 'Checking reading status…'
+              : item.availability === 'unavailable'
+                ? 'Reading source unavailable'
+                : item.read
+                  ? 'Read'
+                  : item.version
+                    ? 'Marked unread'
+                    : 'Unmarked / unread'}{' '}
+        · private · revision {number}
+      </span>
+      <button
+        className="text-button"
+        disabled={!item || item.availability !== 'available'}
+        onClick={() =>
+          void session.mark([{ ...target, read: true, expected_version: item!.version }], 'manual')
+        }
+      >
+        Mark read
+      </button>
+      <button
+        className="text-button"
+        disabled={!item}
+        onClick={() =>
+          void session.mark([{ ...target, read: false, expected_version: item!.version }], 'manual')
+        }
+      >
+        Mark unread
+      </button>
+      <button className="text-button" onClick={session.refresh}>
+        Refresh reading status
+      </button>
+      {selectable && (
+        <label>
+          <input
+            type="checkbox"
+            checked={session.selected.has(target.revision_id)}
+            disabled={
+              !session.selected.has(target.revision_id) &&
+              session.selected.size >= readingLimits.batch
+            }
+            onChange={(e) => session.select(target.revision_id, e.target.checked)}
+          />
+          Select revision {number} for bulk marking
+        </label>
+      )}
+      {conflicted && (
+        <p className="notice" role="alert">
+          Reading change conflicted for this revision. Review its current state before making
+          another choice. <Link to="/loom/reading">Review or dismiss the reading conflict</Link>
+        </p>
+      )}
+      {(session.error || state?.error) && (
+        <p className="notice" role="alert">
+          {session.error || state?.error} <Link to="/loom/reading">Reading recovery</Link>
+        </p>
+      )}
+    </div>
+  );
   return (
     <div
       className="reading-text"
@@ -394,77 +466,20 @@ export function ReadingText({
       <div ref={node} data-presented-revision={target.revision_id}>
         <AuthoredText content={content} participants={participants} />
       </div>
-      {session && (
-        <div className="reading-controls">
-          <span role="status">
-            {pending
-              ? 'Pending reading change'
-              : state?.error
-                ? 'Reading status unavailable'
-                : !item
-                  ? 'Checking reading status…'
-                  : item.availability === 'unavailable'
-                    ? 'Reading source unavailable'
-                    : item.read
-                      ? 'Read'
-                      : item.version
-                        ? 'Marked unread'
-                        : 'Unmarked / unread'}{' '}
-            · private · revision {number}
-          </span>
-          <button
-            className="text-button"
-            disabled={!item || item.availability !== 'available'}
-            onClick={() =>
-              void session.mark(
-                [{ ...target, read: true, expected_version: item!.version }],
-                'manual',
-              )
-            }
-          >
-            Mark read
-          </button>
-          <button
-            className="text-button"
-            disabled={!item}
-            onClick={() =>
-              void session.mark(
-                [{ ...target, read: false, expected_version: item!.version }],
-                'manual',
-              )
-            }
-          >
-            Mark unread
-          </button>
-          <button className="text-button" onClick={session.refresh}>
-            Refresh reading status
-          </button>
-          {selectable && (
-            <label>
-              <input
-                type="checkbox"
-                checked={session.selected.has(target.revision_id)}
-                disabled={
-                  !session.selected.has(target.revision_id) &&
-                  session.selected.size >= readingLimits.batch
-                }
-                onChange={(e) => session.select(target.revision_id, e.target.checked)}
-              />
-              Select revision {number} for bulk marking
-            </label>
-          )}
-          {conflicted && (
-            <p className="notice" role="alert">
-              Reading change conflicted for this revision. Review its current state before making
-              another choice. <Link to="/loom/reading">Review or dismiss the reading conflict</Link>
-            </p>
-          )}
-          {(session.error || state?.error) && (
-            <p className="notice" role="alert">
-              {session.error || state?.error} <Link to="/loom/reading">Reading recovery</Link>
-            </p>
-          )}
-        </div>
+      {compact && controls ? (
+        <details
+          className="reading-details"
+          open={expanded}
+          onToggle={(event) => setExpanded(event.currentTarget.open)}
+        >
+          <summary>
+            Reading status
+            {item?.availability === 'available' ? (item.read ? ' · read' : ' · unread') : ''}
+          </summary>
+          {controls}
+        </details>
+      ) : (
+        controls
       )}
     </div>
   );

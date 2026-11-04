@@ -32,6 +32,11 @@ const control=(page:Page,revision:string)=>page.locator(`[data-reading-target="$
 const pair=(s:any)=>({resource_id:s.resource_id,revision_id:s.revision_id});
 const state=async(page:Page,s:any)=>(await api(page,endpoint+'/lookup',{targets:[pair(s)]})).items[0];
 async function enable(page:Page,origin:string){await page.goto(origin+'/loom/reading');await page.getByLabel('Automatically mark presented text read — prototype, this account on this browser').check();await expect.poll(()=>page.evaluate(()=>Object.keys(localStorage).some(k=>k.endsWith(':automatic')&&localStorage.getItem(k)==='true'))).toBe(true);}
+async function readingTools(page:Page,revision:string){
+  const parent=control(page,revision);await parent.waitFor({state:'visible'});
+  const details=parent.locator(':scope > .reading-details');
+  if(await details.count()&&await details.getAttribute('open')===null)await details.locator(':scope > summary').click();
+}
 async function exact(page:Page,origin:string,s:any){await page.goto(origin+`/loom/resource/${s.resource_id}/${s.revision_id}`);await expect(control(page,s.revision_id).getByRole('button',{name:'Mark unread',exact:true})).toBeEnabled();}
 
 async function nativeLifecycleBrowser(diagnostics:BrowserDiagnostics){
@@ -86,8 +91,8 @@ test('manual selective reading, exact historical IDs and a frozen bounded select
   const newer=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:y.resource_id,expected_revision_id:y.revision_id,title:null,content:text('Y2')});
   expect((await state(page,x)).version).toBe(0);expect((await state(page,newer)).version).toBe(0);
   await page.goto(server.origin+'/loom/discussion/'+d.discussion);
-  await control(page,d.opening.revision_id).getByRole('checkbox').check();await control(page,newer.revision_id).getByRole('checkbox').check();
-  await page.getByText('Mark selected discussion revisions (2/25)',{exact:true}).click();
+  await readingTools(page,d.opening.revision_id);await readingTools(page,newer.revision_id);await control(page,d.opening.revision_id).getByRole('checkbox').check();await control(page,newer.revision_id).getByRole('checkbox').check();
+  await page.locator('.discussion-details > summary').click();await page.getByText('Mark selected discussion revisions (2/25)',{exact:true}).click();
   const queued=barrier(),release=barrier();let frozen:any;
   await page.route('**'+endpoint+'/state',async route=>{frozen=route.request().postDataJSON();queued.release();await release.promise;await route.continue();});
   try{
@@ -109,7 +114,7 @@ test('a reading conflict stays on its exact revision after another change succee
   const d=await setup(page,context,server),a=await d.reply('Conflicting selection'),b=await d.reply('Independent selection');
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.name));
   await page.goto(server.origin+'/loom/discussion/'+d.discussion);
-  await expect(control(page,a.revision_id).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
+  await readingTools(page,a.revision_id);await readingTools(page,b.revision_id);await expect(control(page,a.revision_id).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
   const queued=barrier(),release=barrier();
   await page.route('**'+endpoint+'/state',async route=>{
     if(route.request().postDataJSON().targets[0].revision_id===a.revision_id){queued.release();await release.promise;}
@@ -127,6 +132,7 @@ test('a reading conflict stays on its exact revision after another change succee
     await page.reload();
     await expect(control(page,a.revision_id).getByText(/Reading change conflicted/)).toBeVisible();
     await expect(control(page,b.revision_id).getByText(/Reading change conflicted/)).toHaveCount(0);
+    await readingTools(page,b.revision_id);
     await expect(control(page,b.revision_id).getByText(/Read · private/)).toBeVisible();
     if(process.env.LOOM_READING_REVIEW_SCREENS==='1')await page.screenshot({path:'/private/tmp/loom-reading-conflict-desktop.png',fullPage:true});
     await page.setViewportSize({width:390,height:844});
@@ -140,7 +146,7 @@ test('a reading conflict stays on its exact revision after another change succee
     expect((await state(page,a)).read).toBe(false);expect((await state(page,a)).version).toBe(1);
     expect((await state(page,b)).read).toBe(true);expect((await state(page,b)).version).toBe(1);
     await page.goto(server.origin+'/loom/discussion/'+d.discussion);
-    await expect(control(page,a.revision_id).getByText(/Marked unread · private/)).toBeVisible();
+    await readingTools(page,a.revision_id);await expect(control(page,a.revision_id).getByText(/Marked unread · private/)).toBeVisible();
     await expect(control(page,a.revision_id).getByText(/Reading change conflicted/)).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
   }finally{release.release();}

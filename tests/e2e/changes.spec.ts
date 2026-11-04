@@ -1,3 +1,4 @@
+import {expandComposer} from '../helpers/composer-controls.js';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -8,7 +9,7 @@ import {setup,api,journal} from '../helpers/change-browser.js';
 import {content,note,exactPair,revisionBody,notePath,coveragePath} from '../helpers/changes.js';
 import {authored,reference,incoming} from '../helpers/references.js';
 function barrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};}
-async function addNote(page:Page,text:string){await page.getByLabel('Add a revision change note',{exact:true}).check();await page.getByLabel('Change note',{exact:true}).fill(text);}
+async function addNote(page:Page,text:string){await expandComposer(page,'advanced');await page.getByLabel('Add a revision change note',{exact:true}).check();await page.getByLabel('Change note',{exact:true}).fill(text);}
 async function accountTarget(page:Page,target:{resource_id:string;revision_id:string}){
   await page.getByLabel('Described resource ID or exact Loom link').fill(`/loom/resource/${target.resource_id}/${target.revision_id}`);
   await page.getByRole('button',{name:'Check described revision',exact:true}).click();
@@ -31,7 +32,7 @@ test('revision notes and ordinary accounts have distinct authors, immutable exac
   const discussion=(await f.admin.call('/api/v1/resources/'+opening.body.resource_id)).body.discussion_id;
   // Browser author has no editor rights on the described target created by admin.
   await page.goto(server.origin+'/loom/discussion/'+discussion);await page.getByRole('button',{name:'Reply',exact:true}).first().click();
-  await page.getByLabel('Your reply',{exact:true}).fill('My independent explanation');await page.getByLabel('Explain a declared set of changes in this post').check();await accountTarget(page,f.target);
+  await page.getByLabel('Your reply',{exact:true}).fill('My independent explanation');await expandComposer(page,'advanced');await page.getByLabel('Explain a declared set of changes in this post').check();await accountTarget(page,f.target);
   await expect(page.getByLabel('Described resource ID or exact Loom link')).toBeFocused();await page.getByRole('button',{name:'Post reply',exact:true}).click();await expect(page.getByText('Your reply was posted.',{exact:true})).toBeVisible();
   const account=(await journal(page,'reply.create')).result;expect((await f.admin.call(coveragePath(account))).body.source.author.id).toBe(f.person);
   await page.goto(server.origin+`/loom/resource/${r2.resource_id}/${r2.revision_id}`);await expect(page.getByText(/Editor’s note for revision 2/)).toBeVisible();await expect(page.locator('.change-details script')).toHaveCount(0);
@@ -67,7 +68,7 @@ test('v2 to v3 correction preserves added, edited and withdrawn references after
   const edited=page.locator('.reference-draft').filter({has:page.locator('select option:checked[value="builds_on"]')});
   await edited.locator('textarea').fill('Attempted rationale');
   await page.locator('.reference-draft').filter({has:page.locator('select option:checked[value=""]')}).getByRole('button',{name:/Remove reference/}).click();
-  await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(added.body.resource_id);
+  await expandComposer(page,'advanced');await page.getByRole('button',{name:'Add reference',exact:true}).click();await page.getByLabel('Target ID or Loom link').fill(added.body.resource_id);
   await page.getByRole('button',{name:'Check target',exact:true}).click();await page.getByRole('button',{name:'Use this resource',exact:true}).click();
   await page.getByRole('combobox',{name:'Relationship 2',exact:true}).selectOption('related_to');await page.getByLabel('Rationale 2 (optional)',{exact:true}).fill('Added rationale');
   await page.getByLabel('Text',{exact:true}).fill('Attempted main');
@@ -112,7 +113,7 @@ test('uncertain notes survive competing tabs and browser restart without copying
 });
 
 test('late account selection preserves newer typing; reload and uncertain retry retain its complete declaration',async({page,context,server})=>{
-  const f=await setup(page,context,server);await page.goto(server.origin+'/loom/area/'+f.area+'?compose=discussions');await page.getByLabel('Title',{exact:true}).fill('Account draft');await page.getByLabel('Text',{exact:true}).fill('Initial typing');await page.getByLabel('Explain a declared set of changes in this post').check();
+  const f=await setup(page,context,server);await page.goto(server.origin+'/loom/area/'+f.area+'?compose=discussions');await page.getByLabel('Title',{exact:true}).fill('Account draft');await page.getByLabel('Text',{exact:true}).fill('Initial typing');await expandComposer(page,'advanced');await page.getByLabel('Explain a declared set of changes in this post').check();
   const entered=barrier(),release=barrier();await page.route('**/api/v1/references/target?*',async route=>{const response=await route.fetch();entered.release();await release.promise;await route.fulfill({response});});
   await page.getByLabel('Described resource ID or exact Loom link').fill(`/loom/resource/${f.target.resource_id}/${f.target.revision_id}`);await page.getByRole('button',{name:'Check described revision'}).click();
   try{await entered.promise;await page.getByLabel('Text',{exact:true}).fill('Latest typing while checking a target');}finally{release.release();}

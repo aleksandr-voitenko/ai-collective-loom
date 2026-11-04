@@ -19,13 +19,13 @@ Object.defineProperty(navigator,'locks',{value:{request:async(_name:string,work:
 const {render,screen,fireEvent,cleanup,act,waitFor,within}=await import('@testing-library/react');
 afterEach(()=>{cleanup();localStorage.clear();});
 const target={resource_id:randomUUID(),revision_id:randomUUID()};
-function mount(t:TestContext,automatic=false,targets=[target]){
+function mount(t:TestContext,automatic=false,targets=[target],compact=false){
   const context={community:{instance_id:randomUUID()},self:{participant_id:randomUUID(),csrf:'fixture'}} as Context;
   const recovery=new ReadingRecovery(context.community.instance_id,context.self.participant_id);
   if(automatic)localStorage.setItem(recovery.preference,'true');
   const calls:{path:string;body:any;finish:(r:Response)=>void}[]=[];
   t.mock.method(globalThis,'fetch',(path:string,options:any)=>new Promise<Response>(finish=>calls.push({path,body:JSON.parse(options.body),finish})));
-  const router=createMemoryRouter([{path:'/read',element:<ReadingProvider context={context}><AuthorizationBoundary>{targets.map((target,index)=><ReadingText key={target.revision_id} target={target} number={String(index+1)} content={{format:'loom-markdown-v1',text:'Exact readable text',mentions:[]}} participants={[]}/>)}<ReadingPageViewComponent/></AuthorizationBoundary></ReadingProvider>},{path:'/other',element:<h1>Other</h1>}],{initialEntries:['/read']});
+  const router=createMemoryRouter([{path:'/read',element:<ReadingProvider context={context}><AuthorizationBoundary>{targets.map((target,index)=><ReadingText key={target.revision_id} target={target} number={String(index+1)} content={{format:'loom-markdown-v1',text:'Exact readable text',mentions:[]}} participants={[]} compact={compact}/>)}<ReadingPageViewComponent/></AuthorizationBoundary></ReadingProvider>},{path:'/other',element:<h1>Other</h1>}],{initialEntries:['/read']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   return {context,recovery,calls,router};
 }
@@ -35,6 +35,21 @@ async function settle(calls:ReturnType<typeof mount>['calls'],read=false,version
   await act(async()=>{for(const c of calls.filter(c=>c.path.endsWith('/lookup')))c.finish(Response.json(page(read,version)));});
   await waitFor(()=>assert.equal((screen.getByRole('button',{name:'Mark unread'}) as HTMLButtonElement).disabled,false));
 }
+test('compact reading controls preserve the open disclosure and focused button after successful marking',async t=>{
+  const f=mount(t,false,[target],true);
+  const details=document.querySelector<HTMLDetailsElement>('.reading-details')!;
+  await act(async()=>fireEvent.click(details.querySelector('summary')!));
+  await settle(f.calls);
+  const button=screen.getByRole('button',{name:'Mark read'});button.focus();
+  await act(async()=>fireEvent.click(button));
+  await waitFor(()=>assert.ok(f.calls.some(c=>c.path.endsWith('/state'))));
+  const command=f.calls.find(c=>c.path.endsWith('/state'))!;
+  await act(async()=>command.finish(Response.json({operation_state:'applied',operation_id:randomUUID(),idempotency:'created',
+    outcome:{basis:'manual',episode_id:null,targets:[{...command.body.targets[0],result_version:1}]},current:page(true,1).items})));
+  await waitFor(()=>assert.equal(f.recovery.all().length,0));
+  assert.equal(details.open,true,'Successful marking does not close the user-opened controls');
+  assert.ok(document.activeElement===button);
+});
 test('reading lookup withdrawal clears its text host while a pending private command settles and a fresh read recovers',async t=>{
   const f=mount(t);await settle(f.calls);
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Mark unread'})));

@@ -1,3 +1,4 @@
+import {expandComposer} from '../helpers/composer-controls.js';
 import {readFile} from 'node:fs/promises';
 import {fileTest as test,expect} from '../helpers/browser-fixtures.js';
 import {setup,journal,api} from '../helpers/change-browser.js';
@@ -12,7 +13,7 @@ test('Files search opens exact inert text pages, preserves tree/search navigatio
   await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
   await page.getByLabel('Title',{exact:true}).fill('Manuscript package');
   for(const input of [{name:'chapter.md',path:'chapters/manuscript.md',type:'text/markdown',bytes},{name:'source.ts',path:'src/module.ts',type:'text/plain',bytes:Buffer.from('export const inert = "softwarepayload";')},{name:'opaque.zip',path:'archive.zip',type:'application/zip',bytes:Buffer.from('PK opaque')}]){
-    await page.getByLabel('Select file',{exact:true}).setInputFiles({name:input.name,mimeType:input.type,buffer:input.bytes});await page.getByLabel('Relative path',{exact:true}).fill(input.path);
+    await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:input.name,mimeType:input.type,buffer:input.bytes});await page.getByLabel('Relative path',{exact:true}).fill(input.path);
     await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare '+input.path,exact:true}).click();
     await expect(page.getByRole('button',{name:'Upload and prepare '+input.path,exact:true})).toHaveCount(0);
   }

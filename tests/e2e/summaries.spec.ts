@@ -21,7 +21,7 @@ async function setup(page:Page,context:BrowserContext,server:Awaited<ReturnType<
   const reply=()=>admin.call('/api/v1/replies',{idempotency_key:randomUUID(),discussion_id:discussion,parent_id:opening.body.resource_id,content:authored('Later discussion material')});
   return {admin,area,discussion,opening:opening.body,person:person.body.participant_id,reply};
 }
-async function draft(page:Page,origin:string,discussion:string){await page.goto(origin+'/loom/discussion/'+discussion);await expect(page.getByText('No summary has been published.')).toBeVisible();await page.getByRole('link',{name:'Create first summary',exact:true}).click();await page.getByLabel('Title',{exact:true}).fill('Human discussion summary');await page.getByLabel('Text',{exact:true}).fill('Authored independent summary');}
+async function draft(page:Page,origin:string,discussion:string){await page.goto(origin+'/loom/discussion/'+discussion);await expect(page.getByRole('link',{name:'Create first summary',exact:true})).toBeVisible();await page.getByRole('link',{name:'Create first summary',exact:true}).click();await page.getByLabel('Title',{exact:true}).fill('Human discussion summary');await page.getByLabel('Text',{exact:true}).fill('Authored independent summary');}
 const journal=(page:Page,kind:string,key?:string)=>page.evaluate(({kind,key})=>Object.entries(localStorage).filter(([k])=>k.startsWith('loom.intent.v1:')).map(([,v])=>JSON.parse(v)).find(r=>r.kind===kind&&(!key||r.key===key)),{kind,key});
 
 test('summary create, inspect, maintain, partial update, editor reassignment, keyboard and narrow layouts',async({page,context,server},info)=>{
