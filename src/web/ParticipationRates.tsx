@@ -22,11 +22,6 @@ const labels = {
 
 export function ParticipationRates({ context }: { context: Context }) {
   const chosen = new URLSearchParams(useLocation().search).get('intent');
-  const [opened, setOpened] = useState(() =>
-    context.store
-      .all()
-      .some((r) => r.kind === 'participation.rates' && (!chosen || r.key === chosen)),
-  );
   return (
     <section className="card admin-card">
       <h2>Participation rate limits</h2>
@@ -39,11 +34,7 @@ export function ParticipationRates({ context }: { context: Context }) {
             : 'Synthetic preview'}{' '}
         policy; production sizing is unapproved.
       </p>
-      {!opened ? (
-        <button onClick={() => setOpened(true)}>Inspect participation limits</button>
-      ) : (
-        <RateControls context={context} chosen={chosen} />
-      )}
+      <RateControls context={context} chosen={chosen} />
     </section>
   );
 }

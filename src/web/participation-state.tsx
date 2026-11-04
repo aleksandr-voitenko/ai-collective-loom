@@ -8,6 +8,7 @@ import {
 } from './participation-client.js';
 import type { OnboardingView } from '../contracts/participation.js';
 import { useAuthorization, type AuthorizedValue } from './AuthorizationBoundary.js';
+import { administrationIntentPath } from './administration-navigation.js';
 
 export function useQuery<T>(path: string, schema?: import('@sinclair/typebox').TSchema) {
   const authority = useAuthorization();
@@ -85,8 +86,8 @@ export interface Context {
 }
 
 export function intentUrl(record: Intent) {
-  if (record.kind === 'community.settings')
-    return '/loom/admin/community?intent=' + encodeURIComponent(record.key);
+  const administrationPath = administrationIntentPath(record);
+  if (administrationPath) return administrationPath + '?intent=' + encodeURIComponent(record.key);
   if (record.kind === 'file.upload') {
     const target = record.body.target as { kind: string; resource_id: string };
     return target.kind === 'artifact' || target.kind === 'contribution'

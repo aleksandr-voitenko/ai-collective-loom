@@ -5,8 +5,90 @@ import type { Page, Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { settingsReview } from '../helpers/community-settings-review.js';
 import { journal } from '../helpers/change-browser.js';
+import { adminNavigationReview } from '../helpers/admin-navigation-review.js';
 const click=(page:Page,name:string)=>page.getByRole('button',{name,exact:true}).click();
 function barrier(){let release!:()=>void;const promise=new Promise<void>(r=>release=r);return{promise,release};}
+
+test('administration workspace routes, isolated pages and accessible responsive navigation',async({page,context,server})=>{
+ const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
+ await page.goto(server.origin+'/loom/admin');
+ const review=await adminNavigationReview(page);
+ if(review.before){
+  await expect(page.getByRole('heading',{name:'Administration',exact:true})).toBeVisible();
+  await review.capture('old-administration',[{width:1440,height:1000},{width:768,height:1024},{width:390,height:844}]);return;
+ }
+ await expect(page.getByRole('heading',{name:'Overview',exact:true})).toBeVisible();
+ const writes:string[]=[],queries:string[]=[];
+ page.on('request',r=>{
+  const path=new URL(r.url()).pathname;
+  if(path.startsWith('/api/v1/')&&r.method()==='POST'&&!path.endsWith('/query')&&!path.endsWith('/lookup')&&!path.endsWith('/failures'))writes.push(path);
+  if(path.startsWith('/api/v1/admin/')||path.startsWith('/api/v1/identity/accounts')||path.endsWith('/audit/query'))queries.push(path);
+ });
+ const sections=[['','Overview'],['community','Community settings'],['participants','Participants'],['limits','Limits'],['search','Search indexing'],['file-processing','File processing'],['audit','Identity audit']] as const;
+ const labels=['Overview','Community','Participants','Limits','Search indexing','File processing','Identity audit'];
+ for(const [i,[child,heading]] of sections.entries()){
+  queries.length=0;
+  await page.goto(server.origin+'/loom/admin'+(child?'/'+child:''));
+  await expect(page.getByRole('heading',{name:heading,exact:true})).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  const nav=page.getByRole('navigation',{name:'Administration sections'});
+  await expect(nav).toHaveCount(1);await expect(page.getByRole('navigation',{name:'Community navigation'})).toHaveCount(0);
+  await expect(page.locator('h1')).toHaveCount(1);await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+  await expect(nav.getByRole('link',{name:labels[i]!,exact:true})).toHaveAttribute('aria-current','page');
+  for(const query of queries){
+   const owner=query.includes('operational-health')?'':query.includes('identity/accounts')?'participants':query.includes('/audit/query')?'audit':query.includes('participation-rates')||query.includes('file-limits')?'limits':query.includes('/admin/search/')?'search':query.includes('/admin/file-text/')?'file-processing':'unexpected';
+   expect(owner).toBe(child);
+  }
+  if(child==='participants'){
+   await page.getByText('Participant accounts',{exact:true}).click();
+   await page.getByLabel('Exact account ID or nickname').fill('browser_author');await click(page,'Find account');
+   const row=page.locator('.list-row').filter({hasText:'browser_author · human · active'});await row.getByRole('button',{name:'Manage credentials'}).click();
+   await expect(page.getByRole('heading',{name:'Managing @browser_author'})).toBeVisible();
+  }
+  await review.capture(child||'overview');
+  await page.reload();await expect(page.getByRole('heading',{name:heading,exact:true})).toBeVisible();await page.waitForLoadState('networkidle');
+ }
+ expect(writes).toEqual([]);
+ await page.getByRole('link',{name:'Community',exact:true}).click();
+ await page.getByRole('link',{name:'Search indexing',exact:true}).click();
+ await page.goBack();await expect(page.getByRole('heading',{name:'Community settings'})).toBeVisible();
+ await expect(page.getByRole('link',{name:'Community',exact:true})).toHaveAttribute('aria-current','page');
+ await page.goForward();await expect(page.getByRole('heading',{name:'Search indexing',exact:true})).toBeVisible();
+ const opened=context.waitForEvent('page');await page.getByRole('link',{name:'Limits',exact:true}).click({modifiers:['ControlOrMeta']});const other=await opened;await expect(other).toHaveURL(server.origin+'/loom/admin/limits');await expect(other.getByRole('heading',{name:'Limits',exact:true})).toBeVisible();await other.close();
+ await page.goto(server.origin+'/loom/admin/missing');await expect(page.getByRole('heading',{name:'Administration page unavailable'})).toBeVisible();await expect(page.locator('nav [aria-current="page"]')).toHaveCount(0);
+ await page.getByRole('link',{name:'Community',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Change community overview'})).toBeEnabled();
+ await review.capture('tablet-community',[{width:768,height:1024}]);
+ await page.setViewportSize({width:390,height:844});
+ const menu=page.getByRole('button',{name:'Administration menu',exact:true});
+ await expect(page.getByRole('dialog',{name:'Administration menu'})).not.toBeVisible();
+ await expect(page.locator('.workspace')).toHaveCSS('margin-left','0px');
+ await review.capture('mobile-closed',[{width:390,height:844}]);
+ await click(page,'Change community overview');await click(page,'Choose Target R1 in General');
+ const form=page.getByRole('form',{name:'Community settings'});const handle=await form.elementHandle();
+ await menu.focus();await page.keyboard.press('Enter');
+ const drawer=page.getByRole('dialog',{name:'Administration menu'});
+ await expect(drawer).toBeVisible();await expect(drawer.getByRole('link',{name:'Community',exact:true})).toHaveAttribute('aria-current','page');
+ await review.capture('mobile-open',[{width:390,height:844}]);
+ await drawer.getByRole('button',{name:'Close navigation ×'}).focus();await page.keyboard.press('Shift+Tab');await expect(drawer.getByRole('button',{name:'Sign out',exact:true})).toBeFocused();
+ await page.keyboard.press('Tab');await expect(drawer.getByRole('button',{name:'Close navigation ×'})).toBeFocused();
+ for(let i=0;i<23;i++){await page.keyboard.press('Tab');expect(await drawer.evaluate(d=>d.contains(document.activeElement))).toBe(true);}
+ await page.getByRole('button',{name:'Save changes',exact:true}).evaluate(b=>b.focus());expect(await drawer.evaluate(d=>d.contains(document.activeElement))).toBe(true);
+ page.once('dialog',d=>d.dismiss());await drawer.getByRole('link',{name:'Participants',exact:true}).click();
+ await expect(page).toHaveURL(server.origin+'/loom/admin/community');await expect(drawer).toBeVisible();await expect(form).toContainText('Unsaved changes');
+ await expect(drawer.getByRole('link',{name:'Community',exact:true})).toHaveAttribute('aria-current','page');
+ await page.keyboard.press('Escape');await expect(menu).toBeFocused();await expect(drawer).not.toBeVisible();expect(await handle!.evaluate(el=>el.isConnected)).toBe(true);
+ await review.capture('dirty-departure-cancelled',[{width:390,height:844}]);
+ await menu.click();await page.setViewportSize({width:1440,height:1000});await expect(page.getByRole('dialog',{name:'Administration menu'})).toHaveCount(0);await expect(page.locator('.sidebar')).toBeVisible();
+ await page.getByRole('button',{name:'Save changes',exact:true}).focus();await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeFocused();expect(await handle!.evaluate(el=>el.isConnected)).toBe(true);
+ await page.setViewportSize({width:390,height:844});await menu.click();page.once('dialog',d=>d.accept());await drawer.getByRole('link',{name:'Participants',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Participants',exact:true})).toBeFocused();await expect(drawer).not.toBeVisible();
+ await review.capture('mobile-destination',[{width:390,height:844}]);
+ expect(writes).toEqual([]);
+ await menu.click();await drawer.getByRole('link',{name:/Back to Loom/}).click();await expect(page).toHaveURL(server.origin+'/loom/updates');await expect(page.getByRole('heading',{name:'Updates',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Open navigation',exact:true}).click();await expect(page.getByRole('navigation',{name:'Community navigation'})).toBeVisible();await expect(page.getByRole('navigation',{name:'Administration sections'})).toHaveCount(0);
+ await page.keyboard.press('Escape');
+});
 
 test('community settings conflict recovery and bounded picker navigation',async({page,context,server})=>{
  const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
@@ -77,15 +159,15 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:initial.settings_version,community_name:'Synthetic research commons',overview_id:generalOverview,proposal_area_id:generalProposals})).status).toBe(200);
  const base=initial.settings_version+1;
  await page.goto(server.origin+'/loom/admin');
- await expect(page.getByRole('heading',{name:'Administration',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Overview',exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:'Search indexing',exact:true})).toBeVisible();
  const review=await settingsReview(page);await review.capture('administration-entry');
- await page.getByRole('link',{name:'Community settings',exact:true}).click();
+ await page.getByRole('link',{name:'Community',exact:true}).click();
  await expect(page).toHaveURL(server.origin+'/loom/admin/community');
  const panel=page.getByRole('form',{name:'Community settings'}),overview=page.getByRole('region',{name:'Community overview',exact:true}),proposal=page.getByRole('region',{name:'Proposal topic',exact:true});
  await expect(overview.getByText('General',{exact:true})).toBeVisible();await expect(proposal.getByText('General › Proposals',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();
- await expect(page.getByRole('link',{name:'Search indexing',exact:true})).toHaveCount(0);await expect(panel).not.toContainText(generalOverview);
+ await expect(page.getByRole('link',{name:'Search indexing',exact:true})).toBeVisible();await expect(panel).not.toContainText(generalOverview);
  await review.capture('loaded');
  const writes:any[]=[];let reads=0;
  page.on('request',r=>{if(r.url().endsWith('/community/settings')&&r.method()==='POST')writes.push(r.postDataJSON());if(r.url().endsWith('/api/v1/community')&&r.method()==='GET')reads++;});
@@ -101,7 +183,7 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  const selectOverview=async(location:string)=>{await click(page,'Change community overview');await page.getByRole('button',{name:'Choose Community introduction in '+location,exact:true}).focus();await page.keyboard.press('Enter');};
  await selectOverview('Research');await expect(overview.getByText('Research',{exact:true})).toBeVisible();await expect(panel.getByText('Unsaved changes',{exact:true})).toBeVisible();await review.capture('dirty');
  page.once('dialog',async dialog=>{expect(dialog.message()).toContain('Discard unsaved Community settings');review.dialog('cancel',dialog.message());await dialog.dismiss();});
- await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Administration'}).click();await expect(page).toHaveURL(server.origin+'/loom/admin/community');
+ await page.getByRole('navigation',{name:'Administration sections'}).getByRole('link',{name:'Overview',exact:true}).click();await expect(page).toHaveURL(server.origin+'/loom/admin/community');
  expect((await f.admin.call('/api/v1/community/settings',{idempotency_key:randomUUID(),expected_version:base,community_name:'Synthetic research commons',overview_id:generalOverview,proposal_area_id:researchProposals})).status).toBe(200);
  const conflict=page.waitForResponse(r=>r.url().endsWith('/community/settings'));await click(page,'Save changes');expect((await conflict).status()).toBe(409);
  expect(writes[0].expected_version).toBe(base);await expect(panel.getByText(/Community settings changed while/)).toBeVisible();await expect(overview.getByText('Research',{exact:true})).toBeVisible();await review.capture('version-conflict');
@@ -150,15 +232,16 @@ async function checkConfiguration(page:Page,f:Awaited<ReturnType<typeof setup>>,
  const deniedCount=writes.length;await click(page,'Check access');await expect(panel.getByText(/Administrator access is required/)).toBeVisible();expect(writes).toHaveLength(deniedCount);
  await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);await click(page,'Check access');await expect(overview.getByText('Research',{exact:true})).toBeVisible();
  await click(page,'Cancel');await expect(overview.getByText('General',{exact:true})).toBeVisible();expect(writes).toHaveLength(deniedCount);
- await page.getByRole('navigation',{name:'Breadcrumb'}).getByRole('link',{name:'Administration'}).click();
+ await page.getByRole('navigation',{name:'Administration sections'}).getByRole('link',{name:'Overview',exact:true}).click();
  // Let the shell's navigation discovery and the dependent account page settle before the next fault injection.
- await page.waitForLoadState('networkidle');await expect(page.getByRole('heading',{name:'Administration',exact:true})).toBeVisible();
+ await page.waitForLoadState('networkidle');await expect(page.getByRole('heading',{name:'Overview',exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'Participants',exact:true}).click();
 }
 
 test('administrator rate controls retain a lost decision through reload and recover original versus current policy',async({page,context,server})=>{
  await server.observer.query('UPDATE loom.participation_rate_policy SET ordinary_requests=120,new_publications=20,recovery_control=60 WHERE id=1');
  const f=await setup(page,context,server);await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
- await page.goto(server.origin+'/loom/admin');await click(page,'Inspect participation limits');await expect(page.getByText(/Current policy version 1/)).toBeVisible();
+ await page.goto(server.origin+'/loom/admin/limits');await expect(page.getByText(/Current policy version 1/).first()).toBeVisible();
  await page.setViewportSize({width:390,height:844});await page.getByLabel(/Ordinary requests per minute/).fill('7');
  await expect.poll(async()=>(await journal(page,'participation.rates'))?.body.ordinary_requests).toBe(7);
  await page.route('**/api/v1/admin/participation-rates/state',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');},{times:1});
@@ -173,7 +256,7 @@ test('administrator rate controls retain a lost decision through reload and reco
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  // File policy uses the same production administration host and durable journal.
  const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'File upload and storage limits',exact:true})});
- await panel.getByRole('button',{name:'Inspect file limits',exact:true}).click();
+
  await expect(panel.getByText(/Current policy version 1/)).toBeVisible();
  await panel.getByLabel('Maximum newly admitted file size (bytes)').fill('8');
  await expect.poll(async()=>(await journal(page,'file.policy'))?.body.max_file_bytes).toBe(8);
@@ -231,11 +314,11 @@ test('compiled composer preserves a committed lost response through temporary th
 async function begin(page:Page,context:Parameters<typeof setup>[1],server:Parameters<typeof setup>[2]){
  const f=await setup(page,context,server);
  await server.observer.query("UPDATE loom.participants SET role='administrator' WHERE id=$1",[f.person]);
- await populateAdministration(server);await page.goto(server.origin+'/loom/admin');await expect(page.getByRole('heading',{name:'Administration',exact:true})).toBeVisible();
+ await populateAdministration(server);await page.goto(server.origin+'/loom/admin/participants');await expect(page.getByRole('heading',{name:'Participants',exact:true})).toBeVisible();
  await page.getByText('Participant accounts',{exact:true}).click();await expect(page.getByRole('button',{name:'Manage credentials'}).first()).toBeVisible();return f;
 }
 test('bounded administrative browsing reaches later accounts, credential history and audit with keyboard, retries and stable-ID actions',async({page,context,server})=>{
- const f=await begin(page,context,server);await checkConfiguration(page,f,server);
+ const f=await begin(page,context,server);await checkConfiguration(page,f,server);await page.waitForLoadState('networkidle');
  await page.getByText('Participant accounts',{exact:true}).click();await expect(page.getByRole('button',{name:'Manage credentials'}).first()).toBeVisible();
  await page.setViewportSize({width:390,height:844});
  // Fail one actual next-page read and preserve the first page and focused control.
@@ -255,7 +338,7 @@ test('bounded administrative browsing reaches later accounts, credential history
  await expect.poll(async()=> (await server.observer.query("SELECT state FROM loom.participant_credentials WHERE id='20000000-0000-4000-8000-000000000134'")).rows[0].state).toBe('revoked');
  await target.getByRole('button',{name:'Suspend',exact:true}).click();await expect.poll(async()=> (await server.observer.query('SELECT state FROM loom.participants WHERE id=$1',[administrationTarget])).rows[0].state).toBe('suspended');
  await page.getByLabel('Exact account ID or nickname').fill('BROWSE_TARGET');await click(page,'Find account');await expect(page.getByText('browse_target · agent · suspended',{exact:true})).toBeVisible();
- await page.getByText('Identity administration audit',{exact:true}).click();await expect(page.locator('[data-audit-id]').first()).toBeVisible();
+ await page.goto(server.origin+'/loom/admin/audit');await expect(page.locator('[data-audit-id]').first()).toBeVisible();
  for(let n=0;n<5;n++){await click(page,'Next audit page');await expect(page.locator(`[data-audit-id="30000000-0000-4000-8000-${String((n+1)*25+1).padStart(12,'0')}"]`)).toBeVisible();}
  await expect(page.locator('[data-audit-id="30000000-0000-4000-8000-000000000137"]')).toBeVisible();expect(await page.locator('[data-audit-id]').count()).toBeLessThanOrEqual(25);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -274,7 +357,7 @@ test('compiled administration discards held credentials on account switch, and h
  await server.observer.query("UPDATE loom.participants SET role='participant' WHERE id=$1",[f.person]);
  await click(page,'Refresh credentials');await expect(page.getByText(/Administrator metadata was withdrawn/)).toBeVisible();await expect(page.getByText(/History 1 Ω/)).toHaveCount(0);await expect(page.getByLabel('Nickname',{exact:true})).not.toHaveValue('browse_target');
  accountsRelease.release();await expect(page.getByText('browse_target · agent · active',{exact:true})).toHaveCount(0);
- await page.getByRole('link',{name:'Participation guide',exact:true}).click();await expect(page.getByRole('heading',{name:/Participation guide/})).toBeVisible();await expect(page.getByText(/History 1 Ω/)).toHaveCount(0);
+ await page.getByRole('link',{name:'Back to Loom',exact:false}).click();await page.getByRole('link',{name:'Participation guide',exact:true}).first().click();await expect(page.getByRole('heading',{name:/Participation guide/})).toBeVisible();await expect(page.getByText(/History 1 Ω/)).toHaveCount(0);
 });
 
 test('operational health keeps failed-page focus and fences held observations after authority withdrawal',async({page,context,server})=>{
@@ -289,7 +372,7 @@ test('operational health keeps failed-page focus and fences held observations af
    if((await server.observer.query('SELECT count(*)::int n FROM loom.operational_observations')).rows[0].n>=28)break;
   }
   expect((await server.observer.query('SELECT count(*)::int n FROM loom.operational_observations')).rows[0].n).toBeGreaterThanOrEqual(28);
-  await page.goto(server.origin+'/loom/admin');await page.getByText('Operational health',{exact:true}).click();
+  await page.goto(server.origin+'/loom/admin');
   await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('not established');
   const refresh=page.getByRole('button',{name:'Refresh operational health'});await refresh.focus();await page.keyboard.press('Enter');
   await expect(page.getByRole('region',{name:'Authored indexing health'})).toContainText('not established');

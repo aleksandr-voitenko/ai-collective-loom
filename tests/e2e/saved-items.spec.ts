@@ -30,7 +30,7 @@ async function setup(page:Page,context:BrowserContext,server:Awaited<ReturnType<
   await enter(page,context,server.origin,server.ticket,true);
 
   await page.getByRole('button',{name:'Create community',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await page.getByRole('link',{name:'Administration',exact:true}).click();await expect(page.getByRole('link',{name:'Community settings',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Topics',exact:true})).toBeVisible();await page.getByRole('link',{name:'Administration',exact:true}).click();await expect(page.getByRole('link',{name:'Community',exact:true})).toBeVisible();await page.getByRole('link',{name:/Back to Loom/}).click();
   const area=(await api(page,'/api/v1/areas')).items.find((r:{title:string})=>r.title==='General').id;
   const created=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:area,title:'Saved discussion',content:content('Opening for private bookmarks')});
   const resource=await api(page,'/api/v1/resources/'+created.resource_id);

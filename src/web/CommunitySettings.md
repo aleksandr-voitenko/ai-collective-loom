@@ -1,9 +1,9 @@
 # Community settings interaction specification
 
 `/loom/admin/community` is the administrator form for the overview artifact and
-proposal destination. `/loom/admin` links here; maintenance, admission and audit
-sections remain on Administration. Presentation follows the v0.6 Loom palette and
-system typography, with one 820px content column, a breadcrumb, two labelled
+proposal destination. Shared Administration navigation links here; maintenance,
+admission and audit use their own section routes. Presentation follows the v0.6
+Loom palette and system typography, with one 820px content column, two labelled
 selections and adjacent Save changes / Cancel actions. Styles are scoped to this
 page and its native modal picker.
 

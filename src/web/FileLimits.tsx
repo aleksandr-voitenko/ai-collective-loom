@@ -23,9 +23,6 @@ const labels = {
 
 export function FileLimits({ context }: { context: Context }) {
   const chosen = new URLSearchParams(useLocation().search).get('intent');
-  const [opened, setOpened] = useState(() =>
-    context.store.all().some((r) => r.kind === 'file.policy' && (!chosen || r.key === chosen)),
-  );
   return (
     <section className="card admin-card">
       <h2>File upload and storage limits</h2>
@@ -38,11 +35,7 @@ export function FileLimits({ context }: { context: Context }) {
             : 'Synthetic preview'}{' '}
         policy; production sizing is unapproved.
       </p>
-      {!opened ? (
-        <button onClick={() => setOpened(true)}>Inspect file limits</button>
-      ) : (
-        <FileControls context={context} chosen={chosen} />
-      )}
+      <FileControls context={context} chosen={chosen} />
     </section>
   );
 }

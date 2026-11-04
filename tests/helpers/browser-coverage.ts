@@ -11,11 +11,12 @@ function loadAssets(assetsRoot: string) { return new Map(readdirSync(assetsRoot)
   return ['/assets/' + name, { name, source, hash: createHash('sha256').update(source).digest('hex') }] as const;
 })); }
 type Entry = { asset: string; sha256: string; functions: { functionName: string; isBlockCoverage: boolean; ranges: { startOffset: number; endOffset: number; count: number }[] }[] };
-type State = { ready: Promise<void>; active: boolean; closed: boolean; captures: number; entries: Entry[]; kind: string; session?: CDPSession; scripts: Map<string, string> };
+type State = { ready: Promise<void>; active: boolean; closed: boolean; captures: number; entries: Entry[]; kind: string; session?: CDPSession; isolate?: string; scripts: Map<string, string> };
 
 export class BrowserCoverage {
   private pages = new Map<Page, State>();
   private contexts = new Set<BrowserContext>();
+  private isolates = new Map<string, Map<string, string>>();
   private issues = new Set<string>();
   private id: string;
   private assets: ReturnType<typeof loadAssets>;
@@ -47,6 +48,13 @@ export class BrowserCoverage {
     this.pages.set(page, state);
     state.ready = (async () => {
       const session = state.session = await page.context().newCDPSession(page);
+      session.on('Runtime.executionContextsCleared', () => {
+        // Precise coverage can retain counters after their context retires.
+        // Preserve that proof only under the last measured isolate, then reset
+        // the target-local identities before another context can reuse IDs.
+        if (state.isolate) this.isolates.set(state.isolate, new Map([...(this.isolates.get(state.isolate) ?? []), ...state.scripts]));
+        state.scripts.clear();delete state.isolate;
+      });
       session.on('Debugger.scriptParsed', event => {
         let pathname: string;
         try { pathname = new URL(event.url).pathname; } catch { return; }
@@ -55,10 +63,12 @@ export class BrowserCoverage {
         // Bind counters synchronously to Chromium's parsed-source SHA-256 and
         // exact UTF-16 range, never just its URL or a later network response.
         if (event.hash !== asset.hash || event.length !== asset.source.length || event.startLine !== 0 || event.startColumn !== 0) {
+          state.scripts.set(event.scriptId, '');
           this.issues.add('different_script_source'); return;
         }
         state.scripts.set(event.scriptId, pathname);
       });
+      await session.send('Runtime.enable');
       await session.send('Debugger.enable');
       await session.send('Profiler.enable');
       await session.send('Profiler.startPreciseCoverage', { callCount: true, detailed: true });
@@ -84,13 +94,29 @@ export class BrowserCoverage {
     await state.ready;
     if (!state.active) return;
     assert.ok(!page.isClosed(), 'Coverage page closed before collection');
+    const { id: isolate } = await state.session!.send('Runtime.getIsolateId');
+    assert.ok(isolate, 'Browser counters must identify their V8 isolate');
+    state.isolate = isolate;
     const { result: entries } = await state.session!.send('Profiler.takePreciseCoverage');
     state.captures++;
     for (const entry of entries) {
       let pathname: string;
       try { pathname = new URL(entry.url).pathname; } catch { continue; }
       const asset = this.assets.get(pathname); if (!asset) continue;
-      assert.equal(state.scripts.get(entry.scriptId), pathname, 'Browser script must match the measured build exactly');
+      let identity: string | undefined = state.scripts.has(entry.scriptId) ? state.scripts.get(entry.scriptId) : this.isolates.get(isolate)?.get(entry.scriptId);
+      if (!state.scripts.has(entry.scriptId)) {
+        // Related tabs can share V8 counters without sharing Debugger parse
+        // events. A sibling's exact parsed-source identity is usable only in
+        // the same Chromium isolate; script IDs alone are not globally unique.
+        for (const sibling of this.pages.values()) {
+          if (sibling === state || sibling.scripts.get(entry.scriptId) !== pathname) continue;
+          await sibling.ready;
+          const siblingIsolate = sibling.active
+            ? (await sibling.session!.send('Runtime.getIsolateId')).id : sibling.isolate;
+          if (siblingIsolate === isolate && sibling.scripts.get(entry.scriptId) === pathname) { identity = pathname; break; }
+        }
+      }
+      assert.equal(identity, pathname, 'Browser script must match the measured build exactly');
       const functions = entry.functions.map(fn => ({ functionName: '', isBlockCoverage: fn.isBlockCoverage,
         ranges: fn.ranges.map(range => {
           assert.ok(Number.isSafeInteger(range.count) && range.count >= 0);
@@ -100,6 +126,9 @@ export class BrowserCoverage {
         }) }));
       state.entries.push({ asset: asset.name, sha256: asset.hash, functions });
     }
+    assert.equal((await state.session!.send('Runtime.getIsolateId')).id, isolate, 'Browser isolate changed during collection');
+    this.isolates.set(isolate, new Map([...(this.isolates.get(isolate) ?? []), ...state.scripts]));
+    state.isolate = isolate;
     if (final) {
       await state.session!.send('Profiler.stopPreciseCoverage');
       await state.session!.detach();

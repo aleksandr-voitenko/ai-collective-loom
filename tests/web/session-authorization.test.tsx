@@ -19,6 +19,7 @@ for(const key of ['window','document','navigator','HTMLElement','MutationObserve
 Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true,writable:true});
 dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
 dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+Object.defineProperty(window,'matchMedia',{value:()=>({matches:false,addEventListener(){},removeEventListener(){}}),configurable:true});
 Object.defineProperty(navigator,'locks',{value:{request:async(_name:string,work:()=>unknown)=>work()},configurable:true});
 const {render,screen,fireEvent,cleanup,act,within}=await import('@testing-library/react');
 // JSDOM exercises the real shell's state/effects; Vite handles CSS in Chromium.
@@ -203,7 +204,7 @@ test(`production administration: ${path} refusal withdraws metadata before journ
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
  });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/participants']});t.after(()=>router.dispose());
  await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
  assert.ok(screen.queryByText('ProtectedAccount · agent · suspended'));
  const before=identityGeneration();
@@ -244,7 +245,7 @@ test(`production administration: ${arrival} copies cannot outlive their content 
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
  });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/participants']});t.after(()=>router.dispose());
  await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
  assert.equal((screen.getByLabelText('Nickname') as HTMLInputElement).value,'ProtectedSelection');
@@ -257,7 +258,7 @@ test(`production administration: ${arrival} copies cannot outlive their content 
    assert.equal((screen.getByLabelText('Issued secret') as HTMLTextAreaElement).value,'Synthetic_one_time_value');
   }
  }
- const store=new IntentStore(instance,self.participant_id),before=identityGeneration();
+ const store=new IntentStore(instance,self.participant_id),before=identityGeneration(),exact=store.all()[0];
  const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'credential.issue',idempotency_key:randomUUID()},self:admin});
  const rejected=assert.rejects(refusal,{code:'forbidden'});
  await act(async()=>{commands.at(-1)!.resolve(Response.json({error:{code:'forbidden',message:'Administrator permission was removed.'}},{status:403}));await rejected;});
@@ -271,11 +272,12 @@ test(`production administration: ${arrival} copies cannot outlive their content 
  assert.equal(!!screen.queryByDisplayValue('ProtectedSelection'),false);
  assert.equal(!!screen.queryByText(/ProtectedCredential/),false);
  assert.equal(!!screen.queryByText('ProtectedSelection · '+accountKind+' · active'),false);
- assert.deepEqual(store.all(),[],'A late private success must retire the exact record without restoring its protected display.');
  if(arrival==='pending-secret'){
-  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Dismiss credential display'})));
+  assert.deepEqual(store.all(),[exact],'An undeliverable one-time response must keep exact non-secret recovery.');
+  assert.equal(JSON.stringify(store.all()).includes('Synthetic_one_time_value'),false);
+  assert.ok(screen.queryByRole('button',{name:'Check account operation'}));
   assert.ok(screen.queryByRole('button',{name:'Issue enrollment ticket'}),'The private issuance kind must survive without copying withdrawn account metadata.');
- }
+ }else assert.deepEqual(store.all(),[],'A completed handoff retains no secret in recovery.');
 });
 
 for(const action of ['account','recovery','state','revoke','search'] as const)
@@ -305,7 +307,7 @@ test(`production administration: late ${action} success cannot start protected r
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
  });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:[action==='search'?'/loom/admin/search':'/loom/admin']});t.after(()=>router.dispose());
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:[action==='search'?'/loom/admin/search':'/loom/admin/participants']});t.after(()=>router.dispose());
  await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
  const refuse=async()=>{
   const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'account.create',idempotency_key:randomUUID()},self:admin});
@@ -392,7 +394,7 @@ test(`production setup: ${path} settlement leaves reauthorization to an explicit
   if(url==='/api/v1/admin/search/failures')return Promise.resolve(Response.json({items:[],next_after:null}));
   throw new Error('Unexpected request: '+url);
  });
- const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
+ const router=createMemoryRouter([{path:'/loom/*',element:<ParticipationApp/>}],{initialEntries:['/loom/admin/participants']});t.after(()=>router.dispose());
  await act(async()=>{render(<StrictMode><RouterProvider router={router}/></StrictMode>);});
  const refuse=async()=>{
   const refusal=commandRequest('/api/v1/identity/reconcile',{body:{operation_kind:'account.create',idempotency_key:randomUUID()},self});
@@ -413,7 +415,7 @@ test(`production setup: ${path} settlement leaves reauthorization to an explicit
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh administration'})));
  assert.ok(reads.length>before.length);
  assert.equal(!!screen.queryByText('Initialize the community'),false);
- assert.ok(screen.queryByRole('link',{name:'Community settings'}));
+ assert.ok(screen.queryByRole('link',{name:'Community'}));
  await act(async()=>router.navigate('/loom/admin/community'));
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check access'})));
  assert.ok(screen.queryByRole('button',{name:'Save changes'}));

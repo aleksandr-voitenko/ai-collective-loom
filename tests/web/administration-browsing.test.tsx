@@ -8,7 +8,8 @@ import {RouterProvider} from 'react-router/dom';
 import {Value} from '@sinclair/typebox/value';
 import {ActiveView} from '../../src/web/ParticipationRoutes.js';
 import {Onboarding} from '../../src/contracts/participation.js';
-import {IntentStore,invalidateIdentity,sessionRequest} from '../../src/web/participation-client.js';
+import {IntentStore,invalidateIdentity,sessionRequest,commandRequest} from '../../src/web/participation-client.js';
+import {intentUrl} from '../../src/web/participation-state.js';
 import type {Context} from '../../src/web/participation-state.js';
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://loom.example/loom/admin'});
 for(const key of ['window','document','navigator','HTMLElement','MutationObserver','location','localStorage','Event','CustomEvent'] as const)Object.defineProperty(globalThis,key,{value:dom.window[key],configurable:true});
@@ -18,7 +19,7 @@ const {render,screen,fireEvent,cleanup,act}=await import('@testing-library/react
 afterEach(()=>{cleanup();invalidateIdentity();localStorage.clear();});
 const person=(nickname:string)=>({id:randomUUID(),nickname,kind:'agent',state:'active',role:'participant'});
 const page=(collection:string,items:unknown[],cursor:string|null=null,target:string|null=null)=>({contract:'administration-pages-1',scope:{collection,participant_id:target,order:collection==='audit'?'recorded_at,id':'id',consistency:'restart-on-change'},items,next_cursor:cursor,complete:cursor===null,expires_at:'2090-01-01Z'});
-async function fixture(t:TestContext){
+async function fixture(t:TestContext,route='/loom/admin/participants'){
  const self={participant_id:randomUUID(),credential_id:randomUUID(),nickname:'Admin',kind:'human',role:'administrator',csrf:'fixture'};
  t.mock.method(globalThis,'fetch',async()=>Response.json(self));await sessionRequest('/api/v1/identity/self');
  const community=Value.Create({...Onboarding,properties:{...Onboarding.properties,instance_id:{...Onboarding.properties.instance_id,default:randomUUID()}}});community.settings_version=1;
@@ -29,7 +30,7 @@ async function fixture(t:TestContext){
   if(path.includes('/admin/search/')||path.includes('/admin/file-text/'))return Promise.resolve(Response.json({}));
   return new Promise<Response>(finish=>{const call={path,body:options?.body?JSON.parse(String(options.body)):undefined,done:false,finish:(r:Response)=>{call.done=true;finish(r);}};calls.push(call);});
  });
- const router=createMemoryRouter([{path:'/loom/*',element:<ActiveView context={context}/>}],{initialEntries:['/loom/admin']});t.after(()=>router.dispose());
+ const router=createMemoryRouter([{path:'/loom/*',element:<ActiveView context={context}/>}],{initialEntries:[route]});t.after(()=>router.dispose());
  const element=<StrictMode><RouterProvider router={router}/></StrictMode>;
  let view=render(element);
  for(const d of document.querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Participant accounts')d.open=true;
@@ -158,25 +159,22 @@ test('managing an existing participant names it without claiming creation and ex
  assert.ok(screen.queryByRole('heading',{name:'Managing @review_agent'}));
  assert.ok(input.closest('form')!.querySelector('[role="alert"]'));
 });
-for(const departure of ['role','identity','route'] as const)test(`pending account, lookup, credential and audit pages cannot restore metadata after ${departure} departure`,async t=>{
+for(const departure of ['role','identity','route'] as const)test(`pending account, lookup and credential pages cannot restore metadata after ${departure} departure`,async t=>{
  const f=await fixture(t),a=person('Protected account');await f.initial([a]);
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
  const held=f.calls.filter(c=>c.path.endsWith('/credentials/query')).at(-1)!;
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Refresh accounts'})));const account=f.calls.at(-1)!;
  const input=screen.getByLabelText('Exact account ID or nickname');await act(async()=>fireEvent.change(input,{target:{value:'lookup_account'}}));await act(async()=>fireEvent.submit(input.closest('form')!));const lookup=f.calls.at(-1)!;
- const auditDetails=screen.getByText('Identity administration audit').closest('details')!;
- await act(async()=>{auditDetails.open=true;fireEvent(auditDetails,new Event('toggle'));});const audit=f.calls.filter(c=>c.path.endsWith('/audit/query')).at(-1)!;assert.ok(audit);
  if(departure==='role')await act(async()=>account.finish(Response.json({error:{code:'forbidden',message:'Administrator authority withdrawn'}},{status:403})));
  if(departure==='identity')await act(async()=>invalidateIdentity());
  if(departure==='route')await act(async()=>f.router.navigate('/loom/help'));
- await act(async()=>{held.finish(Response.json(page('credentials',[{id:randomUUID(),label:'Late protected credential',kind:'agent',state:'revoked'}])));lookup.finish(Response.json(person('Late lookup')));if(departure!=='role')account.finish(Response.json(page('accounts',[person('Late protected account')])));audit.finish(Response.json(page('audit',[{id:randomUUID(),action:'Late protected audit',recorded_at:'2020Z',target_id:randomUUID(),operation_id:randomUUID(),actor_id:null,actor_credential_id:null,authority:'deployment_recovery'}])));});
+ await act(async()=>{held.finish(Response.json(page('credentials',[{id:randomUUID(),label:'Late protected credential',kind:'agent',state:'revoked'}])));lookup.finish(Response.json(person('Late lookup')));if(departure!=='role')account.finish(Response.json(page('accounts',[person('Late protected account')])));});
  assert.equal(!!screen.queryByText(/Late protected/),false);assert.equal(!!screen.queryByText(/Late lookup/),false);assert.equal(!!screen.queryByDisplayValue('Protected account'),false);
 });
 
 for(const departure of ['role','identity','route'] as const)test(`operational pages retain exact failed position and fence late health/outcomes after ${departure}`,async t=>{
- const f=await fixture(t);await f.initial([]);
+ const f=await fixture(t,'/loom/admin');
  const open=async(label:string)=>act(async()=>{const d=screen.getByText(label,{exact:true}).closest('details')!;d.open=true;fireEvent(d,new Event('toggle'));});
- await open('Operational health');
  const health=f.calls.filter(c=>c.path==='/api/v1/admin/operational-health').at(-1)!;assert.ok(health);
  await open('Inspect request outcomes');
  const root=f.calls.filter(c=>c.path.endsWith('/operational-health/outcomes')).at(-1)!;
@@ -191,4 +189,116 @@ for(const departure of ['role','identity','route'] as const)test(`operational pa
  if(departure==='route')await act(async()=>f.router.navigate('/loom/help'));
  await act(async()=>retry.finish(Response.json(result('idempotency_conflict',null))));
  assert.equal(!!screen.queryByText('revision conflict'),false);assert.equal(!!screen.queryByText('idempotency conflict'),false);
+});
+
+for(const departure of ['role','identity','route'] as const)test(`dedicated identity audit fences late pages after ${departure}`,async t=>{
+ const f=await fixture(t,'/loom/admin/audit');
+ const pending=f.calls.filter(c=>c.path.endsWith('/audit/query')).at(-1)!;assert.ok(pending);
+ if(departure==='role'){
+  const refusal=commandRequest('/api/v1/identity/reconcile',{self:f.self,body:{operation_kind:'account.create',idempotency_key:randomUUID()}});
+  const rejected=assert.rejects(refusal,{code:'forbidden'});
+  await act(async()=>{f.calls.at(-1)!.finish(Response.json({error:{code:'forbidden',message:'Current administrator authority required'}},{status:403}));await rejected;});
+ }
+ if(departure==='identity')await act(async()=>invalidateIdentity());
+ if(departure==='route')await act(async()=>f.router.navigate('/loom/help'));
+ await act(async()=>pending.finish(Response.json(page('audit',[{id:randomUUID(),action:'Late protected audit',recorded_at:'2020Z',target_id:randomUUID(),operation_id:randomUUID(),actor_id:null,actor_credential_id:null,authority:'deployment_recovery'}]))));
+ assert.equal(!!screen.queryByText('Late protected audit'),false);
+});
+
+for(const [kind,route] of [['account.create','participants'],['credential.issue','participants'],['community.settings','community'],['community.setup','community'],['participation.rates','limits'],['file.policy','limits']] as const)test(`legacy ${kind} recovery preserves its exact intent and all URL parameters`,async t=>{
+ const f=await fixture(t,'/loom/admin/missing');
+ const body=kind==='credential.issue'?{participant_id:randomUUID(),kind:'agent'}:{nickname:'retained',kind:'agent'};
+ const record=await f.store.saveDraft(f.store.create(kind==='account.create'||kind==='credential.issue'?'admission':kind,kind,'/api/v1/identity/accounts',body),body);
+ const expected='/loom/admin/'+route+'?intent='+record.key;
+ assert.equal(intentUrl(record),expected);
+ await act(async()=>f.router.navigate('/loom/admin?intent='+record.key+'&retained=original%2Fvalue&retained=two#handoff'));
+ assert.equal(f.router.state.location.pathname,'/loom/admin/'+route);
+ assert.equal(f.router.state.location.search,'?intent='+record.key+'&retained=original%2Fvalue&retained=two');
+ assert.equal(f.router.state.location.hash,'#handoff');assert.deepEqual(f.store.all()[0],record);
+ assert.equal(f.calls.some(c=>!c.path.endsWith('/query')&&!c.path.endsWith('/lookup')&&!c.path.startsWith('/api/v1/admin/')),false);
+});
+
+for(const missing of [false,true])test(`unknown ${missing?'missing':'retained'} legacy intent remains reviewable without a redirect`,async t=>{
+ const f=await fixture(t,'/loom/admin/missing'),body={unknown:'private'};
+ const record=f.store.create('unknown','unknown.operation','/api/v1/unknown',body);
+ if(!missing)await f.store.saveDraft(record,body);
+ await act(async()=>f.router.navigate('/loom/admin?intent='+record.key+'&keep=1'));
+ assert.equal(f.router.state.location.pathname,'/loom/admin');assert.equal(f.router.state.location.search,'?intent='+record.key+'&keep=1');
+ assert.ok(screen.queryByRole('heading',{name:'Recovery unavailable'}));assert.ok(screen.queryByRole('link',{name:'Inspect local drafts'}));assert.deepEqual(f.calls,[]);
+});
+
+test('one-time handoff blocks cancelled departure, permits confirmed departure and never persists its secret',async t=>{
+ const f=await fixture(t),target=person('handoff_agent');await f.initial([target]);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ const request=f.calls.find(c=>c.path.endsWith('/identity/credentials'))!,record=f.store.all()[0]!;
+ const prototype=Object.getPrototypeOf(localStorage),remove=prototype.removeItem;let handoffBeforeRetirement=false;
+ t.mock.method(prototype,'removeItem',function(this:Storage,key:string){
+  if(key===f.store.prefix+record.key){handoffBeforeRetirement=!!screen.queryByLabelText('Issued secret');assert.equal(handoffBeforeRetirement,true);}
+  return remove.call(this,key);
+ });
+ await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:randomUUID(),secret:'one-time-fixture-secret'})));
+ assert.equal(handoffBeforeRetirement,true);
+ let confirmations=0;const confirm=t.mock.method(window,'confirm',()=>{confirmations++;return false;});
+ await act(async()=>f.router.navigate('/loom/admin/search'));
+ assert.equal(confirmations,1);assert.equal(f.router.state.location.pathname,'/loom/admin/participants');
+ assert.equal((screen.getByLabelText('Issued secret') as HTMLTextAreaElement).value,'one-time-fixture-secret');
+ assert.equal(JSON.stringify(Object.values(localStorage)).includes('one-time-fixture-secret'),false);
+ confirm.mock.mockImplementation(()=>true);await act(async()=>f.router.navigate('/loom/admin/search'));
+ assert.equal(f.router.state.location.pathname,'/loom/admin/search');assert.equal(!!screen.queryByLabelText('Issued secret'),false);
+});
+
+test('late credential issuance after route departure keeps the exact attempt for reconciliation',async t=>{
+ const f=await fixture(t),target=person('interrupted_agent');await f.initial([target]);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ const request=f.calls.find(c=>c.path.endsWith('/identity/credentials'))!,record=f.store.all()[0]!;
+ await act(async()=>f.router.navigate('/loom/admin/audit'));
+ await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:randomUUID(),secret:'departed-secret'})));
+ assert.deepEqual(f.store.all()[0],record);assert.equal(record.state,'uncertain');
+ await act(async()=>f.router.navigate(intentUrl(record)));assert.ok(screen.queryByRole('button',{name:'Check credential issuance'}));assert.deepEqual(f.store.all()[0],record);
+});
+
+for(const departure of ['route','identity','authority'] as const)test(`credential issuance held at serialized local completion retains exact recovery after ${departure} departure`,async t=>{
+ const f=await fixture(t),target=person('completion_agent');await f.initial([target]);
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Manage credentials'})));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Issue agent credential'})));
+ const request=f.calls.find(c=>c.path.endsWith('/identity/credentials'))!,record=f.store.all()[0]!,credential=randomUUID();
+ const saved=localStorage.getItem(f.store.prefix+record.key);
+ let release!:()=>void,entered!:()=>void;const held=new Promise<void>(r=>release=r),waiting=new Promise<void>(r=>entered=r);
+ const locks=t.mock.method(navigator.locks,'request',async(name:string,work:()=>unknown)=>{assert.equal(name,f.store.prefix);entered();await held;return work();});
+ await act(async()=>request.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:credential,secret:'held-completion-secret'})));
+ await waiting;assert.equal(locks.mock.callCount(),1);assert.equal(localStorage.getItem(f.store.prefix+record.key),saved);
+ if(departure==='route'){
+  await act(async()=>f.router.navigate('/loom/admin/audit'));
+  assert.equal(f.router.state.location.pathname,'/loom/admin/audit');
+ }else if(departure==='identity')await act(async()=>invalidateIdentity());
+ else{
+  const refused=assert.rejects(commandRequest('/api/v1/identity/accounts',{self:f.self,body:{}}),{code:'forbidden'});
+  await act(async()=>{f.calls.at(-1)!.finish(Response.json({error:{code:'forbidden',message:'Administrator permission removed'}},{status:403}));await refused;});
+ }
+ await act(async()=>release());
+ assert.equal(localStorage.getItem(f.store.prefix+record.key),saved);assert.deepEqual(f.store.all(),[record]);
+ assert.equal(JSON.stringify(Object.values(localStorage)).includes('held-completion-secret'),false);
+ assert.equal(!!screen.queryByLabelText('Issued secret'),false);
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/identity/credentials')).length,1);
+ if(departure!=='route')return;
+ await act(async()=>f.router.navigate(intentUrl(record)));assert.ok(screen.queryByRole('button',{name:'Check credential issuance'}));
+ await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Check credential issuance'})));
+ const status=f.calls.filter(c=>c.path.endsWith('/identity/reconcile')).at(-1)!;
+ assert.deepEqual(status.body,{operation_kind:'credential.issue',idempotency_key:record.key});
+ await act(async()=>status.finish(Response.json({operation_state:'committed',participant_id:target.id,credential_id:credential})));
+ assert.ok(screen.queryByText('Credential issued — secret unavailable'));assert.deepEqual(f.store.all(),[]);
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/identity/credentials')).length,1);
+ assert.equal(JSON.stringify(Object.values(localStorage)).includes('held-completion-secret'),false);
+});
+
+test('non-administrator direct entry never reads administrative sections and neighbouring participant routes remain reachable',async t=>{
+ const f=await fixture(t,'/loom/admin/missing');f.self.role='participant';
+ for(const child of ['','community','participants','limits','search','file-processing','audit']){
+  await act(async()=>f.router.navigate('/loom/admin'+(child?'/'+child:'')));
+  assert.ok(screen.queryByRole('alert'));assert.ok(screen.queryByText('Administrator access is required.'));assert.deepEqual(f.calls,[]);
+ }
+ await act(async()=>f.router.navigate('/loom/help'));assert.ok(screen.queryByRole('heading',{name:'Participation guide'}));
+ assert.ok(f.calls.some(c=>c.path==='/api/v1/guide'));
 });

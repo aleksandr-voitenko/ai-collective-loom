@@ -1,5 +1,25 @@
 # Browser test diagnostics
 
+UI-05's production-shell administration journey checks seven direct routes/reloads,
+Back/Forward, another tab, unknown children, one exact current link/navigation tree,
+query isolation, Back to Loom, dirty cancellation/confirmation and the modal drawer's
+keyboard/focus/resize behavior without remounting the form. Mounted recovery tests
+cover actual-kind legacy destinations, preserved query/hash, unknown intent retention,
+one-time handoff departure and late issuance/audit fences. The existing admission
+journey also holds the native journal Web Lock in another authenticated tab after a
+valid committed issuance response, leaves the section, then releases completion.
+It returns through Local drafts and reconciles the same request without duplicate
+issuance or stored secrets. Mounted cases cover the same local-completion window
+through route, identity and authority loss, and require visible handoff before
+retirement. Existing pre-response departure and post-display cancellation remain.
+Opt-in handoff-completion PNGs supplement the original UI-05 presentation package.
+The admission journey returns through Local drafts; Search leaves and reopens its section before
+exact recovery. Moderation, organization, reading and Saved setup helpers return
+through Back to Loom before using participant navigation.
+`helpers/admin-navigation-review.ts` captures opt-in actual viewports
+under `/tmp/loom-review-evidence/ui-05`, separate from diagnostics. Closed diagnostics
+admit the six fixed child paths and the complete 177-case inventory; other limits stay.
+
 Administrative browsing: `identity-browsing.test.ts` joins the existing identity
 PostgreSQL suite. Deterministic >100 account/credential/audit fixtures compare full
 eligible IDs and metadata, actual HTTPS bytes, whole-table hashes, current guard
@@ -22,7 +42,8 @@ mask is mandatory while the one-time textarea exists. No extra browser test entr
 or diagnostic capture is introduced. Mounted browsing tests assert step/status copy
 and lookup-error placement alongside the existing ownership/withdrawal cases.
 That journey seeds 26 lower-ID fixture accounts, selects the off-page target by
-nickname lookup, loses issuance, reloads, fails/holds the exact-ID name lookup and
+nickname lookup, loses issuance, leaves to Overview and returns through Local drafts,
+fails/holds the exact-ID name lookup and
 reconciles without another issuance. It checks the original key/body, one identity
 and one credential before deliberate replacement. Follow-up recovery PNGs use
 `ui-04/follow-up`, preserving the original review archive. Mounted cases also fence
@@ -697,6 +718,14 @@ binds each parsed script synchronously to the built asset's SHA-256, UTF-16 leng
 and zero source offset. Fetching script text afterward races navigation: Chromium
 can report `No script for id` even though the parse event has the matching hash.
 Missing/mismatched identity still refuses coverage; URLs alone never prove source.
+Related tabs can share an isolate's V8 counters while Debugger parse events remain
+target-scoped. Unseen script IDs may use another tracked target's verified parse
+only after Chromium confirms the same isolate (or its final recorded isolate after
+closure). A rejected local parse cannot borrow a sibling identity, and a sample
+refuses isolate changes. Execution-context reset archives verified identities under
+their last measured isolate for retired counters, then clears the target-local map.
+Those old records cannot authorize a replacement isolate. The real coverage probe opens an actual related tab;
+independent newPage siblings alone do not exercise this boundary.
 `unit/browser-coverage.test.ts` reproduces retired source retrieval and checks
 fail-closed identities; the real Chromium probe checks Unicode, repeated navigation
 counters and same-URL/same-length changed bytes. Retained failed assertion steps can
@@ -727,7 +756,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 175 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 177 collected tests and <17 MiB/candidate. The test count includes
 Community settings and Search indexing recovery, including two-tab exact retry on a
 25-row failed-job page, so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete

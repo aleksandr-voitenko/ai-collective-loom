@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import { Type, type Static } from '@sinclair/typebox';
 import { SearchHealth, FailedSearchJobs, type SearchHealthView } from '../contracts/search.js';
 import { closed } from '../contracts/participation.js';
@@ -392,11 +391,6 @@ export function SearchAdministration({ context }: { context: Context }) {
 
   return (
     <div className="search-administration">
-      <nav className="breadcrumb" aria-label="Breadcrumb">
-        <Link to="/loom/admin">Administration</Link>
-        <span aria-hidden="true">›</span>
-        <span>Search indexing</span>
-      </nav>
       <h1>Search indexing</h1>
       <p className="subtitle">
         Shared-text indexing for discussions, comments, artifacts and summaries.

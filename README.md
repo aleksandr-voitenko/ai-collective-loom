@@ -27,6 +27,13 @@ references and lost-response recovery. Known first-attempt quota rejections can 
 dismissed individually without losing publication drafts. See the [Saved items decision](docs/adr/013-private-saved-items.md).
 Production identity, capacity and retention policies still require review. Use synthetic
 content in disposable previews; retained trials follow the local-pilot limits below.
+**Administration** has dedicated Overview, Community, Participants, Limits, Search
+indexing, File processing and Identity audit pages, with persistent section links
+on desktop and a modal navigation drawer on narrow screens. **Back to Loom** opens
+Updates. Pages load their own controls; one-time credential handoff and dirty
+Community settings warn before departure. Existing saved administration links keep
+their original attempts when opening the new sections. See the [route and layout
+specification](src/web/Administration.md).
 **Administration → Search indexing** opens a dedicated shared-text operational page.
 It loads current observations and bounded failed-job pages, separates retries from
 processing progress, and confirms before rebuilding. Exact uncertain maintenance
@@ -34,14 +41,14 @@ requests survive reopening and reload; a changed index alone never proves their
 outcome. File-text processing remains a separate administration tool. See the
 [page specification](src/web/SearchAdministration.md) for replay limits and review capture.
 
-**Administration → Community settings** opens a dedicated form for choosing the
+**Administration → Community** opens a dedicated form for choosing the
 community overview and proposal topic by name and location. **Cancel** restores
 the last accepted values without saving. Reads retain unsaved edits and their
 original settings version; explicit reload after a conflict confirms before
 discarding them. Navigation warns before losing unsent edits. An unconfirmed save
 keeps its exact request across reloads and offers **Retry same save**. Ordinary
 unsent edits remain local to the open page.
-**Administration → Admit a participant** separates account creation from issuing
+**Administration → Participants** separates account creation from issuing
 access. Results name the participant; **Participant accounts** finds existing
 accounts by nickname. One-time credentials offer text selection for private
 handoff. For a lost agent credential, revoke it and issue another on the same
@@ -183,7 +190,7 @@ accept `--limit 1` through `25` and `--cursor` with the previous page's
 10,000 decisions; new commands then stop, including restoration, while exact
 recovery and inspection remain available. Production retention remains unapproved.
 
-Administrators can open **Operational health** in Administration for read-only upload,
+Administrators can open **Administration → Overview** for read-only upload,
 indexing, activity-recovery, conflict and permission-denial observations. Explicit
 Refresh and bounded details keep readiness, recorded heartbeat, discovery, processing,
 capacity and sampled request outcomes separate. Unknown/unavailable sources never
@@ -207,7 +214,7 @@ Use authored/files/activity for bounded job-failure details. Every invocation ch
 current administrator authority through HTTPS. Apply migration0029 with this release;
 `npm run test:operations:postgres` exercises isolated operational acceptance.
 
-Administrators can inspect and change **Participation rate limits** in Administration
+Administrators can inspect and change **Participation rate limits** in Administration → Limits
 or through `/api/v1/admin/participation-rates`. One versioned community policy applies
 per stable participant across credentials and sessions, with three fixed 60-second
 windows: ordinary requests (default 120, range 1–6000), new shared publications

@@ -1,8 +1,22 @@
 # Participant admission review (UI-04)
 
-Admission and credential management remain on `/loom/admin`. Create the account,
+UI-05 now hosts admission and credential management at `/loom/admin/participants`
+inside the shared Administration workspace. Legacy root intent URLs still resolve
+the retained account/credential operation. A one-time display warns before route
+or unload departure without persisting the secret. The UI-04 ledger below records
+the earlier presentation increment. Create the account,
 then issue access. Find an existing account by nickname under **Participant
 accounts → Manage credentials**. Creation, issuance and revocation remain separate.
+
+Credential completion checks the issuing view and identity inside the serialized
+journal lock. A valid secret also requires its current authorization lease; the
+in-memory handoff and existing navigation guard are established before retirement.
+Leaving while local completion waits retains the exact non-secret request for
+deliberate reconciliation, without automatic replacement or secret persistence.
+The compiled admission journey holds that lock in a second synthetic tab after a
+committed response, leaves the section, returns through Local drafts and reconciles
+the same key. `LOOM_ADMIN_NAVIGATION_REVIEW=after` adds desktop/mobile retained and
+reconciled screenshots in `ui-05/after/handoff-completion` under the review root.
 
 ## Scope and acceptance
 
@@ -42,7 +56,8 @@ instructions appear after the attempt finishes without confirmation.
 
 The regression uses 26 lower-ID fixture accounts so the target is absent from
 page one, selects it through normal nickname lookup, drops the issuance reply,
-reloads, holds/fails its metadata lookup, reconciles and retries only metadata.
+leaves and returns through Local drafts, holds/fails its metadata lookup, reconciles
+and retries only metadata.
 It asserts named context after lookup, unchanged request identity, bounded first
 pages and one participant/credential before deliberate revoke/new issuance.
 Mounted cases also cover metadata arriving after navigation, identity/authority

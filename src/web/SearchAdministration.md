@@ -1,9 +1,9 @@
 # Search indexing administration
 
 `/loom/admin/search` is the administrator-only shared-text indexing page. The
-Administration entry links here beside its existing Community settings entry.
+shared Administration navigation links here alongside Community and the other sections.
 Participant Search, file-text processing and other Administration tools keep their
-own behavior. The 820px column, breadcrumb, restrained white sections and narrow
+own behavior. The shared page gutter, 820px column, restrained white sections and narrow
 layout follow Community settings. Primary sections are Status, Failed jobs and
 Maintenance; technical identifiers are secondary disclosures.
 
