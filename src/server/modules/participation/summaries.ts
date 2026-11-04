@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { encryptCursor, decryptCursor } from '../../application/encrypted-cursor.js';
+import { randomBytes } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import type { ActorContext } from '../publication/actor.js';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
@@ -44,20 +45,12 @@ export class DiscussionSummaries {
     this.reads = new ParticipationRetrieval(database);
   }
   private encode(value: Cursor) {
-    const nonce = randomBytes(12),
-      cipher = createCipheriv('aes-256-gcm', this.key, nonce);
-    const bytes = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
-    return Buffer.concat([nonce, cipher.getAuthTag(), bytes]).toString('base64url');
+    return encryptCursor(this.key, () => value);
   }
   private decode(value: string): Cursor {
     try {
       if (Buffer.byteLength(value) > summaryLimits.cursorBytes) throw new Error();
-      const bytes = Buffer.from(value, 'base64url'),
-        decipher = createDecipheriv('aes-256-gcm', this.key, bytes.subarray(0, 12));
-      decipher.setAuthTag(bytes.subarray(12, 28));
-      const data = JSON.parse(
-        Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString('utf8'),
-      ) as Cursor;
+      const data = decryptCursor(this.key, value) as Cursor;
       if (
         !Number.isFinite(data.expires) ||
         data.expires <= Date.now() ||

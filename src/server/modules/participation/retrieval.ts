@@ -1,4 +1,5 @@
-import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+import { encryptCursor, decryptCursor } from '../../application/encrypted-cursor.js';
+import { randomBytes } from 'node:crypto';
 import {
   limits,
   contractVersion,
@@ -59,23 +60,12 @@ export class ParticipationRetrieval {
   private readonly cursorKey = randomBytes(32);
   constructor(private readonly database: Transactions) {}
   private encode(binding: string, after: string) {
-    const nonce = randomBytes(12),
-      cipher = createCipheriv('aes-256-gcm', this.cursorKey, nonce);
-    const bytes = Buffer.concat([
-      cipher.update(JSON.stringify({ binding, after }), 'utf8'),
-      cipher.final(),
-    ]);
-    return Buffer.concat([nonce, cipher.getAuthTag(), bytes]).toString('base64url');
+    return encryptCursor(this.cursorKey, () => ({ binding, after }));
   }
   private decode(binding: string, value?: string) {
     if (!value) return null;
     try {
-      const bytes = Buffer.from(value, 'base64url'),
-        decipher = createDecipheriv('aes-256-gcm', this.cursorKey, bytes.subarray(0, 12));
-      decipher.setAuthTag(bytes.subarray(12, 28));
-      const saved = JSON.parse(
-        Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString('utf8'),
-      ) as { binding: string; after: string };
+      const saved = decryptCursor(this.cursorKey, value) as { binding: string; after: string };
       if (saved.binding !== binding || !/^[0-9a-f-]{36}$/.test(saved.after)) throw new Error();
       return saved.after;
     } catch {

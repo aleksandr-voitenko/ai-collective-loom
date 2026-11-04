@@ -197,6 +197,9 @@ ownership and each exact revision independently of current-revision availability
 withhold a suppressed current revision ID and editing hint. No ordinary read changes
 receipts, delivery or source activity. ADR-016 records the structural-disclosure scope.
 
+Ordinary participation readers share only the nonce/tag/UTF-8 JSON envelope in
+`server/application/encrypted-cursor.ts`. Each reader retains its own key lifetime,
+shape/scope/expiry checks, bounds and domain errors; the helper grants no authority.
 AES-GCM cursors bind participant/query/scope with a process-local key. Hierarchy and
 area/discussion/artifact collections also bind the community hierarchy epoch; any
 organization change makes old continuation requests fail `invalid_cursor`. Restart makes

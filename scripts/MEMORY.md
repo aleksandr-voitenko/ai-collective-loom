@@ -95,6 +95,13 @@ dispatch; later send uses the same fsynced metadata and supplied bytes.
 Recovery captures policy/decisions and rejects new admissions under exhaustion
 without relaxing authoritative inventory equality or the PR29 charge allowance.
 
+The administration and operational-health readers share
+`lib/administrative-read-client.mjs` for HTTPS origin/private credential admission,
+verified TLS, the fixed32KiB response cap,15-second socket inactivity timeout and
+safe error codes.
+It never retries; each caller retains collection/owner/continuation validation and
+exclusive fsynced output. Neither reader imports server internals.
+
 `operational-health-client.mjs` (guide24/ADR-040) independently inspects one bounded
 health/outcome/job-failure page through HTTPS, with private input/output and current
 administrator authority on each invocation. `--after-page` binds origin/owner/collection;
