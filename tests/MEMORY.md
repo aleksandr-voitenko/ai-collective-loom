@@ -722,8 +722,9 @@ Related tabs can share an isolate's V8 counters while Debugger parse events rema
 target-scoped. Unseen script IDs may use another tracked target's verified parse
 only after Chromium confirms the same isolate (or its final recorded isolate after
 closure). A rejected local parse cannot borrow a sibling identity, and a sample
-refuses isolate changes. Global-object replacement clears the target's old parse
-identities before they can authorize a replacement isolate. The real coverage probe opens an actual related tab;
+refuses isolate changes. Execution-context reset archives verified identities under
+their last measured isolate for retired counters, then clears the target-local map.
+Those old records cannot authorize a replacement isolate. The real coverage probe opens an actual related tab;
 independent newPage siblings alone do not exercise this boundary.
 `unit/browser-coverage.test.ts` reproduces retired source retrieval and checks
 fail-closed identities; the real Chromium probe checks Unicode, repeated navigation

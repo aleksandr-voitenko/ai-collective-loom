@@ -98,11 +98,19 @@ test('browser coverage refuses an isolate change during a sample',async t=>{
 });
 
 test('browser coverage cannot borrow a retired target parse after its global object is replaced',async t=>{
-  const f=fixture(t);await f.tracked.newPage();f.cdp.emit('Debugger.scriptParsed',f.event);
+  const f=fixture(t),original=await f.tracked.newPage();f.cdp.emit('Debugger.scriptParsed',f.event);
+  await f.collector.flush(original,false);
   f.cdp.emit('Runtime.executionContextsCleared');
   const send=f.cdp.send;
   f.cdp.send=async(name:string)=>name==='Runtime.getIsolateId'?{id:'replacement-isolate'}:send(name);
   const peer=f.peer('replacement-isolate'),tracked=f.collector.track(peer.context as unknown as BrowserContext),page=await tracked.newPage();
   await assert.rejects(()=>f.collector.flush(page,false),/Browser script must match/);
   await tracked.close();await f.tracked.close();await assert.rejects(()=>f.collector.finish(),/Every page/);
+});
+
+test('browser coverage retains retired counters under their original verified isolate',async t=>{
+  const f=fixture(t),page=await f.tracked.newPage();f.cdp.emit('Debugger.scriptParsed',f.event);
+  await f.collector.flush(page,false);f.cdp.emit('Runtime.executionContextsCleared');
+  await f.tracked.close();await f.collector.finish();assert.deepEqual(f.read().issues,[]);
+  assert.equal(f.read().pages[0].entries.length,2);
 });

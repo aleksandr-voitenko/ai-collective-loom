@@ -16,6 +16,7 @@ type State = { ready: Promise<void>; active: boolean; closed: boolean; captures:
 export class BrowserCoverage {
   private pages = new Map<Page, State>();
   private contexts = new Set<BrowserContext>();
+  private isolates = new Map<string, Map<string, string>>();
   private issues = new Set<string>();
   private id: string;
   private assets: ReturnType<typeof loadAssets>;
@@ -47,7 +48,13 @@ export class BrowserCoverage {
     this.pages.set(page, state);
     state.ready = (async () => {
       const session = state.session = await page.context().newCDPSession(page);
-      session.on('Runtime.executionContextsCleared', () => { state.scripts.clear(); });
+      session.on('Runtime.executionContextsCleared', () => {
+        // Precise coverage can retain counters after their context retires.
+        // Preserve that proof only under the last measured isolate, then reset
+        // the target-local identities before another context can reuse IDs.
+        if (state.isolate) this.isolates.set(state.isolate, new Map([...(this.isolates.get(state.isolate) ?? []), ...state.scripts]));
+        state.scripts.clear();delete state.isolate;
+      });
       session.on('Debugger.scriptParsed', event => {
         let pathname: string;
         try { pathname = new URL(event.url).pathname; } catch { return; }
@@ -96,7 +103,7 @@ export class BrowserCoverage {
       let pathname: string;
       try { pathname = new URL(entry.url).pathname; } catch { continue; }
       const asset = this.assets.get(pathname); if (!asset) continue;
-      let identity = state.scripts.get(entry.scriptId);
+      let identity: string | undefined = state.scripts.has(entry.scriptId) ? state.scripts.get(entry.scriptId) : this.isolates.get(isolate)?.get(entry.scriptId);
       if (!state.scripts.has(entry.scriptId)) {
         // Related tabs can share V8 counters without sharing Debugger parse
         // events. A sibling's exact parsed-source identity is usable only in
@@ -120,6 +127,8 @@ export class BrowserCoverage {
       state.entries.push({ asset: asset.name, sha256: asset.hash, functions });
     }
     assert.equal((await state.session!.send('Runtime.getIsolateId')).id, isolate, 'Browser isolate changed during collection');
+    this.isolates.set(isolate, new Map([...(this.isolates.get(isolate) ?? []), ...state.scripts]));
+    state.isolate = isolate;
     if (final) {
       await state.session!.send('Profiler.stopPreciseCoverage');
       await state.session!.detach();
