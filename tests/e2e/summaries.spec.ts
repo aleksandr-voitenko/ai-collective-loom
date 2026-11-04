@@ -151,16 +151,22 @@ test('summary review regression: successive updates use the current revision and
   await start.click();await expect(editor.getByRole('alert')).toHaveText('Injected summary draft save failure');await expect(start).toBeEnabled();
   expect(await journal(page,'summary.revise',previous.key)).toEqual(previous);
   await start.focus();await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Text',{exact:true})).toHaveValue(content.text);
+  await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Current summary @summary_author');
   const key=new URL(page.url()).searchParams.get('intent');expect(key).toBeTruthy();expect(key).not.toBe(previous.key);
   const next=await journal(page,'summary.revise',key!);
   expect(next.state).toBe('draft');
   expect(next.body).toEqual({idempotency_key:key,resource_id:first.resource_id,expected_revision_id:current.body.revision_id,
     title:'Current summary title',content,coverage:{carry_forward_revision_id:current.body.revision_id}});
-  await page.reload();await expect(page.getByLabel('Text',{exact:true})).toHaveValue(content.text);
+  await page.reload();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Current summary @summary_author');
   await expect(page.getByLabel('Title',{exact:true})).toHaveValue('Current summary title');
   expect((await journal(page,'summary.revise',key!)).body).toEqual(next.body);
-  await page.getByLabel('Text',{exact:true}).fill('Second browser update [[mention:mreview]]');
+  const input=page.getByLabel('Text',{exact:true});
+  // Replace only the prose prefix. Replacing the entire field with a plain label
+  // would deliberately remove its existing explicit notification binding.
+  await input.evaluate(node=>(node as HTMLTextAreaElement).setSelectionRange(0,'Current summary'.length));
+  await input.pressSequentially('Second browser update');
+  await expect(input).toHaveValue('Second browser update @summary_author');
+
   await page.getByRole('button',{name:'Publish',exact:true}).click();
   await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
   const published=(await f.admin.call('/api/v1/resources/'+first.resource_id)).body;

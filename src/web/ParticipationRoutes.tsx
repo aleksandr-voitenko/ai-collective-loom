@@ -21,7 +21,7 @@ import { SummaryMaintenance } from './Summaries.js';
 import { Collection, ResourceRow } from './participation-ui.js';
 import { Administration } from './ParticipationAdministration.js';
 import { DiscussionPage } from './ParticipationDiscussion.js';
-import { Help } from './ParticipationHelp.js';
+import { Help, Drafts } from './ParticipationHelp.js';
 import { ResourcePage } from './ParticipationResource.js';
 import { AreaPage, Overview, Topics } from './ParticipationTopics.js';
 
@@ -41,6 +41,7 @@ export function ActiveView({ context }: { context: Context }) {
   // Attention pages already own their full-view or private-settings boundary.
   // The remaining routes must also provide a protected read capability.
   if (
+    kind === 'drafts' ||
     kind === 'notes' ||
     kind === 'admin' ||
     kind === 'moderation' ||
@@ -82,6 +83,7 @@ function RouteView({ context }: { context: Context }) {
     kind = path[0],
     id = path[1];
   if (!kind) return <Topics context={context} />;
+  if (kind === 'drafts') return <Drafts key={context.self.participant_id} context={context} />;
   if (kind === 'notes')
     return <PrivateNotesPage key={location.pathname + location.search} context={context} />;
   if (kind === 'attention') return <AttentionPage context={context} />;

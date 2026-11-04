@@ -1572,3 +1572,54 @@
     font-size: 11px;
   }
 }
+
+.loom-app .composer-confirmed {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.loom-app .publication-confirmed,
+.loom-app .mention-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.loom-app .publication-confirmed p {
+  margin: 0;
+}
+.loom-app .composer-status:empty,
+.loom-app .draft-save-status:empty {
+  margin: 0;
+}
+.loom-app .mention-chips button {
+  border-radius: 999px;
+  min-height: 32px;
+  font-size: 12px;
+}
+.loom-app .composer-tools {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.loom-app .composer-tools .formatting-help {
+  margin-top: 0;
+  max-width: 32rem;
+  font-size: 13px;
+}
+.loom-app .parent-preview {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--line);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.loom-app .composer textarea {
+  font-weight: 400;
+}
+.loom-app .composer-status-confirmed {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

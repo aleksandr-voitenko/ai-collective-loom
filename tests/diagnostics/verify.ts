@@ -79,7 +79,7 @@ for(const path of ['/loom/following','/loom/changes','/api/v1/me/following','/ap
   assert.equal(routeTemplate('https://example.test'+path+'?scope='+canary+'&cursor='+canary,'https://example.test'),path);
 assert.equal(new Set(controlNames).size,controlLabels.length);
 assert.equal(sourceFile('/private/synthetic/reading.spec.ts'),'reading.spec.ts');
-for(const path of ['/loom/reading','/api/v1/me/reading/lookup','/api/v1/me/reading/state','/api/v1/me/reading/status'])
+for(const path of ['/loom/drafts','/loom/reading','/api/v1/me/reading/lookup','/api/v1/me/reading/state','/api/v1/me/reading/status'])
   assert.equal(routeTemplate('https://example.test'+path+'?revision_id='+canary+'&idempotency_key='+canary,'https://example.test'),path);
 assert.equal(sourceFile('/private/synthetic/attention.spec.ts'),'attention.spec.ts');
 for(const path of ['/loom/attention','/api/v1/me/attention/mutes/lookup','/api/v1/me/attention/mutes/state',

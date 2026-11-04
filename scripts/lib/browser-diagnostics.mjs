@@ -47,7 +47,7 @@ const routePatterns = [
   '/api/v1/summary-preparations', '/api/v1/summary-preparations/cleanup', '/api/v1/summary-preparations/:id', '/api/v1/summary-preparations/:id/members',
   '/api/v1/discussions/:id/summary', '/api/v1/discussions/:id/summary-sources', '/api/v1/summaries/:id/revisions/:id/coverage', '/api/v1/summaries/:id/revisions/:id/members', '/api/v1/summaries/:id/revisions/:id/sources',
   '/loom/admin/community', '/loom/admin/participants', '/loom/admin/limits', '/loom/admin/file-processing', '/loom/admin/audit',
-  '/loom', '/loom/saved', '/loom/admin/search', '/loom/admin', '/loom/help', '/loom/overview', '/loom/artifacts', '/loom/organize', '/loom/area/:id',
+  '/loom', '/loom/drafts', '/loom/saved', '/loom/admin/search', '/loom/admin', '/loom/help', '/loom/overview', '/loom/artifacts', '/loom/organize', '/loom/area/:id',
   '/loom/discussion/:id', '/loom/resource/:id', '/loom/resource/:id/:id',
   '/loom/search', '/api/v1/search', '/api/v1/search/status', '/api/v1/search/authors', '/api/v1/admin/search/health', '/api/v1/admin/search/failures', '/api/v1/admin/search/rebuild', '/api/v1/admin/search/retry',
   '/api/v1/runtime', '/api/v1/identity/self', '/api/v1/identity/register/start', '/api/v1/identity/register/finish',
