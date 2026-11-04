@@ -916,6 +916,9 @@ templates and Add/Check/Refresh controls, without changing bounds or raw contain
 mention remount/removal assertions. Status misses and transient failures preserve
 uncertain bodies; recorded file expiry through status or exact retry cannot unlock
 correction until rejection is durably saved. Independent drafts stay untouched.
+Settlement barriers also keep confirmation, exact-revision links and callbacks
+hidden until the committed journal write finishes. Busy/uncertain feedback changes
+retain the same editor/disclosure nodes, their open state and exact stored bytes.
 Mention regressions cover quote/fence endings, deliberate opening focus and deletion
 of one marker; the pure insertion suite covers caret/selection, Unicode, links,
 unclosed code and byte limits. Browser workflows open native disclosures through

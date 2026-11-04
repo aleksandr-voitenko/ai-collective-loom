@@ -107,6 +107,11 @@ Mounted `discussion-closure` tests use the actual ActiveView/resource/organizati
 hosts, including contribution/summary intents and storage refusal before dispatch.
 
 `ParticipationComposer.tsx` coordinates authored drafts, correction and exact retry.
+`ComposerFeedback.tsx` renders confirmation, uncertain recovery and correction
+panels without owning state or adding DOM wrappers. The composer retains panel
+visibility, journal actions, comparison loading and the recovery focus ref/effects;
+confirmation is shown only after durable settlement. Keep editors and disclosures
+mounted through busy/uncertain feedback changes.
 `composer-draft.ts` derives routes/targets/capabilities from its six-kind caller
 operation union and owns draft construction/comparison/correction transitions.
 Named draft patches preserve undefined-as-unchanged and explicit null/empty values;
