@@ -182,6 +182,14 @@ matching groups within the same fixed interval. Independent paired checkpoints
 preserve delayed personal deliveries. Missing or unknown history has an explicit
 incomplete-baseline recovery path that preserves scope and personal reasons.
 See the [Updates decision](docs/adr/025-combined-updates.md).
+
+The notifications, shared-changes and Updates command-line readers use private
+`.lock.sqlite` journal sidecars. Ownership releases automatically if a reader
+crashes; keep the sidecar in place and retry with the same journal. Use separate
+journals for independent readers, and upgrade every client sharing a journal to
+this locking protocol. An older `.lock` file is refused: stop older clients and
+verify that no reader is active before manually removing only that legacy lock.
+
 Private reading progress has exact **Mark read / Mark unread** controls for opening
 posts, comments, artifacts and summaries, plus bounded discussion selection.
 An opt-in browser prototype marks fully presented text; manual Unread holds for the

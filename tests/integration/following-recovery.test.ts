@@ -6,6 +6,38 @@ import { once } from 'node:events';
 import { promisify } from 'node:util';
 import { readFile,writeFile,unlink,stat } from 'node:fs/promises';
 import { fixture } from '../helpers/following.js';
+import type { SharedPageView } from '../../src/contracts/following.js';
+import { gates } from '../helpers/updates-gates.js';
+import { verifyNativeReaderLockRecovery } from '../helpers/native-reader-lock.js';
+
+test('killed shared-change readers release journal ownership and resume the saved page', { timeout: 90000 }, async t => {
+  const gate = gates();
+  const f = await fixture(t, { transactionWrapper: gate.wrapper });
+  const reader = await f.participant('shared_crash_reader');
+  const expected: string[] = [];
+  for (let index = 0; index < 2; index++) {
+    const source = await f.artifact(f.admin, 'Shared crash recovery ' + index);
+    expected.push(await f.event(source.revision_id));
+    await f.follow(reader.client, f.settings('artifact', source.resource_id));
+  }
+  const credential = await f.admin.call('/api/v1/identity/credentials', {
+    idempotency_key: randomUUID(), participant_id: reader.id, kind: 'agent', purpose: null,
+    label: 'Shared crash reader', replace_credential_id: null,
+  });
+  assert.equal(credential.status, 200);
+  const token = f.directory + '/shared-crash-token';
+  const journal = f.directory + '/shared-crash.json';
+  await writeFile(token, credential.body.secret, { mode: 0o600 });
+  const { displayed, next } = await verifyNativeReaderLockRecovery<SharedPageView>({
+    journal, gate,
+    args: (action, file = journal) => [
+      'scripts/shared-changes-client.mjs', '--origin', f.origin, '--credential-file', token,
+      '--ca', f.directory + '/cert.pem', '--journal', file, '--action', action, '--limit', '1',
+    ],
+  });
+  assert.deepEqual(displayed.items.map(item => item.event_id), expected.slice(0, 1));
+  assert.deepEqual(next.items.map(item => item.event_id), expected.slice(1));
+});
 
 test('independent HTTPS and compiled API processes replay displayed shared pages and resize exact successors',{timeout:90000},async t=>{
   const f=await fixture(t),reader=await f.participant('external_shared'),expected:string[]=[];
@@ -29,7 +61,7 @@ test('independent HTTPS and compiled API processes replay displayed shared pages
   assert.deepEqual((await run('read')).items,second.items);
   assert.deepEqual(ids(await run('next',2,f.directory+'/independent.json')),expected.slice(0,2));
   await writeFile(journal+'.lock','Owned synthetic competing process');const before=await readFile(journal,'utf8');
-  await assert.rejects(run('next'),/Another reader holds/);assert.equal(await readFile(journal,'utf8'),before);await unlink(journal+'.lock');
+  await assert.rejects(run('next'),/Legacy journal lock exists/);assert.equal(await readFile(journal,'utf8'),before);await unlink(journal+'.lock');
   const third=await run('next',1);assert.deepEqual(ids(third),expected.slice(3));assert.equal(third.interval_complete,true);
   const legacy=JSON.parse(await readFile(journal,'utf8'));delete legacy.next_cursor;delete legacy.checkpoint;await writeFile(journal,JSON.stringify(legacy));
   await assert.rejects(run('next'),/saved page boundary is unavailable/);assert.deepEqual(ids(await run('read')),expected.slice(3));
