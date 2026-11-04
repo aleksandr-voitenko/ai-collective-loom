@@ -57,6 +57,12 @@ injected failure and explicit reload, asserting each response/count before advan
 Replacing expiring one-shot handlers can race interception updates and miss the fault.
 The no-Web-Locks sign-out journey checks each cleanup warning independently of order,
 server session revocation and exact retained draft/uncertain Search recovery bytes.
+Its publication-journal snapshot compares storage keys and exact stored strings,
+without relying on enumeration order after the independent Search key is inserted.
+`unit/publication-journal-snapshot.test.ts` permutes storage enumeration while retaining
+all bytes, and separately detects byte-only changes, changed content and added/removed
+records. The competing Saved retry race waits for the other tab's enabled ordinary
+Save control before the first request is held; document load alone is not that boundary.
 
 
 `integration/pilot.test.ts` and `e2e/pilot.spec.ts` execute the actual persistent
