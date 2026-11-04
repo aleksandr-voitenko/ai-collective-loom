@@ -562,6 +562,12 @@ both owner/global caps; migration0015 must force retry before a stale count can
 reserve a view. Its populated upgrade retains all prior tables and custody rows.
 Native tests SIGKILL a reader while it holds the journal, prove a live competitor
 is refused, then recover both displayed pages. SQLite lock sidecars stay in place.
+Notifications and shared Changes use `helpers/native-reader-lock.ts` in their
+recovery suites: hold real authentication SQL, reject a live same-journal reader
+while permitting an independent journal, SIGKILL the owner, and replay the saved
+page before its exact successor. Assert unchanged journal bytes on interruption
+and HTTP failure, release after failure, private modes, a stable sidecar inode and
+non-destructive legacy-lock refusal. Compare page semantics, not randomized tokens.
 StrictMode and Chromium member-race retries must reauthorize a withdrawn overview
 and preserve the prior expansion until an unseen successor has been saved.
 Recovery regressions start without a saved descriptor for personal/mention and

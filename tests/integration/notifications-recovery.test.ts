@@ -8,6 +8,41 @@ import { readFile,writeFile } from 'node:fs/promises';
 import type { QueryResultRow } from 'pg';
 import { fixture,mentioned } from '../helpers/notifications.js';
 import { NativeSearchWorker } from '../../scripts/lib/native-search-worker.js';
+import type { NotificationPageView } from '../../src/contracts/notifications.js';
+import { gates } from '../helpers/updates-gates.js';
+import { verifyNativeReaderLockRecovery } from '../helpers/native-reader-lock.js';
+
+test('killed notification readers release journal ownership and resume the saved page', { timeout: 90000 }, async t => {
+  const gate = gates();
+  const f = await fixture(t, { transactionWrapper: gate.wrapper });
+  const reader = await f.participant('notification_crash_reader');
+  for (let index = 0; index < 2; index++) {
+    await f.publish(f.admin, '/api/v1/artifacts', {
+      area_id: f.area, title: 'Notification crash recovery ' + index,
+      content: mentioned(reader.id), change_note: null, change_account: null,
+    });
+  }
+  await f.drain();
+  const expected = (await f.page(reader.client)).items.map(item => item.delivery_id);
+  assert.equal(expected.length, 2);
+  const credential = await f.admin.call('/api/v1/identity/credentials', {
+    idempotency_key: randomUUID(), participant_id: reader.id, kind: 'agent', purpose: null,
+    label: 'Notification crash reader', replace_credential_id: null,
+  });
+  assert.equal(credential.status, 200);
+  const token = f.directory + '/notification-crash-token';
+  const journal = f.directory + '/notification-crash.json';
+  await writeFile(token, credential.body.secret, { mode: 0o600 });
+  const { displayed, next } = await verifyNativeReaderLockRecovery<NotificationPageView>({
+    journal, gate,
+    args: (action, file = journal) => [
+      'scripts/notifications-client.mjs', '--origin', f.origin, '--credential-file', token,
+      '--ca', f.directory + '/cert.pem', '--journal', file, '--action', action, '--limit', '1',
+    ],
+  });
+  assert.deepEqual(displayed.items.map(item => item.delivery_id), expected.slice(0, 1));
+  assert.deepEqual(next.items.map(item => item.delivery_id), expected.slice(1));
+});
 
 test('bounded empty scans, complete Unicode JSON, descriptor renewal, retained gaps and recovery epoch',{timeout:90000},async t=>{
   let slow=false,unavailable=false;
