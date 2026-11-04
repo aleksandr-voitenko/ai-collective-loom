@@ -916,6 +916,22 @@ templates and Add/Check/Refresh controls, without changing bounds or raw contain
 mention remount/removal assertions. Status misses and transient failures preserve
 uncertain bodies; recorded file expiry through status or exact retry cannot unlock
 correction until rejection is durably saved. Independent drafts stay untouched.
+Mention regressions cover quote/fence endings, deliberate opening focus and deletion
+of one marker; the pure insertion suite covers caret/selection, Unicode, links,
+unclosed code and byte limits. Browser workflows open native disclosures through
+`helpers/composer-controls.ts`, preserving their existing domain assertions.
+`LOOM_MESSAGING_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"`
+captures opt-in compiled-app 1440x1000/390x844 composer, attachment, conversation,
+message-detail and failed-save PNGs plus provenance under `/tmp/loom-review-evidence/messaging`.
+The journey uses ordinary non-admin WebAuthn and asserts mention publication,
+explicit focus, close/reopen custody and unchanged actual reply parentage. Mounted
+close tests refuse dismissal after failed storage and preserve the visible fields.
+The same compiled participation journey checks named parent destinations, accessible
+reply disclosure state, nested draft retention while hidden, bounded first/continuation
+counts and an empty branch's failed-refresh/retry. `LOOM_REPLY_REVIEW=1` uses the same
+command to capture desktop/mobile reply-context, thread, page, empty and refresh-error
+states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifies the
+deliberate children503. The suppressed-parent journey retains traversal after body loss.
 The Chromium conflict-correction restart case waits for the replacement URL, holds
 the real journal lock across text/title edits, and verifies the complete saved body
 before reload. A replacement key/base alone does not prove later autosaves finished;

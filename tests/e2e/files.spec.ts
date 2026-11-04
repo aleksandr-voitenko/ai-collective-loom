@@ -1,3 +1,4 @@
+import {expandComposer} from '../helpers/composer-controls.js';
 import {readFile} from 'node:fs/promises';
 import {fileTest as test,expect} from '../helpers/browser-fixtures.js';
 import {setup,journal,api} from '../helpers/change-browser.js';
@@ -8,7 +9,7 @@ test('file-only package publishes nested paths, downloads passive exact bytes an
   await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
   await page.getByLabel('Title',{exact:true}).fill('Exact package');
   const bytes=Buffer.from('<script>fetch("https://invalid.test")</script>\nOriginal bytes');
-  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'chapter.html',mimeType:'text/html',buffer:bytes});
+  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'chapter.html',mimeType:'text/html',buffer:bytes});
   await page.getByLabel('Relative path',{exact:true}).fill('chapters/café #?%.html');
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
   await expect(page.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();
@@ -44,7 +45,7 @@ test('file-only package publishes nested paths, downloads passive exact bytes an
   await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
   await page.getByRole('button',{name:'Write another',exact:true}).click();
   await page.getByLabel('Title',{exact:true}).fill('Quota draft');await page.getByLabel('Text',{exact:true}).fill('Preserved authored text');
-  const small=Buffer.from('12345');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'quota.txt',mimeType:'text/plain',buffer:small});
+  const small=Buffer.from('12345');await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'quota.txt',mimeType:'text/plain',buffer:small});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
   await page.getByRole('button',{name:'Upload and prepare quota.txt',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('exceeds the current file-size policy');
@@ -53,7 +54,7 @@ test('file-only package publishes nested paths, downloads passive exact bytes an
   expect((await journal(page,'file.upload',rejected.key)).body).toEqual(rejected.body);
   await page.getByRole('button',{name:'Remove rejected upload',exact:true}).click();
   await updatePolicy({max_file_bytes:10});
-  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
+  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
   let discarded!:(status:number)=>void;const admissionDiscarded=new Promise<number>(resolve=>{discarded=resolve;});
   await page.route('**/api/v1/file-uploads',async route=>{const response=await route.fetch();await route.abort('failed');discarded(response.status());},{times:1});
@@ -64,7 +65,7 @@ test('file-only package publishes nested paths, downloads passive exact bytes an
   await updatePolicy({max_file_bytes:1,participant_reserved_bytes:1,community_reserved_bytes:1});await page.reload();
   expect((await journal(page,'file.upload',savedUpload.key)).body).toEqual(savedUpload.body);
   await page.getByRole('button',{name:'Inspect my file limits',exact:true}).click();await expect(page.getByText(/Over the byte allowance/)).toBeVisible();
-  await page.getByLabel('Reselect original admitted.txt',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
+  await expandComposer(page,'attachments');await page.getByLabel('Reselect original admitted.txt',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
   await page.getByRole('button',{name:'Upload and prepare admitted.txt',exact:true}).click();await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
   expect((await journal(page,'artifact.create')).body.content.text).toBe('Preserved authored text');
   await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
@@ -81,7 +82,7 @@ test('file edits reject stale tabs and source withdrawal preserves exact upload 
   const unaffected=await journal(page,'artifact.create');
   const base=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Concurrent files',content:{format:'loom-markdown-v1',text:'Base',mentions:[]}});
   await page.goto(server.origin+`/loom/resource/${base.resource_id}?edit=1`);
-  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
+  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
   await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
   await expect(page.getByLabel('File path 1')).toHaveValue('original.txt');
@@ -96,7 +97,7 @@ test('file edits reject stale tabs and source withdrawal preserves exact upload 
   expect((await journal(page,'revision.publish',originalKey)).body.file_set.files[0].path).toBe('first-tab.txt');
   const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+base.resource_id)).body;
   expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version})).status).toBe(200);
-  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'blocked.txt',mimeType:'text/plain',buffer:Buffer.from('blocked')});
+  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'blocked.txt',mimeType:'text/plain',buffer:Buffer.from('blocked')});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
   await page.getByRole('button',{name:'Upload and prepare blocked.txt',exact:true}).click();
   await expect(page.getByLabel('File path 1')).toHaveCount(0);
@@ -111,7 +112,7 @@ test('reload requires exact reselection, uncertain publication recovers, and sta
   const reserved:string[]=[];
   for(let i=0;i<4;i++)reserved.push((await api(page,'/api/v1/file-uploads',{idempotency_key:randomUUID(),target:{kind:'artifact',resource_id:base.resource_id},path:'pending-'+i,size:0,sha256:'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',media_type:'text/plain'})).upload_id);
   await page.goto(server.origin+`/loom/resource/${base.resource_id}?edit=1`);
-  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
+  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
   await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
   await expect(page.getByRole('button',{name:'Remove rejected upload',exact:true})).toBeVisible();
@@ -120,15 +121,15 @@ test('reload requires exact reselection, uncertain publication recovers, and sta
   await expect.poll(async()=>await journal(page,'file.upload')).toBeUndefined();
   await server.observer.query("UPDATE loom.file_uploads SET prepared_expires_at=clock_timestamp()-interval '1 second' WHERE id=ANY($1::uuid[])",[reserved]);
   expect(await api(page,'/api/v1/file-uploads/cleanup',{})).toEqual({removed:4,quarantined:0});
-  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
+  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
   await expect.poll(async()=>(await journal(page,'file.upload'))?.key).not.toBe(refused.key);
   await expect.poll(async()=>!!(await journal(page,'file.upload'))).toBe(true);await page.reload();
   await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('Reselect the original file');
-  await page.getByLabel('Reselect original original.txt').setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('changed!')});
+  await expandComposer(page,'attachments');await page.getByLabel('Reselect original original.txt').setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('changed!')});
   await expect(page.getByRole('alert')).toContainText('Reselected bytes differ');
-  await page.getByLabel('Reselect original original.txt').setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
+  await expandComposer(page,'attachments');await page.getByLabel('Reselect original original.txt').setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
   await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
   await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
   await page.getByLabel('Text',{exact:true}).fill('Attempted text');
@@ -158,14 +159,14 @@ test('browser opening and reply attachments download exact bytes and another par
   const f=await setup(page,context,server);
   await page.goto(server.origin+`/loom/area/${f.area}?compose=discussions`);
   await page.getByLabel('Title',{exact:true}).fill('Browser attachments');await page.getByLabel('Text',{exact:true}).fill('Opening with a lightweight file');
-  const bytes=Buffer.from('Opening exact bytes');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'opening.txt',mimeType:'text/plain',buffer:bytes});
+  const bytes=Buffer.from('Opening exact bytes');await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'opening.txt',mimeType:'text/plain',buffer:bytes});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare opening.txt',exact:true}).click();
   await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
   const opening=(await journal(page,'discussion.create')).result,view=await api(page,'/api/v1/resources/'+opening.resource_id);
   await page.goto(server.origin+'/loom/discussion/'+view.discussion_id);
   const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download opening.txt',exact:true}).click();expect(await readFile((await (await download).path())!)).toEqual(bytes);
   await page.getByRole('button',{name:'Reply',exact:true}).click();await page.getByLabel('Your reply',{exact:true}).fill('Attached reply');
-  await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'reply.txt',mimeType:'text/plain',buffer:Buffer.from('Reply bytes')});
+  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'reply.txt',mimeType:'text/plain',buffer:Buffer.from('Reply bytes')});
   await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare reply.txt',exact:true}).click();
   await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Post reply',exact:true}).click();await expect(page.getByText('Your reply was posted.',{exact:true})).toBeVisible();
   const reply=(await journal(page,'reply.create')).result;expect((await api(page,'/api/v1/resources/'+reply.resource_id)).parent_id).toBe(opening.resource_id);
@@ -251,7 +252,7 @@ test('closure refuses prepared discussion files without withdrawing history; exp
  const discussion=(await api(page,'/api/v1/resources/'+opened.resource_id)).discussion_id;
  async function close(closed:boolean){const current=(await f.admin.call('/api/v1/organization/resources/'+discussion)).body;expect((await f.admin.call('/api/v1/organization/changes',{idempotency_key:randomUUID(),kind:closed?'discussion.close':'discussion.open',resource_id:discussion,expected_version:current.version,expected_hierarchy_version:current.hierarchy_version})).status).toBe(200);}
  await page.goto(server.origin+'/loom/resource/'+opened.resource_id+'?edit=1');await page.getByLabel('Text',{exact:true}).fill('Prepared text with exact attachment');
- const bytes=Buffer.from('Exact prepared bytes');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'prepared.txt',mimeType:'text/plain',buffer:bytes});await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare prepared.txt',exact:true}).click();await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
+ const bytes=Buffer.from('Exact prepared bytes');await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'prepared.txt',mimeType:'text/plain',buffer:bytes});await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare prepared.txt',exact:true}).click();await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
  const before=await journal(page,'revision.publish');await close(true);await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'closed to publication'})).toBeVisible();
  await expect(page.getByText('Readable original opening',{exact:true})).toBeVisible();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Prepared text with exact attachment');expect((await journal(page,'revision.publish')).body).toEqual(before.body);
  await page.reload();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Prepared text with exact attachment');expect((await journal(page,'revision.publish')).body).toEqual(before.body);await close(false);
@@ -270,7 +271,7 @@ test('exact file references select a bounded revision, persist main and note int
   await page.setViewportSize({width:390,height:844});
   await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
   await page.getByLabel('Title',{exact:true}).fill('Citing exact evidence');await page.getByLabel('Text',{exact:true}).fill('Main file evidence');
-  await page.getByRole('button',{name:'Add reference',exact:true}).focus();await page.keyboard.press('Enter');
+  await expandComposer(page,'advanced');await page.getByRole('button',{name:'Add reference',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(page.getByLabel('Target ID or Loom link')).toBeFocused();
   await page.getByLabel('Target ID or Loom link').fill(`/loom/resource/${promoted.resource_id}/${promoted.revision_id}`);
   await page.getByLabel('Citation scope').selectOption('revision');await page.getByRole('button',{name:'Check target',exact:true}).click();

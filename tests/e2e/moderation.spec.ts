@@ -41,6 +41,7 @@ test('displayed source suppression, independent restoration, keyboard cancellati
   const d=await setup(page,context,server);
   await page.goto(server.origin+'/loom/discussion/'+d.discussion);
   await expect(page.getByText('Comment to withhold',{exact:true})).toBeVisible();
+  await page.locator('[data-resource-id="'+d.comment.resource_id+'"] > .post-footer > .message-details > summary').click();
   await page.getByRole('link',{name:'Suppress comment',exact:true}).first().click();
   const button=row(page,d.comment.resource_id).getByRole('button',{name:'Suppress comment',exact:true});
   await button.focus();await page.keyboard.press('Enter');await expect(page.getByRole('dialog')).toContainText('Replies remain independently eligible');

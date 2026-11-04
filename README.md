@@ -27,6 +27,16 @@ when the current revision is unavailable. Private Saved items use owner-scoped,
 versioned Save/Unsave with exact-revision
 references and lost-response recovery. Known first-attempt quota rejections can be
 dismissed individually without losing publication drafts. See the [Saved items decision](docs/adr/013-private-saved-items.md).
+Discussion and reply composers focus their first field when explicitly opened;
+**Close composer** keeps the saved draft. Attachments and reference/change details
+use expandable controls. Messages keep Reply and Save visible, with reading status
+and maintenance tools behind disclosures. Mention selection respects the cursor,
+uses a separate prose paragraph when Markdown would prevent notification, and
+names the selected participant in Preview. Deleting a mention marker from an
+editable draft removes its declaration; dispatched requests retain their exact bytes.
+Reply links name an already loaded parent and open its discussion context. **Check
+replies** loads a branch on demand; hiding it keeps nested drafts. Reply counts
+describe the loaded direct-reply page, with explicit continuation and refresh controls.
 Production identity, capacity and retention policies still require review. Use synthetic
 content in disposable previews; retained trials follow the local-pilot limits below.
 **Administration** has dedicated Overview, Community, Participants, Limits, Search

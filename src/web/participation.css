@@ -526,6 +526,22 @@
   color: var(--muted);
   margin: 0 0 12px;
 }
+.loom-app .comment .parent-context {
+  margin-left: 39px;
+}
+.loom-app .reply-page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 12px 0 4px;
+}
+.loom-app .reply-page-summary {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
 .loom-app .focus-banner {
   display: flex;
   justify-content: space-between;
@@ -554,9 +570,80 @@
 .loom-app .composer {
   padding: 22px;
   margin: 22px 0;
+  scroll-margin-top: 80px;
 }
 .loom-app .composer h2 {
   font-size: 17px;
+}
+.loom-app .composer input:not([type='checkbox']),
+.loom-app .composer textarea,
+.loom-app .composer select {
+  border-color: #7c8e82;
+}
+.loom-app .composer-options {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.loom-app .composer-options > summary {
+  margin-bottom: 8px;
+  min-height: 32px;
+}
+.loom-app .composer-actions,
+.loom-app .discussion-actions,
+.loom-app .summary-invitation {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.loom-app .composer-actions {
+  margin-top: 16px;
+}
+.loom-app .discussion-heading {
+  margin-bottom: 16px;
+}
+.loom-app .discussion-actions .follow-control {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+}
+.loom-app .discussion-actions details > summary,
+.loom-app .post-footer details > summary,
+.loom-app .reading-details > summary {
+  margin-bottom: 0;
+  min-height: 30px;
+}
+.loom-app .discussion-details,
+.loom-app .message-details {
+  min-width: 0;
+}
+.loom-app .discussion-details[open],
+.loom-app .message-details[open] {
+  flex-basis: 100%;
+}
+.loom-app .discussion-details-content,
+.loom-app .message-details-content {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-top: 8px;
+  background: white;
+}
+.loom-app .message-details-content > a {
+  display: inline-block;
+  margin: 8px 16px 0 0;
+}
+.loom-app .summary-invitation {
+  font-size: 12px;
+  margin: 0 0 20px;
+}
+.loom-app .reading-details {
+  margin-top: 8px;
+}
+.loom-app .reading-details[open] {
+  margin-bottom: 12px;
 }
 .loom-app label {
   display: block;

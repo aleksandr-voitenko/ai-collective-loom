@@ -1,6 +1,6 @@
 import { AddPrivateNote } from './PrivateNotes.js';
 import { FileBrowser } from './Files.js';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { useLocation, Link } from 'react-router';
 import {
   type ResourceView,
@@ -19,7 +19,7 @@ import { AuthorizationBoundary, useAuthorization } from './AuthorizationBoundary
 import { ReadingSelection, ReadingText } from './Reading.js';
 import { SuppressLink } from './Moderation.js';
 import { SummarySection } from './Summaries.js';
-import { Avatar, Collection, ErrorText } from './participation-ui.js';
+import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { EditingIntent } from './EditingIntent.js';
 
@@ -68,23 +68,35 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
             <span>›</span>
             <Link to={'/loom/area/' + data.area.id}>{data.area.title}</Link>
           </div>
-          <div className="header-line">
+          <div className="discussion-heading">
             <h1>{data.opening.title}</h1>
-            <AddPrivateNote target={{ kind: 'discussion', resource_id: id }} />
-            <SuppressLink context={context} id={id} kind="discussion" />
-            <SaveControl
-              context={context}
-              target={{ kind: 'discussion', resource_id: id }}
-              label="discussion"
-            />
-            <FollowControl
-              key={'discussion:' + id}
-              context={context}
-              target={{ kind: 'discussion', resource_id: id }}
-            />
-            <Link className="button" to={'/loom/resource/' + data.opening.resource_id}>
-              History & details
-            </Link>
+            <div className="discussion-actions">
+              <SaveControl
+                context={context}
+                target={{ kind: 'discussion', resource_id: id }}
+                label="discussion"
+              />
+              <FollowControl
+                key={'discussion:' + id}
+                context={context}
+                target={{ kind: 'discussion', resource_id: id }}
+              />
+              <details className="discussion-details">
+                <summary>Discussion details</summary>
+                <div className="discussion-details-content">
+                  <AddPrivateNote target={{ kind: 'discussion', resource_id: id }} />
+                  <Link className="button" to={'/loom/resource/' + data.opening.resource_id}>
+                    History & details
+                  </Link>
+                  <ReferenceViews key={id} target={{ kind: 'discussion', resource_id: id }} />
+                  <ReadingSelection />
+                  {context.self.role === 'administrator' && (
+                    <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
+                  )}
+                  <SuppressLink context={context} id={id} kind="discussion" />
+                </div>
+              </details>
+            </div>
           </div>
           {!data.publication_open && (
             <p className="notice" role="status">
@@ -100,7 +112,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               <Link to={'/loom/area/' + data.opening.affected_area_id}>this topic</Link>.
             </p>
           )}
-          <ReferenceViews key={id} target={{ kind: 'discussion', resource_id: id }} />
           <SummarySection key={summaryReload} discussion={id} />
           {new URLSearchParams(location.search).get('summary') === 'create' && (
             <Composer
@@ -111,9 +122,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               heading="Create discussion summary"
               onCommitted={() => setSummaryReload((n) => n + 1)}
             />
-          )}
-          {context.self.role === 'administrator' && (
-            <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
           )}
         </>
       ) : (
@@ -126,7 +134,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
       )}
       <div className="reading-grid">
         <div>
-          <ReadingSelection />
           {focus ? (
             <FocusedBranch id={focus} discussionId={id} context={context} />
           ) : (
@@ -146,6 +153,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               <Children
                 key={opening.current! + reload}
                 id={opening.current!}
+                parent={data?.opening}
                 discussionId={id}
                 context={context}
                 depth={0}
@@ -211,7 +219,14 @@ function FocusedBranch({
         </h2>
         <span>Oldest first</span>
       </div>
-      <Children key={id + reload} id={id} discussionId={discussionId} context={context} depth={0} />
+      <Children
+        key={id + reload}
+        id={id}
+        parent={'state' in data ? undefined : data}
+        discussionId={discussionId}
+        context={context}
+        depth={0}
+      />
     </>
   );
 }
@@ -249,6 +264,7 @@ type ContributionProps = {
   id: string;
   context: Context;
   opening?: boolean;
+  parent?: ResourceView | undefined;
   onPosted?: () => void;
 };
 
@@ -273,6 +289,7 @@ function ContributionBody({
   data,
   context,
   opening = false,
+  parent,
   onPosted,
 }: ContributionProps & { data: ContributionContextView }) {
   const [reply, setReply] = useState(() =>
@@ -280,6 +297,8 @@ function ContributionBody({
       .all()
       .some((record) => record.slot === 'reply:' + id && record.state !== 'committed'),
   );
+  const replyButton = useRef<HTMLButtonElement>(null);
+  const [focusComposer, setFocusComposer] = useState(false);
   if ('state' in data)
     return (
       <div className="comment notice" data-resource-id={id}>
@@ -303,7 +322,12 @@ function ContributionBody({
       </div>
       {data.parent_id && (
         <p className="parent-context">
-          Replying to <Link to={'/loom/resource/' + data.parent_id}>the parent contribution</Link>
+          Replying to{' '}
+          <Link to={`/loom/discussion/${data.discussion_id}?focus=${data.parent_id}`}>
+            {parent?.resource_id === data.parent_id
+              ? '@' + parent.author.nickname
+              : 'parent message'}
+          </Link>
         </p>
       )}
       {/* Both siblings reset for a new revision, but their keys must remain distinct. */}
@@ -314,8 +338,9 @@ function ContributionBody({
         selectable
         content={data.content}
         participants={data.mentioned_participants}
+        compact
       />
-      {data.attachment_set && (
+      {!!data.attachment_set?.files.length && (
         <FileBrowser
           participant={context.self.participant_id}
           key={'attachments:' + data.revision_id}
@@ -324,34 +349,47 @@ function ContributionBody({
         />
       )}
       <ChangeDetails revision={data} />
-      <EditingIntent
-        context={context}
-        resource={id}
-        base={data.revision_id}
-        canEdit={data.can_edit}
-      />
-      <ReferenceViews
-        key={'references:' + data.revision_id}
-        sourceId={id}
-        sourceRevision={data.revision_id}
-        target={{ kind: 'contribution', resource_id: id }}
-      />
       <div className="post-footer">
-        {!opening && data.parent_id && <SuppressLink context={context} id={id} kind="comment" />}
+        <button
+          ref={replyButton}
+          className="text-button"
+          onClick={() => {
+            setFocusComposer(true);
+            setReply((value) => !value);
+          }}
+          disabled={!data.publication_open}
+        >
+          <Icon name="reply" /> Reply
+        </button>
         <SaveControl
           context={context}
           target={{ kind: 'contribution', resource_id: id }}
           label="contribution"
         />
-        <button
-          className="text-button"
-          onClick={() => setReply((value) => !value)}
-          disabled={!data.publication_open}
-        >
-          <span aria-hidden="true">↩</span> Reply
-        </button>
-        <Link to={`/loom/resource/${id}/${data.revision_id}`}>Revision {data.revision_number}</Link>
-        {data.can_edit && <Link to={'/loom/resource/' + id + '?edit=1'}>Edit</Link>}
+        <details className="message-details">
+          <summary>More</summary>
+          <div className="message-details-content">
+            <EditingIntent
+              context={context}
+              resource={id}
+              base={data.revision_id}
+              canEdit={data.can_edit}
+            />
+            <ReferenceViews
+              key={'references:' + data.revision_id}
+              sourceId={id}
+              sourceRevision={data.revision_id}
+              target={{ kind: 'contribution', resource_id: id }}
+            />
+            <Link to={`/loom/resource/${id}/${data.revision_id}`}>
+              Revision {data.revision_number}
+            </Link>
+            {data.can_edit && <Link to={'/loom/resource/' + id + '?edit=1'}>Edit</Link>}
+            {!opening && data.parent_id && (
+              <SuppressLink context={context} id={id} kind="comment" />
+            )}
+          </div>
+        </details>
       </div>
       {reply && (
         <Composer
@@ -359,6 +397,11 @@ function ContributionBody({
           operation={{ kind: 'reply.create', discussionId: data.discussion_id!, parentId: id }}
           slot={'reply:' + id}
           heading={'Reply to ' + data.author.nickname}
+          focusOnOpen={focusComposer}
+          onClose={() => {
+            setReply(false);
+            replyButton.current?.focus();
+          }}
           onCommitted={() => onPosted?.()}
         />
       )}
@@ -368,23 +411,27 @@ function ContributionBody({
 
 function Children({
   id,
+  parent,
   discussionId,
   context,
   depth,
   refreshVersion = 0,
 }: {
   id: string;
+  parent?: ResourceView | undefined;
   discussionId: string;
   context: Context;
   depth: number;
   refreshVersion?: number;
 }) {
   const authority = useAuthorization();
+  const treeId = useId();
   const [projection, setPage] = useState<{ value: PageView; generation?: number | undefined }>(),
     [cursor, setCursor] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [expanded, setExpanded] = useState<string[]>([]),
+    [opened, setOpened] = useState<string[]>([]),
     [branchVersions, setBranchVersions] = useState<Record<string, number>>({}),
     [reload, setReload] = useState(0);
   const page =
@@ -406,7 +453,12 @@ function Children({
         (value) => {
           if (active) {
             setPage(value);
-            setExpanded([]);
+            const retained = (ids: string[]) =>
+              ids.filter((id) =>
+                value.value.items.some((item) => 'resource_id' in item && item.resource_id === id),
+              );
+            setExpanded(retained);
+            setOpened(retained);
           }
         },
         (failure) => {
@@ -421,8 +473,24 @@ function Children({
       controller.abort();
     };
   }, [id, cursor, reload, refreshVersion]);
+  const refreshControl = page && !error && (
+    <button className="text-button" disabled={busy} onClick={() => setReload((n) => n + 1)}>
+      {busy ? 'Checking replies…' : 'Refresh replies'}
+    </button>
+  );
   return (
     <div className="comment-tree" aria-busy={busy}>
+      {page && page.items.length > 0 && (
+        <div className="reply-page-toolbar">
+          <p className="reply-page-summary" role="status">
+            {error ? 'Earlier page: ' : ''}
+            {page.items.length} direct {page.items.length === 1 ? 'reply' : 'replies'}
+            {cursor || !page.complete ? ' on this page' : ''}
+            {page.next_cursor ? ' · More replies available' : ''}
+          </p>
+          {refreshControl}
+        </div>
+      )}
       {page?.items.map((item) => {
         const resource = item as ResourceView;
         return (
@@ -434,6 +502,7 @@ function Children({
             ) : (
               <Contribution
                 id={resource.resource_id}
+                parent={parent}
                 context={context}
                 onPosted={() => {
                   setExpanded((value) => [...new Set([...value, resource.resource_id])]);
@@ -449,35 +518,47 @@ function Children({
                 className="branch-link"
                 to={`/loom/discussion/${discussionId}?focus=${resource.resource_id}`}
               >
-                Focus this branch →
+                Open reply thread →
               </Link>
             ) : (
               <>
                 <button
                   className="text-button branch-link"
-                  onClick={() =>
+                  aria-expanded={expanded.includes(resource.resource_id)}
+                  aria-controls={`${treeId}-${resource.resource_id}`}
+                  onClick={() => {
+                    setOpened((value) => [...new Set([...value, resource.resource_id])]);
                     setExpanded((value) =>
                       value.includes(resource.resource_id)
                         ? value.filter((key) => key !== resource.resource_id)
                         : [...value, resource.resource_id],
-                    )
-                  }
+                    );
+                  }}
                 >
                   {expanded.includes(resource.resource_id)
-                    ? 'Hide nested replies'
-                    : 'Show nested replies'}
+                    ? 'Hide replies'
+                    : opened.includes(resource.resource_id)
+                      ? 'Show loaded replies'
+                      : 'Check replies'}
                 </button>
-                {expanded.includes(resource.resource_id) && (
-                  <div className="comment-children">
+                {/* Hiding retains mounted drafts/cursors; reads still use the current lease. */}
+                <div
+                  className="comment-children"
+                  id={`${treeId}-${resource.resource_id}`}
+                  hidden={!expanded.includes(resource.resource_id)}
+                >
+                  {(opened.includes(resource.resource_id) ||
+                    expanded.includes(resource.resource_id)) && (
                     <Children
                       id={resource.resource_id}
+                      parent={'state' in item ? undefined : resource}
                       discussionId={discussionId}
                       context={context}
                       depth={depth + 1}
                       refreshVersion={branchVersions[resource.resource_id] ?? 0}
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -490,9 +571,16 @@ function Children({
         </div>
       )}
       {!page && !error && <p role="status">Loading replies…</p>}
-      {page && !page.items.length && page.complete && (
-        <p className="empty-replies">No replies yet.</p>
+      {page && !page.items.length && (
+        <p className="empty-replies">
+          {error
+            ? 'Earlier check: no replies on this page.'
+            : !cursor && page.complete
+              ? 'No replies yet.'
+              : 'No replies on this page.'}
+        </p>
       )}
+      {page && !page.items.length && refreshControl}
       {page?.next_cursor && (
         <button disabled={busy} onClick={() => setCursor(page.next_cursor!)}>
           Next replies →
