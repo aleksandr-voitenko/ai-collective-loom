@@ -63,6 +63,16 @@ private bounded credential-file admission, exclusive0600 output and one page per
 invocation. Canonical UUID scope/owner checks bind --after-page to the prior output; current server
 authority remains decisive. It sends no mutations and imports no server internals.
 
+The notifications, shared-changes and Updates readers share
+`lib/client-journal-lock.mjs`, extracted from Updates' ADR-025 locking protocol
+(LC-20261017-FUWG). Built-in Node24 SQLite BEGIN EXCLUSIVE with zero wait owns a
+private0600 `.lock.sqlite` sidecar through the whole request/save operation.
+Close releases ownership on success/error; OS locks release even after SIGKILL.
+Never unlink the sidecar: contenders must lock the same inode. Legacy `.lock`
+files have unverifiable ownership and are refused without mutation. Upgrade all
+clients sharing a journal; the JSON recovery formats and atomic/fsynced saves
+remain owned by their individual clients.
+
 `file-artifacts-client.mjs` guide21 adds list-files/reference-target/referenced-by
 using existing contextual IDs/path and bounded cursor outputs. It remains an independent
 HTTPS client; no server imports, automatic format upgrades, credentials in journals or

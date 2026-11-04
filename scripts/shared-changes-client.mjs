@@ -6,6 +6,7 @@ import { request } from 'node:https';
 import { readFile, open, rename, unlink, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { lockJournal } from './lib/client-journal-lock.mjs';
 const args=new Map();for(let i=2;i<process.argv.length;i+=2)args.set(process.argv[i],process.argv[i+1]);
 if([...args.keys()].some(k=>!['--origin','--credential-file','--ca','--journal','--action','--scope-file','--limit','--max-response-bytes'].includes(k)))throw new Error('Unsupported option');
 const origin=new URL(args.get('--origin'));
@@ -56,6 +57,6 @@ async function main(){
   console.log(JSON.stringify(page));
 }
 let lock;
-try{lock=await open(journalPath+'.lock','wx',0o600);await main();}
-catch(error){console.error(error.code==='EEXIST'?'Another reader holds this journal. Use a separate journal for an independent client.':error.message);process.exitCode=1;}
-finally{if(lock){await lock.close();await unlink(journalPath+'.lock');}}
+try{lock=await lockJournal(journalPath);await main();}
+catch(error){console.error(error.message);process.exitCode=1;}
+finally{lock?.close();}
