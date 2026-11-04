@@ -1,349 +1,1134 @@
-import {expandComposer} from '../helpers/composer-controls.js';
-import {readFile} from 'node:fs/promises';
-import {fileTest as test,expect} from '../helpers/browser-fixtures.js';
-import {setup,journal,api} from '../helpers/change-browser.js';
-import {randomUUID} from 'node:crypto';
+import { expandComposer } from '../helpers/composer-controls.js';
+import { readFile } from 'node:fs/promises';
+import { fileTest as test, expect } from '../helpers/browser-fixtures.js';
+import { setup, journal, api } from '../helpers/change-browser.js';
+import { randomUUID } from 'node:crypto';
 
-test('file-only package publishes nested paths, downloads passive exact bytes and reuses files in a later revision',async({page,context,server})=>{
-  const f=await setup(page,context,server);
-  await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
-  await page.getByLabel('Title',{exact:true}).fill('Exact package');
-  const bytes=Buffer.from('<script>fetch("https://invalid.test")</script>\nOriginal bytes');
-  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'chapter.html',mimeType:'text/html',buffer:bytes});
-  await page.getByLabel('Relative path',{exact:true}).fill('chapters/café #?%.html');
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();
-  await page.getByRole('button',{name:'Upload and prepare chapters/café #?%.html',exact:true}).click();
-  await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
-  const draft=await journal(page,'artifact.create');expect(draft.body.content.text).toBe('');expect(draft.body.file_set.files).toHaveLength(1);
+test('file-only package publishes nested paths, downloads passive exact bytes and reuses files in a later revision', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server);
+  await page.goto(server.origin + `/loom/area/${f.area}?compose=artifacts`);
+  await page.getByLabel('Title', { exact: true }).fill('Exact package');
+  const bytes = Buffer.from('<script>fetch("https://invalid.test")</script>\nOriginal bytes');
+  await expandComposer(page, 'attachments');
+  await page
+    .getByLabel('Select file', { exact: true })
+    .setInputFiles({ name: 'chapter.html', mimeType: 'text/html', buffer: bytes });
+  await page.getByLabel('Relative path', { exact: true }).fill('chapters/café #?%.html');
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
+  await page
+    .getByRole('button', { name: 'Upload and prepare chapters/café #?%.html', exact: true })
+    .click();
+  await expect(page.getByText('File set ready for publication.', { exact: true })).toBeVisible();
+  const draft = await journal(page, 'artifact.create');
+  expect(draft.body.content.text).toBe('');
+  expect(draft.body.file_set.files).toHaveLength(1);
   await page.getByLabel('File path 1').fill('');
-  await expect.poll(async()=>(await journal(page,'artifact.create',draft.key))?.body.file_set.files[0].path).toBe('');
-  await page.reload();await expect(page.getByLabel('File path 1')).toHaveValue('');
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Invalid relative file path');
-  expect((await journal(page,'artifact.create')).state).toBe('draft');
+  await expect
+    .poll(
+      async () => (await journal(page, 'artifact.create', draft.key))?.body.file_set.files[0].path,
+    )
+    .toBe('');
+  await page.reload();
+  await expect(page.getByLabel('File path 1')).toHaveValue('');
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Invalid relative file path');
+  expect((await journal(page, 'artifact.create')).state).toBe('draft');
   await page.getByLabel('File path 1').fill('chapters/café #?%.html');
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
-  const first=(await journal(page,'artifact.create')).result;
-  await page.goto(server.origin+`/loom/resource/${first.resource_id}/${first.revision_id}`);
-  await expect(page.getByRole('button',{name:/Mark read/})).toHaveCount(0);
-  await page.getByRole('button',{name:'Open folder chapters',exact:true}).focus();await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading',{name:'Revision files',exact:true})).toBeFocused();
-  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download chapters/café #?%.html',exact:true}).click();
-  const saved=await download;expect(await readFile((await saved.path())!)).toEqual(bytes);
-  await page.goto(server.origin+`/loom/resource/${first.resource_id}?edit=1`);
-  await page.getByLabel('File path 1').fill('renamed.html');await page.getByLabel('Text',{exact:true}).fill('A new description');
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
-  const second=(await journal(page,'revision.publish')).result;
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  const first = (await journal(page, 'artifact.create')).result;
+  await page.goto(server.origin + `/loom/resource/${first.resource_id}/${first.revision_id}`);
+  await expect(page.getByRole('button', { name: /Mark read/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open folder chapters', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Revision files', exact: true })).toBeFocused();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download chapters/café #?%.html', exact: true }).click();
+  const saved = await download;
+  expect(await readFile((await saved.path())!)).toEqual(bytes);
+  await page.goto(server.origin + `/loom/resource/${first.resource_id}?edit=1`);
+  await page.getByLabel('File path 1').fill('renamed.html');
+  await page.getByLabel('Text', { exact: true }).fill('A new description');
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  const second = (await journal(page, 'revision.publish')).result;
   expect(second.revision_id).not.toBe(first.revision_id);
-  await page.goto(server.origin+`/loom/resource/${first.resource_id}/${first.revision_id}`);
-  await expect(page.getByRole('button',{name:'Open folder chapters',exact:true})).toBeVisible();
-  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.goto(server.origin + `/loom/resource/${first.resource_id}/${first.revision_id}`);
+  await expect(
+    page.getByRole('button', { name: 'Open folder chapters', exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // Prospective limits preserve a new draft on refusal and an admitted upload on recovery.
-  const fileJournal=(path:string)=>page.evaluate(path=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.intent.v1:')).map(([,value])=>JSON.parse(value)).find(record=>record.kind==='file.upload'&&record.body.path===path),path);
-  const updatePolicy=async(patch:Record<string,number>)=>{const {version,...limits}=(await f.admin.call('/api/v1/admin/file-limits')).body.policy;expect((await f.admin.call('/api/v1/admin/file-limits/state',{...limits,...patch,expected_version:version,idempotency_key:randomUUID()})).status).toBe(200);};
-  await updatePolicy({max_file_bytes:1});
-  await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
-  await page.getByRole('button',{name:'Write another',exact:true}).click();
-  await page.getByLabel('Title',{exact:true}).fill('Quota draft');await page.getByLabel('Text',{exact:true}).fill('Preserved authored text');
-  const small=Buffer.from('12345');await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'quota.txt',mimeType:'text/plain',buffer:small});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
-  await page.getByRole('button',{name:'Upload and prepare quota.txt',exact:true}).click();
+  const fileJournal = (path: string) =>
+    page.evaluate(
+      (path) =>
+        Object.entries(localStorage)
+          .filter(([key]) => key.startsWith('loom.intent.v1:'))
+          .map(([, value]) => JSON.parse(value))
+          .find((record) => record.kind === 'file.upload' && record.body.path === path),
+      path,
+    );
+  const updatePolicy = async (patch: Record<string, number>) => {
+    const { version, ...limits } = (await f.admin.call('/api/v1/admin/file-limits')).body.policy;
+    expect(
+      (
+        await f.admin.call('/api/v1/admin/file-limits/state', {
+          ...limits,
+          ...patch,
+          expected_version: version,
+          idempotency_key: randomUUID(),
+        })
+      ).status,
+    ).toBe(200);
+  };
+  await updatePolicy({ max_file_bytes: 1 });
+  await page.goto(server.origin + `/loom/area/${f.area}?compose=artifacts`);
+  await page.getByRole('button', { name: 'Write another', exact: true }).click();
+  await page.getByLabel('Title', { exact: true }).fill('Quota draft');
+  await page.getByLabel('Text', { exact: true }).fill('Preserved authored text');
+  const small = Buffer.from('12345');
+  await expandComposer(page, 'attachments');
+  await page
+    .getByLabel('Select file', { exact: true })
+    .setInputFiles({ name: 'quota.txt', mimeType: 'text/plain', buffer: small });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload and prepare quota.txt', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('exceeds the current file-size policy');
-  const rejected=await fileJournal('quota.txt');expect(rejected.state).toBe('rejected');
-  await page.reload();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Preserved authored text');
-  expect((await journal(page,'file.upload',rejected.key)).body).toEqual(rejected.body);
-  await page.getByRole('button',{name:'Remove rejected upload',exact:true}).click();
-  await updatePolicy({max_file_bytes:10});
-  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
-  let discarded!:(status:number)=>void;const admissionDiscarded=new Promise<number>(resolve=>{discarded=resolve;});
-  await page.route('**/api/v1/file-uploads',async route=>{const response=await route.fetch();await route.abort('failed');discarded(response.status());},{times:1});
-  await page.getByRole('button',{name:'Upload and prepare admitted.txt',exact:true}).click();
+  const rejected = await fileJournal('quota.txt');
+  expect(rejected.state).toBe('rejected');
+  await page.reload();
+  await expect(page.getByLabel('Text', { exact: true })).toHaveValue('Preserved authored text');
+  expect((await journal(page, 'file.upload', rejected.key)).body).toEqual(rejected.body);
+  await page.getByRole('button', { name: 'Remove rejected upload', exact: true }).click();
+  await updatePolicy({ max_file_bytes: 10 });
+  await expandComposer(page, 'attachments');
+  await page
+    .getByLabel('Select file', { exact: true })
+    .setInputFiles({ name: 'admitted.txt', mimeType: 'text/plain', buffer: small });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  let discarded!: (status: number) => void;
+  const admissionDiscarded = new Promise<number>((resolve) => {
+    discarded = resolve;
+  });
+  await page.route(
+    '**/api/v1/file-uploads',
+    async (route) => {
+      const response = await route.fetch();
+      await route.abort('failed');
+      discarded(response.status());
+    },
+    { times: 1 },
+  );
+  await page.getByRole('button', { name: 'Upload and prepare admitted.txt', exact: true }).click();
   expect(await admissionDiscarded).toBe(201);
-  await expect.poll(async()=>(await fileJournal('admitted.txt'))?.state).toBe('uncertain');
-  const savedUpload=await fileJournal('admitted.txt');
-  await updatePolicy({max_file_bytes:1,participant_reserved_bytes:1,community_reserved_bytes:1});await page.reload();
-  expect((await journal(page,'file.upload',savedUpload.key)).body).toEqual(savedUpload.body);
-  await page.getByRole('button',{name:'Inspect my file limits',exact:true}).click();await expect(page.getByText(/Over the byte allowance/)).toBeVisible();
-  await expandComposer(page,'attachments');await page.getByLabel('Reselect original admitted.txt',{exact:true}).setInputFiles({name:'admitted.txt',mimeType:'text/plain',buffer:small});
-  await page.getByRole('button',{name:'Upload and prepare admitted.txt',exact:true}).click();await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
-  expect((await journal(page,'artifact.create')).body.content.text).toBe('Preserved authored text');
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
-  await page.goto(server.origin+`/loom/resource/${first.resource_id}/${first.revision_id}`);await page.getByRole('button',{name:'Open folder chapters',exact:true}).click();
-  const historical=page.waitForEvent('download');await page.getByRole('button',{name:'Download chapters/café #?%.html',exact:true}).click();expect(await readFile((await (await historical).path())!)).toEqual(bytes);
-
+  await expect.poll(async () => (await fileJournal('admitted.txt'))?.state).toBe('uncertain');
+  const savedUpload = await fileJournal('admitted.txt');
+  await updatePolicy({
+    max_file_bytes: 1,
+    participant_reserved_bytes: 1,
+    community_reserved_bytes: 1,
+  });
+  await page.reload();
+  expect((await journal(page, 'file.upload', savedUpload.key)).body).toEqual(savedUpload.body);
+  await page.getByRole('button', { name: 'Inspect my file limits', exact: true }).click();
+  await expect(page.getByText(/Over the byte allowance/)).toBeVisible();
+  await expandComposer(page, 'attachments');
+  await page
+    .getByLabel('Reselect original admitted.txt', { exact: true })
+    .setInputFiles({ name: 'admitted.txt', mimeType: 'text/plain', buffer: small });
+  await page.getByRole('button', { name: 'Upload and prepare admitted.txt', exact: true }).click();
+  await expect(page.getByText('File set ready for publication.', { exact: true })).toBeVisible();
+  expect((await journal(page, 'artifact.create')).body.content.text).toBe(
+    'Preserved authored text',
+  );
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  await page.goto(server.origin + `/loom/resource/${first.resource_id}/${first.revision_id}`);
+  await page.getByRole('button', { name: 'Open folder chapters', exact: true }).click();
+  const historical = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download chapters/café #?%.html', exact: true }).click();
+  expect(await readFile((await (await historical).path())!)).toEqual(bytes);
 });
 
-test('file edits reject stale tabs and source withdrawal preserves exact upload recovery and unrelated drafts',async({page,context,server})=>{
-  const f=await setup(page,context,server);
-  await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
-  await page.getByLabel('Title',{exact:true}).fill('Unrelated saved draft');
-  await page.getByLabel('Text',{exact:true}).fill('Keep this draft');
-  const unaffected=await journal(page,'artifact.create');
-  const base=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Concurrent files',content:{format:'loom-markdown-v1',text:'Base',mentions:[]}});
-  await page.goto(server.origin+`/loom/resource/${base.resource_id}?edit=1`);
-  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
-  await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
+test('file edits reject stale tabs and source withdrawal preserves exact upload recovery and unrelated drafts', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server);
+  await page.goto(server.origin + `/loom/area/${f.area}?compose=artifacts`);
+  await page.getByLabel('Title', { exact: true }).fill('Unrelated saved draft');
+  await page.getByLabel('Text', { exact: true }).fill('Keep this draft');
+  const unaffected = await journal(page, 'artifact.create');
+  const base = await api(page, '/api/v1/artifacts', {
+    idempotency_key: randomUUID(),
+    area_id: f.area,
+    title: 'Concurrent files',
+    content: { format: 'loom-markdown-v1', text: 'Base', mentions: [] },
+  });
+  await page.goto(server.origin + `/loom/resource/${base.resource_id}?edit=1`);
+  await expandComposer(page, 'attachments');
+  await page.getByLabel('Select file', { exact: true }).setInputFiles({
+    name: 'original.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('original'),
+  });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload and prepare original.txt', exact: true }).click();
   await expect(page.getByLabel('File path 1')).toHaveValue('original.txt');
-  const originalKey=(await journal(page,'revision.publish')).key;
-  const other=await context.newPage();await other.goto(server.origin+`/loom/resource/${base.resource_id}?edit=1`);await expect(other.getByLabel('File path 1')).toHaveValue('original.txt');
+  const originalKey = (await journal(page, 'revision.publish')).key;
+  const other = await context.newPage();
+  await other.goto(server.origin + `/loom/resource/${base.resource_id}?edit=1`);
+  await expect(other.getByLabel('File path 1')).toHaveValue('original.txt');
   await page.getByLabel('File path 1').fill('first-tab.txt');
-  await expect.poll(async()=>(await journal(page,'revision.publish')).body.file_set.files[0].path).toBe('first-tab.txt');
+  await expect
+    .poll(async () => (await journal(page, 'revision.publish')).body.file_set.files[0].path)
+    .toBe('first-tab.txt');
   await other.getByLabel('File path 1').fill('stale-tab.txt');
-  await expect(other.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();
-  const separated=await other.evaluate(()=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.intent.v1:')).map(([,value])=>JSON.parse(value)).find(value=>value.kind==='revision.publish'&&value.blocked_by));
+  await expect(other.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
+  const separated = await other.evaluate(() =>
+    Object.entries(localStorage)
+      .filter(([key]) => key.startsWith('loom.intent.v1:'))
+      .map(([, value]) => JSON.parse(value))
+      .find((value) => value.kind === 'revision.publish' && value.blocked_by),
+  );
   expect(separated.body.file_set.files[0].path).toBe('stale-tab.txt');
-  expect((await journal(page,'revision.publish',originalKey)).body.file_set.files[0].path).toBe('first-tab.txt');
-  const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+base.resource_id)).body;
-  expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version})).status).toBe(200);
-  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'blocked.txt',mimeType:'text/plain',buffer:Buffer.from('blocked')});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
-  await page.getByRole('button',{name:'Upload and prepare blocked.txt',exact:true}).click();
+  expect((await journal(page, 'revision.publish', originalKey)).body.file_set.files[0].path).toBe(
+    'first-tab.txt',
+  );
+  const state = (await f.admin.call('/api/v1/admin/moderation/resources/' + base.resource_id)).body;
+  expect(
+    (
+      await f.admin.call('/api/v1/admin/moderation/state', {
+        idempotency_key: randomUUID(),
+        target: state.target,
+        suppressed: true,
+        expected_version: state.version,
+      })
+    ).status,
+  ).toBe(200);
+  await expandComposer(page, 'attachments');
+  await page
+    .getByLabel('Select file', { exact: true })
+    .setInputFiles({ name: 'blocked.txt', mimeType: 'text/plain', buffer: Buffer.from('blocked') });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload and prepare blocked.txt', exact: true }).click();
   await expect(page.getByLabel('File path 1')).toHaveCount(0);
-  expect((await journal(page,'artifact.create')).body).toEqual(unaffected.body);
-  expect((await journal(page,'revision.publish',originalKey)).body.file_set.files[0].path).toBe('first-tab.txt');
+  expect((await journal(page, 'artifact.create')).body).toEqual(unaffected.body);
+  expect((await journal(page, 'revision.publish', originalKey)).body.file_set.files[0].path).toBe(
+    'first-tab.txt',
+  );
   await other.close();
 });
 
-test('reload requires exact reselection, uncertain publication recovers, and stale correction preserves the attempted manifest',async({page,context,server})=>{
-  const f=await setup(page,context,server);
-  const base=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'File recovery',content:{format:'loom-markdown-v1',text:'Base',mentions:[]}});
-  const reserved:string[]=[];
-  for(let i=0;i<4;i++)reserved.push((await api(page,'/api/v1/file-uploads',{idempotency_key:randomUUID(),target:{kind:'artifact',resource_id:base.resource_id},path:'pending-'+i,size:0,sha256:'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',media_type:'text/plain'})).upload_id);
-  await page.goto(server.origin+`/loom/resource/${base.resource_id}?edit=1`);
-  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
-  await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Remove rejected upload',exact:true})).toBeVisible();
-  const refused=await journal(page,'file.upload');expect(refused.state).toBe('rejected');
-  await page.reload();await page.getByRole('button',{name:'Remove rejected upload',exact:true}).click();
-  await expect.poll(async()=>await journal(page,'file.upload')).toBeUndefined();
-  await server.observer.query("UPDATE loom.file_uploads SET prepared_expires_at=clock_timestamp()-interval '1 second' WHERE id=ANY($1::uuid[])",[reserved]);
-  expect(await api(page,'/api/v1/file-uploads/cleanup',{})).toEqual({removed:4,quarantined:0});
-  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();
-  await expect.poll(async()=>(await journal(page,'file.upload'))?.key).not.toBe(refused.key);
-  await expect.poll(async()=>!!(await journal(page,'file.upload'))).toBe(true);await page.reload();
-  await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
+test('reload requires exact reselection, uncertain publication recovers, and stale correction preserves the attempted manifest', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server);
+  const base = await api(page, '/api/v1/artifacts', {
+    idempotency_key: randomUUID(),
+    area_id: f.area,
+    title: 'File recovery',
+    content: { format: 'loom-markdown-v1', text: 'Base', mentions: [] },
+  });
+  const reserved: string[] = [];
+  for (let i = 0; i < 4; i++)
+    reserved.push(
+      (
+        await api(page, '/api/v1/file-uploads', {
+          idempotency_key: randomUUID(),
+          target: { kind: 'artifact', resource_id: base.resource_id },
+          path: 'pending-' + i,
+          size: 0,
+          sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          media_type: 'text/plain',
+        })
+      ).upload_id,
+    );
+  await page.goto(server.origin + `/loom/resource/${base.resource_id}?edit=1`);
+  await expandComposer(page, 'attachments');
+  await page.getByLabel('Select file', { exact: true }).setInputFiles({
+    name: 'original.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('original'),
+  });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload and prepare original.txt', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Remove rejected upload', exact: true }),
+  ).toBeVisible();
+  const refused = await journal(page, 'file.upload');
+  expect(refused.state).toBe('rejected');
+  await page.reload();
+  await page.getByRole('button', { name: 'Remove rejected upload', exact: true }).click();
+  await expect.poll(async () => await journal(page, 'file.upload')).toBeUndefined();
+  await server.observer.query(
+    "UPDATE loom.file_uploads SET prepared_expires_at=clock_timestamp()-interval '1 second' WHERE id=ANY($1::uuid[])",
+    [reserved],
+  );
+  expect(await api(page, '/api/v1/file-uploads/cleanup', {})).toEqual({
+    removed: 4,
+    quarantined: 0,
+  });
+  await expandComposer(page, 'attachments');
+  await page.getByLabel('Select file', { exact: true }).setInputFiles({
+    name: 'original.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('original'),
+  });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await expect.poll(async () => (await journal(page, 'file.upload'))?.key).not.toBe(refused.key);
+  await expect.poll(async () => !!(await journal(page, 'file.upload'))).toBe(true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Upload and prepare original.txt', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Reselect the original file');
-  await expandComposer(page,'attachments');await page.getByLabel('Reselect original original.txt').setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('changed!')});
+  await expandComposer(page, 'attachments');
+  await page.getByLabel('Reselect original original.txt').setInputFiles({
+    name: 'original.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('changed!'),
+  });
   await expect(page.getByRole('alert')).toContainText('Reselected bytes differ');
-  await expandComposer(page,'attachments');await page.getByLabel('Reselect original original.txt').setInputFiles({name:'original.txt',mimeType:'text/plain',buffer:Buffer.from('original')});
-  await page.getByRole('button',{name:'Upload and prepare original.txt',exact:true}).click();
-  await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
-  await page.getByLabel('Text',{exact:true}).fill('Attempted text');
-  const newer=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:base.resource_id,expected_revision_id:base.revision_id,title:'Other edit',content:{format:'loom-markdown-v1',text:'Competitor',mentions:[]}});
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your draft is preserved.',{exact:true})).toBeVisible();
-  const old=await journal(page,'revision.publish');await page.reload();await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();
-  await expect.poll(async()=>(await journal(page,'revision.publish'))?.key).not.toBe(old.key);
-  const corrected=await journal(page,'revision.publish');expect(corrected.body.file_set).toEqual(old.body.file_set);expect(corrected.body.content.text).toBe('Attempted text');expect(corrected.body.expected_revision_id).toBe(newer.revision_id);
-  let lost=false;await page.route('**/api/v1/revisions',async route=>{if(!lost){lost=true;await route.fetch();await route.abort('failed');}else await route.continue();});
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Check status',exact:true})).toBeEnabled();
-  await page.reload();await page.getByRole('button',{name:'Check status',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
-  expect((await journal(page,'revision.publish')).body).toEqual(corrected.body);
+  await expandComposer(page, 'attachments');
+  await page.getByLabel('Reselect original original.txt').setInputFiles({
+    name: 'original.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('original'),
+  });
+  await page.getByRole('button', { name: 'Upload and prepare original.txt', exact: true }).click();
+  await expect(page.getByText('File set ready for publication.', { exact: true })).toBeVisible();
+  await page.getByLabel('Text', { exact: true }).fill('Attempted text');
+  const newer = await api(page, '/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: base.resource_id,
+    expected_revision_id: base.revision_id,
+    title: 'Other edit',
+    content: { format: 'loom-markdown-v1', text: 'Competitor', mentions: [] },
+  });
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your draft is preserved.', { exact: true })).toBeVisible();
+  const old = await journal(page, 'revision.publish');
+  await page.reload();
+  await page.getByRole('button', { name: 'Prepare corrected submission', exact: true }).click();
+  await expect.poll(async () => (await journal(page, 'revision.publish'))?.key).not.toBe(old.key);
+  const corrected = await journal(page, 'revision.publish');
+  expect(corrected.body.file_set).toEqual(old.body.file_set);
+  expect(corrected.body.content.text).toBe('Attempted text');
+  expect(corrected.body.expected_revision_id).toBe(newer.revision_id);
+  let lost = false;
+  await page.route('**/api/v1/revisions', async (route) => {
+    if (!lost) {
+      lost = true;
+      await route.fetch();
+      await route.abort('failed');
+    } else await route.continue();
+  });
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Check status', exact: true })).toBeEnabled();
+  await page.reload();
+  await page.getByRole('button', { name: 'Check status', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  expect((await journal(page, 'revision.publish')).body).toEqual(corrected.body);
 });
 
-async function attachedSource(f:Awaited<ReturnType<typeof setup>>,path='source.txt'){
-  const bytes=Buffer.from('Alice exact historical bytes');
-  const {createHash}=await import('node:crypto');
-  const upload=(await f.admin.call('/api/v1/file-uploads',{idempotency_key:randomUUID(),target:{kind:'opening',resource_id:f.area},path,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),media_type:'text/plain'})).body;
-  expect((await f.admin.call('/api/v1/file-uploads/'+upload.upload_id+'/bytes',undefined,{bytes})).status).toBe(200);
-  expect((await f.admin.call('/api/v1/file-uploads/'+upload.upload_id+'/finalize',{})).status).toBe(200);
-  const result=await f.admin.call('/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Alice attachment',content:{format:'loom-markdown-v1',text:'Alice owns this contribution',mentions:[]},attachment_set:{version:'contribution-attachments-v1',files:[{path,source:{upload_id:upload.upload_id}}]}});expect(result.status).toBe(201);
-  const source=result.body,manifest=(await f.admin.call(`/api/v1/contributions/${source.resource_id}/revisions/${source.revision_id}/attachments`)).body;
-  return {...source,discussion:manifest.discussion_id,file:manifest.items[0],bytes};
+async function attachedSource(f: Awaited<ReturnType<typeof setup>>, path = 'source.txt') {
+  const bytes = Buffer.from('Alice exact historical bytes');
+  const { createHash } = await import('node:crypto');
+  const upload = (
+    await f.admin.call('/api/v1/file-uploads', {
+      idempotency_key: randomUUID(),
+      target: { kind: 'opening', resource_id: f.area },
+      path,
+      size: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      media_type: 'text/plain',
+    })
+  ).body;
+  expect(
+    (
+      await f.admin.call('/api/v1/file-uploads/' + upload.upload_id + '/bytes', undefined, {
+        bytes,
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (await f.admin.call('/api/v1/file-uploads/' + upload.upload_id + '/finalize', {})).status,
+  ).toBe(200);
+  const result = await f.admin.call('/api/v1/discussions', {
+    idempotency_key: randomUUID(),
+    area_id: f.area,
+    title: 'Alice attachment',
+    content: { format: 'loom-markdown-v1', text: 'Alice owns this contribution', mentions: [] },
+    attachment_set: {
+      version: 'contribution-attachments-v1',
+      files: [{ path, source: { upload_id: upload.upload_id } }],
+    },
+  });
+  expect(result.status).toBe(201);
+  const source = result.body,
+    manifest = (
+      await f.admin.call(
+        `/api/v1/contributions/${source.resource_id}/revisions/${source.revision_id}/attachments`,
+      )
+    ).body;
+  return { ...source, discussion: manifest.discussion_id, file: manifest.items[0], bytes };
 }
 
-test('browser opening and reply attachments download exact bytes and another participant promotes an independently editable artifact',async({page,context,server})=>{
-  const f=await setup(page,context,server);
-  await page.goto(server.origin+`/loom/area/${f.area}?compose=discussions`);
-  await page.getByLabel('Title',{exact:true}).fill('Browser attachments');await page.getByLabel('Text',{exact:true}).fill('Opening with a lightweight file');
-  const bytes=Buffer.from('Opening exact bytes');await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'opening.txt',mimeType:'text/plain',buffer:bytes});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare opening.txt',exact:true}).click();
-  await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
-  const opening=(await journal(page,'discussion.create')).result,view=await api(page,'/api/v1/resources/'+opening.resource_id);
-  await page.goto(server.origin+'/loom/discussion/'+view.discussion_id);
-  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download opening.txt',exact:true}).click();expect(await readFile((await (await download).path())!)).toEqual(bytes);
-  await page.getByRole('button',{name:'Reply',exact:true}).click();await page.getByLabel('Your reply',{exact:true}).fill('Attached reply');
-  await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'reply.txt',mimeType:'text/plain',buffer:Buffer.from('Reply bytes')});
-  await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare reply.txt',exact:true}).click();
-  await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Post reply',exact:true}).click();await expect(page.getByText('Your reply was posted.',{exact:true})).toBeVisible();
-  const reply=(await journal(page,'reply.create')).result;expect((await api(page,'/api/v1/resources/'+reply.resource_id)).parent_id).toBe(opening.resource_id);
-  const alice=await attachedSource(f);
-  await page.goto(server.origin+`/loom/resource/${alice.resource_id}/${alice.revision_id}`);
-  await expect(page.getByRole('link',{name:'Edit',exact:true})).toHaveCount(0);
-  await page.getByRole('link',{name:'Create artifact from attachment source.txt',exact:true}).click();
-  await page.getByLabel('Artifact title',{exact:true}).fill('Bob maintained artifact');
-  await page.getByRole('button',{name:'Select General',exact:true}).click();
-  await page.getByRole('button',{name:'Review artifact promotion',exact:true}).focus();await page.keyboard.press('Enter');
-  await expect(page.getByRole('dialog',{name:'Confirm independent artifact'})).toContainText(alice.revision_id);
-  await page.getByRole('button',{name:'Create independent artifact',exact:true}).click();await expect(page.getByText('The independent artifact is published. The source attachment is unchanged.',{exact:true})).toBeVisible();
-  const promoted=(await journal(page,'attachment.promote')).result;
-  await page.getByRole('link',{name:'Open independent artifact',exact:true}).click();
-  const artifactDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Download source.txt',exact:true}).click();expect(await readFile((await (await artifactDownload).path())!)).toEqual(alice.bytes);
-  await page.getByRole('button',{name:'Source attribution',exact:true}).click();await expect(page.getByRole('link',{name:'Exact source revision',exact:true})).toHaveAttribute('href',`/loom/resource/${alice.resource_id}/${alice.revision_id}`);
-  await page.goto(server.origin+`/loom/resource/${promoted.resource_id}?edit=1`);await page.getByLabel('File path 1').fill('independent.txt');await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+test('browser opening and reply attachments download exact bytes and another participant promotes an independently editable artifact', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server);
+  await page.goto(server.origin + `/loom/area/${f.area}?compose=discussions`);
+  await page.getByLabel('Title', { exact: true }).fill('Browser attachments');
+  await page.getByLabel('Text', { exact: true }).fill('Opening with a lightweight file');
+  const bytes = Buffer.from('Opening exact bytes');
+  await expandComposer(page, 'attachments');
+  await page
+    .getByLabel('Select file', { exact: true })
+    .setInputFiles({ name: 'opening.txt', mimeType: 'text/plain', buffer: bytes });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload and prepare opening.txt', exact: true }).click();
+  await expect(page.getByText('File set ready for publication.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  const opening = (await journal(page, 'discussion.create')).result,
+    view = await api(page, '/api/v1/resources/' + opening.resource_id);
+  await page.goto(server.origin + '/loom/discussion/' + view.discussion_id);
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download opening.txt', exact: true }).click();
+  expect(await readFile((await (await download).path())!)).toEqual(bytes);
+  await page.getByRole('button', { name: 'Reply', exact: true }).click();
+  await page.getByLabel('Your reply', { exact: true }).fill('Attached reply');
+  await expandComposer(page, 'attachments');
+  await page.getByLabel('Select file', { exact: true }).setInputFiles({
+    name: 'reply.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Reply bytes'),
+  });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload and prepare reply.txt', exact: true }).click();
+  await expect(page.getByText('File set ready for publication.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+  const reply = (await journal(page, 'reply.create')).result;
+  expect((await api(page, '/api/v1/resources/' + reply.resource_id)).parent_id).toBe(
+    opening.resource_id,
+  );
+  const alice = await attachedSource(f);
+  await page.goto(server.origin + `/loom/resource/${alice.resource_id}/${alice.revision_id}`);
+  await expect(page.getByRole('link', { name: 'Edit', exact: true })).toHaveCount(0);
+  await page
+    .getByRole('link', { name: 'Create artifact from attachment source.txt', exact: true })
+    .click();
+  await page.getByLabel('Artifact title', { exact: true }).fill('Bob maintained artifact');
+  await page.getByRole('button', { name: 'Select General', exact: true }).click();
+  await page.getByRole('button', { name: 'Review artifact promotion', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Confirm independent artifact' })).toContainText(
+    alice.revision_id,
+  );
+  await page.getByRole('button', { name: 'Create independent artifact', exact: true }).click();
+  await expect(
+    page.getByText('The independent artifact is published. The source attachment is unchanged.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const promoted = (await journal(page, 'attachment.promote')).result;
+  await page.getByRole('link', { name: 'Open independent artifact', exact: true }).click();
+  const artifactDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download source.txt', exact: true }).click();
+  expect(await readFile((await (await artifactDownload).path())!)).toEqual(alice.bytes);
+  await page.getByRole('button', { name: 'Source attribution', exact: true }).click();
+  await expect(
+    page.getByRole('link', { name: 'Exact source revision', exact: true }),
+  ).toHaveAttribute('href', `/loom/resource/${alice.resource_id}/${alice.revision_id}`);
+  await page.goto(server.origin + `/loom/resource/${promoted.resource_id}?edit=1`);
+  await page.getByLabel('File path 1').fill('independent.txt');
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
   expect((await f.admin.call(alice.file.download_url)).body).toBe(alice.bytes.toString());
-  await page.setViewportSize({width:390,height:844});await page.goto(server.origin+`/loom/resource/${promoted.resource_id}`);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(server.origin + `/loom/resource/${promoted.resource_id}`);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('multiple uncertain browser promotions preserve separate exact bodies and recover after source-only suppression',async({page,context,server})=>{
-  const f=await setup(page,context,server),source=await attachedSource(f);
-  const other=(await f.admin.call('/api/v1/areas')).body.items.find((a:any)=>a.id!==f.area).id;
-  const route=`/loom/promote?contribution=${source.resource_id}&revision=${source.revision_id}&file=${source.file.file_id}`;
-  const sent:string[]=[];await page.route('**/api/v1/attachment-promotions',async r=>{sent.push(r.request().postData()!);await r.fetch();await r.abort('failed');});
-  const records:any[]=[];
-  for(const [title,area] of [['First independent copy',f.area],['Second independent copy',other]]){
-    await page.goto(server.origin+route);await page.getByLabel('Artifact title',{exact:true}).fill(title);await page.getByLabel('Destination area ID',{exact:true}).fill(area);
-    await page.getByRole('button',{name:'Review artifact promotion',exact:true}).click();await page.getByRole('button',{name:'Create independent artifact',exact:true}).click();await expect(page.getByRole('button',{name:'Check promotion status',exact:true})).toBeEnabled();
-    const rows=await page.evaluate(()=>Object.values(localStorage).map(v=>{try{return JSON.parse(v);}catch{return {};}}).filter(v=>v.kind==='attachment.promote'));records.push(rows.find(r=>r.body.title===title));
+test('multiple uncertain browser promotions preserve separate exact bodies and recover after source-only suppression', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server),
+    source = await attachedSource(f);
+  const other = (await f.admin.call('/api/v1/areas')).body.items.find(
+    (a: any) => a.id !== f.area,
+  ).id;
+  const route = `/loom/promote?contribution=${source.resource_id}&revision=${source.revision_id}&file=${source.file.file_id}`;
+  const sent: string[] = [];
+  await page.route('**/api/v1/attachment-promotions', async (r) => {
+    sent.push(r.request().postData()!);
+    await r.fetch();
+    await r.abort('failed');
+  });
+  const records: any[] = [];
+  for (const [title, area] of [
+    ['First independent copy', f.area],
+    ['Second independent copy', other],
+  ]) {
+    await page.goto(server.origin + route);
+    await page.getByLabel('Artifact title', { exact: true }).fill(title);
+    await page.getByLabel('Destination area ID', { exact: true }).fill(area);
+    await page.getByRole('button', { name: 'Review artifact promotion', exact: true }).click();
+    await page.getByRole('button', { name: 'Create independent artifact', exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Check promotion status', exact: true }),
+    ).toBeEnabled();
+    const rows = await page.evaluate(() =>
+      Object.values(localStorage)
+        .map((v) => {
+          try {
+            return JSON.parse(v);
+          } catch {
+            return {};
+          }
+        })
+        .filter((v) => v.kind === 'attachment.promote'),
+    );
+    records.push(rows.find((r) => r.body.title === title));
   }
-  expect(records.map(r=>r.state)).toEqual(['uncertain','uncertain']);
-  const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+source.discussion)).body;
-  expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version})).status).toBe(200);
-  await page.reload();await expect(page.getByText('Alice exact historical bytes',{exact:true})).toHaveCount(0);
-  await page.unroute('**/api/v1/attachment-promotions');let retried='';await page.route('**/api/v1/attachment-promotions',async r=>{retried=r.request().postData()!;await r.continue();});
-  await page.getByRole('link',{name:new RegExp('Create “First independent copy” in area '+f.area)}).click();
-  await page.getByRole('button',{name:'Retry this exact promotion',exact:true}).click();await expect(page.getByRole('link',{name:'Open independent artifact',exact:true})).toBeVisible();expect(retried).toBe(sent[0]);
-  expect(await journal(page,'attachment.promote',records[1].key)).toEqual(records[1]);
-  await page.getByRole('link',{name:new RegExp('Create “Second independent copy” in area '+other)}).click();await page.getByRole('button',{name:'Check promotion status',exact:true}).click();await expect(page.getByRole('link',{name:'Open independent artifact',exact:true})).toBeVisible();
-  expect((await journal(page,'attachment.promote',records[1].key)).body).toEqual(records[1].body);expect(sent).toHaveLength(2);
-  await page.getByRole('link',{name:'Open independent artifact',exact:true}).click();await expect(page.getByRole('button',{name:'Download source.txt',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Source attribution',exact:true}).click();
-  await expect(page.getByText('Source attribution details are currently unavailable.',{exact:true})).toBeVisible();
-  await expect(page.getByRole('link',{name:'Exact source revision',exact:true})).toHaveCount(0);
-  await expect(page.getByText(/Original contributor/)).toHaveCount(0);
-  await expect(page.getByRole('heading',{name:'Second independent copy',exact:true})).toBeVisible();
-  const recoveredDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Download source.txt',exact:true}).click();expect(await readFile((await (await recoveredDownload).path())!)).toEqual(source.bytes);
+  expect(records.map((r) => r.state)).toEqual(['uncertain', 'uncertain']);
+  const state = (await f.admin.call('/api/v1/admin/moderation/resources/' + source.discussion))
+    .body;
+  expect(
+    (
+      await f.admin.call('/api/v1/admin/moderation/state', {
+        idempotency_key: randomUUID(),
+        target: state.target,
+        suppressed: true,
+        expected_version: state.version,
+      })
+    ).status,
+  ).toBe(200);
   await page.reload();
-  await expect(page.getByText('Source attribution details are currently unavailable.',{exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'Second independent copy',exact:true})).toBeVisible();
-  await expect(page.getByRole('link',{name:'Exact source revision',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Alice exact historical bytes', { exact: true })).toHaveCount(0);
+  await page.unroute('**/api/v1/attachment-promotions');
+  let retried = '';
+  await page.route('**/api/v1/attachment-promotions', async (r) => {
+    retried = r.request().postData()!;
+    await r.continue();
+  });
+  await page
+    .getByRole('link', { name: new RegExp('Create “First independent copy” in area ' + f.area) })
+    .click();
+  await page.getByRole('button', { name: 'Retry this exact promotion', exact: true }).click();
+  await expect(
+    page.getByRole('link', { name: 'Open independent artifact', exact: true }),
+  ).toBeVisible();
+  expect(retried).toBe(sent[0]);
+  expect(await journal(page, 'attachment.promote', records[1].key)).toEqual(records[1]);
+  await page
+    .getByRole('link', { name: new RegExp('Create “Second independent copy” in area ' + other) })
+    .click();
+  await page.getByRole('button', { name: 'Check promotion status', exact: true }).click();
+  await expect(
+    page.getByRole('link', { name: 'Open independent artifact', exact: true }),
+  ).toBeVisible();
+  expect((await journal(page, 'attachment.promote', records[1].key)).body).toEqual(records[1].body);
+  expect(sent).toHaveLength(2);
+  await page.getByRole('link', { name: 'Open independent artifact', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Download source.txt', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Source attribution', exact: true }).click();
+  await expect(
+    page.getByText('Source attribution details are currently unavailable.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Exact source revision', exact: true })).toHaveCount(
+    0,
+  );
   await expect(page.getByText(/Original contributor/)).toHaveCount(0);
-  const reloadedDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Download source.txt',exact:true}).click();expect(await readFile((await (await reloadedDownload).path())!)).toEqual(source.bytes);
-  const independent=(await journal(page,'attachment.promote',records[1].key)).result;
-  const artifactState=(await f.admin.call('/api/v1/admin/moderation/resources/'+independent.resource_id)).body;
-  expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:artifactState.target,suppressed:true,expected_version:artifactState.version})).status).toBe(200);
-  await page.getByRole('button',{name:'Download source.txt',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Retry protected view',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'Second independent copy',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Download source.txt',exact:true})).toHaveCount(0);
-  await expect(page.getByText('Source attribution details are currently unavailable.',{exact:true})).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Second independent copy', exact: true }),
+  ).toBeVisible();
+  const recoveredDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download source.txt', exact: true }).click();
+  expect(await readFile((await (await recoveredDownload).path())!)).toEqual(source.bytes);
+  await page.reload();
+  await expect(
+    page.getByText('Source attribution details are currently unavailable.', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Second independent copy', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Exact source revision', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText(/Original contributor/)).toHaveCount(0);
+  const reloadedDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download source.txt', exact: true }).click();
+  expect(await readFile((await (await reloadedDownload).path())!)).toEqual(source.bytes);
+  const independent = (await journal(page, 'attachment.promote', records[1].key)).result;
+  const artifactState = (
+    await f.admin.call('/api/v1/admin/moderation/resources/' + independent.resource_id)
+  ).body;
+  expect(
+    (
+      await f.admin.call('/api/v1/admin/moderation/state', {
+        idempotency_key: randomUUID(),
+        target: artifactState.target,
+        suppressed: true,
+        expected_version: artifactState.version,
+      })
+    ).status,
+  ).toBe(200);
+  await page.getByRole('button', { name: 'Download source.txt', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Retry protected view', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Second independent copy', exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Download source.txt', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByText('Source attribution details are currently unavailable.', { exact: true }),
+  ).toHaveCount(0);
 });
 
-test('a legacy contribution draft explicitly adopts comparison attachments without replacing attempted prose',async({page,context,server})=>{
-  const f=await setup(page,context,server),opening=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Legacy opening',content:{format:'loom-markdown-v1',text:'Initial',mentions:[]}});
-  await page.goto(server.origin+`/loom/resource/${opening.resource_id}?edit=1`);await page.getByLabel('Text',{exact:true}).fill('My attempted prose');
-  await expect.poll(async()=>(await journal(page,'revision.publish'))?.body.content.text).toBe('My attempted prose');
-  const {createHash}=await import('node:crypto'),bytes=Buffer.from('Competing attachment');
-  const upload=await api(page,'/api/v1/file-uploads',{idempotency_key:randomUUID(),target:{kind:'contribution',resource_id:opening.resource_id},path:'competing.txt',size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),media_type:'text/plain'});
-  const self=await api(page,'/api/v1/identity/self');expect((await page.request.post(server.origin+`/api/v1/file-uploads/${upload.upload_id}/bytes`,{data:bytes,headers:{origin:server.origin,'x-loom-csrf':self.csrf,'content-type':'application/octet-stream'}})).ok()).toBe(true);
-  await api(page,`/api/v1/file-uploads/${upload.upload_id}/finalize`,{});
-  const newer=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:opening.resource_id,expected_revision_id:opening.revision_id,title:'Legacy opening',content:{format:'loom-markdown-v1',text:'Competing prose',mentions:[]},attachment_set:{version:'contribution-attachments-v1',files:[{path:'competing.txt',source:{upload_id:upload.upload_id}}]}});
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your draft is preserved.',{exact:true})).toBeVisible();await page.reload();
-  await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('My attempted prose');await expect(page.getByLabel('File path 1')).toHaveValue('competing.txt');
-  await page.getByLabel('File path 1').fill('reviewed.txt');await expect.poll(async()=>(await journal(page,'revision.publish'))?.body.attachment_set?.files[0]?.path).toBe('reviewed.txt');await page.reload();
-  expect((await journal(page,'revision.publish')).body.expected_revision_id).toBe(newer.revision_id);await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
+test('a legacy contribution draft explicitly adopts comparison attachments without replacing attempted prose', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server),
+    opening = await api(page, '/api/v1/discussions', {
+      idempotency_key: randomUUID(),
+      area_id: f.area,
+      title: 'Legacy opening',
+      content: { format: 'loom-markdown-v1', text: 'Initial', mentions: [] },
+    });
+  await page.goto(server.origin + `/loom/resource/${opening.resource_id}?edit=1`);
+  await page.getByLabel('Text', { exact: true }).fill('My attempted prose');
+  await expect
+    .poll(async () => (await journal(page, 'revision.publish'))?.body.content.text)
+    .toBe('My attempted prose');
+  const { createHash } = await import('node:crypto'),
+    bytes = Buffer.from('Competing attachment');
+  const upload = await api(page, '/api/v1/file-uploads', {
+    idempotency_key: randomUUID(),
+    target: { kind: 'contribution', resource_id: opening.resource_id },
+    path: 'competing.txt',
+    size: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    media_type: 'text/plain',
+  });
+  const self = await api(page, '/api/v1/identity/self');
+  expect(
+    (
+      await page.request.post(server.origin + `/api/v1/file-uploads/${upload.upload_id}/bytes`, {
+        data: bytes,
+        headers: {
+          origin: server.origin,
+          'x-loom-csrf': self.csrf,
+          'content-type': 'application/octet-stream',
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await api(page, `/api/v1/file-uploads/${upload.upload_id}/finalize`, {});
+  const newer = await api(page, '/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: opening.resource_id,
+    expected_revision_id: opening.revision_id,
+    title: 'Legacy opening',
+    content: { format: 'loom-markdown-v1', text: 'Competing prose', mentions: [] },
+    attachment_set: {
+      version: 'contribution-attachments-v1',
+      files: [{ path: 'competing.txt', source: { upload_id: upload.upload_id } }],
+    },
+  });
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your draft is preserved.', { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Prepare corrected submission', exact: true }).click();
+  await expect(page.getByLabel('Text', { exact: true })).toHaveValue('My attempted prose');
+  await expect(page.getByLabel('File path 1')).toHaveValue('competing.txt');
+  await page.getByLabel('File path 1').fill('reviewed.txt');
+  await expect
+    .poll(
+      async () => (await journal(page, 'revision.publish'))?.body.attachment_set?.files[0]?.path,
+    )
+    .toBe('reviewed.txt');
+  await page.reload();
+  expect((await journal(page, 'revision.publish')).body.expected_revision_id).toBe(
+    newer.revision_id,
+  );
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
 });
 
-test('closure refuses prepared discussion files without withdrawing history; explicit reopening permits correction and later lost publication status',async({page,context,server})=>{
- const f=await setup(page,context,server),opened=await api(page,'/api/v1/discussions',{idempotency_key:randomUUID(),area_id:f.area,title:'Prepared closure',content:{format:'loom-markdown-v2',text:'Readable original opening',mentions:[],references:[]}});
- const discussion=(await api(page,'/api/v1/resources/'+opened.resource_id)).discussion_id;
- async function close(closed:boolean){const current=(await f.admin.call('/api/v1/organization/resources/'+discussion)).body;expect((await f.admin.call('/api/v1/organization/changes',{idempotency_key:randomUUID(),kind:closed?'discussion.close':'discussion.open',resource_id:discussion,expected_version:current.version,expected_hierarchy_version:current.hierarchy_version})).status).toBe(200);}
- await page.goto(server.origin+'/loom/resource/'+opened.resource_id+'?edit=1');await page.getByLabel('Text',{exact:true}).fill('Prepared text with exact attachment');
- const bytes=Buffer.from('Exact prepared bytes');await expandComposer(page,'attachments');await page.getByLabel('Select file',{exact:true}).setInputFiles({name:'prepared.txt',mimeType:'text/plain',buffer:bytes});await page.getByRole('button',{name:'Keep file selection',exact:true}).click();await page.getByRole('button',{name:'Upload and prepare prepared.txt',exact:true}).click();await expect(page.getByText('File set ready for publication.',{exact:true})).toBeVisible();
- const before=await journal(page,'revision.publish');await close(true);await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'closed to publication'})).toBeVisible();
- await expect(page.getByText('Readable original opening',{exact:true})).toBeVisible();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Prepared text with exact attachment');expect((await journal(page,'revision.publish')).body).toEqual(before.body);
- await page.reload();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Prepared text with exact attachment');expect((await journal(page,'revision.publish')).body).toEqual(before.body);await close(false);
- await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();await expect.poll(async()=>(await journal(page,'revision.publish')).key).not.toBe(before.key);const corrected=await journal(page,'revision.publish');expect(corrected.key).not.toBe(before.key);expect(corrected.body.attachment_set).toEqual(before.body.attachment_set);expect(corrected.body.content).toEqual(before.body.content);
- await page.route('**/api/v1/revisions',async route=>{const response=await route.fetch();expect(response.status()).toBe(201);await route.abort('failed');},{times:1});await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Check status',exact:true})).toBeVisible();const uncertain=await journal(page,'revision.publish',corrected.key);expect(uncertain.state).toBe('uncertain');await close(true);
- await page.reload();await page.getByRole('button',{name:'Check status',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();const committed=await journal(page,'revision.publish',corrected.key);expect(committed.body).toEqual(uncertain.body);expect(committed.result.revision_id).not.toBe(opened.revision_id);
- await page.goto(server.origin+'/loom/resource/'+opened.resource_id+'/'+committed.result.revision_id);await expect(page.getByText('Prepared text with exact attachment',{exact:true})).toBeVisible();const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download prepared.txt',exact:true}).click();expect(await readFile((await(await download).path())!)).toEqual(bytes);
- expect((await api(page,'/api/v1/resources/'+opened.resource_id+'/revisions/'+opened.revision_id)).content.text).toBe('Readable original opening');expect((await server.observer.query('SELECT count(*)::int n FROM loom.revisions WHERE resource_id=$1',[opened.resource_id])).rows[0].n).toBe(2);
+test('closure refuses prepared discussion files without withdrawing history; explicit reopening permits correction and later lost publication status', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server),
+    opened = await api(page, '/api/v1/discussions', {
+      idempotency_key: randomUUID(),
+      area_id: f.area,
+      title: 'Prepared closure',
+      content: {
+        format: 'loom-markdown-v2',
+        text: 'Readable original opening',
+        mentions: [],
+        references: [],
+      },
+    });
+  const discussion = (await api(page, '/api/v1/resources/' + opened.resource_id)).discussion_id;
+  async function close(closed: boolean) {
+    const current = (await f.admin.call('/api/v1/organization/resources/' + discussion)).body;
+    expect(
+      (
+        await f.admin.call('/api/v1/organization/changes', {
+          idempotency_key: randomUUID(),
+          kind: closed ? 'discussion.close' : 'discussion.open',
+          resource_id: discussion,
+          expected_version: current.version,
+          expected_hierarchy_version: current.hierarchy_version,
+        })
+      ).status,
+    ).toBe(200);
+  }
+  await page.goto(server.origin + '/loom/resource/' + opened.resource_id + '?edit=1');
+  await page.getByLabel('Text', { exact: true }).fill('Prepared text with exact attachment');
+  const bytes = Buffer.from('Exact prepared bytes');
+  await expandComposer(page, 'attachments');
+  await page
+    .getByLabel('Select file', { exact: true })
+    .setInputFiles({ name: 'prepared.txt', mimeType: 'text/plain', buffer: bytes });
+  await page.getByRole('button', { name: 'Keep file selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload and prepare prepared.txt', exact: true }).click();
+  await expect(page.getByText('File set ready for publication.', { exact: true })).toBeVisible();
+  const before = await journal(page, 'revision.publish');
+  await close(true);
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'closed to publication' })).toBeVisible();
+  await expect(page.getByText('Readable original opening', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Text', { exact: true })).toHaveValue(
+    'Prepared text with exact attachment',
+  );
+  expect((await journal(page, 'revision.publish')).body).toEqual(before.body);
+  await page.reload();
+  await expect(page.getByLabel('Text', { exact: true })).toHaveValue(
+    'Prepared text with exact attachment',
+  );
+  expect((await journal(page, 'revision.publish')).body).toEqual(before.body);
+  await close(false);
+  await page.getByRole('button', { name: 'Prepare corrected submission', exact: true }).click();
+  await expect.poll(async () => (await journal(page, 'revision.publish')).key).not.toBe(before.key);
+  const corrected = await journal(page, 'revision.publish');
+  expect(corrected.key).not.toBe(before.key);
+  expect(corrected.body.attachment_set).toEqual(before.body.attachment_set);
+  expect(corrected.body.content).toEqual(before.body.content);
+  await page.route(
+    '**/api/v1/revisions',
+    async (route) => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(201);
+      await route.abort('failed');
+    },
+    { times: 1 },
+  );
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Check status', exact: true })).toBeVisible();
+  const uncertain = await journal(page, 'revision.publish', corrected.key);
+  expect(uncertain.state).toBe('uncertain');
+  await close(true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Check status', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  const committed = await journal(page, 'revision.publish', corrected.key);
+  expect(committed.body).toEqual(uncertain.body);
+  expect(committed.result.revision_id).not.toBe(opened.revision_id);
+  await page.goto(
+    server.origin + '/loom/resource/' + opened.resource_id + '/' + committed.result.revision_id,
+  );
+  await expect(
+    page.getByText('Prepared text with exact attachment', { exact: true }),
+  ).toBeVisible();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download prepared.txt', exact: true }).click();
+  expect(await readFile((await (await download).path())!)).toEqual(bytes);
+  expect(
+    (
+      await api(
+        page,
+        '/api/v1/resources/' + opened.resource_id + '/revisions/' + opened.revision_id,
+      )
+    ).content.text,
+  ).toBe('Readable original opening');
+  expect(
+    (
+      await server.observer.query(
+        'SELECT count(*)::int n FROM loom.revisions WHERE resource_id=$1',
+        [opened.resource_id],
+      )
+    ).rows[0].n,
+  ).toBe(2);
 });
 
-test('exact file references select a bounded revision, persist main and note intent, publish and navigate scoped incoming pages at narrow width',async({page,context,server})=>{
-  const f=await setup(page,context,server),source=await attachedSource(f,'evidence.txt');
-  const promoted=(await f.admin.call('/api/v1/attachment-promotions',{idempotency_key:randomUUID(),source:{contribution_id:source.resource_id,revision_id:source.revision_id,file_id:source.file.file_id},area_id:f.area,title:'Exact evidence package'})).body;
-  const manifest=(await f.admin.call(`/api/v1/artifacts/${promoted.resource_id}/revisions/${promoted.revision_id}/files`)).body,file=manifest.items[0];
-  const fileLink=`/loom/file/artifact/${promoted.resource_id}/${promoted.revision_id}/${file.file_id}`;
-  await page.setViewportSize({width:390,height:844});
-  await page.goto(server.origin+`/loom/area/${f.area}?compose=artifacts`);
-  await page.getByLabel('Title',{exact:true}).fill('Citing exact evidence');await page.getByLabel('Text',{exact:true}).fill('Main file evidence');
-  await expandComposer(page,'advanced');await page.getByRole('button',{name:'Add reference',exact:true}).focus();await page.keyboard.press('Enter');
+test('exact file references select a bounded revision, persist main and note intent, publish and navigate scoped incoming pages at narrow width', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server),
+    source = await attachedSource(f, 'evidence.txt');
+  const promoted = (
+    await f.admin.call('/api/v1/attachment-promotions', {
+      idempotency_key: randomUUID(),
+      source: {
+        contribution_id: source.resource_id,
+        revision_id: source.revision_id,
+        file_id: source.file.file_id,
+      },
+      area_id: f.area,
+      title: 'Exact evidence package',
+    })
+  ).body;
+  const manifest = (
+      await f.admin.call(
+        `/api/v1/artifacts/${promoted.resource_id}/revisions/${promoted.revision_id}/files`,
+      )
+    ).body,
+    file = manifest.items[0];
+  const fileLink = `/loom/file/artifact/${promoted.resource_id}/${promoted.revision_id}/${file.file_id}`;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(server.origin + `/loom/area/${f.area}?compose=artifacts`);
+  await page.getByLabel('Title', { exact: true }).fill('Citing exact evidence');
+  await page.getByLabel('Text', { exact: true }).fill('Main file evidence');
+  await expandComposer(page, 'advanced');
+  await page.getByRole('button', { name: 'Add reference', exact: true }).focus();
+  await page.keyboard.press('Enter');
   await expect(page.getByLabel('Target ID or Loom link')).toBeFocused();
-  await page.getByLabel('Target ID or Loom link').fill(`/loom/resource/${promoted.resource_id}/${promoted.revision_id}`);
-  await page.getByLabel('Citation scope').selectOption('revision');await page.getByRole('button',{name:'Check target',exact:true}).click();
-  await page.getByRole('button',{name:'Choose a file from this revision',exact:true}).click();
-  await page.getByRole('button',{name:'Select file evidence.txt',exact:true}).focus();await page.keyboard.press('Enter');
-  await expect(page.getByRole('button',{name:'Use this exact file',exact:true})).toBeFocused();
-  await expect(page.getByRole('group',{name:'Choose reference target'})).toContainText(promoted.revision_id);await expect(page.getByRole('group',{name:'Choose reference target'})).toContainText('evidence.txt');
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.keyboard.press('Enter');await expect(page.getByRole('button',{name:'Add reference',exact:true})).toBeFocused();
-  await page.getByLabel('Add a revision change note').check();await page.getByLabel('Change note',{exact:true}).fill('Note cites original attachment');
-  const note=page.getByRole('group',{name:'Revision change note',exact:true});await note.getByRole('button',{name:'Add reference',exact:true}).click();
-  await note.getByLabel('Target ID or Loom link').fill(server.origin+source.file.download_url);await note.getByRole('button',{name:'Check target',exact:true}).click();await note.getByRole('button',{name:'Use this exact file',exact:true}).click();
-  await expect.poll(async()=>(await journal(page,'artifact.create'))?.body.change_note?.references[0]?.target.file_id).toBe(source.file.file_id);
-  const draft=await journal(page,'artifact.create');expect(draft.body.content.format).toBe('loom-markdown-v4');expect(draft.body.content.references[0].target.file_id).toBe(file.file_id);expect(draft.body.change_note.references[0].target.file_id).toBe(source.file.file_id);
-  await page.reload();expect((await journal(page,'artifact.create')).body).toEqual(draft.body);
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
-  const published=(await journal(page,'artifact.create')).result;
-  await page.goto(server.origin+`/loom/resource/${published.resource_id}/${published.revision_id}`);await page.getByRole('button',{name:'References',exact:true}).click();
-  await page.locator(`a[href="${fileLink}"]`).click();await expect(page).toHaveURL(server.origin+fileLink);
-  await expect(page.getByRole('link',{name:'Open exact publication',exact:true})).toHaveAttribute('href',`/loom/resource/${promoted.resource_id}/${promoted.revision_id}`);
-  for(let i=0;i<12;i++)expect((await f.admin.call('/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Additional citation '+i,content:{format:'loom-markdown-v4',text:'Exact scope',mentions:[],references:[{...draft.body.content.references[0],reference_id:randomUUID()}]},change_note:null,change_account:null})).status).toBe(201);
-  const pages:string[]=[];await page.route('**/api/v1/references/incoming?**',async route=>{const url=route.request().url();if(url.includes('cursor=')){pages.push(url);if(pages.length===1){await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'service_unavailable',message:'Temporary page failure'}})});return;}}await route.continue();});
-  await page.getByRole('button',{name:'Referenced by · file',exact:true}).click();await expect(page.getByText(/Containing revision, sibling files/)).toBeVisible();
-  await page.getByRole('button',{name:'Next references',exact:true}).focus();await page.keyboard.press('Enter');
-  await expect(page.getByRole('button',{name:'Retry reference page',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Next references',exact:true})).toBeFocused();
-  await page.getByRole('button',{name:'Retry reference page',exact:true}).click();await expect(page.getByRole('heading',{name:'Recorded reference results'})).toBeFocused();expect(pages[1]).toBe(pages[0]);
-  await expect(page.getByText('End of this selected reference view.',{exact:true})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  expect((await server.observer.query('SELECT count(*)::int n FROM loom.reading_states')).rows[0].n).toBe(0);
+  await page
+    .getByLabel('Target ID or Loom link')
+    .fill(`/loom/resource/${promoted.resource_id}/${promoted.revision_id}`);
+  await page.getByLabel('Citation scope').selectOption('revision');
+  await page.getByRole('button', { name: 'Check target', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose a file from this revision', exact: true }).click();
+  await page.getByRole('button', { name: 'Select file evidence.txt', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('button', { name: 'Use this exact file', exact: true }),
+  ).toBeFocused();
+  await expect(page.getByRole('group', { name: 'Choose reference target' })).toContainText(
+    promoted.revision_id,
+  );
+  await expect(page.getByRole('group', { name: 'Choose reference target' })).toContainText(
+    'evidence.txt',
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Add reference', exact: true })).toBeFocused();
+  await page.getByLabel('Add a revision change note').check();
+  await page.getByLabel('Change note', { exact: true }).fill('Note cites original attachment');
+  const note = page.getByRole('group', { name: 'Revision change note', exact: true });
+  await note.getByRole('button', { name: 'Add reference', exact: true }).click();
+  await note.getByLabel('Target ID or Loom link').fill(server.origin + source.file.download_url);
+  await note.getByRole('button', { name: 'Check target', exact: true }).click();
+  await note.getByRole('button', { name: 'Use this exact file', exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await journal(page, 'artifact.create'))?.body.change_note?.references[0]?.target.file_id,
+    )
+    .toBe(source.file.file_id);
+  const draft = await journal(page, 'artifact.create');
+  expect(draft.body.content.format).toBe('loom-markdown-v4');
+  expect(draft.body.content.references[0].target.file_id).toBe(file.file_id);
+  expect(draft.body.change_note.references[0].target.file_id).toBe(source.file.file_id);
+  await page.reload();
+  expect((await journal(page, 'artifact.create')).body).toEqual(draft.body);
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  const published = (await journal(page, 'artifact.create')).result;
+  await page.goto(
+    server.origin + `/loom/resource/${published.resource_id}/${published.revision_id}`,
+  );
+  await page.getByRole('button', { name: 'References', exact: true }).click();
+  await page.locator(`a[href="${fileLink}"]`).click();
+  await expect(page).toHaveURL(server.origin + fileLink);
+  await expect(
+    page.getByRole('link', { name: 'Open exact publication', exact: true }),
+  ).toHaveAttribute('href', `/loom/resource/${promoted.resource_id}/${promoted.revision_id}`);
+  for (let i = 0; i < 12; i++)
+    expect(
+      (
+        await f.admin.call('/api/v1/artifacts', {
+          idempotency_key: randomUUID(),
+          area_id: f.area,
+          title: 'Additional citation ' + i,
+          content: {
+            format: 'loom-markdown-v4',
+            text: 'Exact scope',
+            mentions: [],
+            references: [{ ...draft.body.content.references[0], reference_id: randomUUID() }],
+          },
+          change_note: null,
+          change_account: null,
+        })
+      ).status,
+    ).toBe(201);
+  const pages: string[] = [];
+  await page.route('**/api/v1/references/incoming?**', async (route) => {
+    const url = route.request().url();
+    if (url.includes('cursor=')) {
+      pages.push(url);
+      if (pages.length === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'service_unavailable', message: 'Temporary page failure' },
+          }),
+        });
+        return;
+      }
+    }
+    await route.continue();
+  });
+  await page.getByRole('button', { name: 'Referenced by · file', exact: true }).click();
+  await expect(page.getByText(/Containing revision, sibling files/)).toBeVisible();
+  await page.getByRole('button', { name: 'Next references', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('button', { name: 'Retry reference page', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Next references', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Retry reference page', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Recorded reference results' })).toBeFocused();
+  expect(pages[1]).toBe(pages[0]);
+  await expect(
+    page.getByText('End of this selected reference view.', { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(
+    (await server.observer.query('SELECT count(*)::int n FROM loom.reading_states')).rows[0].n,
+  ).toBe(0);
 });
 
-test('file-aware correction keeps declarations across conflicts, manifest refusals and lost acknowledgement; withdrawal fences late results',async({page,context,server})=>{
-  const f=await setup(page,context,server),source=await attachedSource(f);
-  const base=await api(page,'/api/v1/artifacts',{idempotency_key:randomUUID(),area_id:f.area,title:'Legacy draft base',content:{format:'loom-markdown-v3',text:'Base text',mentions:[],references:[]},change_note:null,change_account:null});
-  await page.goto(server.origin+`/loom/resource/${base.resource_id}?edit=1`);await page.getByLabel('Text',{exact:true}).fill('Preserved attempted text');
-  const ref={reference_id:randomUUID(),target:{kind:'contribution',resource_id:source.resource_id,revision_id:source.revision_id,file_id:source.file.file_id,path:source.file.path},relationship:null,rationale:'Exact attachment intent'};
-  const newer=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:base.resource_id,expected_revision_id:base.revision_id,title:'File-aware competitor',content:{format:'loom-markdown-v4',text:'New base',mentions:[],references:[ref]},change_note:null,change_account:null});
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your draft is preserved.',{exact:true})).toBeVisible();const rejected=await journal(page,'revision.publish');await page.reload();
-  await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Preserved attempted text');
-  await expect.poll(async()=>(await journal(page,'revision.publish')).body.content.references).toEqual([ref]);const corrected=await journal(page,'revision.publish');expect(corrected.key).not.toBe(rejected.key);expect(corrected.body.expected_revision_id).toBe(newer.revision_id);
-  await page.route('**/api/v1/revisions',async route=>{const result=await route.fetch();expect(result.status()).toBe(201);await route.abort('failed');},{times:1});
-  await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByRole('button',{name:'Check status',exact:true})).toBeVisible();await page.reload();await page.getByRole('button',{name:'Check status',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();expect((await journal(page,'revision.publish')).body).toEqual(corrected.body);
+test('file-aware correction keeps declarations across conflicts, manifest refusals and lost acknowledgement; withdrawal fences late results', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server),
+    source = await attachedSource(f);
+  const base = await api(page, '/api/v1/artifacts', {
+    idempotency_key: randomUUID(),
+    area_id: f.area,
+    title: 'Legacy draft base',
+    content: { format: 'loom-markdown-v3', text: 'Base text', mentions: [], references: [] },
+    change_note: null,
+    change_account: null,
+  });
+  await page.goto(server.origin + `/loom/resource/${base.resource_id}?edit=1`);
+  await page.getByLabel('Text', { exact: true }).fill('Preserved attempted text');
+  const ref = {
+    reference_id: randomUUID(),
+    target: {
+      kind: 'contribution',
+      resource_id: source.resource_id,
+      revision_id: source.revision_id,
+      file_id: source.file.file_id,
+      path: source.file.path,
+    },
+    relationship: null,
+    rationale: 'Exact attachment intent',
+  };
+  const newer = await api(page, '/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: base.resource_id,
+    expected_revision_id: base.revision_id,
+    title: 'File-aware competitor',
+    content: { format: 'loom-markdown-v4', text: 'New base', mentions: [], references: [ref] },
+    change_note: null,
+    change_account: null,
+  });
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your draft is preserved.', { exact: true })).toBeVisible();
+  const rejected = await journal(page, 'revision.publish');
+  await page.reload();
+  await page.getByRole('button', { name: 'Prepare corrected submission', exact: true }).click();
+  await expect(page.getByLabel('Text', { exact: true })).toHaveValue('Preserved attempted text');
+  await expect
+    .poll(async () => (await journal(page, 'revision.publish')).body.content.references)
+    .toEqual([ref]);
+  const corrected = await journal(page, 'revision.publish');
+  expect(corrected.key).not.toBe(rejected.key);
+  expect(corrected.body.expected_revision_id).toBe(newer.revision_id);
+  await page.route(
+    '**/api/v1/revisions',
+    async (route) => {
+      const result = await route.fetch();
+      expect(result.status()).toBe(201);
+      await route.abort('failed');
+    },
+    { times: 1 },
+  );
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Check status', exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Check status', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  expect((await journal(page, 'revision.publish')).body).toEqual(corrected.body);
   // An older v3 client can omit both the manifest and file declarations. The
   // actual server returns the manifest refusal first, with no v4 refusal marker.
-  const promoted=await api(page,'/api/v1/attachment-promotions',{idempotency_key:randomUUID(),source:{contribution_id:source.resource_id,revision_id:source.revision_id,file_id:source.file.file_id},area_id:f.area,title:'File-aware package'});
+  const promoted = await api(page, '/api/v1/attachment-promotions', {
+    idempotency_key: randomUUID(),
+    source: {
+      contribution_id: source.resource_id,
+      revision_id: source.revision_id,
+      file_id: source.file.file_id,
+    },
+    area_id: f.area,
+    title: 'File-aware package',
+  });
   // The earlier resource's committed revision journal remains retained. Select
   // this resource explicitly; localStorage iteration order is not draft identity.
-  const packageJournal=async()=>{
-    const records=await page.evaluate(id=>Object.entries(localStorage).filter(([key])=>key.startsWith('loom.intent.v1:')).map(([,value])=>JSON.parse(value)).filter(record=>record.kind==='revision.publish'&&record.body.resource_id===id),promoted.resource_id);
-    expect(records).toHaveLength(1);return records[0];
+  const packageJournal = async () => {
+    const records = await page.evaluate(
+      (id) =>
+        Object.entries(localStorage)
+          .filter(([key]) => key.startsWith('loom.intent.v1:'))
+          .map(([, value]) => JSON.parse(value))
+          .filter((record) => record.kind === 'revision.publish' && record.body.resource_id === id),
+      promoted.resource_id,
+    );
+    expect(records).toHaveLength(1);
+    return records[0];
   };
-  const packageView=await api(page,'/api/v1/resources/'+promoted.resource_id),manifest={version:packageView.file_set.version,files:packageView.file_set.files};
-  const packageBase=await api(page,'/api/v1/revisions',{idempotency_key:randomUUID(),resource_id:promoted.resource_id,expected_revision_id:promoted.revision_id,title:'File-aware package',content:{format:'loom-markdown-v4',text:'Published package',mentions:[],references:[ref]},change_note:null,change_account:null,file_set:manifest});
-  await page.goto(server.origin+`/loom/resource/${promoted.resource_id}?edit=1`);await page.getByLabel('Text',{exact:true}).fill('Older client attempted package prose');
-  await expect.poll(async()=>(await packageJournal()).body.content.text).toBe('Older client attempted package prose');const oldPackage=await packageJournal();
-  await page.goto(server.origin+'/loom');
-  await page.evaluate(key=>{const entry=Object.entries(localStorage).find(([name])=>name.startsWith('loom.intent.v1:')&&name.endsWith(key))!;const record=JSON.parse(entry[1]);record.body.content.format='loom-markdown-v3';record.body.content.references=[];delete record.body.file_set;record.sequence++;localStorage.setItem(entry[0],JSON.stringify(record));},oldPackage.key);
-  await page.goto(server.origin+`/loom/resource/${promoted.resource_id}?edit=1`);await expect(page.getByLabel('Text',{exact:true})).toHaveValue('Older client attempted package prose');
-  const refusedResponse=page.waitForResponse(response=>response.url()===server.origin+'/api/v1/revisions'&&response.request().method()==='POST');
-  await page.getByRole('button',{name:'Publish',exact:true}).click();expect((await(await refusedResponse).json()).error.code).toBe('file_format_required');
-  await expect.poll(async()=>(await journal(page,'revision.publish',oldPackage.key))?.state).toBe('rejected');expect((await journal(page,'revision.publish',oldPackage.key)).required_format).toBeUndefined();
-  await page.reload();await page.getByRole('button',{name:'Prepare corrected submission',exact:true}).click();
-  await expect.poll(async()=>(await packageJournal()).body.content.references).toEqual([ref]);const repaired=await packageJournal();
-  expect(repaired.key).not.toBe(oldPackage.key);expect(repaired.body.expected_revision_id).toBe(packageBase.revision_id);expect(repaired.body.file_set.files).toHaveLength(1);expect(repaired.body.content.text).toBe('Older client attempted package prose');
-  await page.reload();expect((await journal(page,'revision.publish',repaired.key)).body).toEqual(repaired.body);await page.getByRole('button',{name:'Publish',exact:true}).click();await expect(page.getByText('Your publication is saved.',{exact:true})).toBeVisible();
-  const repairedResult=(await journal(page,'revision.publish',repaired.key)).result;expect((await api(page,`/api/v1/resources/${promoted.resource_id}/revisions/${repairedResult.revision_id}`)).content.references).toEqual([ref]);
-  const fileRoute=`/loom/file/contribution/${source.resource_id}/${source.revision_id}/${source.file.file_id}`;
-  await page.goto(server.origin+fileRoute);await expect(page.getByRole('button',{name:'Referenced by · file',exact:true})).toBeVisible();
-  let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});let captured!:()=>void;const ready=new Promise<void>(resolve=>{captured=resolve;});
-  await page.route('**/api/v1/references/incoming?**',async route=>{const response=await route.fetch();captured();await held;await route.fulfill({response});});
-  await page.getByRole('button',{name:'Referenced by · file',exact:true}).click();await ready;
-  const state=(await f.admin.call('/api/v1/admin/moderation/resources/'+source.discussion)).body;expect((await f.admin.call('/api/v1/admin/moderation/state',{idempotency_key:randomUUID(),target:state.target,suppressed:true,expected_version:state.version})).status).toBe(200);
-  await page.getByRole('button',{name:'Check file status',exact:true}).click();await expect(page.getByRole('button',{name:'Retry protected view',exact:true})).toBeVisible();release();
-  await expect(page.getByRole('heading',{name:'Recorded reference results'})).toHaveCount(0);await expect(page.getByText('Exact attachment intent',{exact:true})).toHaveCount(0);
-  expect((await journal(page,'revision.publish',corrected.key)).body).toEqual(corrected.body);
+  const packageView = await api(page, '/api/v1/resources/' + promoted.resource_id),
+    manifest = { version: packageView.file_set.version, files: packageView.file_set.files };
+  const packageBase = await api(page, '/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: promoted.resource_id,
+    expected_revision_id: promoted.revision_id,
+    title: 'File-aware package',
+    content: {
+      format: 'loom-markdown-v4',
+      text: 'Published package',
+      mentions: [],
+      references: [ref],
+    },
+    change_note: null,
+    change_account: null,
+    file_set: manifest,
+  });
+  await page.goto(server.origin + `/loom/resource/${promoted.resource_id}?edit=1`);
+  await page.getByLabel('Text', { exact: true }).fill('Older client attempted package prose');
+  await expect
+    .poll(async () => (await packageJournal()).body.content.text)
+    .toBe('Older client attempted package prose');
+  const oldPackage = await packageJournal();
+  await page.goto(server.origin + '/loom');
+  await page.evaluate((key) => {
+    const entry = Object.entries(localStorage).find(
+      ([name]) => name.startsWith('loom.intent.v1:') && name.endsWith(key),
+    )!;
+    const record = JSON.parse(entry[1]);
+    record.body.content.format = 'loom-markdown-v3';
+    record.body.content.references = [];
+    delete record.body.file_set;
+    record.sequence++;
+    localStorage.setItem(entry[0], JSON.stringify(record));
+  }, oldPackage.key);
+  await page.goto(server.origin + `/loom/resource/${promoted.resource_id}?edit=1`);
+  await expect(page.getByLabel('Text', { exact: true })).toHaveValue(
+    'Older client attempted package prose',
+  );
+  const refusedResponse = page.waitForResponse(
+    (response) =>
+      response.url() === server.origin + '/api/v1/revisions' &&
+      response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  expect((await (await refusedResponse).json()).error.code).toBe('file_format_required');
+  await expect
+    .poll(async () => (await journal(page, 'revision.publish', oldPackage.key))?.state)
+    .toBe('rejected');
+  expect((await journal(page, 'revision.publish', oldPackage.key)).required_format).toBeUndefined();
+  await page.reload();
+  await page.getByRole('button', { name: 'Prepare corrected submission', exact: true }).click();
+  await expect.poll(async () => (await packageJournal()).body.content.references).toEqual([ref]);
+  const repaired = await packageJournal();
+  expect(repaired.key).not.toBe(oldPackage.key);
+  expect(repaired.body.expected_revision_id).toBe(packageBase.revision_id);
+  expect(repaired.body.file_set.files).toHaveLength(1);
+  expect(repaired.body.content.text).toBe('Older client attempted package prose');
+  await page.reload();
+  expect((await journal(page, 'revision.publish', repaired.key)).body).toEqual(repaired.body);
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  const repairedResult = (await journal(page, 'revision.publish', repaired.key)).result;
+  expect(
+    (
+      await api(
+        page,
+        `/api/v1/resources/${promoted.resource_id}/revisions/${repairedResult.revision_id}`,
+      )
+    ).content.references,
+  ).toEqual([ref]);
+  const fileRoute = `/loom/file/contribution/${source.resource_id}/${source.revision_id}/${source.file.file_id}`;
+  await page.goto(server.origin + fileRoute);
+  await expect(
+    page.getByRole('button', { name: 'Referenced by · file', exact: true }),
+  ).toBeVisible();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let captured!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
+  await page.route('**/api/v1/references/incoming?**', async (route) => {
+    const response = await route.fetch();
+    captured();
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.getByRole('button', { name: 'Referenced by · file', exact: true }).click();
+  await ready;
+  const state = (await f.admin.call('/api/v1/admin/moderation/resources/' + source.discussion))
+    .body;
+  expect(
+    (
+      await f.admin.call('/api/v1/admin/moderation/state', {
+        idempotency_key: randomUUID(),
+        target: state.target,
+        suppressed: true,
+        expected_version: state.version,
+      })
+    ).status,
+  ).toBe(200);
+  await page.getByRole('button', { name: 'Check file status', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Retry protected view', exact: true }),
+  ).toBeVisible();
+  release();
+  await expect(page.getByRole('heading', { name: 'Recorded reference results' })).toHaveCount(0);
+  await expect(page.getByText('Exact attachment intent', { exact: true })).toHaveCount(0);
+  expect((await journal(page, 'revision.publish', corrected.key)).body).toEqual(corrected.body);
 });

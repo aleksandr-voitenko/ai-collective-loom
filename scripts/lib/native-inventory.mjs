@@ -53,9 +53,7 @@ export async function nativeInventory(db, s3, storageConfig, phase = () => {}) {
       // Capture all counters exactly. Application verification may subsequently
       // charge its own reads; publication allowance must remain byte-identical.
       tables[schemaname + '.' + tablename].publicationSha256 = hash(
-        JSON.stringify(
-          rows.filter(({ row }) => JSON.parse(row).category === 'new_publications'),
-        ),
+        JSON.stringify(rows.filter(({ row }) => JSON.parse(row).category === 'new_publications')),
       );
       tables[schemaname + '.' + tablename].requestWindows = rows
         .map(({ row }) => JSON.parse(row))
@@ -131,14 +129,11 @@ export async function nativeInventory(db, s3, storageConfig, phase = () => {}) {
       throw new Error('required exact native version');
   }
   const migrations = (
-    await db.query(
-      'SELECT version,filename,sha256 FROM loom_migrations.history ORDER BY version',
-    )
+    await db.query('SELECT version,filename,sha256 FROM loom_migrations.history ORDER BY version')
   ).rows;
   phase('inventory-history');
-  const instance = (
-    await db.query('SELECT instance_id FROM loom.community_settings WHERE id=1')
-  ).rows[0]?.instance_id;
+  const instance = (await db.query('SELECT instance_id FROM loom.community_settings WHERE id=1'))
+    .rows[0]?.instance_id;
   await db.end();
   s3.destroy();
   return { tables, buckets, migrations, instance, requiredVersions: required.length };

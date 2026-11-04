@@ -7,7 +7,14 @@ test('second batch starts only after the previous worker has exited', async ({ d
   expect(previous.batch).toBe(1);
   expect(previous.pid).not.toBe(process.pid);
   let previousExited = false;
-  try { process.kill(previous.pid, 0); } catch (error) { previousExited = (error as NodeJS.ErrnoException).code === 'ESRCH'; }
+  try {
+    process.kill(previous.pid, 0);
+  } catch (error) {
+    previousExited = (error as NodeJS.ErrnoException).code === 'ESRCH';
+  }
   expect(previousExited).toBe(true);
-  appendFileSync(process.env.LOOM_BATCH_PROBE_OUTPUT!, JSON.stringify({ batch: 2, pid: process.pid }) + '\n');
+  appendFileSync(
+    process.env.LOOM_BATCH_PROBE_OUTPUT!,
+    JSON.stringify({ batch: 2, pid: process.pid }) + '\n',
+  );
 });

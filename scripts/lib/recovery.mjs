@@ -202,9 +202,16 @@ function base(d) {
 }
 function mounts(d) {
   return [
-    ...['dist', 'node_modules', 'package.json', 'scripts/lib/recovery-runtime.mjs', 'scripts/lib/native-inventory.mjs'].flatMap(
-      (path) => ['--mount', `type=bind,src=${join(root, path)},dst=/release/${path},readonly`],
-    ),
+    ...[
+      'dist',
+      'node_modules',
+      'package.json',
+      'scripts/lib/recovery-runtime.mjs',
+      'scripts/lib/native-inventory.mjs',
+    ].flatMap((path) => [
+      '--mount',
+      `type=bind,src=${join(root, path)},dst=/release/${path},readonly`,
+    ]),
     '--mount',
     `type=bind,src=${d.path},dst=/custody,readonly`,
     '--workdir',
@@ -922,14 +929,22 @@ async function verifyApplication(d, expectationsPath) {
         fail('source must be unavailable');
     }
     await serveRuntime(d);
-    const observations = await verifyRequests(c, expectations, { query: q => sql(d, q), capture: () => inventory(d), drain: () => docker(['stop', '--time', '60', names(d).runtime]), expectedInventory: manifest.inventory });
+    const observations = await verifyRequests(c, expectations, {
+      query: (q) => sql(d, q),
+      capture: () => inventory(d),
+      drain: () => docker(['stop', '--time', '60', names(d).runtime]),
+      expectedInventory: manifest.inventory,
+    });
     await serveRuntime(d);
     setStatus(d, 'verified-isolated-snapshot');
     json(join(d.path, 'VERIFIED.json'), {
       format: 'loom-isolated-verification-1',
       backupId: manifest.backupId,
       reads: expectations.reads.length,
-      observedRequests: [...observations].map(([request_id, fields]) => ({request_id, ...fields})),
+      observedRequests: [...observations].map(([request_id, fields]) => ({
+        request_id,
+        ...fields,
+      })),
     });
     return { status: d.status, requests: expectations.reads.length, cutover: false };
   } catch (error) {
@@ -944,11 +959,24 @@ async function verifyApplication(d, expectationsPath) {
 }
 /** Full inventory equality except bounded authenticated read charges and identified
  * verifier observations. All other participants, domain rows and policy stay exact. */
-export function verificationStatePreserved(before, after, admissions, startTime, endTime, observations = new Map()) {
+export function verificationStatePreserved(
+  before,
+  after,
+  admissions,
+  startTime,
+  endTime,
+  observations = new Map(),
+) {
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return false;
-  const tables = normalizeVerifierObservations(before.tables, after.tables, observations, startTime, endTime);
+  const tables = normalizeVerifierObservations(
+    before.tables,
+    after.tables,
+    observations,
+    startTime,
+    endTime,
+  );
   if (!tables) return false;
-  after = {...after, tables};
+  after = { ...after, tables };
   const table = 'loom.participation_rate_windows',
     original = before.tables[table],
     current = after.tables[table];
@@ -1052,70 +1080,98 @@ export const start = (d) => exclusive(d, () => startSource(d));
 export const destroy = (d) => exclusive(d, () => destroyResources(d));
 export const verify = (d, expectations) => exclusive(d, () => verifyApplication(d, expectations));
 
-export async function verifyRequests(c, expectations, { query, capture, drain, expectedInventory, verifierPolicy, requestCall = httpsCall }) {
-    const startTime = Date.parse(query('SELECT clock_timestamp()'));
-    const admissions = new Map(),
-      identities = new Map(), observations = new Map();
-    const operationFamily = verifierPolicy
-      ? template => new Map(verifierPolicy.families).get(template)
-      : (await import('../../dist/server/modules/operations/collector.js')).operationFamily;
-    const outcomeCodes = verifierPolicy?.outcomeCodes ?? (await import('../../dist/contracts/operations.js')).outcomeCodes;
-    const record = (result, template) => {
-      const error=result.body?.error, family=operationFamily(template);
-      if (family && outcomeCodes.includes(error?.code) && !error?.forbidden_reason &&
-          result.status >= 400 && result.status <= 599 && typeof error.request_id === 'string')
-        observations.set(error.request_id,{family,code:error.code,status:result.status});
-    };
-    const add = (participant, category) => {
-      const key = participant + ':' + category;
-      admissions.set(key, (admissions.get(key) ?? 0) + 1);
-    };
-    const participationRateRoutes = verifierPolicy ? new Map(verifierPolicy.routes) : (await import('../../dist/server/http/rate-policy.js')).participationRateRoutes;
-    // Validate each credential through the actual API. This extra control read
-    // is itself charged; no verifier bypass or counter reset is permitted.
-    for (const { token } of expectations.reads)
-      if (!identities.has(token)) {
-        const self = await requestCall(
-          c.origin,
-          c.tls.ca ?? c.tls.cert,
-          '/api/v1/identity/self',
-          undefined,
-          token,
-        );
-        record(self, '/api/v1/identity/self');
-        if (self.status === 401) identities.set(token, null);
-        else {
-          if (self.status !== 200 || typeof self.body?.participant_id !== 'string')
-            fail('verification identity unavailable');
-          identities.set(token, self.body.participant_id);
-          add(self.body.participant_id, 'recovery_control');
-        }
+export async function verifyRequests(
+  c,
+  expectations,
+  { query, capture, drain, expectedInventory, verifierPolicy, requestCall = httpsCall },
+) {
+  const startTime = Date.parse(query('SELECT clock_timestamp()'));
+  const admissions = new Map(),
+    identities = new Map(),
+    observations = new Map();
+  const operationFamily = verifierPolicy
+    ? (template) => new Map(verifierPolicy.families).get(template)
+    : (await import('../../dist/server/modules/operations/collector.js')).operationFamily;
+  const outcomeCodes =
+    verifierPolicy?.outcomeCodes ??
+    (await import('../../dist/contracts/operations.js')).outcomeCodes;
+  const record = (result, template) => {
+    const error = result.body?.error,
+      family = operationFamily(template);
+    if (
+      family &&
+      outcomeCodes.includes(error?.code) &&
+      !error?.forbidden_reason &&
+      result.status >= 400 &&
+      result.status <= 599 &&
+      typeof error.request_id === 'string'
+    )
+      observations.set(error.request_id, { family, code: error.code, status: result.status });
+  };
+  const add = (participant, category) => {
+    const key = participant + ':' + category;
+    admissions.set(key, (admissions.get(key) ?? 0) + 1);
+  };
+  const participationRateRoutes = verifierPolicy
+    ? new Map(verifierPolicy.routes)
+    : (await import('../../dist/server/http/rate-policy.js')).participationRateRoutes;
+  // Validate each credential through the actual API. This extra control read
+  // is itself charged; no verifier bypass or counter reset is permitted.
+  for (const { token } of expectations.reads)
+    if (!identities.has(token)) {
+      const self = await requestCall(
+        c.origin,
+        c.tls.ca ?? c.tls.cert,
+        '/api/v1/identity/self',
+        undefined,
+        token,
+      );
+      record(self, '/api/v1/identity/self');
+      if (self.status === 401) identities.set(token, null);
+      else {
+        if (self.status !== 200 || typeof self.body?.participant_id !== 'string')
+          fail('verification identity unavailable');
+        identities.set(token, self.body.participant_id);
+        add(self.body.participant_id, 'recovery_control');
       }
-    for (const [index, entry] of expectations.reads.entries()) {
-      const result = await requestCall(c.origin, c.tls.ca ?? c.tls.cert, entry.path, entry.body, entry.token);
-      if (!isDeepStrictEqual(comparable(result, entry.path), entry.expected))
-        fail('application expectation ' + (index + 1) + ' differs');
-      const method = entry.body === undefined ? 'GET' : 'POST';
-      const pathname = new URL(entry.path, c.origin).pathname;
-      const route = [...participationRateRoutes].find(([key]) => {
-        const [verb, template] = key.split(' ');
-        return (
-          method === verb &&
-          new RegExp('^' + template.replace(/:[^/]+/g, '[^/]+') + '$').test(pathname)
-        );
-      });
-      if (route) record(result, route[0].split(' ')[1]);
-      if (identities.get(entry.token) && route && route[1] !== 'excluded')
-        add(
-          identities.get(entry.token),
-          route[1] === 'publication' ? 'ordinary_requests' : route[1],
-        );
     }
-    // Graceful close drains the bounded asynchronous collector before comparison.
-    await drain();
-    const after = capture();
-    const endTime = Date.parse(query('SELECT clock_timestamp()'));
-    if (!verificationStatePreserved(expectedInventory, after, admissions, startTime, endTime, observations))
-      fail('verification changed retained state');
-    return observations;
+  for (const [index, entry] of expectations.reads.entries()) {
+    const result = await requestCall(
+      c.origin,
+      c.tls.ca ?? c.tls.cert,
+      entry.path,
+      entry.body,
+      entry.token,
+    );
+    if (!isDeepStrictEqual(comparable(result, entry.path), entry.expected))
+      fail('application expectation ' + (index + 1) + ' differs');
+    const method = entry.body === undefined ? 'GET' : 'POST';
+    const pathname = new URL(entry.path, c.origin).pathname;
+    const route = [...participationRateRoutes].find(([key]) => {
+      const [verb, template] = key.split(' ');
+      return (
+        method === verb &&
+        new RegExp('^' + template.replace(/:[^/]+/g, '[^/]+') + '$').test(pathname)
+      );
+    });
+    if (route) record(result, route[0].split(' ')[1]);
+    if (identities.get(entry.token) && route && route[1] !== 'excluded')
+      add(identities.get(entry.token), route[1] === 'publication' ? 'ordinary_requests' : route[1]);
+  }
+  // Graceful close drains the bounded asynchronous collector before comparison.
+  await drain();
+  const after = capture();
+  const endTime = Date.parse(query('SELECT clock_timestamp()'));
+  if (
+    !verificationStatePreserved(
+      expectedInventory,
+      after,
+      admissions,
+      startTime,
+      endTime,
+      observations,
+    )
+  )
+    fail('verification changed retained state');
+  return observations;
 }

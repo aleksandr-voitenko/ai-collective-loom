@@ -236,8 +236,7 @@ export function preflight(d, options) {
   for (const [file, expected] of Object.entries(providerConfiguration(c)))
     if (readFileSync(join(d.path, file), 'utf8') !== expected)
       fail('provider configuration changed');
-  if (readFileSync(join(d.path, 'ca.pem'), 'utf8') !== c.tls.ca)
-    fail('CA configuration changed');
+  if (readFileSync(join(d.path, 'ca.pem'), 'utf8') !== c.tls.ca) fail('CA configuration changed');
   topology(d);
   return c;
 }
@@ -285,9 +284,7 @@ export function topology(d) {
             : d.release.image;
     if (v.Config.Image !== expectedImage) fail('unexpected container release');
     const binds = v.Mounts.filter((m) => m.Type === 'bind').map((m) => [
-      d.engine.host.startsWith('darwin/')
-        ? m.Source.replace(/^\/host_mnt(?=\/)/, '')
-        : m.Source,
+      d.engine.host.startsWith('darwin/') ? m.Source.replace(/^\/host_mnt(?=\/)/, '') : m.Source,
       m.Destination,
       m.RW,
     ]);
@@ -337,8 +334,7 @@ export function topology(d) {
     ])
       .split('\n')
       .filter(Boolean);
-    if (consumers.some((c) => c !== name(d, service)))
-      fail('foreign persistent volume consumer');
+    if (consumers.some((c) => c !== name(d, service))) fail('foreign persistent volume consumer');
   }
 }
 export async function availablePort(port) {
@@ -713,8 +709,7 @@ export async function status(d) {
                 v.State.Running &&
                 safeLogs(d, service).some(
                   (x) =>
-                    x.event ===
-                    (service === 'api' ? 'pilot_api_ready' : service + '_worker_ready'),
+                    x.event === (service === 'api' ? 'pilot_api_ready' : service + '_worker_ready'),
                 ),
             }
           : {}),
@@ -727,8 +722,7 @@ export async function status(d) {
   return result;
 }
 export async function initialize(path, options) {
-  if (options.acknowledge !== policy)
-    fail('acknowledge README local-pilot-1 policies explicitly');
+  if (options.acknowledge !== policy) fail('acknowledge README local-pilot-1 policies explicitly');
   const host = engine(),
     port = Number(options.port ?? 3444);
   path = privatePath(path, { fresh: true, instance: true, testOwner: options.testOwner });

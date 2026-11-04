@@ -47,12 +47,17 @@ test('staging ordinary non-admin browser enrolls and reconciles a lost committed
     });
     await page.goto(p.c.origin + '/loom');
     await expect(page.getByText('Staging test', { exact: true })).toBeVisible();
-    await expect(page.getByText('Invitation-only staging for non-sensitive test material.')).toBeVisible();
+    await expect(
+      page.getByText('Invitation-only staging for non-sensitive test material.'),
+    ).toBeVisible();
     await expect(page.getByText('Local evaluation', { exact: true })).toHaveCount(0);
     if (process.env.LOOM_STAGING_REVIEW_SCREENS === '1') {
       const output = '/tmp/loom-review-evidence/staging';
       mkdirSync(output, { recursive: true, mode: 0o700 });
-      for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+      for (const viewport of [
+        { width: 1440, height: 1000 },
+        { width: 390, height: 844 },
+      ]) {
         await page.setViewportSize(viewport);
         await page.screenshot({ path: join(output, 'signin-' + viewport.width + '.png') });
       }
@@ -61,7 +66,9 @@ test('staging ordinary non-admin browser enrolls and reconciles a lost committed
     await page.goto(p.c.origin + '/');
     await expect(page.getByRole('heading', { name: 'Invitation-only staging' })).toBeVisible();
     await page.goto(p.c.origin + '/status');
-    await expect(page.getByText('Staging participant access is enabled. Sign in with an admitted account.')).toBeVisible();
+    await expect(
+      page.getByText('Staging participant access is enabled. Sign in with an admitted account.'),
+    ).toBeVisible();
     await page.goto(p.c.origin + '/loom');
     await page.getByText('Set up an admitted account', { exact: true }).click();
     await page.getByLabel('Enrollment ticket', { exact: true }).fill(p.browser.token);
@@ -70,12 +77,19 @@ test('staging ordinary non-admin browser enrolls and reconciles a lost committed
       const create = navigator.credentials.create.bind(navigator.credentials);
       navigator.credentials.create = async () => {
         navigator.credentials.create = create;
-        throw new DOMException('No authenticator was available for this test attempt.', 'NotAllowedError');
+        throw new DOMException(
+          'No authenticator was available for this test attempt.',
+          'NotAllowedError',
+        );
       };
     });
     await page.getByRole('button', { name: 'Create passkey', exact: true }).click();
-    await expect(page.getByText('No authenticator was available for this test attempt.')).toBeVisible();
-    expect(sql(p.d, `SELECT state FROM loom.participant_credentials WHERE id='${p.browser.credential}'`)).toBe('active');
+    await expect(
+      page.getByText('No authenticator was available for this test attempt.'),
+    ).toBeVisible();
+    expect(
+      sql(p.d, `SELECT state FROM loom.participant_credentials WHERE id='${p.browser.credential}'`),
+    ).toBe('active');
     await page.getByRole('button', { name: 'Create passkey', exact: true }).click();
     await expect(page.getByText('Your passkey is ready. Sign in to continue.')).toBeVisible();
     await page.getByRole('button', { name: 'Sign in with passkey' }).click();

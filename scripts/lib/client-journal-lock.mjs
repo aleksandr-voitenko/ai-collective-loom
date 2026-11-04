@@ -6,7 +6,9 @@ export async function lockJournal(journalPath) {
   // automatically: an older client may still be writing this journal.
   try {
     await stat(journalPath + '.lock');
-    throw new Error('Legacy journal lock exists. Stop older clients and remove it only after verifying no reader is active.');
+    throw new Error(
+      'Legacy journal lock exists. Stop older clients and remove it only after verifying no reader is active.',
+    );
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }

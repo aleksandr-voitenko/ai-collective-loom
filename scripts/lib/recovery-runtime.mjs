@@ -46,7 +46,11 @@ const s3 = new S3Client({
   maxAttempts: 1,
 });
 let phase = 'configuration';
-async function inventory() { return nativeInventory(db, s3, storageConfig, value => { phase = value; }); }
+async function inventory() {
+  return nativeInventory(db, s3, storageConfig, (value) => {
+    phase = value;
+  });
+}
 
 try {
   const mode = process.argv[2];

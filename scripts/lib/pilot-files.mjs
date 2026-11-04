@@ -42,11 +42,7 @@ export function privatePath(path, { fresh = false, instance = false, testOwner }
     fail('explicit absolute private path required');
   path = resolve(path);
   if (realpathSync(dirname(path)) !== dirname(path)) fail('symlinked parent');
-  if (
-    inside(realpathSync(root), path) ||
-    inside(path, realpathSync(root)) ||
-    path === homedir()
-  )
+  if (inside(realpathSync(root), path) || inside(path, realpathSync(root)) || path === homedir())
     fail('unsafe or overlapping path');
   if (
     instance &&
@@ -65,8 +61,7 @@ export function privatePath(path, { fresh = false, instance = false, testOwner }
     if (existsSync(join(parent, 'instance.json'))) fail('nested instance');
     else if (!testOwner && lstatSync(parent).mode & 0o022)
       fail('instance parent is writable by another user');
-  if (fresh && existsSync(path))
-    fail('destination exists; initialization never replaces material');
+  if (fresh && existsSync(path)) fail('destination exists; initialization never replaces material');
   if (existsSync(path)) {
     const stat = lstatSync(path);
     if (stat.isSymbolicLink() || stat.uid !== process.getuid() || stat.mode & 0o077)

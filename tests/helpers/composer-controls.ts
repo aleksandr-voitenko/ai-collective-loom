@@ -8,6 +8,7 @@ export async function expandComposer(page: Page, section: 'attachments' | 'advan
   });
   await groups.first().waitFor({ state: 'attached' });
   for (const group of await groups.all()) {
-    if (await group.getAttribute('open') === null) await group.locator(':scope > summary').click();
+    if ((await group.getAttribute('open')) === null)
+      await group.locator(':scope > summary').click();
   }
 }

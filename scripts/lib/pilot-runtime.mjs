@@ -45,8 +45,7 @@ try {
   const policy = syntheticIdentityPolicy(c.origin);
   if (mode === 'verification-policy') {
     const { participationRateRoutes } = await import('../../dist/server/http/rate-policy.js');
-    const { operationFamily } =
-      await import('../../dist/server/modules/operations/collector.js');
+    const { operationFamily } = await import('../../dist/server/modules/operations/collector.js');
     const { outcomeCodes } = await import('../../dist/contracts/operations.js');
     const routes = [...participationRateRoutes];
     process.stdout.write(

@@ -7,25 +7,55 @@ import { applicationInputs } from '../../scripts/lib/release-identity.mjs';
 const screenshots: unknown[] = [];
 export async function captureMentionSelection(page: Page, state: string) {
   if (process.env.LOOM_MENTION_SELECTION_REVIEW !== '1') return;
-  if (await page.getByLabel('Issued secret', { exact: true }).count()) throw new Error('Credential display cannot enter review evidence.');
+  if (await page.getByLabel('Issued secret', { exact: true }).count())
+    throw new Error('Credential display cannot enter review evidence.');
   const directory = '/tmp/loom-review-evidence/mention-selection';
   const inputs = applicationInputs(process.cwd());
   const build = JSON.parse(await readFile('dist/release.json', 'utf8'));
-  if (inputs.sha256 !== build.sha256) throw new Error('Mention selection review source and build differ.');
+  if (inputs.sha256 !== build.sha256)
+    throw new Error('Mention selection review source and build differ.');
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  await page.evaluate(async () => { await document.fonts.ready; });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
   const viewport = page.viewportSize()!;
   const filename = `${state}-${viewport.width}x${viewport.height}.png`;
   const bytes = await page.screenshot({ path: directory + '/' + filename, fullPage: false });
   const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trimEnd();
-  screenshots.push({ filename, state, source_commit: git('rev-parse', 'HEAD'), dirty_tree: git('status', '--porcelain').length > 0,
-    application_input_sha256: inputs.sha256, build_sha256: build.sha256, route: new URL(page.url()).pathname,
-    viewport, browser: { name: 'Chromium', version: page.context().browser()!.version() },
-    test_account_role: 'participant', authentication: 'Ordinary synthetic WebAuthn enrollment and sign-in', full_viewport: true,
-    mocked_responses: ['The actual authorized participant-directory response is held, then delivered unchanged after native full selection.'],
-    injected_failures: ['Selectionchange notifications are deliberately withheld until the directory response renders to exercise native selection before React notification.'],
-    sha256: createHash('sha256').update(bytes).digest('hex') });
-  await writeFile(directory + '/manifest.json', JSON.stringify({ screenshots,
-    reproduction: 'LOOM_MENTION_SELECTION_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"',
-    isolation: 'Actual compiled React app, disposable PostgreSQL/HTTPS and virtual passkey. No staging/pilot, cookies, credentials or authentication exports.' }, null, 2) + '\n', { mode: 0o600 });
+  screenshots.push({
+    filename,
+    state,
+    source_commit: git('rev-parse', 'HEAD'),
+    dirty_tree: git('status', '--porcelain').length > 0,
+    application_input_sha256: inputs.sha256,
+    build_sha256: build.sha256,
+    route: new URL(page.url()).pathname,
+    viewport,
+    browser: { name: 'Chromium', version: page.context().browser()!.version() },
+    test_account_role: 'participant',
+    authentication: 'Ordinary synthetic WebAuthn enrollment and sign-in',
+    full_viewport: true,
+    mocked_responses: [
+      'The actual authorized participant-directory response is held, then delivered unchanged after native full selection.',
+    ],
+    injected_failures: [
+      'Selectionchange notifications are deliberately withheld until the directory response renders to exercise native selection before React notification.',
+    ],
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  });
+  await writeFile(
+    directory + '/manifest.json',
+    JSON.stringify(
+      {
+        screenshots,
+        reproduction:
+          'LOOM_MENTION_SELECTION_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"',
+        isolation:
+          'Actual compiled React app, disposable PostgreSQL/HTTPS and virtual passkey. No staging/pilot, cookies, credentials or authentication exports.',
+      },
+      null,
+      2,
+    ) + '\n',
+    { mode: 0o600 },
+  );
 }

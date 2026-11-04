@@ -1,13 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import {
-  cpSync,
-  mkdtempSync,
-  realpathSync,
-  readFileSync,
-  existsSync,
-  rmSync,
-} from 'node:fs';
+import { cpSync, mkdtempSync, realpathSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -72,15 +65,10 @@ export async function interruptAfterBackup(path: string, options: Record<string,
   );
   try {
     await until(() => {
-      assert.equal(
-        child.exitCode,
-        null,
-        'controller must still be running before interruption',
-      );
+      assert.equal(child.exitCode, null, 'controller must still be running before interruption');
       const journal = join(path, 'update.json');
       return (
-        existsSync(journal) &&
-        JSON.parse(readFileSync(journal, 'utf8')).phase === 'backup-complete'
+        existsSync(journal) && JSON.parse(readFileSync(journal, 'utf8')).phase === 'backup-complete'
       );
     }, 'observed completed backup before update selection');
     assert.equal(child.kill('SIGKILL'), true);
