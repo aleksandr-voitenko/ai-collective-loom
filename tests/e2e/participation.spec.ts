@@ -16,6 +16,8 @@ import { admissionReview } from "../helpers/admission-review.js";
 import { adminNavigationReview } from '../helpers/admin-navigation-review.js';
 import { uxHighReview } from '../helpers/ux-high-review.js';
 import { captureMessaging } from '../helpers/messaging-review.js';
+import { captureMentionSelection } from '../helpers/mention-selection-review.js';
+import { publicationJournalBytes } from '../helpers/publication-journal-snapshot.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
 async function authenticator(page: Page, context: BrowserContext) {
@@ -515,13 +517,67 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
     path: testInfo.outputPath("discussion-mobile.png"),
     contentType: "image/png",
   });
-  await page.goto(
-    server.origin +
-      `/loom/resource/${discussion.resource}/${discussion.revision}?edit=1`,
-  );
-  await page
-    .getByLabel("Text", { exact: true })
-    .fill("My retained conflicting edit.");
+  let releaseNames!: () => void, namesReached!: () => void;
+  const heldNames = new Promise<void>(resolve => { releaseNames = resolve; });
+  const reachedNames = new Promise<void>(resolve => { namesReached = resolve; });
+  const namesRoute = async (route: import('@playwright/test').Route) => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    namesReached();
+    await heldNames;
+    await route.fulfill({ response });
+  };
+  await page.route('**/api/v1/participants', namesRoute);
+  await page.goto(server.origin + `/loom/resource/${discussion.resource}/${discussion.revision}?edit=1`);
+  const conflictInput = page.getByLabel('Text', { exact: true });
+  try {
+    await reachedNames;
+    await expect(conflictInput).toHaveValue(/@participant/);
+    // Defer selection notification, not the selection itself. This exercises the
+    // valid interval between native replacement selection and React's observer.
+    await conflictInput.evaluate(node => {
+      const input = node as HTMLTextAreaElement;
+      const hold = (event: Event) => event.stopImmediatePropagation();
+      document.addEventListener('selectionchange', hold, true);
+      (window as unknown as { releaseMentionSelection: () => void }).releaseMentionSelection = () => {
+        document.removeEventListener('selectionchange', hold, true);
+        document.dispatchEvent(new Event('selectionchange'));
+      };
+      input.setSelectionRange(0, input.value.length);
+      input.focus();
+    });
+    releaseNames();
+    await expect(conflictInput).toHaveValue(/@lyra/);
+    const resolvedLength = (await conflictInput.inputValue()).length;
+    await expect.poll(() => conflictInput.evaluate(node => {
+      const input = node as HTMLTextAreaElement;
+      return [input.selectionStart, input.selectionEnd, input.value.length];
+    })).toEqual([0, resolvedLength, resolvedLength]);
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await conflictInput.scrollIntoViewIfNeeded();
+      await captureMentionSelection(page, 'resolved-full-selection');
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  } finally {
+    releaseNames();
+    await page.unroute('**/api/v1/participants', namesRoute);
+    await page.evaluate(() => {
+      const windowWithRelease = window as unknown as { releaseMentionSelection?: () => void };
+      windowWithRelease.releaseMentionSelection?.();
+      delete windowWithRelease.releaseMentionSelection;
+    });
+  }
+  await page.keyboard.insertText('My retained conflicting edit.');
+  await expect(conflictInput).toHaveValue('My retained conflicting edit.');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(conflictInput).toHaveValue(/@lyra/);
+  await expect.poll(async () => (await savedIntents(page)).find(record => record.slot === 'edit:' + discussion.resource)?.body.content)
+    .toEqual(actual.body.content);
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(conflictInput).toHaveValue('My retained conflicting edit.');
+  await expect.poll(async () => (await savedIntents(page)).find(record => record.slot === 'edit:' + discussion.resource)?.body.content)
+    .toEqual(text('My retained conflicting edit.'));
   const competing = await api(page, "/api/v1/revisions", {
     idempotency_key: randomUUID(),
     resource_id: discussion.resource,
@@ -530,14 +586,24 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
     content: text("A competing revision."),
   });
   expect(competing.status()).toBe(201);
+  const exactConflictDraft = (await savedIntents(page)).find(record => record.slot === 'edit:' + discussion.resource)!;
+  const submittedConflict = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/revisions' && request.method() === 'POST');
   await page.getByRole("button", { name: "Publish", exact: true }).click();
+  expect((await submittedConflict).postData()).toBe(JSON.stringify(exactConflictDraft.body));
   await expect(page.getByText("Your draft is preserved.")).toBeVisible();
+  await expect.poll(async () => JSON.stringify((await savedIntents(page)).find(record => record.key === exactConflictDraft.key)?.body)).toBe(JSON.stringify(exactConflictDraft.body));
   await expect(page.getByLabel("Text", { exact: true })).toHaveValue(
     "My retained conflicting edit.",
   );
   await expect(
     page.getByText("A competing revision.", { exact: true }),
   ).toBeVisible();
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await conflictInput.scrollIntoViewIfNeeded();
+    await captureMentionSelection(page, 'retained-conflicting-edit');
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page
     .getByRole("button", { name: "Prepare corrected submission" })
     .click();
@@ -2102,7 +2168,7 @@ test("publication fails closed without browser locks while retained drafts remai
           ?.body.content.text,
     )
     .toBe("Retained before browser locks unavailable");
-  const before = await savedIntents(page);
+  const before = await page.evaluate(publicationJournalBytes);
   // Retain a real maintenance request too: lack of Web Locks must prevent
   // cleanup of either owner-scoped store without preventing server sign-out.
   await page.goto(server.origin + "/loom/admin/search");
@@ -2139,7 +2205,7 @@ test("publication fails closed without browser locks while retained drafts remai
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Web Locks support");
   expect(posts).toBe(0);
-  expect(await savedIntents(page)).toEqual(before);
+  expect(await page.evaluate(publicationJournalBytes)).toEqual(before);
   await page.goto(server.origin + "/loom/help");
   await expect(
     page.getByRole("button", { name: "Export drafts" }),
@@ -2159,7 +2225,7 @@ test("publication fails closed without browser locks while retained drafts remai
   await expect(warning).toContainText("local drafts could not be cleared.");
   await expect(warning).toContainText("search maintenance recovery could not be cleared.");
   await expect(warning).toContainText("They remain scoped to this account on this browser.");
-  expect(await savedIntents(page)).toEqual(before);
+  expect(await page.evaluate(publicationJournalBytes)).toEqual(before);
   expect(await maintenanceRecords()).toEqual(maintenanceBefore);
 });
 
