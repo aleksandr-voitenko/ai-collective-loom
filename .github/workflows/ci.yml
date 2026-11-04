@@ -42,7 +42,7 @@ jobs:
       - name: Check bootstrap JavaScript syntax
         run: find scripts tests/bootstrap tests/integration -name '*.mjs' -print0 | xargs -0 -n 1 node --check
       - run: bash -n infra/postgres/10-roles.sh && bash -n infra/postgres/start.sh
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-checks
           path: coverage/ci-export/*.json
@@ -67,12 +67,12 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-checks
           path: coverage/ci-input
       - run: npm run coverage:ci -- collect native-${{ matrix.group }}
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-native-${{ matrix.group }}
           path: coverage/ci-export/*.json
@@ -97,7 +97,7 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-checks
           path: coverage/ci-input
@@ -110,7 +110,7 @@ jobs:
           printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
       - run: npx playwright install --with-deps chromium
       - run: npm run coverage:ci -- collect browser-${{ matrix.group }}
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-browser-${{ matrix.group }}
           path: coverage/ci-export/*.json
@@ -125,7 +125,7 @@ jobs:
         run: node scripts/approve-browser-diagnostics.mjs
       - name: Preserve approved browser diagnostics
         if: always() && steps.browser_diagnostics.outputs.ready == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-browser-${{ matrix.group }}
           path: browser-diagnostics/approved/*.json
@@ -175,7 +175,7 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}-*
           merge-multiple: true
@@ -188,7 +188,7 @@ jobs:
         run: npm run coverage:ci -- report
       - name: Preserve line and branch coverage reports
         if: always() && steps.coverage.outputs.ready == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ github.run_id }}-${{ github.run_attempt }}-local-integration
           path: coverage/approved/

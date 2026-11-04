@@ -57,6 +57,12 @@ injected failure and explicit reload, asserting each response/count before advan
 Replacing expiring one-shot handlers can race interception updates and miss the fault.
 The no-Web-Locks sign-out journey checks each cleanup warning independently of order,
 server session revocation and exact retained draft/uncertain Search recovery bytes.
+Its publication-journal snapshot compares storage keys and exact stored strings,
+without relying on enumeration order after the independent Search key is inserted.
+`unit/publication-journal-snapshot.test.ts` permutes storage enumeration while retaining
+all bytes, and separately detects byte-only changes, changed content and added/removed
+records. The competing Saved retry race waits for the other tab's enabled ordinary
+Save control before the first request is held; document load alone is not that boundary.
 
 
 `integration/pilot.test.ts` and `e2e/pilot.spec.ts` execute the actual persistent
@@ -297,6 +303,10 @@ The real Saved case pre-saves both mounted targets and requires no404, preventin
 an unknown lookup from masking a missed successful denial. Saved's lease-aware
 collection retains safe Unsave when older metadata is withdrawn. Opaque hosts retain
 the conservative fallback for unavailable optional source projections.
+`unit/webauthn.test.ts` checks exact registration/sign-in option decoding and proof
+encoding through the compatibility facade, plus cancellation without a finish request.
+The protected-read architecture guard covers both facade and internal transport
+paths, including alias/namespace/re-export/dynamic-import refusal fixtures.
 `web/session-authorization.test.tsx` mounts the production shell in StrictMode:
 ordinary anonymous401 settles without another identity event or probe, including
 failed ceremonies and navigation. All eight host configurations cover discovery,
@@ -950,8 +960,17 @@ hidden until the committed journal write finishes. Busy/uncertain feedback chang
 retain the same editor/disclosure nodes, their open state and exact stored bytes.
 Mention regressions cover quote/fence endings, deliberate opening focus and deletion
 of one marker; the pure insertion suite covers caret/selection, Unicode, links,
-unclosed code and byte limits. Browser workflows open native disclosures through
-`helpers/composer-controls.ts`, preserving their existing domain assertions.
+unclosed code and byte limits. Mounted late-name cases additionally preserve native
+selection before queued notification (including already-focused/backward ranges),
+disabled focus, unchanged canonical bytes/bindings and no authoring callbacks. The
+participation journey holds an actual authorized directory response unchanged and
+defers selectionchange notification across native full selection, then verifies
+native undo/redo, exact replacement, serialized saved/outgoing body and retained
+409 correction bytes. Opt-in
+LOOM_MENTION_SELECTION_REVIEW=1 curates actual desktop/mobile PNGs and provenance
+under /tmp/loom-review-evidence/mention-selection, outside approved diagnostics.
+Browser workflows open native disclosures through `helpers/composer-controls.ts`,
+preserving their existing domain assertions.
 `LOOM_MESSAGING_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "administrator setup/admission"`
 captures opt-in compiled-app 1440x1000/390x844 composer, attachment, conversation,
 message-detail and failed-save PNGs plus provenance under `/tmp/loom-review-evidence/messaging`.
