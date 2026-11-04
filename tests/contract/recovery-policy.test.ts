@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import Fastify from 'fastify';
-import { participantError, registerParticipation, type ParticipationServices } from '../../src/server/http/participation.js';
+import { registerParticipation, type ParticipationServices } from '../../src/server/http/participation.js';
+import { participantError } from '../../src/server/http/participation-errors.js';
 import { participationRecoveryPolicies, participationRecoveryPolicy } from '../../src/server/http/recovery-policy.js';
 import { PublicationError } from '../../src/server/modules/publication/errors.js';
 import { RevisionUnavailableError } from '../../src/server/modules/participation/retrieval.js';

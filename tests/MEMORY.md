@@ -284,6 +284,12 @@ actual participation routes and injects 500/503 failures before handlers: retrie
 retry without mutation-outcome claims, while state-changing requests retain unknown
 outcomes. It covers automatic HEAD siblings, narrow revision hints, recorded
 definitive refusals, strict validation and conservative unclassified-route fallback.
+`contract/participation-errors.test.ts` covers domain error families through
+registered response schemas. Closed code tables compare complete mutation/status
+envelopes independently of the adapter maps. Specialized cases and retry headers
+preserve closure versus authority loss, explicit null revisions,
+optional byte budgets, definitive refusals versus POST5xx uncertainty, throttling
+categories/bounds and safe framework messages.
 `web/saved-authorization.test.tsx` covers successful Saved
 denials across eight hosts, private receipt settlement behind a blocked Web Lock,
 Reading receipts, and mixed-response publication without restoring older content.
@@ -566,6 +572,12 @@ both owner/global caps; migration0015 must force retry before a stale count can
 reserve a view. Its populated upgrade retains all prior tables and custody rows.
 Native tests SIGKILL a reader while it holds the journal, prove a live competitor
 is refused, then recover both displayed pages. SQLite lock sidecars stay in place.
+Notifications and shared Changes use `helpers/native-reader-lock.ts` in their
+recovery suites: hold real authentication SQL, reject a live same-journal reader
+while permitting an independent journal, SIGKILL the owner, and replay the saved
+page before its exact successor. Assert unchanged journal bytes on interruption
+and HTTP failure, release after failure, private modes, a stable sidecar inode and
+non-destructive legacy-lock refusal. Compare page semantics, not randomized tokens.
 StrictMode and Chromium member-race retries must reauthorize a withdrawn overview
 and preserve the prior expansion until an unseen successor has been saved.
 Recovery regressions start without a saved descriptor for personal/mention and
@@ -639,6 +651,13 @@ Optional `LOOM_NOTIFICATION_REVIEW_SCREENS=1` deliberately curates synthetic scr
 under the system temporary directory `loom-review-evidence/notifications`, separate
 from approved diagnostics. Following, Updates and attention use sibling directories.
 Do not write review evidence into a repository development folder.
+
+Publication type checks live in `types/publication-operations.ts`, included by
+`app:typecheck` but never executed as requests. They cover the closed kind union,
+schema-required fields, wrong-operation bodies and exhaustive branch narrowing.
+`unit/participation-publications.test.ts` keeps runtime validation independent:
+unknown/missing/extra fields fail before SQL for all seven operations, accepted
+bodies reach preparation without caller mutation, and untyped unknown kinds fail.
 
 Summary tests use the same runner and closed diagnostics (`summaries.spec.ts` and
 summary route templates; no raw IDs/bodies added). `summaries*.test.ts` covers
