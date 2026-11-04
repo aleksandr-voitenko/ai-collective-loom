@@ -54,3 +54,16 @@ test('readable mention editing retains stable bindings only outside the replaced
   assert.deepEqual(editMentionPresentation({ text: 'Hi [[mention:ada]]', mentions: [mention] }, names, 'Hi @Ana'), { text: 'Hi @Ana', mentions: [] });
   assert.deepEqual(editMentionPresentation(content('Hi '), names, 'Hi @Ada'), { text: 'Hi @Ada', mentions: [] });
 });
+
+test('readable mention offsets follow native textarea line ending normalization', async () => {
+  const { mentionPresentation, editMentionPresentation } = await import('../../src/web/composer-mentions.js');
+  const wire={...content('A\r\n[[mention:ada]]\rB'),mentions:[mention]};
+  const names={[mention.participant_id]:'Ada'};
+  const view=mentionPresentation(wire,names);
+  assert.equal(view.text,'A\n@Ada\nB');
+  assert.equal(view.wireOffset(2),3);
+  assert.equal(view.wireOffset(6),18);
+  assert.equal(view.wireOffset(view.text.length),wire.text.length);
+  assert.equal(view.displayOffset(18),6);
+  assert.deepEqual(editMentionPresentation(wire,names,'A\n@Ada\nB!'),{text:'A\n[[mention:ada]]\nB!',mentions:[mention]});
+});

@@ -123,7 +123,7 @@ export function MentionEditor({
         event.preventDefault();
         const input = inputRef.current!;
         const range = { start: input.selectionStart, end: input.selectionEnd };
-        const pasted = event.clipboardData.getData('text/plain');
+        const pasted = event.clipboardData.getData('text/plain').replace(/\r\n?/g, '\n');
         const displayed =
           presentation.text.slice(0, range.start) + pasted + presentation.text.slice(range.end);
         const next = editMentionPresentation(value, names, displayed, range);

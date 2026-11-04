@@ -115,9 +115,9 @@ async function createDiscussion(
     await input.press('ControlOrMeta+a');await input.press('ControlOrMeta+c');
     expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(withMention);
     await input.press('ArrowRight');
-    await page.evaluate(()=>navigator.clipboard.writeText(' @lyra'));
+    await page.evaluate(()=>navigator.clipboard.writeText(' \r\n@lyra'));
     await input.press('ControlOrMeta+v');
-    await expect(input).toHaveValue(withMention+' @lyra');
+    await expect(input).toHaveValue(withMention+' \n@lyra');
     await expect(page.getByRole('button',{name:'Remove mention @lyra',exact:true})).toHaveCount(1);
     await input.press('ControlOrMeta+z');await expect(input).toHaveValue(withMention);
     await page.getByText('Formatting help', {exact:true}).click();

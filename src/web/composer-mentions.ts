@@ -41,27 +41,31 @@ export function mentionPresentation(
 ) {
   const spans: { start: number; end: number; wireStart: number; wireEnd: number; token: string }[] =
     [];
+  const offsets: { start: number; end: number; wireStart: number; wireEnd: number }[] = [];
   let text = '',
     offset = 0;
-  for (const match of content.text.matchAll(/\[\[mention:([^\]]+)\]\]/g)) {
+  // Textareas normalize CRLF and lone CR even for programmatically restored text.
+  // Track those offsets alongside entity labels without rewriting retained bytes.
+  for (const match of content.text.matchAll(/\[\[mention:([^\]\r\n]+)\]\]|\r\n?/g)) {
     const mention = content.mentions.find((value) => value.token === match[1]);
-    if (!mention) continue;
+    if (!mention && match[0][0] !== '\r') continue;
     text += content.text.slice(offset, match.index);
-    const label = '@' + (names[mention.participant_id] ?? 'participant');
-    spans.push({
+    const label = mention ? '@' + (names[mention.participant_id] ?? 'participant') : '\n';
+    const range = {
       start: text.length,
       end: text.length + label.length,
       wireStart: match.index,
       wireEnd: match.index + match[0].length,
-      token: mention.token,
-    });
+    };
+    offsets.push(range);
+    if (mention) spans.push({ ...range, token: mention.token });
     text += label;
     offset = match.index + match[0].length;
   }
   text += content.text.slice(offset);
   function wireOffset(position: number) {
     let delta = 0;
-    for (const span of spans) {
+    for (const span of offsets) {
       if (position > span.start && position < span.end) return span.wireStart;
       if (position >= span.end) delta += span.wireEnd - span.wireStart - (span.end - span.start);
     }
@@ -69,7 +73,7 @@ export function mentionPresentation(
   }
   function displayOffset(position: number) {
     let delta = 0;
-    for (const span of spans) {
+    for (const span of offsets) {
       if (position > span.wireStart && position < span.wireEnd) return span.start;
       if (position >= span.wireEnd)
         delta += span.wireEnd - span.wireStart - (span.end - span.start);
