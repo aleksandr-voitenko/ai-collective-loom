@@ -15,6 +15,7 @@ import { httpClient } from "../helpers/participation-http.js";
 import { admissionReview } from "../helpers/admission-review.js";
 import { adminNavigationReview } from '../helpers/admin-navigation-review.js';
 import { uxHighReview } from '../helpers/ux-high-review.js';
+import { captureMessaging } from '../helpers/messaging-review.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
 async function authenticator(page: Page, context: BrowserContext) {
@@ -75,11 +76,13 @@ async function backToLoom(page:Page){
 async function createDiscussion(
   page: Page,
   title = "Reading the actual context",
+  reviewMessaging = false,
 ) {
   await backToLoom(page);
   await page.getByRole("link", { name: "Topics", exact: true }).first().click();
   await page.getByRole("link").filter({ hasText: "General" }).first().click();
   await page.getByRole("button", { name: "Start a discussion" }).click();
+  if (reviewMessaging) await expect(page.getByLabel('Title', { exact: true })).toBeFocused();
   const another = page.getByRole("button", {
     name: "Write another",
     exact: true,
@@ -89,6 +92,53 @@ async function createDiscussion(
   await page
     .getByLabel("Text", { exact: true })
     .fill("A **shared question** with `<script>` as ordinary text.");
+  if (reviewMessaging) {
+    const input = page.getByLabel('Text', { exact: true });
+    await input.fill('A **shared question** with `<script>` as ordinary text.\n\n> A quoted ending');
+    await input.press('ControlOrMeta+End');
+    await page.getByRole('button', { name: 'Mention a participant', exact: true }).click();
+    await page.getByRole('button', { name: '@lyra', exact: true }).click();
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue(/> A quoted ending\n\n\[\[mention:/);
+    await page.getByText('Preview', { exact: true }).click();
+    await expect(page.locator('.composer .mention')).toHaveText('@lyra');
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await page.locator('.composer').scrollIntoViewIfNeeded();
+      await input.focus();
+      await expect(input).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeInViewport({ ratio: 1 });
+      await captureMessaging(page, 'composer');
+      const attachments = page.locator('.composer-options').filter({ has: page.locator('summary', { hasText: /^Attachments/ }) });
+      await attachments.locator('summary').click();
+      await expect(page.getByRole('button', { name: 'Inspect my file limits', exact: true })).toBeVisible();
+      await attachments.scrollIntoViewIfNeeded();
+      await captureMessaging(page, 'attachments');
+      await attachments.locator('summary').click();
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function(key, value) {
+        if (key.startsWith('loom.intent.v1:')) {
+          Storage.prototype.setItem = original;
+          throw new Error('Synthetic draft save failure');
+        }
+        return original.call(this, key, value);
+      };
+    });
+    await page.getByRole('button', { name: 'Close composer', exact: true }).click();
+    const failure = page.getByRole('alert').filter({ hasText: 'Synthetic draft save failure' });
+    await expect(failure).toBeVisible();
+    await expect(input).toHaveValue(/\[\[mention:/);
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await failure.scrollIntoViewIfNeeded();
+      await expect(failure).toBeInViewport({ ratio: 1 });
+      await captureMessaging(page, 'close-save-failure', ['One local draft Storage.setItem deliberately throws before dismissal; editor and saved request remain present.']);
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByText("Your publication is saved.", { exact: true }),
@@ -266,7 +316,7 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
     page.getByRole("button", { name: "Sign in with passkey" }),
   ).toBeVisible();
   await enter(page, context, server.origin, ticket.secret);
-  const discussion = await createDiscussion(page),
+  const discussion = await createDiscussion(page, undefined, true),
     client = httpClient(
       server.origin,
       await readFile(server.directory + "/cert.pem", "utf8"),
@@ -289,6 +339,12 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
     `[data-resource-id="${reply.body.resource_id}"]`,
   );
   await agentPost.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(agentPost.getByLabel('Your reply', { exact: true })).toBeFocused();
+  await agentPost.getByLabel('Your reply', { exact: true }).fill('A draft kept when the composer closes.');
+  await agentPost.getByRole('button', { name: 'Close composer', exact: true }).click();
+  await expect(agentPost.getByRole('button', { name: 'Reply', exact: true })).toBeFocused();
+  await agentPost.getByRole('button', { name: 'Reply', exact: true }).click();
+  await expect(agentPost.getByLabel('Your reply', { exact: true })).toHaveValue('A draft kept when the composer closes.');
   await agentPost
     .getByLabel("Your reply", { exact: true })
     .fill("This reply belongs under Lyra.");
@@ -322,6 +378,19 @@ test("administrator setup/admission, human discussion, direct HTTP agent, nestin
       .locator(".comment-tree .prose")
       .getByText("A second reply in the already open branch.", { exact: true }),
   ).toBeVisible();
+  await agentPost.getByRole('button', { name: 'Reply', exact: true }).first().click();
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await agentPost.locator('.prose').first().scrollIntoViewIfNeeded();
+    await captureMessaging(page, 'conversation');
+    const more = agentPost.locator(':scope > .post-footer > .message-details');
+    await more.locator('summary').click();
+    await expect(more.getByText('Inspect editing intent', { exact: true })).toBeVisible();
+    await more.scrollIntoViewIfNeeded();
+    await captureMessaging(page, 'message-details');
+    await more.locator('summary').click();
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: testInfo.outputPath("discussion-desktop.png"),
     fullPage: true,

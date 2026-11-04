@@ -7,7 +7,16 @@ import { useAuthorization } from './AuthorizationBoundary.js';
 export function Icon({
   name,
 }: {
-  name: 'topic' | 'artifact' | 'discussion' | 'help' | 'saved' | 'search';
+  name:
+    | 'topic'
+    | 'artifact'
+    | 'discussion'
+    | 'help'
+    | 'saved'
+    | 'search'
+    | 'plus'
+    | 'reply'
+    | 'mention';
 }) {
   return (
     <svg
@@ -20,17 +29,23 @@ export function Icon({
     >
       <path
         d={
-          name === 'search'
-            ? 'M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0'
-            : name === 'topic'
-              ? 'M4 3h6v6H4zM14 15h6v6h-6zM7 9v9h7'
-              : name === 'artifact'
-                ? 'M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6'
-                : name === 'discussion'
-                  ? 'M3 4h18v13H8l-5 4z'
-                  : name === 'saved'
-                    ? 'M6 3h12v18l-6-4-6 4z'
-                    : 'M12 16v1M10 8a2 2 0 1 1 3 2c-1 .5-1 1-1 3M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0'
+          name === 'plus'
+            ? 'M12 5v14M5 12h14'
+            : name === 'reply'
+              ? 'M9 5l-5 5 5 5M4 10h10a6 6 0 0 1 6 6v3'
+              : name === 'mention'
+                ? 'M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0'
+                : name === 'search'
+                  ? 'M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0'
+                  : name === 'topic'
+                    ? 'M4 3h6v6H4zM14 15h6v6h-6zM7 9v9h7'
+                    : name === 'artifact'
+                      ? 'M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6'
+                      : name === 'discussion'
+                        ? 'M3 4h18v13H8l-5 4z'
+                        : name === 'saved'
+                          ? 'M6 3h12v18l-6-4-6 4z'
+                          : 'M12 16v1M10 8a2 2 0 1 1 3 2c-1 .5-1 1-1 3M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0'
         }
       />
     </svg>

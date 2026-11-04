@@ -1,7 +1,8 @@
 import { EditingIntent } from './EditingIntent.js';
+import { insertMention } from './composer-mentions.js';
 import { FileEditor } from './Files.js';
 import { type PublicationFileSet, normalizeFileSet } from '../contracts/files.js';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useLocation, Link } from 'react-router';
 import {
   type AuthoredContent,
@@ -31,7 +32,7 @@ import type {
 import { useAuthorization } from './AuthorizationBoundary.js';
 import { CoverageEditor } from './Summaries.js';
 import type { CoverageDeclarationValue } from '../contracts/summaries.js';
-import { Collection, ErrorText } from './participation-ui.js';
+import { Collection, ErrorText, Icon } from './participation-ui.js';
 import {
   composerOperation,
   buildDraftBody,
@@ -56,6 +57,8 @@ export function Composer({
   initialCoverage,
   heading,
   onCommitted,
+  focusOnOpen = false,
+  onClose,
 }: {
   context: Context;
   operation: ComposerOperation;
@@ -70,6 +73,8 @@ export function Composer({
   initialCoverage?: CoverageDeclarationValue | undefined;
   heading: string;
   onCommitted?: (value: CommittedView) => void;
+  focusOnOpen?: boolean;
+  onClose?: () => void;
 }) {
   const { kind } = operation;
   const { path, fixed, titleField, canFiles, canNote, summaryDiscussion } =
@@ -127,16 +132,52 @@ export function Composer({
   );
   const [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
+    [closing, setClosing] = useState(false),
     [status, setStatus] = useState(''),
     [compare, setCompare] = useState<RevisionView>(),
     [comparisonError, setComparisonError] = useState(''),
     [comparisonAttempt, setComparisonAttempt] = useState(0),
     [picker, setPicker] = useState(false);
   const live = useRef(true),
+    section = useRef<HTMLElement>(null),
+    titleInput = useRef<HTMLInputElement>(null),
     textArea = useRef<HTMLTextAreaElement>(null),
+    selection = useRef<{ start: number; end: number } | undefined>(undefined),
+    pendingCaret = useRef<number | undefined>(undefined),
+    feedbackTrigger = useRef<Element | null>(null),
+    [mentionNames, setMentionNames] = useState<Record<string, string>>({}),
+    feedback = useRef<HTMLDivElement>(null),
     recovery = useRef<HTMLDivElement>(null),
     wasBusy = useRef(false),
     revealRecovery = useRef(false);
+  useEffect(() => {
+    if (focusOnOpen && !locked && authority.active()) {
+      (titleInput.current ?? textArea.current)?.focus();
+      section.current?.scrollIntoView?.({ block: 'start' });
+    }
+  }, []);
+  useEffect(() => {
+    if (
+      error &&
+      !busy &&
+      record?.state !== 'uncertain' &&
+      authority.active() &&
+      revealRecovery.current
+    ) {
+      if (
+        document.activeElement === document.body ||
+        document.activeElement === feedbackTrigger.current
+      )
+        feedback.current?.focus();
+      revealRecovery.current = false;
+    }
+  }, [error, busy]);
+  useLayoutEffect(() => {
+    if (pendingCaret.current !== undefined) {
+      textArea.current?.setSelectionRange(pendingCaret.current, pendingCaret.current);
+      pendingCaret.current = undefined;
+    }
+  }, [text]);
   useEffect(() => {
     const completed = wasBusy.current && !busy;
     wasBusy.current = busy;
@@ -158,7 +199,7 @@ export function Composer({
       live.current = false;
     };
   }, []);
-  const locked = busy || (!!record && (record.state !== 'draft' || !!record.blocked_by));
+  const locked = busy || closing || (!!record && (record.state !== 'draft' || !!record.blocked_by));
   const fields: DraftFields = {
     text,
     title,
@@ -243,6 +284,7 @@ export function Composer({
   async function send() {
     if (busy || record?.blocked_by) return;
     revealRecovery.current = true;
+    feedbackTrigger.current = document.activeElement;
     setBusy(true);
     setError('');
     let intent: Intent | undefined,
@@ -420,7 +462,26 @@ export function Composer({
   }
   function editText(value: string) {
     setText(value);
-    if (!locked && record?.state !== 'rejected') persist({ text: value });
+    if (!locked && record?.state !== 'rejected') {
+      const next = mentions.filter((mention) => value.includes(`[[mention:${mention.token}]]`));
+      setMentions(next);
+      void persist({ text: value, mentions: next });
+    }
+  }
+  async function closeComposer() {
+    if (busy || closing) return;
+    feedbackTrigger.current = document.activeElement;
+    revealRecovery.current = true;
+    setClosing(true);
+    try {
+      if (!locked && (record || text || title || fileSet?.files.length)) {
+        const saved = await persist();
+        if (!saved) return;
+      }
+      if (live.current && authority.active()) onClose?.();
+    } finally {
+      if (live.current) setClosing(false);
+    }
   }
   const declareCoverage = useRef<(next: CoverageDeclarationValue) => Promise<boolean>>(
     async () => false,
@@ -464,7 +525,7 @@ export function Composer({
     void persist({ references: nextReferences, note: nextNote, account: nextAccount });
   };
   return (
-    <section className="composer card" aria-label={heading}>
+    <section ref={section} className="composer card" aria-label={heading}>
       <h2>{heading}</h2>
       {(kind === 'revision.publish' || kind === 'summary.revise') &&
         typeof fixed.resource_id === 'string' &&
@@ -476,7 +537,9 @@ export function Composer({
             canEdit={true}
           />
         )}
-      <ErrorText error={error} />
+      <div ref={feedback} tabIndex={-1}>
+        <ErrorText error={error} />
+      </div>
       <SeparateDraft
         record={record}
         review={() =>
@@ -576,6 +639,7 @@ export function Composer({
             <label>
               Title
               <input
+                ref={titleInput}
                 value={title}
                 maxLength={160}
                 disabled={locked}
@@ -591,6 +655,12 @@ export function Composer({
             <textarea
               aria-label={kind === 'reply.create' ? 'Your reply' : 'Text'}
               ref={textArea}
+              onSelect={(event) => {
+                selection.current = {
+                  start: event.currentTarget.selectionStart,
+                  end: event.currentTarget.selectionEnd,
+                };
+              }}
               rows={7}
               value={text}
               disabled={locked}
@@ -613,7 +683,10 @@ export function Composer({
                       if (record?.state !== 'rejected') persist({ text: value, mentions: next });
                     }}
                   >
-                    Remove mention {mention.token}
+                    Remove mention{' '}
+                    {mentionNames[mention.participant_id]
+                      ? '@' + mentionNames[mention.participant_id]
+                      : mention.token}
                   </button>
                 ))}
             </div>
@@ -622,7 +695,7 @@ export function Composer({
             <>
               <div className="composer-tools">
                 <button className="text-button" onClick={() => setPicker((value) => !value)}>
-                  ＠ Mention a participant
+                  <Icon name="mention" /> Mention a participant
                 </button>
                 <span>Markdown supported · text only</span>
               </div>
@@ -635,14 +708,37 @@ export function Composer({
                       <button
                         className="list-row"
                         onClick={() => {
-                          const token = 'm' + crypto.randomUUID().replaceAll('-', '').slice(0, 12),
-                            next = [...mentions, { token, participant_id: person.id }],
-                            value = text + ` [[mention:${token}]]`;
-                          setMentions(next);
-                          setText(value);
-                          persist({ text: value, mentions: next });
-                          setPicker(false);
-                          textArea.current?.focus();
+                          try {
+                            const token =
+                              'm' + crypto.randomUUID().replaceAll('-', '').slice(0, 12);
+                            const mention = { token, participant_id: person.id };
+                            const inserted = insertMention(
+                              draftBody().content as AuthoredContent,
+                              mention,
+                              selection.current ?? { start: text.length, end: text.length },
+                            );
+                            const next = [...mentions, mention];
+                            setMentions(next);
+                            setMentionNames((names) => ({
+                              ...names,
+                              [person.id]: person.nickname,
+                            }));
+                            setText(inserted.text);
+                            pendingCaret.current = inserted.caret;
+                            void persist({ text: inserted.text, mentions: next });
+                            setStatus(
+                              inserted.separateParagraph
+                                ? 'Mention added in a new paragraph outside quoted or code text.'
+                                : 'Mention added.',
+                            );
+                            setPicker(false);
+                            textArea.current?.focus();
+                            textArea.current?.setSelectionRange(inserted.caret, inserted.caret);
+                            selection.current = { start: inserted.caret, end: inserted.caret };
+                          } catch (failure) {
+                            setError((failure as Error).message);
+                            feedback.current?.focus();
+                          }
                         }}
                       >
                         @{person.nickname}
@@ -654,57 +750,68 @@ export function Composer({
             </>
           )}
           {canFiles && (
-            <FileEditor
-              context={context}
-              target={{
-                kind:
-                  kind === 'artifact.create'
-                    ? 'area'
-                    : kind === 'discussion.create'
-                      ? 'opening'
-                      : kind === 'reply.create'
-                        ? 'reply'
-                        : canNote
-                          ? 'artifact'
-                          : 'contribution',
-                resource_id: String(fixed.resource_id ?? fixed.parent_id ?? fixed.area_id),
-              }}
-              value={fileSet}
-              disabled={locked}
-              onPending={setFilesPending}
-              onChange={async (next) => {
-                const saved = await persist({ fileSet: next });
-                if (saved && live.current) setFileSet(next);
-                return !!saved;
-              }}
-            />
+            <details className="composer-options" open={!!fileSet?.files.length || filesPending}>
+              <summary>
+                Attachments{fileSet?.files.length ? ` (${fileSet.files.length})` : ''}
+              </summary>
+              <FileEditor
+                context={context}
+                target={{
+                  kind:
+                    kind === 'artifact.create'
+                      ? 'area'
+                      : kind === 'discussion.create'
+                        ? 'opening'
+                        : kind === 'reply.create'
+                          ? 'reply'
+                          : canNote
+                            ? 'artifact'
+                            : 'contribution',
+                  resource_id: String(fixed.resource_id ?? fixed.parent_id ?? fixed.area_id),
+                }}
+                value={fileSet}
+                disabled={locked}
+                onPending={setFilesPending}
+                onChange={async (next) => {
+                  const saved = await persist({ fileSet: next });
+                  if (saved && live.current) setFileSet(next);
+                  return !!saved;
+                }}
+              />
+            </details>
           )}
-          <ReferenceEditor
-            references={references}
-            disabled={locked}
-            onChange={(next) => {
-              setReferences(next);
-              if (next.some((ref) => ref.target.file_id)) setFormat('loom-markdown-v4');
-              else if (!['loom-markdown-v3', 'loom-markdown-v4'].includes(format))
-                setFormat('loom-markdown-v2');
-              void persist({ references: next });
-            }}
-          />
-          {canNote ? (
-            <ChangeNoteEditor
-              value={note}
+          <details className="composer-options" open={references.length > 0 || !!note || !!account}>
+            <summary>
+              References & change details
+              {references.length ? ` (${references.length} references)` : ''}
+            </summary>
+            <ReferenceEditor
+              references={references}
               disabled={locked}
-              onChange={(next) => changeActions.current(next, account)}
+              onChange={(next) => {
+                setReferences(next);
+                if (next.some((ref) => ref.target.file_id)) setFormat('loom-markdown-v4');
+                else if (!['loom-markdown-v3', 'loom-markdown-v4'].includes(format))
+                  setFormat('loom-markdown-v2');
+                void persist({ references: next });
+              }}
             />
-          ) : (
-            <ChangeAccountEditor
-              value={account}
-              source={typeof fixed.resource_id === 'string' ? fixed.resource_id : undefined}
-              base={typeof base === 'string' ? base : undefined}
-              disabled={locked}
-              onChange={(next, target) => changeActions.current(note, next, target)}
-            />
-          )}
+            {canNote ? (
+              <ChangeNoteEditor
+                value={note}
+                disabled={locked}
+                onChange={(next) => changeActions.current(next, account)}
+              />
+            ) : (
+              <ChangeAccountEditor
+                value={account}
+                source={typeof fixed.resource_id === 'string' ? fixed.resource_id : undefined}
+                base={typeof base === 'string' ? base : undefined}
+                disabled={locked}
+                onChange={(next, target) => changeActions.current(note, next, target)}
+              />
+            )}
+          </details>
           {summaryDiscussion && (
             <CoverageEditor
               context={context}
@@ -787,30 +894,43 @@ export function Composer({
               </button>
             </div>
           )}
-          {(!record || record.state === 'draft') && (
-            <button
-              className="primary"
-              disabled={
-                locked ||
-                references.length > 16 ||
-                filesPending ||
-                (!text.trim() && (!canNote || !fileSet?.files.length)) ||
-                (titleField && !title.trim()) ||
-                (!!summaryDiscussion && !coverage) ||
-                (!!account &&
-                  ('revisions' in account
-                    ? account.revisions.length === 0
-                    : account.carry_forward_revision_id !== base)) ||
-                (!!note && !note.text.trim())
-              }
-              onClick={() => void send()}
-            >
-              {busy ? 'Publishing…' : kind === 'reply.create' ? 'Post reply' : 'Publish'}
-            </button>
-          )}
+          <div className="composer-actions">
+            {(!record || record.state === 'draft') && (
+              <button
+                className="primary"
+                disabled={
+                  locked ||
+                  references.length > 16 ||
+                  filesPending ||
+                  (!text.trim() && (!canNote || !fileSet?.files.length)) ||
+                  (titleField && !title.trim()) ||
+                  (!!summaryDiscussion && !coverage) ||
+                  (!!account &&
+                    ('revisions' in account
+                      ? account.revisions.length === 0
+                      : account.carry_forward_revision_id !== base)) ||
+                  (!!note && !note.text.trim())
+                }
+                onClick={() => void send()}
+              >
+                {busy ? 'Publishing…' : kind === 'reply.create' ? 'Post reply' : 'Publish'}
+              </button>
+            )}
+            {onClose && (
+              <button disabled={busy || closing} onClick={() => void closeComposer()}>
+                {closing ? 'Saving draft…' : 'Close composer'}
+              </button>
+            )}
+          </div>
           <details>
             <summary>Preview</summary>
-            <AuthoredText content={draftBody().content as AuthoredContent} />
+            <AuthoredText
+              content={draftBody().content as AuthoredContent}
+              participants={Object.entries(mentionNames).map(([id, nickname]) => ({
+                id,
+                nickname,
+              }))}
+            />
           </details>
         </>
       )}

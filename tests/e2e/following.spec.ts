@@ -176,7 +176,7 @@ test('summary context keeps one exact text and control set when community revali
     await ready.promise;
     for(const source of [opening,reply]){
       await expect(body(source)).toHaveText('Repeated navigation text');
-      await expect(controls(source).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
+      const disclosure=controls(source).locator(':scope > .reading-details');if(await disclosure.getAttribute('open')===null)await disclosure.locator(':scope > summary').click();await expect(controls(source).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
     }
     release.release();
     await expect(page.getByRole('link',{name:'Revalidated community — Community overview · Start here',exact:true})).toBeVisible();
@@ -185,9 +185,9 @@ test('summary context keeps one exact text and control set when community revali
       await expect(body(source)).toHaveCount(1);
       await expect(body(source)).toHaveText('Repeated navigation text');
       await expect(controls(source)).toHaveCount(1);
-      await expect(controls(source).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
+      const disclosure=controls(source).locator(':scope > .reading-details');if(await disclosure.getAttribute('open')===null)await disclosure.locator(':scope > summary').click();await expect(controls(source).getByRole('button',{name:'Mark read',exact:true})).toBeEnabled();
       await expect(controls(source).getByRole('button',{name:'Mark unread',exact:true})).toBeEnabled();
-      await expect(article(source).getByRole('region',{name:'Source references',exact:true})).toHaveCount(1);
+      await article(source).locator(':scope > .post-footer > .message-details > summary').click();await expect(article(source).getByRole('region',{name:'Source references',exact:true})).toHaveCount(1);
     }
   }finally{release.release();await page.unrouteAll({behavior:'wait'});}
 });

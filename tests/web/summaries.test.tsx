@@ -44,7 +44,7 @@ test('optional summary distinguishes absence, source withdrawal and transient lo
     path:'/'+state,element:<AuthorizationBoundary key={state}><SummarySection discussion={state}/></AuthorizationBoundary>,
   })),{initialEntries:['/absent']});
   t.after(()=>router.dispose());render(<StrictMode><RouterProvider router={router}/></StrictMode>);
-  await screen.findByText('No summary has been published.');
+  await screen.findByRole('link',{name:'Create first summary'});
   assert.equal(screen.getByRole('link',{name:'Create first summary'}).getAttribute('href'),'/loom/discussion/absent?summary=create');
   await act(async()=>router.navigate('/unavailable'));
   await screen.findByRole('button',{name:'Retry protected view'});
@@ -54,7 +54,7 @@ test('optional summary distinguishes absence, source withdrawal and transient lo
   assert.match(screen.getByRole('alert').textContent??'',/Discussion reading and replies remain available/);
   t.mock.method(globalThis,'fetch',async()=>Response.json({state:'absent',can_create:false}));
   await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Retry summary'})));
-  await screen.findByText('No summary has been published.');
+  await screen.findByRole('link',{name:'Summary maintenance'});
   assert.ok(!screen.queryByRole('alert'));
   assert.ok(!screen.queryByRole('link',{name:'Create first summary'}));
   assert.ok(screen.getByRole('link',{name:'Summary maintenance'}));

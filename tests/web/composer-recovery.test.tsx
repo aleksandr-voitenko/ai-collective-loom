@@ -11,6 +11,8 @@ import { IntentStore } from '../../src/web/participation-client.js';
 import type { ComposerOperation } from '../../src/web/composer-draft.js';
 import type { Context } from '../../src/web/participation-state.js';
 import type { CommittedView, PageView } from '../../src/contracts/participation.js';
+import { parseAuthored } from '../../src/contracts/authored.js';
+import type { AuthoredContent } from '../../src/contracts/participation.js';
 
 const locks = navigator.locks;
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://loom.example/' });
@@ -41,7 +43,7 @@ const failure = (code: string, message: string, status = 503, rejected = false) 
 } }, { status });
 type Call = { path: string; method: string; raw: string | undefined; done: boolean; finish: (response: Response) => void };
 
-async function fixture(t: TestContext, operation: ComposerOperation, path: string, body: Record<string, unknown>, uncertain = false) {
+async function fixture(t: TestContext, operation: ComposerOperation, path: string, body: Record<string, unknown>, uncertain = false, focusOnOpen = false) {
   const instance = randomUUID(), participant = randomUUID(), slot = 'composer fixture';
   const context = { self: { participant_id: participant, nickname: 'Current author', kind: 'human', csrf: 'fixture' },
     community: { instance_id: instance }, store: new IntentStore(instance, participant, localStorage, location.origin, locks) } as Context;
@@ -71,11 +73,12 @@ async function fixture(t: TestContext, operation: ComposerOperation, path: strin
     calls.push(call); requests.shift()?.(call);
   }));
   const committed: CommittedView[] = [];
+  let closed = 0;
   let router: ReturnType<typeof createMemoryRouter>, view: ReturnType<typeof render>;
   function mount() {
     router = createMemoryRouter([{ path: '/compose', element: <AuthorizationBoundary><Composer context={context} operation={operation}
-      slot={slot} heading="Authored draft" initialText="Newer defaults must not replace retained text" initialTitle="Newer default title"
-      onCommitted={value => committed.push(value)}/></AuthorizationBoundary> }], { initialEntries: ['/compose?intent=' + original.key] });
+      slot={slot} heading="Authored draft" initialText="Newer defaults must not replace retained text" initialTitle="Newer default title" focusOnOpen={focusOnOpen}
+      onCommitted={value => committed.push(value)} onClose={() => { closed++; }}/></AuthorizationBoundary> }], { initialEntries: ['/compose?intent=' + original.key] });
     view = render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   }
   function remount() { view.unmount(); router.dispose(); mount(); }
@@ -100,8 +103,73 @@ async function fixture(t: TestContext, operation: ComposerOperation, path: strin
     assert.equal(context.store.all().length, 2);
   };
   mount();
-  return { context, original, calls, committed, request, answer, remount, nextSave, raw, record, assertIndependent };
+  return { context, original, calls, committed, request, answer, remount, nextSave, raw, record, assertIndependent, closed: () => closed };
 }
+
+test('close composer keeps the visible draft open when local persistence fails', async t => {
+  const area = randomUUID(), body = { area_id: area, title: 'Keep this draft', content: authored('Visible saved text') };
+  const f = await fixture(t, { kind: 'discussion.create', areaId: area }, '/api/v1/discussions', body);
+  const save = t.mock.method(f.context.store, 'saveDraft', async () => { throw new Error('Draft could not be saved'); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close composer' })); });
+  assert.equal(f.closed(), 0, 'A failed save cannot close the editor and discard local fields');
+  assert.ok(document.activeElement === screen.getByRole('alert').parentElement, 'Close failure is brought into view');
+  assert.equal((screen.getByLabelText('Text') as HTMLTextAreaElement).value, body.content.text);
+  save.mock.restore();
+  const saved = f.nextSave();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close composer' })); await saved; });
+  assert.equal(f.closed(), 1);
+  assert.deepEqual(f.record().body.content, body.content);
+  f.assertIndependent();
+});
+
+for (const text of ['A question\n\n> A quoted ending', '```ts\nconst ready = true;\n```'])
+test('mention picker produces publishable prose after Markdown: ' + text, async t => {
+  const area = randomUUID(), body = { area_id: area, title: 'Mention placement', content: authored(text) };
+  const f = await fixture(t, { kind: 'discussion.create', areaId: area }, '/api/v1/discussions', body);
+  const person = { id: randomUUID(), nickname: 'Ada', kind: 'human' };
+  const input = screen.getByLabelText('Text') as HTMLTextAreaElement;
+  input.setSelectionRange(text.length, text.length);
+  const call = await f.request('Mention a participant');
+  await act(async () => {
+    for (const pending of f.calls.filter(value => !value.done)) pending.finish(Response.json({
+      items: [person], scope: 'participants:all', representation: 'metadata', omitted_detail: 'bodies',
+      next_cursor: null, complete: true, work_budget_reached: false, limit: 12, max_response_bytes: 131072,
+    }));
+  });
+  assert.equal(call.path, '/api/v1/participants');
+  const saved = f.nextSave();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '@Ada' })); await saved; });
+  const content = f.record().body.content as AuthoredContent;
+  assert.doesNotThrow(() => parseAuthored(content), 'Picker-created mentions must be valid authored content');
+  assert.equal(content.mentions[0]!.participant_id, person.id);
+  assert.ok(content.text.startsWith(text), 'Existing Markdown is preserved');
+  fireEvent.click(screen.getByText('Preview', { exact: true }));
+  assert.ok(screen.getByText('@Ada', { exact: true }), 'Preview names the selected participant');
+  f.assertIndependent();
+});
+
+for (const reply of [false, true]) test('explicit composer opening focuses its first field: reply=' + reply, async t => {
+  const area = randomUUID(), discussion = randomUUID(), parent = randomUUID();
+  await fixture(t, reply ? { kind: 'reply.create', discussionId: discussion, parentId: parent } : { kind: 'discussion.create', areaId: area },
+    reply ? '/api/v1/replies' : '/api/v1/discussions',
+    reply ? { discussion_id: discussion, parent_id: parent, content: authored('Saved reply') } : { area_id: area, title: 'Saved title', content: authored('Saved opening') }, false, true);
+  assert.ok(document.activeElement === screen.getByLabelText(reply ? 'Your reply' : 'Title'));
+});
+
+test('deleting a mention marker removes only its declaration from an editable draft', async t => {
+  const area = randomUUID(), person = randomUUID();
+  const body = { area_id: area, title: 'Editing mentions', content: {
+    format: 'loom-markdown-v1', text: 'Hello [[mention:ada]] and [[mention:bo]].',
+    mentions: [{ token: 'ada', participant_id: person }, { token: 'bo', participant_id: randomUUID() }],
+  } };
+  const f = await fixture(t, { kind: 'discussion.create', areaId: area }, '/api/v1/discussions', body);
+  const saved = f.nextSave();
+  await act(async () => { fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Hello Ada and [[mention:bo]].' } }); await saved; });
+  const content = f.record().body.content as AuthoredContent;
+  assert.deepEqual(content.mentions, [body.content.mentions[1]]);
+  assert.doesNotThrow(() => parseAuthored(content));
+  f.assertIndependent();
+});
 
 for(const uncertain of [false,true])test('unconfirmed composer action focuses recovery without changing exact custody: '+uncertain,async t=>{
   const discussion=randomUUID(),parent=randomUUID(),body={discussion_id:discussion,parent_id:parent,content:authored('Retained exact reply')};
@@ -159,7 +227,7 @@ test('participant selection saves exact mentions before remount and removal pres
     complete: true, work_budget_reached: false, limit: 12, max_response_bytes: 131072 };
   const mentions = [ { token: 'm111111111111', participant_id: ada.id }, { token: 'm222222222222', participant_id: bo.id } ];
   for (const [index, person] of [ada, bo].entries()) {
-    const call = await f.request('＠ Mention a participant');
+    const call = await f.request('Mention a participant');
     assert.deepEqual({ path: call.path, method: call.method, raw: call.raw }, { path: '/api/v1/participants', method: 'GET', raw: undefined });
     await act(async () => {
       for (const pending of f.calls.filter(value => !value.done && value.path === '/api/v1/participants'))

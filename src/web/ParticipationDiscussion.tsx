@@ -19,7 +19,7 @@ import { AuthorizationBoundary, useAuthorization } from './AuthorizationBoundary
 import { ReadingSelection, ReadingText } from './Reading.js';
 import { SuppressLink } from './Moderation.js';
 import { SummarySection } from './Summaries.js';
-import { Avatar, Collection, ErrorText } from './participation-ui.js';
+import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { EditingIntent } from './EditingIntent.js';
 
@@ -68,23 +68,35 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
             <span>›</span>
             <Link to={'/loom/area/' + data.area.id}>{data.area.title}</Link>
           </div>
-          <div className="header-line">
+          <div className="discussion-heading">
             <h1>{data.opening.title}</h1>
-            <AddPrivateNote target={{ kind: 'discussion', resource_id: id }} />
-            <SuppressLink context={context} id={id} kind="discussion" />
-            <SaveControl
-              context={context}
-              target={{ kind: 'discussion', resource_id: id }}
-              label="discussion"
-            />
-            <FollowControl
-              key={'discussion:' + id}
-              context={context}
-              target={{ kind: 'discussion', resource_id: id }}
-            />
-            <Link className="button" to={'/loom/resource/' + data.opening.resource_id}>
-              History & details
-            </Link>
+            <div className="discussion-actions">
+              <SaveControl
+                context={context}
+                target={{ kind: 'discussion', resource_id: id }}
+                label="discussion"
+              />
+              <FollowControl
+                key={'discussion:' + id}
+                context={context}
+                target={{ kind: 'discussion', resource_id: id }}
+              />
+              <details className="discussion-details">
+                <summary>Discussion details</summary>
+                <div className="discussion-details-content">
+                  <AddPrivateNote target={{ kind: 'discussion', resource_id: id }} />
+                  <Link className="button" to={'/loom/resource/' + data.opening.resource_id}>
+                    History & details
+                  </Link>
+                  <ReferenceViews key={id} target={{ kind: 'discussion', resource_id: id }} />
+                  <ReadingSelection />
+                  {context.self.role === 'administrator' && (
+                    <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
+                  )}
+                  <SuppressLink context={context} id={id} kind="discussion" />
+                </div>
+              </details>
+            </div>
           </div>
           {!data.publication_open && (
             <p className="notice" role="status">
@@ -100,7 +112,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               <Link to={'/loom/area/' + data.opening.affected_area_id}>this topic</Link>.
             </p>
           )}
-          <ReferenceViews key={id} target={{ kind: 'discussion', resource_id: id }} />
           <SummarySection key={summaryReload} discussion={id} />
           {new URLSearchParams(location.search).get('summary') === 'create' && (
             <Composer
@@ -111,9 +122,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               heading="Create discussion summary"
               onCommitted={() => setSummaryReload((n) => n + 1)}
             />
-          )}
-          {context.self.role === 'administrator' && (
-            <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
           )}
         </>
       ) : (
@@ -126,7 +134,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
       )}
       <div className="reading-grid">
         <div>
-          <ReadingSelection />
           {focus ? (
             <FocusedBranch id={focus} discussionId={id} context={context} />
           ) : (
@@ -280,6 +287,8 @@ function ContributionBody({
       .all()
       .some((record) => record.slot === 'reply:' + id && record.state !== 'committed'),
   );
+  const replyButton = useRef<HTMLButtonElement>(null);
+  const [focusComposer, setFocusComposer] = useState(false);
   if ('state' in data)
     return (
       <div className="comment notice" data-resource-id={id}>
@@ -314,8 +323,9 @@ function ContributionBody({
         selectable
         content={data.content}
         participants={data.mentioned_participants}
+        compact
       />
-      {data.attachment_set && (
+      {!!data.attachment_set?.files.length && (
         <FileBrowser
           participant={context.self.participant_id}
           key={'attachments:' + data.revision_id}
@@ -324,34 +334,47 @@ function ContributionBody({
         />
       )}
       <ChangeDetails revision={data} />
-      <EditingIntent
-        context={context}
-        resource={id}
-        base={data.revision_id}
-        canEdit={data.can_edit}
-      />
-      <ReferenceViews
-        key={'references:' + data.revision_id}
-        sourceId={id}
-        sourceRevision={data.revision_id}
-        target={{ kind: 'contribution', resource_id: id }}
-      />
       <div className="post-footer">
-        {!opening && data.parent_id && <SuppressLink context={context} id={id} kind="comment" />}
+        <button
+          ref={replyButton}
+          className="text-button"
+          onClick={() => {
+            setFocusComposer(true);
+            setReply((value) => !value);
+          }}
+          disabled={!data.publication_open}
+        >
+          <Icon name="reply" /> Reply
+        </button>
         <SaveControl
           context={context}
           target={{ kind: 'contribution', resource_id: id }}
           label="contribution"
         />
-        <button
-          className="text-button"
-          onClick={() => setReply((value) => !value)}
-          disabled={!data.publication_open}
-        >
-          <span aria-hidden="true">↩</span> Reply
-        </button>
-        <Link to={`/loom/resource/${id}/${data.revision_id}`}>Revision {data.revision_number}</Link>
-        {data.can_edit && <Link to={'/loom/resource/' + id + '?edit=1'}>Edit</Link>}
+        <details className="message-details">
+          <summary>More</summary>
+          <div className="message-details-content">
+            <EditingIntent
+              context={context}
+              resource={id}
+              base={data.revision_id}
+              canEdit={data.can_edit}
+            />
+            <ReferenceViews
+              key={'references:' + data.revision_id}
+              sourceId={id}
+              sourceRevision={data.revision_id}
+              target={{ kind: 'contribution', resource_id: id }}
+            />
+            <Link to={`/loom/resource/${id}/${data.revision_id}`}>
+              Revision {data.revision_number}
+            </Link>
+            {data.can_edit && <Link to={'/loom/resource/' + id + '?edit=1'}>Edit</Link>}
+            {!opening && data.parent_id && (
+              <SuppressLink context={context} id={id} kind="comment" />
+            )}
+          </div>
+        </details>
       </div>
       {reply && (
         <Composer
@@ -359,6 +382,11 @@ function ContributionBody({
           operation={{ kind: 'reply.create', discussionId: data.discussion_id!, parentId: id }}
           slot={'reply:' + id}
           heading={'Reply to ' + data.author.nickname}
+          focusOnOpen={focusComposer}
+          onClose={() => {
+            setReply(false);
+            replyButton.current?.focus();
+          }}
           onCommitted={() => onPosted?.()}
         />
       )}

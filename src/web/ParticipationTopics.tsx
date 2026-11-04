@@ -17,7 +17,7 @@ import {
 } from '../contracts/organization.js';
 import { FollowControl } from './Following.js';
 import { AuthorizationBoundary } from './AuthorizationBoundary.js';
-import { Collection, ErrorText, ResourceRow } from './participation-ui.js';
+import { Collection, ErrorText, ResourceRow, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { ResourceContent } from './ParticipationResource.js';
 
@@ -56,6 +56,8 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
     query = new URLSearchParams(location.search);
   const heading = useRef<HTMLHeadingElement>(null),
     [created, setCreated] = useState(false);
+  const createButton = useRef<HTMLButtonElement>(null);
+  const [focusComposer, setFocusComposer] = useState(false);
   const [create, setCreate] = useState(query.has('compose')),
     [reload, setReload] = useState(0),
     [tab, setTab] = useState<'discussions' | 'artifacts'>(
@@ -108,11 +110,15 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
           <p className="subtitle">{area.description}</p>
         </div>
         <button
+          ref={createButton}
           className="primary"
           disabled={!area.publication_open}
-          onClick={() => setCreate((value) => !value)}
+          onClick={() => {
+            setFocusComposer(true);
+            setCreate((value) => !value);
+          }}
         >
-          ＋ {tab === 'discussions' ? 'Start a discussion' : 'New text artifact'}
+          <Icon name="plus" /> {tab === 'discussions' ? 'Start a discussion' : 'New text artifact'}
         </button>
       </div>
       <p className="topic-state">
@@ -161,6 +167,11 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
           }}
           slot={tab + ':' + id}
           heading={tab === 'discussions' ? 'Start a discussion' : 'New text artifact'}
+          focusOnOpen={focusComposer}
+          onClose={() => {
+            setCreate(false);
+            createButton.current?.focus();
+          }}
           onCommitted={() => setReload((n) => n + 1)}
         />
       )}

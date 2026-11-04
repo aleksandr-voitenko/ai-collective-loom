@@ -67,6 +67,12 @@ query edits from its provider key so persistent controls keep their lifetime.
 embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundary.
 `ParticipationDiscussion.tsx` keeps discussion traversal and reply expansion together;
 reading and reference siblings use distinct revision keys (LC-20261018-QWNB).
+Native disclosures keep secondary message/discussion controls mounted and authorized;
+ReadingText's compact mode leaves the prose/presentation observer outside its reading
+disclosure and reveals pending/conflict/error controls. Empty summaries use a small
+invitation. Reading disclosures retain the user's open choice after settlement;
+only a new pending/error/conflict opens them automatically. The
+available/unavailable/error summary states retain their existing meaning.
 
 Discussion headers distinguish local closure from inherited topic closure; only
 administrators receive the contextual close/reopen organization links. The existing
@@ -96,6 +102,14 @@ while authorization is active and focus remains on the body or within that group
 Do not retarget restored drafts or deliberate focus elsewhere; focus also reveals
 the controls without relocating the retained form or changing request custody.
 Automatic reconnect status reads do not request focus.
+Explicit topic/reply opening opts into first-field focus and scroll; closing keeps
+the journal and restores the trigger only after a successful local save. A failed
+save keeps the editor open with focused feedback. Native composer disclosures retain mounted
+file/recovery state and show configured fields. `composer-mentions.ts` validates
+caret insertion with the shared parser, then tries a separate prose paragraph
+without rewriting the original Markdown. Failed placement leaves the draft intact.
+Editable text deletion removes absent mention declarations; uncertain requests stay
+opaque. Selected names are in-memory presentation only, never notification identity.
 Delayed coverage/account selections use latest-draft callbacks. Explicit correction
 of a rejected v1 draft may adopt the exact comparison revision's references;
 v2-to-v3 correction preserves attempted references (LC-20261016-BA7H).
