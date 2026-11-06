@@ -495,7 +495,7 @@ test('populated 0028 upgrade preserves every old row, exact files, retry and pol
   const before = await snapshot(f);
   await f.migrate();
   const after = await snapshot(f);
-  assert.deepEqual(after, before);
+  assert.deepEqual(after, { ...before, revision_discussion_links: [] });
   assert.equal((await f.admin.call(path + '/outcomes', {})).body.items.length, 0);
   assert.equal(
     (await f.admin.call('/api/v1/artifacts', file.input)).body.revision_id,

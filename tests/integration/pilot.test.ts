@@ -663,7 +663,7 @@ test(
 );
 
 test(
-  'pilot updates populated actual 0028 source to 0029 and resumes an interrupted controller after verified backup',
+  'pilot updates populated actual 0028 source to 0030 and resumes an interrupted controller after verified backup',
   { timeout: 240000 },
   async (t) => {
     const { historicalPilot, previousPilotSource, interruptAfterBackup } =
@@ -700,7 +700,8 @@ test(
     await pilotCommand('start', f.path);
     const next = f.instance();
     assert.notEqual(next.release.applicationSource, p.d.release.applicationSource);
-    assert.equal(sql(next, 'SELECT max(version) FROM loom_migrations.history'), '0029');
+    assert.equal(sql(next, 'SELECT max(version) FROM loom_migrations.history'), '0030');
+    assert.equal(sql(next, 'SELECT count(*) FROM loom.revision_discussion_links'), '0');
     assert.equal(sql(next, 'SELECT row_to_json(t) FROM loom.identity_initialization t'), keys);
     await p.verifyReads();
     assert.equal((await p.alice.client.call('/api/v1/admin/operational-health')).status, 403);

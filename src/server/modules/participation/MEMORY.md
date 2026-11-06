@@ -395,8 +395,10 @@ Missing/unavailable links never reject prose. `publication/discussion-link-stora
 inserts immutable memberships before the common clock. No backfill, format/digest
 change or worker; old retries never rescan or reapply. Current-pointer equality
 handles removal/re-addition while retaining history. `discussion-backlinks.ts`
-reads20 candidate revisions/100 destinations each with RR/2.5s, existing guard/byte
-bounds and five-minute publication/visibility/organization-bound cursors.
+selects20 current candidate revisions/100 destinations each with RR/2.5s, existing
+guard/byte bounds and five-minute publication/visibility/organization-bound cursors.
+The current-pointer join precedes the candidate limit, excluding obsolete history
+from paging work; complete sorted guards still recheck pointers and authorization.
 File paths stay in storage/authorization; navigation projects exact IDs and URLs
 without paths so100 escaped maximum-length paths cannot block the largest page.
 Both source and exact destinations are currently authorized; independently visible

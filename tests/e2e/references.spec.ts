@@ -25,7 +25,9 @@ test('automatic discussion backlinks follow browser opening and reply publicatio
   expect(target.status).toBe(201);
   const targetDiscussion = (await f.admin.call('/api/v1/resources/' + target.body.resource_id)).body
     .discussion_id;
-  const text = `Related work: [conversation](/loom/discussion/${targetDiscussion}) and [same conversation](${server.origin}/loom/discussion/${targetDiscussion}).`;
+  const text = `Related work: [conversation](/loom/discussion/${targetDiscussion}) and [same conversation](${server.origin}/loom/discussion/${targetDiscussion}).
+
+[Normalized one](loom/..//outside.example/path) [Normalized two](/a/..//outside.example/path) [Normalized three](/%2e%2e//outside.example/path) [Explicit external](https://outside.example/path)`;
   await page.goto(`${server.origin}/loom/area/${f.area}?compose=discussions`);
   await page.getByLabel('Title', { exact: true }).fill('Related implementation');
   await page.getByLabel('Text', { exact: true }).fill(text);
@@ -46,6 +48,11 @@ test('automatic discussion backlinks follow browser opening and reply publicatio
     'href',
     `/loom/discussion/${targetDiscussion}`,
   );
+  for (const name of ['Normalized one', 'Normalized two', 'Normalized three'])
+    await expect(opening.getByRole('link', { name, exact: true })).toHaveCount(0);
+  await expect(
+    opening.getByRole('link', { name: 'Explicit external', exact: true }),
+  ).toHaveAttribute('href', 'https://outside.example/path');
   await opening.getByRole('button', { name: 'Reply', exact: true }).click();
   await opening
     .getByLabel('Your reply', { exact: true })
@@ -101,6 +108,60 @@ test('automatic discussion backlinks follow browser opening and reply publicatio
   await expect(
     page.getByRole('heading', { name: 'Links from published contributions' }),
   ).toBeFocused();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const emptyTarget = await f.admin.call('/api/v1/discussions', {
+    idempotency_key: randomUUID(),
+    area_id: f.area,
+    title: 'Recorded mentions',
+    content: plain('Target for recorded mention pages.'),
+  });
+  expect(emptyTarget.status).toBe(201);
+  const emptyDiscussion = (await f.admin.call('/api/v1/resources/' + emptyTarget.body.resource_id))
+    .body.discussion_id;
+  await page.goto(`${server.origin}/loom/discussion/${emptyDiscussion}`);
+  await page.locator('details.mentioned-in summary').click();
+  await expect(
+    page.getByText('No recorded mentions yet. Earlier text is included only when revised.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await backlinkReview(page, { state: 'initial-empty' });
+  const revisions: string[] = [];
+  for (let i = 0; i < 25; i++) {
+    const source = await f.admin.call('/api/v1/discussions', {
+      idempotency_key: randomUUID(),
+      area_id: f.area,
+      title: 'Recorded source ' + i,
+      content: plain(`[target](/loom/discussion/${emptyDiscussion})`),
+    });
+    expect(source.status).toBe(201);
+    revisions.push(source.body.revision_id);
+  }
+  const ordered = (
+    await server.observer.query(
+      'SELECT c.discussion_id FROM loom.contributions c JOIN loom.revisions v ON v.resource_id=c.id WHERE v.id=ANY($1::uuid[]) ORDER BY v.id',
+      [revisions],
+    )
+  ).rows;
+  for (const hidden of ordered.slice(2)) {
+    const state = await f.admin.call('/api/v1/admin/moderation/resources/' + hidden.discussion_id);
+    expect(state.status).toBe(200);
+    const suppression = await f.admin.call('/api/v1/admin/moderation/state', {
+      idempotency_key: randomUUID(),
+      target: state.body.target,
+      expected_version: state.body.version,
+      suppressed: true,
+    });
+    expect(suppression.status).toBe(200);
+  }
+  const results = page.getByRole('region', { name: 'Automatic discussion backlinks' });
+  await results.getByRole('button', { name: 'Refresh mentions', exact: true }).click();
+  await expect(results.locator('li.reference-row')).toHaveCount(2);
+  await results.getByRole('button', { name: 'Next mentions', exact: true }).click();
+  await expect(results.getByText('End of recorded mentions.', { exact: true })).toBeVisible();
+  await expect(results.locator('li.reference-row')).toHaveCount(0);
+  await expect(results.getByText('No current published mentions.', { exact: true })).toHaveCount(0);
+  await backlinkReview(page, { state: 'end-of-page' });
 });
 
 function barrier() {

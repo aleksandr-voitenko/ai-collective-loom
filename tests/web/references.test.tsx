@@ -167,12 +167,23 @@ test('automatic backlink pages retain exact failed cursors, distinct navigation,
   assert.equal(calls[3]!.path, calls[2]!.path);
   assert.match(calls[3]!.path, /cursor=mentions-page-two/);
   await act(async () => calls[3]!.finish(Response.json({ ...p, items: [] })));
+  assert.ok(screen.getByText('End of recorded mentions.'));
+  assert.equal(screen.queryByText('No current published mentions.'), null);
   assert.equal(
     document.activeElement,
     screen.getByRole('heading', { name: 'Links from published contributions' }),
   );
   await act(async () => calls[0]!.finish(Response.json(p)));
   assert.equal(screen.queryByRole('link', { name: 'Referring discussion' }), null);
+});
+test('an empty initial backlink page describes recorded prospective coverage only', async (t) => {
+  const { calls } = mount(t, 'backlinks');
+  await waitFor(() => assert.equal(calls.length, 2));
+  await act(async () => calls[1]!.finish(Response.json({ ...backlinkPage(), items: [] })));
+  assert.ok(
+    screen.getByText('No recorded mentions yet. Earlier text is included only when revised.'),
+  );
+  assert.equal(screen.queryByText('End of recorded mentions.'), null);
 });
 test('automatic backlinks cannot reappear after route or identity changes and authorization denial', async (t) => {
   const { calls, router } = mount(t, 'backlinks'),

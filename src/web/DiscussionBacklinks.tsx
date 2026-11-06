@@ -28,7 +28,10 @@ export function MentionedIn({ discussion }: { discussion: string }) {
 
 export function BacklinkResults({ discussion }: { discussion: string }) {
   const authority = useAuthorization();
-  const [data, setData] = useState<DiscussionBacklinkPageView>(),
+  const [loaded, setLoaded] = useState<{
+      page: DiscussionBacklinkPageView;
+      cursor: string | null;
+    }>(),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [restart, setRestart] = useState(false);
@@ -36,6 +39,7 @@ export function BacklinkResults({ discussion }: { discussion: string }) {
     sequence = useRef(0),
     attempt = useRef<string | null>(null),
     heading = useRef<HTMLHeadingElement>(null);
+  const data = loaded?.page;
   async function load(cursor: string | null, focus = false) {
     const seq = ++sequence.current,
       owner = identityGeneration();
@@ -50,7 +54,7 @@ export function BacklinkResults({ discussion }: { discussion: string }) {
         { schema: DiscussionBacklinkPage },
       );
       if (live.current && seq === sequence.current && owner === identityGeneration()) {
-        setData(result);
+        setLoaded({ page: result, cursor });
         if (focus) heading.current?.focus();
       }
     } catch (failure) {
@@ -128,7 +132,9 @@ export function BacklinkResults({ discussion }: { discussion: string }) {
           {!busy && !error && !data.items.length && (
             <p>
               {data.complete
-                ? 'No current published mentions.'
+                ? loaded?.cursor
+                  ? 'End of recorded mentions.'
+                  : 'No recorded mentions yet. Earlier text is included only when revised.'
                 : 'No eligible mentions in this bounded page. More candidates remain.'}
             </p>
           )}

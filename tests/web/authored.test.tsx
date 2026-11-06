@@ -11,6 +11,25 @@ const content = (text: string): AuthoredContent => ({
   text,
   mentions: [],
 });
+test('rendered local Markdown never changes origin after path normalization', () => {
+  const text = [
+    'loom/..//outside.example/path',
+    '/a/..//outside.example/path',
+    '/%2e%2e//outside.example/path',
+  ]
+    .map((url) => `[unsafe](${url})`)
+    .join(' ');
+  const markup = renderToStaticMarkup(
+    <AuthoredText
+      content={content(
+        text + ' [local](/loom/discussion/topic) [explicit](https://outside.example/path)',
+      )}
+    />,
+  );
+  assert.ok(!markup.includes('href="//'), markup);
+  assert.ok(markup.includes('href="/loom/discussion/topic"'));
+  assert.ok(markup.includes('href="https://outside.example/path"'));
+});
 test('authored markup is rendered safely without HTML, remote images or executable URLs', () => {
   const result = renderToStaticMarkup(
     <AuthoredText

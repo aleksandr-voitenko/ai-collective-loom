@@ -43,7 +43,13 @@ export function authoredLink(value: string): string | undefined {
   if (/^(?:\/(?!\/)|(?:\.\.?\/)*(?:loom|api\/v1)\/)/.test(value)) {
     try {
       const url = new URL(value, 'https://loom.invalid/');
-      if (url.origin === 'https://loom.invalid' && !value.includes('\\'))
+      // Dot-segment removal can leave a pathname beginning with //, which
+      // selects a different host when this serialized value becomes an href.
+      if (
+        url.origin === 'https://loom.invalid' &&
+        !value.includes('\\') &&
+        !url.pathname.startsWith('//')
+      )
         return url.pathname + url.search + url.hash;
     } catch {
       return undefined;

@@ -965,14 +965,19 @@ v1 replay scenario. The comparison failure and rejection notices need exact text
 inferred navigation: typed exact file/summary targets, API openings/comments,
 deduplication, current/history retention, retries/rollback/acknowledgement loss,
 prospective0029 upgrade with all old tables preserved, hidden-source paging and
-both visibility race orders. `unit/discussion-links.test.ts` covers safe-token
-selection/URL bounds. Byte-bound regressions retain100 escaped maximum-length
+both visibility race orders. A66-membership/2-current-source fixture verifies that
+obsolete history does not consume continuation pages and remains unchanged.
+`unit/discussion-links.test.ts` covers safe-token selection/URL bounds and normalized
+local href origin preservation, with rendered and compiled-browser regressions.
+Byte-bound regressions retain100 escaped maximum-length
 attachment paths while projecting exact IDs/URLs, and skip oversized query URLs
 without refusing prose. Mounted reference tests separately fence backlink page
-retry/focus, route/identity/authority loss and late success. The compiled references
+retry/focus, initial prospective empty versus completed continuation copy,
+route/identity/authority loss and late success. The compiled references
 journey publishes opening/reply links and checks current revision removal/re-addition.
-`LOOM_BACKLINK_REVIEW=1` adds opt-in actual desktop/mobile PNGs plus provenance under
-`/tmp/loom-review-evidence/discussion-backlinks`, separate from approved diagnostics.
+`LOOM_BACKLINK_REVIEW=1` adds opt-in actual desktop/mobile PNGs for populated,
+initial-empty and completed-continuation states plus build provenance under
+`/tmp/loom-review-evidence/pr55-followup`, separate from approved diagnostics.
 Closed diagnostics add `references.spec.ts`, three route
 templates and Add/Check/Refresh controls, without changing bounds or raw containment.
 `web/composer-recovery.test.tsx` awaits actual journal writes under Web Locks before

@@ -71,8 +71,11 @@ Its `DiscussionBacklinks.tsx` Mentioned in disclosure lazily loads a separate
 inferred-navigation page (ADR-043), with exact source links, author/publisher/time
 and individually navigable contributions. It uses a full withdrawal boundary,
 request/lifetime/identity fences, exact failed-cursor retry and result-heading
-focus. Source grouping never becomes a semantic reference or personal action.
-`AuthoredText` shares safe instance-root local-link resolution with the parser.
+focus. Accepted page/cursor state distinguishes initial prospective absence from
+an empty completed continuation without retaining earlier pages. Source grouping
+never becomes a semantic reference or personal action.
+`AuthoredText` shares safe instance-root local-link resolution with the parser;
+normalized local hrefs must remain single-root-relative, never protocol-relative.
 Native disclosures keep secondary message/discussion controls mounted and authorized;
 ReadingText's compact mode leaves the prose/presentation observer outside its reading
 disclosure and reveals pending/conflict/error controls. Empty summaries use a small

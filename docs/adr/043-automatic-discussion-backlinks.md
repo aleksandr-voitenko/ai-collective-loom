@@ -42,8 +42,11 @@ Absolute HTTP(S) URLs must match the configured instance origin exactly and have
 no credentials or fragment. Root-relative and instance-root path-relative forms
 (`/loom/...`, `loom/...`, `./loom/...`, `../loom/...`, and the corresponding
 `api/v1/...` forms) resolve consistently from the instance root in every rendered
-view. Arbitrary context-relative paths, protocol-relative URLs, other origins,
-malformed IDs, fragments and unknown query parameters are unsupported.
+view. Normalized local hrefs must still begin with a single slash: dot-segment
+removal must never turn a local input into a protocol-relative URL. Explicit
+HTTP(S) links retain their ordinary presentation, including external links that
+do not infer membership. Arbitrary context-relative paths, protocol-relative URLs,
+other origins, malformed IDs, fragments and unknown query parameters are unsupported.
 
 Supported routes, verified against this checkout:
 
@@ -118,8 +121,12 @@ No inaccessible source title, excerpt, URL, ID or count is serialized.
 
 `GET /api/v1/discussions/{id}/mentioned-in` is ordinary authenticated retrieval.
 It queries the immutable membership index directly; no search or new worker is
-required. Each REPEATABLE READ page groups/scans at most 20 source revisions in
-UUID order, with at most 100 destinations each. It returns default 12/max 25 entries
+required. Candidate selection joins the current source pointer before applying
+the 20-source-revision page bound in UUID order; obsolete retained memberships
+cannot consume continuation pages. This is only selection: current pointers,
+sources and exact destinations are still rechecked under the complete sorted
+guard plan in the same REPEATABLE READ snapshot. History is never modified.
+Each candidate has at most 100 destinations. Pages return default 12/max 25 entries
 within the full 4–128 KiB serialized budget. The smaller candidate bound keeps
 the complete resource plan within existing 2200-seed/32-owner/3840-resource limits. SQL uses
 the existing 2.5-second statement deadline. Empty pages may continue, never disclose
@@ -136,6 +143,10 @@ The lazy disclosure uses its own full authorization-withdrawal boundary. Existin
 lifetime, request sequence, participant generation and protected-read safeguards
 fence late responses. A transient failure keeps the earlier page and exact attempted
 cursor for explicit retry; successful retry/paging focuses the result heading.
+The accepted page retains its own cursor, separately from a failed attempt.
+An empty completed initial page describes recorded prospective coverage; an empty
+completed continuation says only that the recorded traversal has ended. Earlier
+populated pages are not accumulated in client state or reclassified as absent.
 Native disclosure, links, buttons, time elements and wrapping rows support keyboard
 and narrow layouts. It stays separate from authored References/Referenced by.
 

@@ -3,7 +3,34 @@ import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { discussionLinks, discussionLinkLimits } from '../../src/contracts/discussion-links.js';
 import { plain } from '../helpers/references.js';
-import { parseAuthored, parseAuthoredLinks } from '../../src/contracts/authored.js';
+import { authoredLink, parseAuthored, parseAuthoredLinks } from '../../src/contracts/authored.js';
+
+test('normalized local hrefs cannot become protocol-relative origins', () => {
+  for (const value of [
+    'loom/..//outside.example/path',
+    '/a/..//outside.example/path',
+    '/%2e%2e//outside.example/path',
+    '/a/..//loom.invalid/path',
+  ])
+    assert.equal(authoredLink(value), undefined, value);
+  for (const [value, expected] of [
+    ['/loom/discussion/topic', '/loom/discussion/topic'],
+    ['./loom/discussion/topic', '/loom/discussion/topic'],
+    ['loom/../loom/discussion/topic', '/loom/discussion/topic'],
+    ['https://outside.example/path', 'https://outside.example/path'],
+    ['http://outside.example/path', 'http://outside.example/path'],
+  ])
+    assert.equal(authoredLink(value!), expected);
+  const id = randomUUID();
+  for (const origin of ['https://outside.example', 'https://loom.example'])
+    assert.deepEqual(
+      discussionLinks(
+        plain(`[unsafe](loom/..//${new URL(origin).host}/loom/discussion/${id})`),
+        'https://loom.example',
+      ),
+      [],
+    );
+});
 
 test('ordinary parsed links support canonical local forms and retain exact discussion, resource, revision and attachment destinations', () => {
   const d = randomUUID(),

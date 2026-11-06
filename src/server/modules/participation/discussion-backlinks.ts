@@ -73,11 +73,15 @@ export class DiscussionBacklinks {
           throw new ReferenceError('references_changed');
         const after = saved?.after ?? null,
           expires = saved?.expires ?? Date.now() + referenceLimits.cursorSeconds * 1000;
+        // Obsolete memberships do not consume the current-source page budget.
+        // Selection is not authority: recheck pointers and visibility under the
+        // complete sorted resource guards below, within this same snapshot.
         const candidates = (
           await tx.query<{ source_id: string; revision_id: string }>(
-            `SELECT source_id,revision_id FROM loom.revision_discussion_links
-           WHERE discussion_id=$1 AND ($2::uuid IS NULL OR revision_id>$2)
-           GROUP BY revision_id,source_id ORDER BY revision_id,source_id LIMIT $3`,
+            `SELECT l.source_id,l.revision_id FROM loom.revision_discussion_links l
+           JOIN loom.resources s ON s.id=l.source_id AND s.current_revision_id=l.revision_id
+           WHERE l.discussion_id=$1 AND ($2::uuid IS NULL OR l.revision_id>$2)
+           GROUP BY l.revision_id,l.source_id ORDER BY l.revision_id,l.source_id LIMIT $3`,
             [discussion, after, discussionLinkLimits.scan + 1],
           )
         ).rows;

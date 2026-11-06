@@ -8,6 +8,60 @@ import { barrier, bounded, blockedBy } from '../helpers/search-races.js';
 import { prepareText } from '../helpers/file-text.js';
 
 test(
+  'retained obsolete memberships do not consume current-source continuation pages',
+  { timeout: 90000 },
+  async (t) => {
+    const f = await fixture(t),
+      target = await discussion(f),
+      text = `[target](/loom/discussion/${target.discussion_id})`;
+    let source = await discussion(f, 'Retained history source', text);
+    for (let i = 0; i < 64; i++) source = { ...source, ...(await revise(f, source, text)) };
+    const other = await discussion(f, 'Second current source', text);
+    const before = (
+      await f.observer.query(
+        'SELECT * FROM loom.revision_discussion_links WHERE discussion_id=$1 ORDER BY revision_id,destination',
+        [target.discussion_id],
+      )
+    ).rows;
+    let cursor: string | null = null,
+      pages = 0,
+      emptyPages = 0;
+    const seen: string[] = [];
+    do {
+      const result = await page(f, target.discussion_id, {
+        limit: '25',
+        ...(cursor ? { cursor } : {}),
+      });
+      pages++;
+      if (!result.items.length) emptyPages++;
+      seen.push(...result.items.map((item) => item.source.resource_id));
+      cursor = result.next_cursor;
+    } while (cursor);
+    t.diagnostic(
+      JSON.stringify({
+        retained_memberships: before.length,
+        current_sources: seen.length,
+        pages,
+        empty_pages: emptyPages,
+      }),
+    );
+    assert.deepEqual(seen.sort(), [source.resource_id, other.resource_id].sort());
+    assert.deepEqual(
+      (
+        await f.observer.query(
+          'SELECT * FROM loom.revision_discussion_links WHERE discussion_id=$1 ORDER BY revision_id,destination',
+          [target.discussion_id],
+        )
+      ).rows,
+      before,
+    );
+    assert.equal(before.length, 66);
+    assert.equal(pages, 1);
+    assert.equal(emptyPages, 0);
+  },
+);
+
+test(
   'oversized inferred URLs cannot prevent ordinary prose publication',
   { timeout: 90000 },
   async (t) => {
