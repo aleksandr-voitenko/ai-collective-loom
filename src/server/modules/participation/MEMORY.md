@@ -179,7 +179,9 @@ Config absence/ineligibility is explicit and does not block unrelated participat
 Bodies are exact v1, explicit-reference v2, change-aware v3 or file-aware v4,
 16 KiB UTF-8 text plus rationale and 4,096 parsed tokens maximum,
 with at most 16 validated ordinary-prose mention tokens/IDs. Raw HTML, images and
-non-HTTP(S) links do not render as active content. Ordinary links infer nothing.
+unsupported-scheme links do not render as active content. Supported local links
+resolve from the instance root. Ordinary links never infer semantic references;
+ADR-043 adds separately stored navigation evidence for opening/comment main text.
 Inline file embedding and model execution remain unsupported; artifact files use
 the separate passive manifest contract. Persisted authored entities feed the
 independent notification consumer (ADR-023).
@@ -380,6 +382,29 @@ guards picker/page responses by live view, request sequence and identity generat
 Known IDs/links work without indexing. Rationale is not searched; all four formats'
 source title/body remain worker/rebuild eligible. Tests: `test:references:postgres`,
 `web/references.test.tsx` and `e2e/references.spec.ts`.
+
+Automatic discussion backlinks (ADR-043/guide25/migration0030) are separate from
+authored references and their exact incoming/outgoing scope. `discussion-links.ts`
+extracts at most100 unique supported link destinations from parsed ordinary prose;
+quotes/code are excluded. Original validation/token accounting stays stable; local
+link expansion falls back to the original dialect for mention/token-bound conflicts.
+URLs above1024 UTF-8 bytes are skipped before SQL, never rejected as publications.
+`discussion-link-context.ts` resolves typed identities
+under the complete sorted resource plan without requiring target read/edit rights.
+Missing/unavailable links never reject prose. `publication/discussion-link-storage.ts`
+inserts immutable memberships before the common clock. No backfill, format/digest
+change or worker; old retries never rescan or reapply. Current-pointer equality
+handles removal/re-addition while retaining history. `discussion-backlinks.ts`
+selects20 current candidate revisions/100 destinations each with RR/2.5s, existing
+guard/byte bounds and five-minute publication/visibility/organization-bound cursors.
+The current-pointer join precedes the candidate limit, excluding obsolete history
+from paging work; complete sorted guards still recheck pointers and authorization.
+File paths stay in storage/authorization; navigation projects exact IDs and URLs
+without paths so100 escaped maximum-length paths cannot block the largest page.
+Both source and exact destinations are currently authorized; independently visible
+nested replies survive parent suppression and withhold unavailable opening titles.
+Links to the source or its own container are excluded; same-discussion peers count.
+No target activity, notification or private-state effects are added.
 
 Authored changes (ADR-022): `change-context.ts` prepares exact account members;
 `publication/change-storage.ts` inserts note/account rows before the common tail;

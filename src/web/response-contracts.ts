@@ -311,6 +311,7 @@ add(
     'GET /api/v1/admin/notifications/health',
     'GET /api/v1/admin/notifications/failures',
     'GET /api/v1/references/target',
+    'GET /api/v1/discussions/{id}/mentioned-in',
     'GET /api/v1/resources/{id}/revisions/{revision}/change-note',
     'GET /api/v1/resources/{id}/revisions/{revision}/change-coverage',
     'GET /api/v1/changes',

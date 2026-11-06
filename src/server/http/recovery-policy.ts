@@ -64,6 +64,7 @@ add('retrieval', [
   'GET /api/v1/contributions/:id/children',
   'GET /api/v1/contributions/:id/context',
   'GET /api/v1/discussions/:id',
+  'GET /api/v1/discussions/:id/mentioned-in',
   'GET /api/v1/discussions/:id/summary',
   'GET /api/v1/discussions/:id/summary-sources',
   'GET /api/v1/file-uploads/:id',

@@ -11,6 +11,25 @@ const content = (text: string): AuthoredContent => ({
   text,
   mentions: [],
 });
+test('rendered local Markdown never changes origin after path normalization', () => {
+  const text = [
+    'loom/..//outside.example/path',
+    '/a/..//outside.example/path',
+    '/%2e%2e//outside.example/path',
+  ]
+    .map((url) => `[unsafe](${url})`)
+    .join(' ');
+  const markup = renderToStaticMarkup(
+    <AuthoredText
+      content={content(
+        text + ' [local](/loom/discussion/topic) [explicit](https://outside.example/path)',
+      )}
+    />,
+  );
+  assert.ok(!markup.includes('href="//'), markup);
+  assert.ok(markup.includes('href="/loom/discussion/topic"'));
+  assert.ok(markup.includes('href="https://outside.example/path"'));
+});
 test('authored markup is rendered safely without HTML, remote images or executable URLs', () => {
   const result = renderToStaticMarkup(
     <AuthoredText
@@ -52,4 +71,17 @@ test('authored byte and complexity bounds reject malformed or unretrievable inpu
   assert.throws(() => parseAuthored(content('bad\u0000text')));
   assert.throws(() => parseAuthored(content('\ud800')));
   assert.throws(() => parseAuthored(content('*x* '.repeat(1800))), /complex/);
+});
+test('supported relative links render from the instance root in every authored presentation', () => {
+  const id = randomUUID();
+  const result = renderToStaticMarkup(
+    <AuthoredText
+      content={content(
+        `[discussion](./loom/discussion/${id}) [resource](/loom/resource/${id}) [unsafe](//other.example/loom)`,
+      )}
+    />,
+  );
+  assert.ok(result.includes(`href="/loom/discussion/${id}"`));
+  assert.ok(result.includes(`href="/loom/resource/${id}"`));
+  assert.ok(!result.includes('href="//other.example'));
 });

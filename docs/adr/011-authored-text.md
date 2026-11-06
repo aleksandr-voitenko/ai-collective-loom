@@ -11,7 +11,9 @@ Retain `{format: "loom-markdown-v1", text, mentions}` for existing publications.
 explicit `references` list, preserving exact text/mentions and v1 interpretation.
 The browser and API use the same pinned markdown-it 15.0.2 CommonMark parser, with
 raw HTML, images and linkification disabled, and a maximum nesting depth of 20.
-Links must use HTTP or HTTPS. Raw HTML and uploaded/transcript-like text have no
+Validation retains the original HTTP(S) dialect and token accounting. ADR-043 adds
+bounded local-link presentation/detection without invalidating retained intent.
+Raw HTML and uploaded/transcript-like text have no
 executable meaning. The React renderer constructs an allowlisted element tree;
 it never passes user text to `innerHTML`. Remote images, embeds, fetches and model
 calls are absent. Ordered lists, headings, paragraphs, emphasis, links, quotes and
@@ -43,9 +45,11 @@ would introduce a larger editor/compatibility contract before this slice needs i
 The selected dialect is versioned so neither choice is imposed on future releases.
 
 Ordinary HTTP(S) links, including exact Loom revision URLs, are retained as authored
-links. They are not typed provenance, recorded backlinks, preserved remote bytes,
+links. They are not typed provenance, authored recorded references, preserved remote bytes,
 change coverage or notification entities. Only an explicit v2/v3 declaration list creates a
-recorded relationship; no URL or token inference/backfill occurs. Unsupported
+recorded relationship; no semantic URL or token inference occurs. ADR-043 separately
+adds prospective automatic navigation backlinks for ordinary opening/comment links,
+without historical backfill or changes to authored declarations. Unsupported
 audience, file, manifest and summary fields are rejected, never silently ignored.
 
 The 128 KiB request/response cap can hold the worst JSON escaping of every accepted

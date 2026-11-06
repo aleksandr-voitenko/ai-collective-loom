@@ -14,6 +14,7 @@ import {
 } from './publication-preparation.js';
 import { publicationOutcome } from './publication-attempt.js';
 import { publishPreparedPublication } from './publication-transaction.js';
+import { discussionLinks } from '../../../contracts/discussion-links.js';
 export {
   digestRequest,
   participationSemanticVersion,
@@ -22,15 +23,19 @@ export {
 } from './publication-preparation.js';
 
 export class ParticipationPublications {
-  constructor(private readonly database: Transactions) {}
+  constructor(
+    private readonly database: Transactions,
+    private readonly origin?: string,
+  ) {}
 
   async publish(actorContext: ActorContext, operation: PublicationKind, value: unknown) {
     const prepared = preparePublicationRequest(operation, value);
+    const links = this.origin ? discussionLinks(prepared.content, this.origin) : [];
     // Validate the trusted actor before entering SQL, including for replay.
     identityOf(actorContext);
     try {
       const completed = await this.database.transaction((tx) =>
-        publishPreparedPublication(tx, actorContext, prepared),
+        publishPreparedPublication(tx, actorContext, prepared, links),
       );
       if (completed instanceof SummaryError || completed instanceof FileError) throw completed;
       return completed;

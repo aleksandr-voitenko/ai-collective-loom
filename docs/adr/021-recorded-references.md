@@ -8,9 +8,14 @@ architecture §11.5 and DIS-06/REF-01–03 govern the behavior.
 
 `loom-markdown-v1` remains byte/semantic compatible. `loom-markdown-v2` adds a
 required `references` array alongside exact `text` and explicit `mentions`.
-References are an authored list, not new syntax in prose. Nothing scans old URLs,
-code, quotes, drafts, Saved items or proposal-area references. HTTP(S) links remain
-ordinary links. The safe Markdown parser/React renderer retains its HTML boundary.
+References are an authored list, not new syntax in prose. Nothing infers semantic
+assertions from URLs, code, quotes, drafts, Saved items or proposal-area references.
+[ADR-043](043-automatic-discussion-backlinks.md) intentionally changes the original
+no-URL-inference decision for newly published/revised opening and comment text:
+recognized Markdown links create separate inferred navigation membership, never
+an authored reference or relationship. Old content is not scanned or backfilled.
+The safe Markdown parser/React renderer retains its HTML boundary; supported local
+links now have an instance-root base in every presentation.
 
 Each declaration has a source-scoped UUID `reference_id`, a target `{kind,
 resource_id, revision_id?}`, nullable `relationship` and nullable `rationale`.

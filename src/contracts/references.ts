@@ -113,3 +113,46 @@ export type ReferenceEntryView = Static<typeof ReferenceEntry>;
 export type ReferencePageView = Static<typeof ReferencePage>;
 export type IncomingOptions = Static<typeof IncomingInput>;
 export type ReferencePageOptions = Static<typeof ReferencePageInput>;
+
+// Navigation needs exact contextual identity, not a second copy of a file path.
+// Escaped paths for 100 destinations could otherwise exceed the largest page.
+const LinkedDiscussionTarget = Type.Object(
+  {
+    kind: Type.Union(['discussion', 'contribution', 'summary'].map((kind) => Type.Literal(kind))),
+    resource_id: UUID,
+    revision_id: Type.Optional(UUID),
+    file_id: Type.Optional(UUID),
+  },
+  closed,
+);
+export const DiscussionBacklink = Type.Object(
+  {
+    source: Resource,
+    source_browser_url: Type.String(),
+    source_context_url: Type.String(),
+    discussion_id: UUID,
+    discussion_title: Type.Union([Type.String(), Type.Null()]),
+    destinations: Type.Array(
+      Type.Object({ target: LinkedDiscussionTarget, browser_url: Type.String() }, closed),
+      { minItems: 1, maxItems: 100 },
+    ),
+  },
+  closed,
+);
+export const DiscussionBacklinkPage = Type.Object(
+  {
+    items: Type.Array(DiscussionBacklink, { maxItems: 25 }),
+    provenance: Type.Literal('inferred_markdown_link'),
+    discussion_id: UUID,
+    order: Type.Literal('source_revision_uuid'),
+    next_cursor: Type.Union([Type.String({ maxLength: referenceLimits.cursorBytes }), Type.Null()]),
+    complete: Type.Boolean(),
+    work_budget_reached: Type.Boolean(),
+    limit: Type.Integer(),
+    max_response_bytes: Type.Integer(),
+    expires_at: Type.String(),
+  },
+  closed,
+);
+export type DiscussionBacklinkView = Static<typeof DiscussionBacklink>;
+export type DiscussionBacklinkPageView = Static<typeof DiscussionBacklinkPage>;

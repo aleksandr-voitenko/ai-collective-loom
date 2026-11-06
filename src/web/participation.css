@@ -1134,6 +1134,21 @@
 .reference-list {
   padding-left: 1.25rem;
 }
+.mentioned-in {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, #ccd5ce);
+  border-radius: 8px;
+  min-width: 0;
+}
+.mentioned-in summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.mentioned-in h3:focus {
+  outline: 2px solid #287348;
+  outline-offset: 3px;
+}
 .reference-rationale {
   white-space: pre-wrap;
 }

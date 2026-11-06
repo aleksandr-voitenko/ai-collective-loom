@@ -15,7 +15,7 @@ non-sensitive VPS staging (ADR-042), on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`24`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`25`.
 Operational health (ADR-040/migration0029) composes existing administrator sources
 with bounded content-free request samples. Read-only HTTPS/browser inspection keeps
 readiness, worker observations, discovery, processing, capacity and request outcomes
@@ -157,6 +157,12 @@ and the participation memory. Exact artifact revisions also cover file-bearing
 artifacts; v4 adds exact contextual file/path targets for artifact files and
 contribution attachments, preserving old format/digest/replay semantics. Private-note
 backlinks remain excluded. See ADR-036 for correction and membership rules.
+ADR-043/migration0030 separately infer navigation from newly published/revised
+opening/comment Markdown links. Immutable membership follows the current source
+revision, retaining exact destinations and owning discussion identity; Mentioned in
+uses direct bounded authorized reads without search, target events or personal
+effects. No backfill, digest change or semantic reference inference is introduced.
+Quotes/code/self-links are excluded; supported local links use an instance-root base.
 Discussion summaries (ADR-010) add optional canonical identity, explicit editors,
 immutable exact source declarations, bounded preparation/comparison/maintenance,
 and current authority across API/browser recovery. Coverage is an author claim,

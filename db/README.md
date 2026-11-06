@@ -147,3 +147,10 @@ See [ADR-030](../docs/adr/030-contribution-attachments-and-promotion.md).
 Migration `0028_file_admission_policy.sql` adds one versioned prospective policy and
 immutable attributable decisions. Defaults equal existing hard maxima; no upload,
 context, prior outcome or usage is rewritten. See [ADR-039](../docs/adr/039-configurable-file-admission.md).
+
+Migration `0030_discussion_backlinks.sql` adds immutable inferred Markdown-link
+membership for newly published/revised discussion openings and comments, separate
+from authored references. It changes no existing table values, digest or outcome
+and performs no backfill. Current source pointers select current incoming links;
+exact destinations and historical memberships remain retained. Apply migrations
+before running the matching release. See [ADR-043](../docs/adr/043-automatic-discussion-backlinks.md).

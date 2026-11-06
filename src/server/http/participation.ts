@@ -62,7 +62,10 @@ export async function registerParticipation(app: FastifyInstance, services: Part
   registerReferences(app, services.database, actor);
   registerChanges(app, services.database, actor);
   registerSummaries(app, services.database, actor);
-  const publications = new ParticipationPublications(services.database),
+  const publications = new ParticipationPublications(
+      services.database,
+      services.authentication.policy.origin,
+    ),
     reads = new ParticipationRetrieval(services.database),
     admin = new ParticipationAdministration(services.database);
   const empty = Type.Object({}, C.closed),

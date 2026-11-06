@@ -14,6 +14,7 @@ import { type Context, useQuery } from './participation-state.js';
 import { OrganizationActions } from './Organization.js';
 import { ChangeDetails } from './Changes.js';
 import { ReferenceViews } from './References.js';
+import { MentionedIn } from './DiscussionBacklinks.js';
 import { SaveControl } from './SavedItems.js';
 import { FollowControl } from './Following.js';
 import { AuthorizationBoundary, useAuthorization } from './AuthorizationBoundary.js';
@@ -170,6 +171,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               </p>
             )}
             <SummarySection key={summaryReload} discussion={id} />
+            <MentionedIn key={id} discussion={id} />
             {new URLSearchParams(location.search).get('summary') === 'create' && (
               <Composer
                 context={context}
