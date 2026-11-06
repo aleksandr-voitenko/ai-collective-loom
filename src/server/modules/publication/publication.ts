@@ -28,6 +28,8 @@ import { insertCoverage, type PreparedCoverage } from './summary-storage.js';
 import { insertChangeFields } from './change-storage.js';
 import type { NoteContent } from '../../../contracts/participation.js';
 import type { PreparedChangeAccount } from '../participation/change-context.js';
+import { insertDiscussionLinks } from './discussion-link-storage.js';
+import type { PreparedDiscussionLink } from '../participation/discussion-link-context.js';
 
 export interface Outcome {
   id: string;
@@ -150,6 +152,7 @@ export async function commitRevision(
     files?: readonly PreparedFile[];
     attachments?: readonly PreparedFile[];
     promotion?: PreparedPromotion;
+    discussionLinks?: readonly PreparedDiscussionLink[];
   },
   attempt: { kind: string; version: string; digest: string },
 ): Promise<CommittedPublication> {
@@ -200,6 +203,8 @@ export async function commitRevision(
       input.references,
       input.expected_revision_id,
     );
+  if (input.discussionLinks?.length)
+    await insertDiscussionLinks(tx, resource.id, ids.revision, input.discussionLinks);
   if (input.files) await insertFiles(tx, resource.id, ids.revision, input.files);
   if (input.attachments)
     await insertAttachments(

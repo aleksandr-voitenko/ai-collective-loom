@@ -156,7 +156,7 @@ async function main() {
     community = await call('/api/v1/community');
   if (
     community.profile !== 'synthetic' ||
-    !['14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24'].includes(
+    !['14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25'].includes(
       community.guide_revision,
     )
   )

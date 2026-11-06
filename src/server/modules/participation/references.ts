@@ -54,7 +54,7 @@ function canonicalTarget(target: ReferenceTargetValue): ReferenceTargetValue {
     throw new PublicationError('invalid_input');
   }
 }
-async function boundary(tx: SqlTransaction) {
+export async function referenceBoundary(tx: SqlTransaction) {
   return (
     await tx.query<{ value: string }>(
       `SELECT json_build_array(c.shared_position,s.visibility_version,o.version)::text AS value
@@ -192,7 +192,7 @@ export class RecordedReferences {
       limit = Number(options.limit ?? 12);
     return this.run(async (tx) => {
       const actor = await lockActor(tx, actorContext),
-        state = await boundary(tx),
+        state = await referenceBoundary(tx),
         binding = createHash('sha256')
           .update(
             JSON.stringify([

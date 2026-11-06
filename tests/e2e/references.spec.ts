@@ -8,6 +8,100 @@ import { test, expect } from '../helpers/browser-fixtures.js';
 import { httpClient } from '../helpers/participation-http.js';
 import type { syntheticServer } from '../helpers/participation-server.js';
 import { plain, authored, reference, incoming } from '../helpers/references.js';
+import { backlinkReview } from '../helpers/backlink-review.js';
+
+test('automatic discussion backlinks follow browser opening and reply publication, revisions and exact navigation', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server);
+  const target = await f.admin.call('/api/v1/discussions', {
+    idempotency_key: randomUUID(),
+    area_id: f.area,
+    title: 'Linked discussion',
+    content: plain('The target conversation.'),
+  });
+  expect(target.status).toBe(201);
+  const targetDiscussion = (await f.admin.call('/api/v1/resources/' + target.body.resource_id)).body
+    .discussion_id;
+  const text = `Related work: [conversation](/loom/discussion/${targetDiscussion}) and [same conversation](${server.origin}/loom/discussion/${targetDiscussion}).`;
+  await page.goto(`${server.origin}/loom/area/${f.area}?compose=discussions`);
+  await page.getByLabel('Title', { exact: true }).fill('Related implementation');
+  await page.getByLabel('Text', { exact: true }).fill(text);
+  expect(
+    (await f.admin.call(`/api/v1/discussions/${targetDiscussion}/mentioned-in`)).body.items,
+  ).toEqual([]);
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Your publication is saved.', { exact: true })).toBeVisible();
+  const source = (
+    await server.observer.query(
+      'SELECT r.id AS revision_id,r.resource_id,c.discussion_id FROM loom.revisions r JOIN loom.contributions c ON c.id=r.resource_id WHERE r.title=$1',
+      ['Related implementation'],
+    )
+  ).rows[0]!;
+  await page.goto(`${server.origin}/loom/discussion/${source.discussion_id}`);
+  const opening = page.locator(`article[data-resource-id="${source.resource_id}"]`);
+  await expect(opening.getByRole('link', { name: 'conversation', exact: true })).toHaveAttribute(
+    'href',
+    `/loom/discussion/${targetDiscussion}`,
+  );
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening
+    .getByLabel('Your reply', { exact: true })
+    .fill(`[Exact opening](/loom/resource/${target.body.resource_id}/${target.body.revision_id})`);
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Exact opening', exact: true })).toBeVisible();
+  await page.goto(`${server.origin}/loom/discussion/${targetDiscussion}`);
+  const mentions = page.locator('details.mentioned-in');
+  await mentions.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    mentions.getByRole('link', { name: 'Related implementation', exact: true }),
+  ).toHaveCount(2);
+  await expect(mentions.getByRole('link', { name: 'Opening post · revision 1' })).toHaveAttribute(
+    'href',
+    `/loom/resource/${source.resource_id}/${source.revision_id}`,
+  );
+  await expect(mentions.getByRole('link', { name: 'Comment · revision 1' })).toBeVisible();
+  await expect(mentions).toContainText('By browser_author');
+  await backlinkReview(page);
+  await mentions.getByRole('link', { name: 'Opening post · revision 1' }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/loom/resource/${source.resource_id}/${source.revision_id}$`),
+  );
+  await expect(page.getByText('Related work:', { exact: false })).toBeVisible();
+  const removal = await api(page, '/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: source.resource_id,
+    expected_revision_id: source.revision_id,
+    title: 'Related implementation',
+    content: plain('The link was removed.'),
+  });
+  await page.goto(`${server.origin}/loom/discussion/${targetDiscussion}`);
+  await page.locator('details.mentioned-in summary').click();
+  await expect(
+    page
+      .locator('details.mentioned-in')
+      .getByRole('link', { name: 'Related implementation', exact: true }),
+  ).toHaveCount(1);
+  await api(page, '/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: source.resource_id,
+    expected_revision_id: removal.revision_id,
+    title: 'Related implementation',
+    content: plain(text),
+  });
+  await page.getByRole('button', { name: 'Refresh mentions', exact: true }).click();
+  await expect(
+    page
+      .locator('details.mentioned-in')
+      .getByRole('link', { name: 'Related implementation', exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    page.getByRole('heading', { name: 'Links from published contributions' }),
+  ).toBeFocused();
+});
 
 function barrier() {
   let release!: () => void;

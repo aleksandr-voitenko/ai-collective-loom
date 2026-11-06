@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from 'react';
 import type { Token } from 'markdown-it';
-import { parseAuthored } from '../contracts/authored.js';
+import { authoredLink, parseAuthoredLinks } from '../contracts/authored.js';
 import type { AuthoredContent } from '../contracts/participation.js';
 
 export function AuthoredText({
@@ -12,7 +12,7 @@ export function AuthoredText({
 }) {
   let tokens: Token[];
   try {
-    tokens = parseAuthored(content);
+    tokens = parseAuthoredLinks(content);
   } catch {
     return <p>The text representation is unavailable.</p>;
   }
@@ -44,14 +44,11 @@ export function AuthoredText({
         ]);
         const tag = allowed.has(token.tag) ? token.tag : 'span';
         const value = token.attrGet('href'),
-          href = typeof value === 'string' ? value : null;
+          href = typeof value === 'string' ? authoredLink(value) : undefined;
         stack.push({
           tag,
           children: [],
-          attrs:
-            tag === 'a' && href && /^https?:\/\//i.test(href)
-              ? { href, rel: 'noopener noreferrer' }
-              : {},
+          attrs: tag === 'a' && href ? { href, rel: 'noopener noreferrer' } : {},
         });
       } else if (token.nesting === -1) {
         const node = stack.pop();

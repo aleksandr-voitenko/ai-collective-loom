@@ -53,3 +53,16 @@ test('authored byte and complexity bounds reject malformed or unretrievable inpu
   assert.throws(() => parseAuthored(content('\ud800')));
   assert.throws(() => parseAuthored(content('*x* '.repeat(1800))), /complex/);
 });
+test('supported relative links render from the instance root in every authored presentation', () => {
+  const id = randomUUID();
+  const result = renderToStaticMarkup(
+    <AuthoredText
+      content={content(
+        `[discussion](./loom/discussion/${id}) [resource](/loom/resource/${id}) [unsafe](//other.example/loom)`,
+      )}
+    />,
+  );
+  assert.ok(result.includes(`href="/loom/discussion/${id}"`));
+  assert.ok(result.includes(`href="/loom/resource/${id}"`));
+  assert.ok(!result.includes('href="//other.example'));
+});

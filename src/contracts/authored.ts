@@ -32,27 +32,47 @@ export function canonicalReferenceTarget(target: ReferenceTargetValue): Referenc
   };
 }
 
-// Parse once using the same bounded dialect in browser and server. No raw HTML,
-// image fetches, autolinking, embedded applications, or inferred @name entities.
-const markdown = new MarkdownIt('commonmark', {
-  html: false,
-  linkify: false,
-  maxNesting: 20,
-}).disable(['image', 'html_block', 'html_inline']);
-markdown.validateLink = (value) => /^https?:\/\//i.test(value);
-markdown.inline.ruler.before('link', 'loom_mention', (state, silent) => {
-  // Link-label lookahead must count the token's brackets normally. Consuming it
-  // in silent mode would turn a linked mention into apparently ordinary prose.
-  if (silent) return false;
-  const match = /^\[\[mention:([a-z][a-z0-9_]{0,31})\]\]/.exec(state.src.slice(state.pos));
-  if (!match) return false;
-  if (!silent) {
-    const token = state.push('loom_mention', 'span', 0);
-    token.content = match[1]!;
+// Validation retains the original dialect/token accounting for exact old retries.
+// Navigation adds local links using the same safe rules and a bounded fallback.
+const markdown = createMarkdown((value) => /^https?:\/\//i.test(value));
+const localMarkdown = createMarkdown((value) => authoredLink(value) !== undefined);
+export function authoredLink(value: string): string | undefined {
+  if (/^https?:\/\//i.test(value)) return value;
+  // Local links have an instance-root base in every presentation (including
+  // exact revisions). Never activate arbitrary schemes or context-relative paths.
+  if (/^(?:\/(?!\/)|(?:\.\.?\/)*(?:loom|api\/v1)\/)/.test(value)) {
+    try {
+      const url = new URL(value, 'https://loom.invalid/');
+      if (url.origin === 'https://loom.invalid' && !value.includes('\\'))
+        return url.pathname + url.search + url.hash;
+    } catch {
+      return undefined;
+    }
   }
-  state.pos += match[0].length;
-  return true;
-});
+  return undefined;
+}
+function createMarkdown(validateLink: (value: string) => boolean) {
+  const parser = new MarkdownIt('commonmark', {
+    html: false,
+    linkify: false,
+    maxNesting: 20,
+  }).disable(['image', 'html_block', 'html_inline']);
+  parser.validateLink = validateLink;
+  parser.inline.ruler.before('link', 'loom_mention', (state, silent) => {
+    // Link-label lookahead must count the token's brackets normally. Consuming it
+    // in silent mode would turn a linked mention into apparently ordinary prose.
+    if (silent) return false;
+    const match = /^\[\[mention:([a-z][a-z0-9_]{0,31})\]\]/.exec(state.src.slice(state.pos));
+    if (!match) return false;
+    if (!silent) {
+      const token = state.push('loom_mention', 'span', 0);
+      token.content = match[1]!;
+    }
+    state.pos += match[0].length;
+    return true;
+  });
+  return parser;
+}
 export function parseAuthored(content: AuthoredContent): Token[] {
   if (
     !Value.Check(Content, content) ||
@@ -97,7 +117,21 @@ export function parseAuthored(content: AuthoredContent): Token[] {
     if (bytes > limits.textBytes)
       throw new Error('Text and reference rationales exceed the authored byte limit.');
   }
-  const tokens = markdown.parse(content.text, {});
+  return validateTokens(markdown.parse(content.text, {}), content);
+}
+
+/** Local-link presentation must not invalidate a previously accepted mention or
+ * exceed the safe token bound. In those cases retain the original text dialect. */
+export function parseAuthoredLinks(content: AuthoredContent): Token[] {
+  const original = parseAuthored(content);
+  try {
+    return validateTokens(localMarkdown.parse(content.text, {}), content);
+  } catch {
+    return original;
+  }
+}
+
+function validateTokens(tokens: Token[], content: AuthoredContent): Token[] {
   const entities = new Map(content.mentions.map((entity) => [entity.token, entity]));
   if (entities.size !== content.mentions.length) throw new Error('Duplicate mention token.');
   const used = new Set<string>();

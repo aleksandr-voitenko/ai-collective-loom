@@ -28,6 +28,7 @@
 | [Private reading decision](adr/026-private-reading-progress.md) | Exact read/unread state, deliberate ordering fence, automatic presentation policy and finite retention. |
 | [Scoped text search decision](adr/012-scoped-text-search.md) | Current lexical population, ranking, explicit continuation invalidation, fenced jobs and bounded backfill/rebuild. |
 | [Recorded references decision](adr/021-recorded-references.md) | Versioned declarations, immutable membership/attribution, full lock plan and bounded backlinks. |
+| [Automatic discussion backlinks](adr/043-automatic-discussion-backlinks.md) | Separate inferred Markdown navigation, current revision membership, exact destinations and bounded authorized Mentioned in views. |
 | [Discussion summaries decision](adr/010-discussion-summary-coverage.md) | Canonical identity, immutable exact declarations, expiry recovery and bounded maintenance. |
 | [Authored change notes decision](adr/022-authored-change-notes.md) | Revision-owned notes, exact ordinary account declarations, immutable field provenance and recovery. |
 | [Personal direct attention decision](adr/023-personal-direct-attention.md) | Ordered projection, coalesced identity, personal availability, durable custody and restoration before completed checkpoints. |

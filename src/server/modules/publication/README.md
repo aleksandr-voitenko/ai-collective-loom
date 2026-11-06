@@ -22,7 +22,7 @@ expiry and parent-passkey state; enrollment tickets grant no publication authori
 Participation HTTP uses typed constructors sharing `guards.ts` and `commitRevision`;
 it imports no fixture. The original `text/plain` contract/digest stays internal.
 Read operations use the same guards and safe error conversion without loading
-publication orchestration. Fixed reference, coverage, change and file inserts live
+publication orchestration. Fixed authored/inferred reference, coverage, change and file inserts live
 in this module, while participation owns validation and preparation.
 
 `reconcile(actor, key)` is read-only and owner-bound. It can recover an eligible

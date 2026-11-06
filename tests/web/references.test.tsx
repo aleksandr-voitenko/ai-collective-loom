@@ -12,6 +12,8 @@ import {
   targetFromSelection,
 } from '../../src/web/References.js';
 import { invalidateIdentity } from '../../src/web/participation-client.js';
+import { BacklinkResults } from '../../src/web/DiscussionBacklinks.js';
+import type { DiscussionBacklinkPageView } from '../../src/contracts/references.js';
 import type { ReferenceValue } from '../../src/contracts/participation.js';
 import type { ReferencePageView, ResolvedTargetView } from '../../src/contracts/references.js';
 
@@ -45,7 +47,7 @@ function Editor() {
     </>
   );
 }
-function mount(t: TestContext, editor = false) {
+function mount(t: TestContext, editor: boolean | 'backlinks' = false) {
   const calls: { path: string; finish: (response: Response) => void }[] = [];
   t.mock.method(
     globalThis,
@@ -58,7 +60,9 @@ function mount(t: TestContext, editor = false) {
         path: '/references',
         element: (
           <AuthorizationBoundary>
-            {editor ? (
+            {editor === 'backlinks' ? (
+              <BacklinkResults discussion="00000000-0000-0000-0000-000000000001" />
+            ) : editor ? (
               <Editor />
             ) : (
               <ReferenceResults path="/api/v1/references/incoming?kind=artifact" />
@@ -95,6 +99,121 @@ function result(): ReferencePageView {
     expires_at: '2026-10-16T12:00:00Z',
   };
 }
+function backlinkPage(): DiscussionBacklinkPageView {
+  const target = resolved(),
+    source = {
+      ...target.representation,
+      kind: 'contribution',
+      discussion_id: randomUUID(),
+      parent_id: null,
+    };
+  return {
+    items: [
+      {
+        source,
+        source_browser_url: `/loom/resource/${source.resource_id}/${source.revision_id}`,
+        source_context_url: `/loom/discussion/${source.discussion_id}?focus=${source.resource_id}`,
+        discussion_id: source.discussion_id,
+        discussion_title: 'Referring discussion',
+        destinations: [
+          {
+            target: { kind: 'discussion', resource_id: randomUUID() },
+            browser_url: '/loom/discussion/target',
+          },
+        ],
+      },
+    ],
+    provenance: 'inferred_markdown_link',
+    discussion_id: '00000000-0000-0000-0000-000000000001',
+    order: 'source_revision_uuid',
+    next_cursor: null,
+    complete: true,
+    work_budget_reached: false,
+    limit: 12,
+    max_response_bytes: 131072,
+    expires_at: '2026-11-06T00:00:00Z',
+  };
+}
+test('automatic backlink pages retain exact failed cursors, distinct navigation, author/time and keyboard recovery focus', async (t) => {
+  const { calls } = mount(t, 'backlinks'),
+    p = backlinkPage();
+  await waitFor(() => assert.equal(calls.length, 2));
+  await act(async () =>
+    calls[1]!.finish(Response.json({ ...p, next_cursor: 'mentions-page-two', complete: false })),
+  );
+  assert.equal(
+    screen.getByRole('link', { name: 'Referring discussion' }).getAttribute('href'),
+    p.items[0]!.source_context_url,
+  );
+  assert.equal(
+    screen.getByRole('link', { name: 'Opening post · revision 1' }).getAttribute('href'),
+    p.items[0]!.source_browser_url,
+  );
+  assert.ok(screen.getByText(/By author/));
+  assert.ok(document.querySelector('time[datetime]'));
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Next mentions' })));
+  await act(async () =>
+    calls[2]!.finish(
+      Response.json(
+        { error: { code: 'service_unavailable', message: 'Failed page' } },
+        { status: 503 },
+      ),
+    ),
+  );
+  assert.ok(screen.getByRole('link', { name: 'Referring discussion' }));
+  await act(async () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Retry mentions page' })),
+  );
+  assert.equal(calls[3]!.path, calls[2]!.path);
+  assert.match(calls[3]!.path, /cursor=mentions-page-two/);
+  await act(async () => calls[3]!.finish(Response.json({ ...p, items: [] })));
+  assert.equal(
+    document.activeElement,
+    screen.getByRole('heading', { name: 'Links from published contributions' }),
+  );
+  await act(async () => calls[0]!.finish(Response.json(p)));
+  assert.equal(screen.queryByRole('link', { name: 'Referring discussion' }), null);
+});
+test('automatic backlinks cannot reappear after route or identity changes and authorization denial', async (t) => {
+  const { calls, router } = mount(t, 'backlinks'),
+    p = backlinkPage();
+  await waitFor(() => assert.equal(calls.length, 2));
+  await act(async () => calls[1]!.finish(Response.json(p)));
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Refresh mentions' })));
+  await act(async () =>
+    calls[2]!.finish(
+      Response.json(
+        { error: { code: 'unavailable', message: 'Target unavailable' } },
+        { status: 404 },
+      ),
+    ),
+  );
+  assert.equal(screen.queryByRole('link', { name: 'Referring discussion' }), null);
+  await act(async () => calls[0]!.finish(Response.json(p)));
+  assert.equal(screen.queryByRole('link', { name: 'Referring discussion' }), null);
+  await act(async () => {
+    invalidateIdentity();
+    router.navigate('/other');
+  });
+  assert.ok(screen.getByRole('heading', { name: 'Another view' }));
+});
+test('late automatic backlink successes after identity departure never render source metadata', async (t) => {
+  const { calls } = mount(t, 'backlinks');
+  await waitFor(() => assert.equal(calls.length, 2));
+  await act(async () => {
+    invalidateIdentity();
+    calls[1]!.finish(Response.json(backlinkPage()));
+  });
+  assert.equal(screen.queryByRole('link', { name: 'Referring discussion' }), null);
+});
+test('late automatic backlink responses after navigation never restore departed source metadata', async (t) => {
+  const { calls, router } = mount(t, 'backlinks');
+  await waitFor(() => assert.equal(calls.length, 2));
+  await act(async () => router.navigate('/other'));
+  await act(async () => calls[1]!.finish(Response.json(backlinkPage())));
+  assert.ok(screen.getByRole('heading', { name: 'Another view' }));
+  assert.equal(screen.queryByRole('link', { name: 'Referring discussion' }), null);
+});
 function resolved(): ResolvedTargetView {
   const id = randomUUID(),
     revision = randomUUID(),

@@ -17,7 +17,7 @@ test(
       a = await f.artifact(f.admin, '文🌿'.repeat(50)),
       b = await f.artifact();
     const community = (await r.client.call('/api/v1/community')).body;
-    assert.equal(community.guide_revision, '24');
+    assert.equal(community.guide_revision, '25');
     assert.equal(community.notes_contract, 'owner-notes-1');
     assert.equal(community.notes_url, '/api/v1/me/notes/query');
     assert.equal(community.attention_contract, 'attention-controls-1');

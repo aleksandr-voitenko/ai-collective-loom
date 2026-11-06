@@ -67,6 +67,12 @@ query edits from its provider key so persistent controls keep their lifetime.
 embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundary.
 `ParticipationDiscussion.tsx` keeps discussion traversal and reply expansion together;
 reading and reference siblings use distinct revision keys (LC-20261018-QWNB).
+Its `DiscussionBacklinks.tsx` Mentioned in disclosure lazily loads a separate
+inferred-navigation page (ADR-043), with exact source links, author/publisher/time
+and individually navigable contributions. It uses a full withdrawal boundary,
+request/lifetime/identity fences, exact failed-cursor retry and result-heading
+focus. Source grouping never becomes a semantic reference or personal action.
+`AuthoredText` shares safe instance-root local-link resolution with the parser.
 Native disclosures keep secondary message/discussion controls mounted and authorized;
 ReadingText's compact mode leaves the prose/presentation observer outside its reading
 disclosure and reveals pending/conflict/error controls. Empty summaries use a small

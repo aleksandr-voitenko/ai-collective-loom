@@ -34,6 +34,7 @@ add('ordinary_requests', [
   'GET /api/v1/contributions/:id/revisions/:revision/attachments/:file/text',
   'GET /api/v1/contributions/:id/revisions/:revision/attachments/:file/text/status',
   'GET /api/v1/discussions/:id',
+  'GET /api/v1/discussions/:id/mentioned-in',
   'GET /api/v1/discussions/:id/summary',
   'GET /api/v1/discussions/:id/summary-sources',
   'GET /api/v1/editing-intent/resources/:id',

@@ -32,12 +32,15 @@ import type { PreparedCoverage } from '../publication/summary-storage.js';
 import { changeMembers, prepareChangeAccount } from './change-context.js';
 import type { PreparedPublication } from './publication-preparation.js';
 import { publicationOutcome } from './publication-attempt.js';
+import type { DiscussionLink } from '../../../contracts/discussion-links.js';
+import { prepareDiscussionLinks } from './discussion-link-context.js';
 import { preparePublicationResource, requireOpenPublication } from './publication-resource.js';
 
 export async function publishPreparedPublication(
   tx: SqlTransaction,
   actorContext: ActorContext,
   prepared: PreparedPublication,
+  links: readonly DiscussionLink[] = [],
 ) {
   const { kind, input, content, digest, version } = prepared;
   const identity = identityOf(actorContext);
@@ -189,7 +192,7 @@ export async function publishPreparedPublication(
       : input.change_account && 'carry_forward_revision_id' in input.change_account
         ? await changeMembers(tx, input.change_account.carry_forward_revision_id)
         : [];
-  if (content.format !== 'loom-markdown-v1' || coverage || input.attachment_set) {
+  if (content.format !== 'loom-markdown-v1' || coverage || input.attachment_set || links.length) {
     // Setup must take the exclusive structure guard before any shared plan.
     if (kind === 'community.setup') {
       await tx.query('SELECT pg_advisory_xact_lock($1::integer,$2::integer)', [0x4c4f4f4d, 3]);
@@ -209,6 +212,7 @@ export async function publishPreparedPublication(
         ...(input.change_note?.references.map((ref) => ref.target.resource_id) ?? []),
         ...described.map((target) => target.resource_id),
         ...(coverage?.members.map((m) => m.contribution_id) ?? []),
+        ...links.flatMap((link) => [link.resource_id, ...(link.focus_id ? [link.focus_id] : [])]),
       ].filter((id): id is string => !!id),
       kind === 'summary.create'
         ? input.discussion_id
@@ -272,6 +276,7 @@ export async function publishPreparedPublication(
       content,
       title,
       mentions: content.mentions,
+      discussionLinks: await prepareDiscussionLinks(tx, chain[0]!, links),
       ...(files ? { files } : {}),
       ...(attachments ? { attachments } : {}),
       ...(coverage ? { coverage } : {}),

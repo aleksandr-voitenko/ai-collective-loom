@@ -10,6 +10,7 @@ import {
 import type { ActorContext } from '../modules/publication/actor.js';
 import type { Transactions } from '../db/postgres.js';
 import { RecordedReferences } from '../modules/participation/references.js';
+import { DiscussionBacklinks } from '../modules/participation/discussion-backlinks.js';
 
 export function registerReferences(
   app: FastifyInstance,
@@ -17,9 +18,27 @@ export function registerReferences(
   actor: (request: FastifyRequest) => Promise<ActorContext>,
 ) {
   const references = new RecordedReferences(database),
+    backlinks = new DiscussionBacklinks(database),
     errors = Object.fromEntries(
       [400, 401, 403, 404, 409, 429, 500, 503].map((code) => [code, ParticipationError]),
     );
+  app.get(
+    '/api/v1/discussions/:id/mentioned-in',
+    {
+      schema: {
+        operationId: 'listDiscussionBacklinks',
+        params: Type.Object({ id: UUID }, closed),
+        querystring: C.ReferencePageInput,
+        response: { ...errors, 200: C.DiscussionBacklinkPage },
+      },
+    },
+    async (request) =>
+      backlinks.incoming(
+        await actor(request),
+        (request.params as { id: string }).id.toLowerCase(),
+        request.query as C.ReferencePageOptions,
+      ),
+  );
   app.get(
     '/api/v1/references/target',
     {

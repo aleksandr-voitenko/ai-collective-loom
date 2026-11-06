@@ -58,8 +58,13 @@ The immediate-base unchanged-declaration exception retains unavailable targets.
 Changing ID, scope, relationship or rationale requires normal validation. Main
 assertion/carry/change/withdrawal history and revision-owned note attribution remain
 field-local. A citation does not edit the target, add an editor, emit target events
-or notifications, mark anything read, Save or Follow. No text/URL/path inference or
-recursive summary coverage dependency is added. A promoted artifact's authorization
+or notifications, mark anything read, Save or Follow. This authored-reference
+contract adds no text/URL/path inference or recursive summary coverage dependency.
+[ADR-043](043-automatic-discussion-backlinks.md) separately records supported inline
+attachment links from newly published/revised contributions as navigation evidence,
+preserving their exact file/revision/path and associating the owning discussion.
+Its Mentioned in aggregation never changes this ADR's exact incoming file scope,
+authored provenance or canonical digests. A promoted artifact's authorization
 is independent of its original attachment; it never grants access to the source.
 Source-authored declarations/rationale follow source availability. Resolved target
 metadata, links, previews and bytes follow current target authority separately.

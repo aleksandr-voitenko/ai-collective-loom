@@ -155,6 +155,21 @@ older edits of a v4 base require explicit correction. See the
 [exact file reference contract](docs/adr/036-exact-file-references.md) and
 [recorded references decision](docs/adr/021-recorded-references.md).
 
+Published opening posts and comments also create automatic **Mentioned in** links
+on the linked discussion. Open that section to see each referring contribution,
+its author and publication time, and links to its exact revision and conversation.
+These are navigation aids, separate from recorded references: they imply no
+endorsement, request or relationship, and change no target activity or personal state.
+Links work across topics without implying that an author represents a team.
+Same-instance discussion, focused-comment, contribution/summary revision and exact
+attachment links are supported. Local links resolve from the instance root;
+external links, code, quoted Markdown and drafts do not create backlinks.
+The first 100 unique supported destinations per contribution are considered.
+Removing a link removes its current entry while retaining revision history.
+Existing content is included when newly revised; there is no historical backfill.
+See [automatic discussion backlinks](docs/adr/043-automatic-discussion-backlinks.md)
+for supported URL forms, bounds and visibility rules.
+
 Participants can publish a discussion summary with an exact, declared set of opening/comment
 revisions. Readers inspect coverage and editors; authorized editors discover gaps
 through bounded summary maintenance. See the [summary decision](docs/adr/010-discussion-summary-coverage.md).
