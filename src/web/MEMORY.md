@@ -91,9 +91,11 @@ The final storage-lock check freezes only still-authorized original versions.
 Manual choices, including validated cross-tab journal intents, cancel unfrozen
 members without delaying their own command; one validated terminal atomic refusal
 may form a new unchanged-version subset, never
-after uncertainty or recursively. Unresolved records retain bounded acknowledged
-success versions so delayed refusals cannot restore stale target warnings after
-reload. Local journal transitions update private state
+after uncertainty or recursively. Acknowledged operations retain compact versioned
+evidence in their own bounded journal slot while overlapping intents remain; this
+suppresses stale target warnings after delayed refusals and reload without expanding
+every sibling near the byte cap. Older per-intent metadata remains readable.
+Local journal transitions update private state
 from safe receipts without broad registered-target lookups; source-host lookup
 ownership and positive-receipt lease limits remain. See ADR-026.
 Reply parent labels reuse only current leased parent metadata with a matching ID;

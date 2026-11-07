@@ -549,8 +549,9 @@ probe. Shape sizing and actual API row-growth measurements are distinct evidence
 `web/reading.test.tsx` tests StrictMode, ownership, monotonic responses, storage
 bounds, presentation batching, manual/freeze races, targeted lookup counts, one
 atomic-refusal subset, mixed fresh/continuation order, full-buffer continuation,
-cross-tab manual cancellation, reversed success/refusal feedback, and presentation
-exclusions. `unit/reading-coordinator.test.ts`
+cross-tab manual cancellation, reversed success/refusal feedback, near-capacity
+receipt settlement/reload, failed-write custody, targeted cross-tab receipt removal,
+and presentation exclusions. `unit/reading-coordinator.test.ts`
 uses fake time for 25/25/10 draining, oldest-deadline fairness, separate reserved
 continuation dispatch and finite occupied capacity; `e2e/reading.spec.ts` checks rendered exact IDs,
 real requests, long scrolling, cross-tab delayed automation, manual and automatic

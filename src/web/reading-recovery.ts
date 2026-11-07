@@ -36,6 +36,26 @@ const RecordSchema = Type.Object(
   closed,
 );
 export type ReadingIntent = Static<typeof RecordSchema>;
+const SuccessSchema = Type.Object(
+  {
+    version: Type.Literal(1),
+    state: Type.Literal('acknowledged'),
+    idempotency_key: UUID,
+    targets: Type.Array(
+      Type.Object({ resource_id: UUID, revision_id: UUID, version: ReadingVersion }, closed),
+      { minItems: 1, maxItems: readingLimits.batch },
+    ),
+  },
+  closed,
+);
+type SuccessEvidence = Static<typeof SuccessSchema>;
+type StoredReading = ReadingIntent | SuccessEvidence;
+const isIntent = (record: StoredReading): record is ReadingIntent =>
+  record.state !== 'acknowledged';
+const sameTarget = (
+  left: { resource_id: string; revision_id: string },
+  right: { resource_id: string; revision_id: string },
+) => left.resource_id === right.resource_id && left.revision_id === right.revision_id;
 export function exportReadingRecovery(instance: string, participant: string) {
   const journal = new ReadingRecovery(instance, participant);
   const blob = new Blob(
@@ -46,6 +66,7 @@ export function exportReadingRecovery(instance: string, participant: string) {
           instance_id: instance,
           participant_id: participant,
           intents: journal.all(),
+          success_evidence: journal.successEvidence(),
         },
         null,
         2,
@@ -64,7 +85,7 @@ export class ReadingRecovery {
   readonly prefix: string;
   readonly preference: string;
   private readonly owner = identityGeneration();
-  private readonly records: BoundedRecoveryRecords<ReadingIntent>;
+  private readonly records: BoundedRecoveryRecords<StoredReading>;
   constructor(
     instance: string,
     participant: string,
@@ -76,8 +97,9 @@ export class ReadingRecovery {
       storage,
       prefix: this.prefix + 'intent:',
       limits: readingLimits,
-      validate: (record): record is ReadingIntent => Value.Check(RecordSchema, record),
-      id: (record) => record.body.idempotency_key,
+      validate: (record): record is StoredReading =>
+        Value.Check(RecordSchema, record) || Value.Check(SuccessSchema, record),
+      id: (record) => (isIntent(record) ? record.body.idempotency_key : record.idempotency_key),
       messages: {
         exceeds: 'Reading recovery exceeds its synthetic limit. Preserve it before continuing.',
         unreadable: 'Reading recovery is unreadable. Preserve it before continuing.',
@@ -87,16 +109,52 @@ export class ReadingRecovery {
     });
   }
   all(): ReadingIntent[] {
-    return this.records.all();
+    const stored = this.records.all();
+    const evidence = stored.filter((record): record is SuccessEvidence => !isIntent(record));
+    return stored.filter(isIntent).map((record) => {
+      if (record.state !== 'conflicted' || !record.conflict_versions) return record;
+      const superseded = new Set(record.superseded_revisions ?? []);
+      for (const refused of record.conflict_versions) {
+        const member = record.body.targets.find(
+          (target) => target.revision_id === refused.revision_id,
+        );
+        if (
+          member &&
+          (record.successful_versions?.some(
+            (success) =>
+              success.revision_id === refused.revision_id && success.version > refused.version,
+          ) ||
+            evidence.some((receipt) =>
+              receipt.targets.some(
+                (target) => sameTarget(target, member) && target.version > refused.version,
+              ),
+            ))
+        )
+          superseded.add(refused.revision_id);
+      }
+      return superseded.size ? { ...record, superseded_revisions: [...superseded] } : record;
+    });
   }
-  storedIntent(raw: string | null): ReadingIntent | undefined {
+  successEvidence(): SuccessEvidence[] {
+    return this.records.all().filter((record): record is SuccessEvidence => !isIntent(record));
+  }
+  private storedRecord(raw: string | null): StoredReading | undefined {
     if (!raw) return undefined;
     try {
       const record: unknown = JSON.parse(raw);
-      return Value.Check(RecordSchema, record) ? record : undefined;
+      if (Value.Check(RecordSchema, record) || Value.Check(SuccessSchema, record)) return record;
+      return undefined;
     } catch {
       return undefined;
     }
+  }
+  storedIntent(raw: string | null): ReadingIntent | undefined {
+    const record = this.storedRecord(raw);
+    return record && isIntent(record) ? record : undefined;
+  }
+  storedTargets(raw: string | null) {
+    const record = this.storedRecord(raw);
+    return record ? (isIntent(record) ? record.body.targets : record.targets) : undefined;
   }
   enabled() {
     return this.storage.getItem(this.preference) === 'true';
@@ -113,12 +171,14 @@ export class ReadingRecovery {
   private changed() {
     window.dispatchEvent(new Event('loom-reading'));
   }
-  private write(record: ReadingIntent) {
+  private write<T extends StoredReading>(record: T): T {
     this.records.write(
       record,
       record.state === 'conflicted'
         ? 'Reading conflict could not be saved. The exact change remains in recovery; check its outcome again.'
-        : 'Reading intent could not be saved. No new request was sent.',
+        : record.state === 'acknowledged'
+          ? 'Reading success evidence could not be saved. The exact change remains in recovery; check its outcome again.'
+          : 'Reading intent could not be saved. No new request was sent.',
     );
     this.changed();
     return record;
@@ -131,16 +191,25 @@ export class ReadingRecovery {
       if (!active()) throw new DOMException('View changed.', 'AbortError');
       const body = prepare();
       if (!body) throw new DOMException('Reading observation changed.', 'AbortError');
-      if (this.all().some((r) => r.body.idempotency_key === body.idempotency_key))
+      if (
+        this.records
+          .all()
+          .some((record) =>
+            isIntent(record)
+              ? record.body.idempotency_key === body.idempotency_key
+              : record.idempotency_key === body.idempotency_key,
+          )
+      )
         throw new Error('Reading operation already exists. Recover its exact request.');
       return this.write({ version: 1, body, attempts: 0, state: 'uncertain' });
     });
   }
   begin(record: ReadingIntent) {
     return this.locked(() => {
-      const current = this.all().find(
-        (r) => r.body.idempotency_key === record.body.idempotency_key,
-      );
+      const current = this.records
+        .all()
+        .filter(isIntent)
+        .find((r) => r.body.idempotency_key === record.body.idempotency_key);
       if (
         !current ||
         current.state !== 'uncertain' ||
@@ -152,18 +221,20 @@ export class ReadingRecovery {
   }
   rejectFirst(record: ReadingIntent) {
     return this.locked(() => {
-      const current = this.all().find(
-        (r) => r.body.idempotency_key === record.body.idempotency_key,
-      );
+      const current = this.records
+        .all()
+        .filter(isIntent)
+        .find((r) => r.body.idempotency_key === record.body.idempotency_key);
       if (current?.state === 'uncertain' && current.attempts === 1 && record.attempts === 1)
         this.write({ ...current, state: 'rejected' });
     });
   }
   recordConflict(record: ReadingIntent, result?: ReadingResultView) {
     return this.locked(() => {
-      const current = this.all().find(
-        (r) => r.body.idempotency_key === record.body.idempotency_key,
-      );
+      const current = this.records
+        .all()
+        .filter(isIntent)
+        .find((r) => r.body.idempotency_key === record.body.idempotency_key);
       if (!current) return;
       if (JSON.stringify(current.body) !== JSON.stringify(record.body))
         throw new Error('Reading intent changed. Refresh recovery.');
@@ -174,75 +245,90 @@ export class ReadingRecovery {
           revision_id: target.revision_id,
           version: target.result_version,
         }));
-        const superseded = new Set(current.superseded_revisions ?? []);
-        for (const conflict of conflicts ?? [])
-          if (
-            current.successful_versions?.some(
-              (success) =>
-                success.revision_id === conflict.revision_id && success.version > conflict.version,
-            )
-          )
-            superseded.add(conflict.revision_id);
         this.write({
           ...current,
           state: 'conflicted',
           ...(conflicts ? { conflict_versions: conflicts } : {}),
-          ...(superseded.size ? { superseded_revisions: [...superseded] } : {}),
         });
       }
     });
   }
-  supersedeConflicts(targets: ReadingResultView['outcome']['targets'], operationKey?: string) {
+  settleSuccess(record: ReadingIntent, targets: ReadingResultView['outcome']['targets']) {
     return this.locked(() => {
-      for (const record of this.all()) {
-        if (record.body.idempotency_key === operationKey) continue;
-        const successes = new Map(
-          record.successful_versions?.map((item) => [item.revision_id, item.version]) ?? [],
-        );
-        const superseded = new Set(record.superseded_revisions ?? []);
-        for (const target of targets) {
-          if (
-            !record.body.targets.some(
-              (member) =>
-                member.revision_id === target.revision_id &&
-                member.resource_id === target.resource_id,
-            )
-          )
-            continue;
-          const seen = successes.get(target.revision_id);
-          if (seen === undefined || target.result_version > seen)
-            successes.set(target.revision_id, target.result_version);
-          const refused = record.conflict_versions?.find(
-            (item) => item.revision_id === target.revision_id,
-          );
-          if (record.state === 'conflicted' && refused && target.result_version > refused.version)
-            superseded.add(target.revision_id);
-        }
-        if (
-          successes.size !== (record.successful_versions?.length ?? 0) ||
-          [...successes].some(
-            ([id, version]) =>
-              record.successful_versions?.find((item) => item.revision_id === id)?.version !==
-              version,
-          ) ||
-          superseded.size !== (record.superseded_revisions?.length ?? 0)
-        )
-          this.write({
-            ...record,
-            successful_versions: [...successes].map(([revision_id, version]) => ({
-              revision_id,
-              version,
-            })),
-            ...(superseded.size ? { superseded_revisions: [...superseded] } : {}),
-          });
+      const stored = this.records.all();
+      const current = stored
+        .filter(isIntent)
+        .find((item) => item.body.idempotency_key === record.body.idempotency_key);
+      if (!current) {
+        this.pruneEvidence();
+        return;
       }
+      if (JSON.stringify(current.body) !== JSON.stringify(record.body))
+        throw new Error('Reading intent changed. Refresh recovery.');
+      const others = stored
+        .filter(isIntent)
+        .filter((item) => item.body.idempotency_key !== record.body.idempotency_key);
+      const relevant = targets.filter(
+        (target) =>
+          current.body.targets.some((member) => sameTarget(member, target)) &&
+          others.some((item) => item.body.targets.some((member) => sameTarget(member, target))),
+      );
+      if (relevant.length)
+        // Replace the acknowledged operation's existing slot, never expand every
+        // overlapping unresolved request near the journal's byte limit.
+        this.write({
+          version: 1,
+          state: 'acknowledged',
+          idempotency_key: record.body.idempotency_key,
+          targets: relevant.map((target) => ({
+            resource_id: target.resource_id,
+            revision_id: target.revision_id,
+            version: target.result_version,
+          })),
+        });
+      else {
+        this.storage.removeItem(this.prefix + 'intent:' + record.body.idempotency_key);
+        this.changed();
+      }
+      this.pruneEvidence();
     });
+  }
+  private pruneEvidence() {
+    const stored = this.records.all();
+    const intents = stored.filter(isIntent);
+    const evidence = stored.filter((item): item is SuccessEvidence => !isIntent(item));
+    const retained: SuccessEvidence[] = [];
+    for (const receipt of evidence.sort(
+      (a, b) =>
+        Math.max(...b.targets.map((target) => target.version)) -
+          Math.max(...a.targets.map((target) => target.version)) ||
+        a.idempotency_key.localeCompare(b.idempotency_key),
+    )) {
+      const needed = receipt.targets.filter((target) =>
+        intents.some((intent) => intent.body.targets.some((member) => sameTarget(member, target))),
+      );
+      if (
+        needed.length &&
+        !needed.every((target) =>
+          retained.some((other) =>
+            other.targets.some(
+              (member) => sameTarget(member, target) && member.version >= target.version,
+            ),
+          ),
+        )
+      ) {
+        retained.push(receipt);
+        continue;
+      }
+      this.storage.removeItem(this.prefix + 'intent:' + receipt.idempotency_key);
+    }
   }
   finish(record: ReadingIntent, resolvedOnly = false) {
     return this.locked(() => {
-      const current = this.all().find(
-        (r) => r.body.idempotency_key === record.body.idempotency_key,
-      );
+      const current = this.records
+        .all()
+        .filter(isIntent)
+        .find((r) => r.body.idempotency_key === record.body.idempotency_key);
       if (!current) return;
       if (
         JSON.stringify(current.body) !== JSON.stringify(record.body) ||
@@ -251,6 +337,7 @@ export class ReadingRecovery {
         throw new Error('Reading intent changed. Refresh recovery.');
       this.storage.removeItem(this.prefix + 'intent:' + record.body.idempotency_key);
       this.changed();
+      this.pruneEvidence();
     });
   }
   setEnabled(enabled: boolean) {
@@ -261,8 +348,12 @@ export class ReadingRecovery {
   }
   clear() {
     return this.locked(() => {
-      for (const record of this.all())
-        this.storage.removeItem(this.prefix + 'intent:' + record.body.idempotency_key);
+      for (const record of this.records.all())
+        this.storage.removeItem(
+          this.prefix +
+            'intent:' +
+            (isIntent(record) ? record.body.idempotency_key : record.idempotency_key),
+        );
       this.storage.removeItem(this.preference);
       this.changed();
     });

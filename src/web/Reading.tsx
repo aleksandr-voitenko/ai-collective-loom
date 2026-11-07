@@ -274,10 +274,12 @@ export function ReadingProvider({ context, children }: { context: Context; child
       changed(event);
       // Another tab may settle a record between events. Unknown removal needs a
       // full revalidation; known records only refresh their exact registered IDs.
+      const removedTargets = journal.storedTargets(event.oldValue);
       if (
         event.key === null ||
         (event.oldValue &&
           !event.newValue &&
+          !removedTargets &&
           !before.some((record) => event.key?.endsWith(record.body.idempotency_key)))
       )
         refresh();
@@ -286,7 +288,10 @@ export function ReadingProvider({ context, children }: { context: Context; child
           before.flatMap((record) => record.body.targets.map((v) => v.revision_id)),
         );
         if (event.key?.startsWith(journal.prefix + 'intent:'))
-          for (const target of journal.storedIntent(event.newValue)?.body.targets ?? [])
+          for (const target of [
+            ...(removedTargets ?? []),
+            ...(journal.storedTargets(event.newValue) ?? []),
+          ])
             ids.add(target.revision_id);
         for (const record of knownRecords.current)
           for (const target of record.body.targets) ids.add(target.revision_id);
@@ -353,10 +358,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
       } else {
         if (result.operation_state === 'version_conflict')
           await journal.recordConflict(record, result);
-        else {
-          await journal.supersedeConflicts(result.outcome.targets, record.body.idempotency_key);
-          await journal.finish(record);
-        }
+        else await journal.settleSuccess(record, result.outcome.targets);
         applyPrivateCurrent(result.current);
         if (active()) setError('');
       }

@@ -153,12 +153,17 @@ error-message race found in self-review. Known conflicts cannot dispatch again a
 uncertain work, late duplicate responses cannot recreate a dismissed record, and
 dismissal does not change private server state. Rejected/conflicted records share the
 existing quota with uncertain work; no extra unbounded feedback cache is introduced.
-Backward-compatible bounded metadata retains acknowledged success versions on
-unresolved records, so a refusal delivered after a newer success can reconcile in
-either response order and after reload. A later success may stop showing a warning
-beside a revision only when its version is newer than the refusal; the original
-conflict record remains reviewable. Private receipt state may advance monotonically but its
-positive availability never renews a protected content lease. Initial, explicit,
+An acknowledged operation replaces its own journal slot with compact, versioned
+success evidence while overlapping unresolved operations remain. This avoids
+expanding every sibling record near the journal's byte cap. The evidence uses the
+same 128-record/512-KiB custody limit, is exported with recovery, and is pruned
+when no unresolved operation needs it or newer evidence covers it. Existing records
+with per-intent success metadata remain readable. A refusal delivered after a newer
+success reconciles in either response order and after reload. A later success may
+stop showing a warning beside a revision only when its version is newer than the
+refusal; the original conflict record remains reviewable. Private receipt state may
+advance monotonically but its positive availability never renews a protected content
+lease. Initial, explicit,
 cross-tab and recovery lookups use registered source hosts; local journal
 save/begin/finish events do not rescan every registered target.
 

@@ -718,8 +718,8 @@ test('fresh work ahead of a continuation cannot give it a second continuation', 
   );
   const original = f.calls.find((call) => call.path.endsWith('/state'))!;
   assert.deepEqual(
-    original.body.targets.map((member: { revision_id: string }) => member.revision_id),
-    [target.revision_id, b.revision_id],
+    original.body.targets.map((member: { revision_id: string }) => member.revision_id).sort(),
+    [target.revision_id, b.revision_id].sort(),
   );
   qualified.add(c.revision_id);
   await new Promise((resolve) => setTimeout(resolve, 1250));
@@ -834,8 +834,8 @@ test('a continuation ahead of fresh work leaves the fresh members their first al
   );
   const fresh = f.calls.filter((call) => call.path.endsWith('/state'))[2]!;
   assert.deepEqual(
-    fresh.body.targets.map((member: any) => member.revision_id),
-    [c.revision_id, d.revision_id],
+    fresh.body.targets.map((member: any) => member.revision_id).sort(),
+    [c.revision_id, d.revision_id].sort(),
   );
   await act(async () =>
     fresh.finish(
@@ -890,8 +890,8 @@ test('a full fresh buffer still dispatches an eligible continuation', async (t) 
   );
   const original = f.calls.find((call) => call.path.endsWith('/state'))!;
   assert.deepEqual(
-    original.body.targets.map((member: { revision_id: string }) => member.revision_id),
-    [target.revision_id, b.revision_id],
+    original.body.targets.map((member: { revision_id: string }) => member.revision_id).sort(),
+    [target.revision_id, b.revision_id].sort(),
   );
   for (const source of fresh) qualified.add(source.revision_id);
   await waitFor(() => assert.ok(screen.getAllByText(/Automatic reading buffer is full/).length), {
@@ -1321,11 +1321,151 @@ test('historical conflict feedback retires only after a newer successful version
     current: [{ ...target, read: false, version: 2, availability: 'available' as const }],
   };
   await journal.recordConflict(sent, refusal);
-  await journal.supersedeConflicts([{ ...body.targets[0]!, result_version: 1 }]);
+  const success = async (version: number) => {
+    const record = await journal.save(
+      { ...body, idempotency_key: randomUUID(), basis: 'manual', episode_id: null },
+      () => true,
+    );
+    await journal.settleSuccess(record, [{ ...body.targets[0]!, result_version: version }]);
+  };
+  await success(1);
   assert.deepEqual(journal.all()[0]!.superseded_revisions, undefined);
-  await journal.supersedeConflicts([{ ...body.targets[0]!, result_version: 3 }]);
+  await success(3);
   assert.deepEqual(journal.all()[0]!.superseded_revisions, [target.revision_id]);
   assert.deepEqual(journal.all()[0]!.body, body);
+  assert.equal(journal.successEvidence().length, 1, 'newer evidence subsumes older evidence');
+});
+test('a near-full journal settles success before later conflict feedback', async () => {
+  const instance = randomUUID(),
+    participant = randomUUID();
+  const journal = new ReadingRecovery(instance, participant);
+  const targets = Array.from({ length: 25 }, () => ({
+    resource_id: randomUUID(),
+    revision_id: randomUUID(),
+  }));
+  const body = () => ({
+    idempotency_key: randomUUID(),
+    basis: 'manual' as const,
+    episode_id: null,
+    targets: targets.map((target) => ({ ...target, read: true, expected_version: 0 })),
+  });
+  for (let n = 0; n < 128; n++) await journal.save(body(), () => true);
+  const initial = journal.all();
+  const successful = await journal.begin(initial[0]!);
+  const resultTargets = successful.body.targets.map((target) => ({
+    ...target,
+    result_version: 1,
+  }));
+  await journal.settleSuccess(successful, resultTargets);
+  assert.equal(journal.all().length, 127);
+  await journal.settleSuccess(successful, resultTargets);
+  assert.equal(journal.all().length, 127);
+  const refused = await journal.begin(initial[1]!);
+  await journal.recordConflict(refused, {
+    operation_state: 'version_conflict',
+    operation_id: randomUUID(),
+    idempotency: 'created',
+    outcome: {
+      basis: refused.body.basis,
+      episode_id: refused.body.episode_id,
+      targets: refused.body.targets.map((target) => ({ ...target, result_version: 0 })),
+    },
+    current: targets.map((target) => ({
+      ...target,
+      read: false,
+      version: 0,
+      availability: 'available',
+    })),
+  });
+  const current = journal
+    .all()
+    .find((record) => record.body.idempotency_key === refused.body.idempotency_key)!;
+  assert.equal(current.state, 'conflicted');
+  assert.deepEqual(
+    current.superseded_revisions?.sort(),
+    targets.map((target) => target.revision_id).sort(),
+  );
+  assert.deepEqual(current.body, refused.body);
+  assert.equal(journal.successEvidence().length, 1);
+  const reopened = new ReadingRecovery(instance, participant);
+  assert.deepEqual(
+    reopened
+      .all()
+      .find((record) => record.body.idempotency_key === refused.body.idempotency_key)
+      ?.superseded_revisions?.sort(),
+    targets.map((target) => target.revision_id).sort(),
+  );
+});
+test('success evidence preserves an exact uncertain body on failed write and clears with custody', async (t) => {
+  const journal = new ReadingRecovery(randomUUID(), randomUUID());
+  const body = () => ({
+    idempotency_key: randomUUID(),
+    basis: 'manual' as const,
+    episode_id: null,
+    targets: [{ ...target, read: true, expected_version: 0 }],
+  });
+  const older = await journal.save(body(), () => true);
+  const successful = await journal.begin(await journal.save(body(), () => true));
+  const result = [{ ...successful.body.targets[0]!, result_version: 1 }];
+  const write = t.mock.method(dom.window.Storage.prototype, 'setItem', () => {
+    throw new Error('Synthetic save failure');
+  });
+  await assert.rejects(
+    journal.settleSuccess(successful, result),
+    /success evidence could not be saved/,
+  );
+  write.mock.restore();
+  assert.deepEqual(
+    journal.all().find((record) => record.body.idempotency_key === successful.body.idempotency_key),
+    successful,
+  );
+  await journal.settleSuccess(successful, result);
+  assert.equal(journal.successEvidence().length, 1);
+  await journal.finish(older);
+  assert.deepEqual(journal.successEvidence(), []);
+  await journal.clear();
+  assert.deepEqual(journal.all(), []);
+});
+test('cross-tab success evidence removal looks up only its registered target', async (t) => {
+  const other = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const f = mount(t, false, [target, other]);
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/lookup'))));
+  await act(async () => {
+    for (const call of f.calls.filter((entry) => entry.path.endsWith('/lookup')))
+      call.finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [target, other].map((source) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      );
+  });
+  const prior = f.calls.filter((call) => call.path.endsWith('/lookup')).length;
+  const idempotency_key = randomUUID();
+  await act(async () =>
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: f.recovery.prefix + 'intent:' + idempotency_key,
+        oldValue: JSON.stringify({
+          version: 1,
+          state: 'acknowledged',
+          idempotency_key,
+          targets: [{ ...target, version: 1 }],
+        }),
+        newValue: null,
+      }),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, prior + 1),
+  );
+  assert.deepEqual(f.calls.filter((call) => call.path.endsWith('/lookup')).at(-1)!.body.targets, [
+    target,
+  ]);
 });
 test('a delayed refusal keeps historical custody without restoring a newer target warning', async (t) => {
   const f = await twoAutomatic(t);
