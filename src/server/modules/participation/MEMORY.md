@@ -489,13 +489,20 @@ a later version blocks the episode; passive rerender/status/StrictMode/tab chang
 never rearm. Explicit away/reopen or reload can. Preserve Changes controls' existing
 query-independent provider lifetime. Badge cache follows mounted text;4096 episode
 fences pause automatic observation without eviction until reopening. Manual controls
-remain usable. `reading-recovery.ts` has separate Web-Locked
+remain usable. Qualified observations are buffered at most128 targets; the oldest
+candidate becomes ready within250ms, or earlier at25 targets. One automatic batch
+is in flight, so ready work waits for capacity. An atomic known refusal may reserve
+one separate at-most25-member unchanged-version subset ahead of the fresh buffer;
+uncertain operations do not continue. Cross-tab manual intents cancel unfrozen
+members. `reading-recovery.ts` has separate Web-Locked
 128-record/16KiB-per-record/512KiB custody, exact bodies and attempt counts, no
 network under storage locks and identity fencing before cleanup. First-refusal
 classification checks current attempts; retry/terminal late responses cannot
 recreate cleared work. Native `reading-client.mjs` uses immutable fsynced0600 files.
 Confirmed conflicts stay in the bounded browser journal until explicit dismissal,
 with revision-specific feedback independent of other completions, refresh or reload.
+Unresolved records retain bounded newer-success versions so delayed refusals cannot
+restore an obsolete per-revision warning after reload.
 `begin` refuses known conflicts; late duplicate results cannot recreate dismissed
 records, and a late first refusal cannot downgrade a confirmed conflict.
 

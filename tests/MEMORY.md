@@ -547,10 +547,24 @@ ABA/retry, quota/failure rollback and native HTTPS credential/restart/COMMIT los
 Guard tests pause the final reading transaction, not the earlier authentication
 probe. Shape sizing and actual API row-growth measurements are distinct evidence.
 `web/reading.test.tsx` tests StrictMode, ownership, monotonic responses, storage
-bounds and presentation exclusions; `e2e/reading.spec.ts` checks rendered exact IDs,
-real requests, long scrolling, cross-tab delayed automation, process restart,
+bounds, presentation batching, manual/freeze races, targeted lookup counts, one
+atomic-refusal subset, mixed fresh/continuation order, full-buffer continuation,
+cross-tab manual cancellation, reversed success/refusal feedback, near-capacity
+receipt settlement/reload, failed-write custody, targeted cross-tab receipt removal,
+mixed-target receipt pruning, partially expanded legacy-journal recovery and
+full prior-receipt admission recovery without key reuse, a compaction-write fault
+followed by conflict recovery, and presentation exclusions.
+`unit/reading-coordinator.test.ts`
+uses fake time for 25/25/10 draining, oldest-deadline fairness, separate reserved
+continuation dispatch and finite occupied capacity; `e2e/reading.spec.ts` checks rendered exact IDs,
+real requests, long scrolling, cross-tab delayed automation, manual and automatic
+exact-key process restart,
 focus/mobile and blocked sign-out. Optional LOOM_READING_REVIEW_SCREENS=1 writes
 explicit synthetic review images under /private/tmp, outside diagnostic uploads.
+The opt-in LOOM_READING_BATCH_REVIEW=1 path in the existing selective-reading journey uses a second authenticated tab
+to arm two simultaneous observations, holds the real automatic request through a
+manual Unread, and captures normal, pending, manual-Unread, conflict/continuation
+and recovery at 1440x1000/390x844 with private provenance records.
 Conflict regressions use two exact targets and both completion orders; assert the
 warning belongs only to the refused target and survives refresh/reopening until
 dismissal. The journal keeps known conflicts distinct from uncertain dispatches;

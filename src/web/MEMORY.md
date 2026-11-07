@@ -82,6 +82,26 @@ disclosure and reveals pending/conflict/error controls. Empty summaries use a sm
 invitation. Reading disclosures retain the user's open choice after settlement;
 only a new pending/error/conflict opens them automatically. The
 available/unavailable/error summary states retain their existing meaning.
+ReadingProvider keeps the full-text presentation gate separate from
+`reading-coordinator.ts`: a 128-candidate in-memory buffer flushes at 25 targets
+or the oldest candidate's 250 ms deadline, with one automatic batch in flight.
+A known atomic refusal reserves one separate at-most-25-member continuation
+ahead of fresh work, making total unfrozen capacity at most 153.
+The final storage-lock check freezes only still-authorized original versions.
+Manual choices, including validated cross-tab journal intents, cancel unfrozen
+members without delaying their own command; one validated terminal atomic refusal
+may form a new unchanged-version subset, never
+after uncertainty or recursively. Acknowledged operations retain compact versioned
+evidence in their own bounded journal slot while overlapping intents remain; this
+suppresses stale target warnings after delayed refusals and reload without expanding
+every sibling near the byte cap. Pruning keeps the maximum version per still-referenced
+exact pair, ignoring dismissed pairs; covered old per-intent versions compact only
+after durable receipt evidence, while uncovered versions remain readable. Admission
+prunes obsolete receipts only after checking for a duplicate operation key; admission
+and conflict recording can retry covered legacy compaction after a storage fault.
+Local journal transitions update private state
+from safe receipts without broad registered-target lookups; source-host lookup
+ownership and positive-receipt lease limits remain. See ADR-026.
 Reply parent labels reuse only current leased parent metadata with a matching ID;
 otherwise the link stays generic. They open the actual parent in discussion context
 without extra reads. Preview parent separately reads current context only on demand,

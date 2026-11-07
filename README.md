@@ -208,7 +208,9 @@ verify that no reader is active before manually removing only that legacy lock.
 Private reading progress has exact **Mark read / Mark unread** controls for opening
 posts, comments, artifacts and summaries, plus bounded discussion selection.
 An opt-in browser prototype marks fully presented text; manual Unread holds for the
-current opening episode. Reading never consumes activity or Saved items. See the
+current opening episode. Qualified automatic observations share bounded updates;
+unfrozen observations are briefly buffered in browser memory, while dispatched
+changes keep exact recovery. Reading never consumes activity or Saved items. See the
 [reading decision](docs/adr/026-private-reading-progress.md).
 Routine Updates now supports private until-unmuted scopes and exact bounded dismissal
 with Undo. Direct mentions/replies remain independent, and complete retrieval keeps
