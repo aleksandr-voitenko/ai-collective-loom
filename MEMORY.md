@@ -191,7 +191,10 @@ Unread precedence over intervening presentation-only writes. Retained exact deci
 return original/current state without reapplication. No shared events, worker, clock,
 Saved/Following/notification or feed changes. Browser automatic presentation is an
 opt-in per-browser/identity prototype, with separate bounded recovery and explicit
-reopening after Unread. See ADR-026 and the
+reopening after Unread. Qualified observations use a bounded short-lived browser
+batch buffer before immutable journal freeze; a known atomic conflict may produce
+one new unchanged-version subset, while manual Unread and uncertain recovery retain
+their original guarantees. See ADR-026 and the
 participation memory for limits, authority and custody. Real-data gates remain.
 ADR-041 permits the operator’s own public/synthetic/non-sensitive local trial
 accounts/content with explicit policy acknowledgement. Sensitive data, production

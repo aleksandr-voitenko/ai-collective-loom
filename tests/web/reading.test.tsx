@@ -103,6 +103,80 @@ const page = (read = false, version = 0) => ({
   scope: 'own_exact_revisions',
   items: [{ ...target, read, version, availability: 'available' }],
 });
+function presentedFixture(t: TestContext) {
+  t.mock.method(document, 'hasFocus', () => true);
+  Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+    const top = this === document.querySelectorAll('.prose')[1] ? 250 : 100;
+    return {
+      top,
+      left: 0,
+      bottom: top + 100,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    };
+  });
+  Object.defineProperty(document, 'elementFromPoint', {
+    value: (_x: number, y: number) => document.querySelectorAll('.prose')[y >= 250 ? 1 : 0],
+    configurable: true,
+  });
+}
+async function twoAutomatic(t: TestContext) {
+  presentedFixture(t);
+  const other = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const f = mount(t, true, [target, other]);
+  await waitFor(() =>
+    assert.ok(
+      f.calls.some((call) => call.path.endsWith('/lookup') && call.body.targets.length === 2),
+    ),
+  );
+  await act(async () => {
+    for (const call of f.calls.filter((entry) => entry.path.endsWith('/lookup')))
+      call.finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [target, other].map((source) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      );
+  });
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))), {
+    timeout: 4000,
+  });
+  const original = f.calls.find((call) => call.path.endsWith('/state'))!;
+  assert.equal(original.body.basis, 'presentation');
+  assert.equal(original.body.targets.length, 2);
+  return { ...f, other, original };
+}
+function receipt(
+  command: { body: any },
+  operation_state: 'applied' | 'version_conflict',
+  current: any[],
+) {
+  return Response.json({
+    operation_state,
+    operation_id: randomUUID(),
+    idempotency: 'created',
+    outcome: {
+      basis: command.body.basis,
+      episode_id: command.body.episode_id,
+      targets: command.body.targets.map((member: any) => ({
+        ...member,
+        result_version:
+          current.find((item) => item.revision_id === member.revision_id)?.version ?? 0,
+      })),
+    },
+    current,
+  });
+}
 async function settle(calls: ReturnType<typeof mount>['calls'], read = false, version = 0) {
   await waitFor(() => assert.ok(calls.some((c) => c.path.endsWith('/lookup'))));
   await act(async () => {
@@ -380,6 +454,404 @@ test('late route and identity responses cannot create progress or repopulate cle
   assert.equal(f.recovery.all().length, 0);
   assert.equal(f.calls.filter((c) => c.path.endsWith('/state')).length, 0);
 });
+test('qualified revisions share one automatic presentation request', async (t) => {
+  t.mock.method(document, 'hasFocus', () => true);
+  Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+    const top = this === document.querySelectorAll('.prose')[1] ? 250 : 100;
+    return {
+      top,
+      left: 0,
+      bottom: top + 100,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    };
+  });
+  Object.defineProperty(document, 'elementFromPoint', {
+    value: (_x: number, y: number) => document.querySelectorAll('.prose')[y >= 250 ? 1 : 0],
+    configurable: true,
+  });
+  const other = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const f = mount(t, true, [target, other]);
+  await waitFor(() =>
+    assert.ok(f.calls.some((c) => c.path.endsWith('/lookup') && c.body.targets.length === 2)),
+  );
+  await act(async () => {
+    for (const call of f.calls.filter((c) => c.path.endsWith('/lookup')))
+      call.finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [target, other].map((source) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      );
+  });
+  await waitFor(() => assert.ok(f.calls.some((c) => c.path.endsWith('/state'))), {
+    timeout: 4000,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const presentations = f.calls.filter((c) => c.path.endsWith('/state'));
+  assert.equal(presentations.length, 1);
+  assert.equal(presentations[0]!.body.basis, 'presentation');
+  assert.deepEqual(
+    presentations[0]!.body.targets.map((v: any) => v.revision_id).sort(),
+    [target.revision_id, other.revision_id].sort(),
+  );
+});
+test('manual unread dispatches beside a held frozen batch and keeps its exact body', async (t) => {
+  const f = await twoAutomatic(t);
+  const frozen = JSON.stringify(f.recovery.all()[0]!.body);
+  const controls = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+  );
+  await act(async () => fireEvent.click(controls.getByRole('button', { name: 'Mark unread' })));
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const manual = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  assert.equal(manual.body.basis, 'manual');
+  assert.equal(JSON.stringify(f.original.body), frozen);
+  assert.equal(
+    JSON.stringify(f.recovery.all().find((record) => record.body.basis === 'presentation')!.body),
+    frozen,
+  );
+  await act(async () =>
+    f.original.finish(
+      receipt(
+        f.original,
+        'applied',
+        [target, f.other].map((source) => ({
+          ...source,
+          read: true,
+          version: 1,
+          availability: 'available',
+        })),
+      ),
+    ),
+  );
+  await act(async () =>
+    manual.finish(
+      receipt(manual, 'applied', [
+        { ...target, read: false, version: 2, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(
+      document
+        .querySelector(`[data-reading-target="${target.revision_id}"]`)
+        ?.getAttribute('data-reading-version'),
+      '2',
+    ),
+  );
+  assert.ok(controls.getByText(/Marked unread · private/));
+});
+test('manual unread during pre-freeze custody removes only its candidate', async (t) => {
+  presentedFixture(t);
+  let release!: () => void;
+  let reached!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const waiting = new Promise<void>((resolve) => (reached = resolve));
+  let first = true;
+  let tail = Promise.resolve();
+  t.mock.method(navigator.locks!, 'request', (_name: string, work: () => unknown) => {
+    const run = tail.then(async () => {
+      if (first) {
+        first = false;
+        reached();
+        await gate;
+      }
+      return work();
+    });
+    tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  });
+  const other = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const f = mount(t, true, [target, other]);
+  await waitFor(() =>
+    assert.ok(
+      f.calls.some((call) => call.path.endsWith('/lookup') && call.body.targets.length === 2),
+    ),
+  );
+  await act(async () =>
+    f.calls
+      .find((call) => call.path.endsWith('/lookup'))!
+      .finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [target, other].map((source) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      ),
+  );
+  await waiting;
+  const a = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+  );
+  await act(async () => fireEvent.click(a.getByRole('button', { name: 'Mark unread' })));
+  await act(async () => release());
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))));
+  const automatic = f.calls.find((call) => call.path.endsWith('/state'))!;
+  assert.equal(automatic.body.basis, 'presentation');
+  assert.deepEqual(automatic.body.targets, [{ ...other, read: true, expected_version: 0 }]);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state'))[1]!.body.basis, 'manual');
+});
+
+test('atomic automatic refusal continues only unchanged B with a new key and retains A conflict', async (t) => {
+  const f = await twoAutomatic(t);
+  await act(async () =>
+    f.original.finish(
+      receipt(f.original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...f.other, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const continuation = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  assert.notEqual(continuation.body.idempotency_key, f.original.body.idempotency_key);
+  assert.equal(continuation.body.episode_id, f.original.body.episode_id);
+  assert.deepEqual(continuation.body.targets, [{ ...f.other, read: true, expected_version: 0 }]);
+  await act(async () =>
+    continuation.finish(
+      receipt(continuation, 'applied', [
+        { ...f.other, read: true, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() => assert.equal(f.recovery.all().length, 1));
+  const retained = f.recovery.all()[0]!;
+  assert.equal(retained.state, 'conflicted');
+  assert.deepEqual(retained.body, f.original.body);
+  assert.deepEqual(retained.superseded_revisions, [f.other.revision_id]);
+  const a = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+  );
+  const b = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+  );
+  assert.ok(a.queryByText(/Reading change conflicted/));
+  assert.equal(!!b.queryByText(/Reading change conflicted/), false);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
+});
+
+test('later manual choice cancels pending automatic continuation', async (t) => {
+  const f = await twoAutomatic(t);
+  await act(async () =>
+    f.original.finish(
+      receipt(f.original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...f.other, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  const b = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+  );
+  await act(async () => fireEvent.click(b.getByRole('button', { name: 'Mark unread' })));
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state'))[1]!.body.basis, 'manual');
+});
+test('a continuation conflict stops and an uncertain original makes no subset', async (t) => {
+  const f = await twoAutomatic(t);
+  await act(async () =>
+    f.original.finish(
+      receipt(f.original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...f.other, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const continuation = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  await act(async () =>
+    continuation.finish(
+      receipt(continuation, 'version_conflict', [
+        { ...f.other, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
+  assert.deepEqual(
+    f.recovery.all().map((record) => record.state),
+    ['conflicted', 'conflicted'],
+  );
+});
+
+test('transport uncertainty and not-recorded status never create a subset', async (t) => {
+  const f = await twoAutomatic(t);
+  await act(async () =>
+    f.original.finish(
+      Response.json(
+        {
+          error: { code: 'service_unavailable', message: 'Held outcome unknown' },
+        },
+        { status: 503 },
+      ),
+    ),
+  );
+  await waitFor(() => assert.equal(f.recovery.all().length, 1));
+  assert.equal(f.recovery.all()[0]!.state, 'uncertain');
+  await act(async () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Check reading outcome' })),
+  );
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/status'))));
+  await act(async () =>
+    f.calls
+      .find((call) => call.path.endsWith('/status'))!
+      .finish(Response.json({ operation_state: 'not_recorded' })),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
+  assert.deepEqual(f.recovery.all()[0]!.body, f.original.body);
+});
+
+test('local reading save, begin and finish do not repeat whole-provider lookups', async (t) => {
+  const other = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const f = mount(t, false, [target, other]);
+  await waitFor(() =>
+    assert.ok(
+      f.calls.some((call) => call.path.endsWith('/lookup') && call.body.targets.length === 2),
+    ),
+  );
+  const initial = f.calls.filter((call) => call.path.endsWith('/lookup'));
+  await act(async () =>
+    initial[0]!.finish(
+      Response.json({
+        scope: 'own_exact_revisions',
+        items: [target, other].map((source) => ({
+          ...source,
+          read: false,
+          version: 0,
+          availability: 'available',
+        })),
+      }),
+    ),
+  );
+  const a = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+  );
+  await act(async () => fireEvent.click(a.getByRole('button', { name: 'Mark unread' })));
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))));
+  const command = f.calls.find((call) => call.path.endsWith('/state'))!;
+  await act(async () =>
+    command.finish(
+      receipt(command, 'applied', [
+        { ...target, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() => assert.equal(f.recovery.all().length, 0));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 1);
+  assert.equal(
+    document
+      .querySelector(`[data-reading-target="${target.revision_id}"]`)
+      ?.getAttribute('data-reading-version'),
+    '1',
+  );
+});
+test('automatic storage failure prevents batch dispatch and leaves unrelated custody intact', async (t) => {
+  presentedFixture(t);
+  const other = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const f = mount(t, true, [target, other]);
+  localStorage.setItem('loom.intent.unrelated', 'preserve');
+  await waitFor(() =>
+    assert.ok(
+      f.calls.some((call) => call.path.endsWith('/lookup') && call.body.targets.length === 2),
+    ),
+  );
+  const original = dom.window.Storage.prototype.setItem;
+  t.mock.method(
+    dom.window.Storage.prototype,
+    'setItem',
+    function (this: Storage, key: string, value: string) {
+      if (key.includes(':intent:')) throw new Error('Synthetic automatic storage failure');
+      return original.call(this, key, value);
+    },
+  );
+  await act(async () =>
+    f.calls
+      .find((call) => call.path.endsWith('/lookup'))!
+      .finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [target, other].map((source) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      ),
+  );
+  await waitFor(() => assert.ok(screen.getAllByText(/could not be saved/).length), {
+    timeout: 4000,
+  });
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+  assert.equal(f.recovery.all().length, 0);
+  assert.equal(localStorage.getItem('loom.intent.unrelated'), 'preserve');
+});
+test('identity withdrawal while an automatic batch waits for custody prevents dispatch', async (t) => {
+  presentedFixture(t);
+  let release!: () => void;
+  let reached!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const waiting = new Promise<void>((resolve) => (reached = resolve));
+  t.mock.method(navigator.locks!, 'request', async (_name: string, work: () => unknown) => {
+    reached();
+    await gate;
+    return work();
+  });
+  const f = mount(t, true);
+  await settle(f.calls);
+  await waiting;
+  await act(async () => invalidateIdentity());
+  await act(async () => release());
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+  assert.equal(f.recovery.all().length, 0);
+});
+
+test('a frozen automatic batch survives navigation with the same saved body and key', async (t) => {
+  const f = await twoAutomatic(t);
+  const frozen = f.recovery.all()[0]!.body;
+  assert.deepEqual(frozen, f.original.body);
+  await act(async () => f.router.navigate('/other'));
+  assert.deepEqual(f.recovery.all()[0]!.body, frozen);
+  await act(async () => f.router.navigate('/read'));
+  await waitFor(() => assert.ok(screen.getByRole('button', { name: 'Retry same reading change' })));
+  assert.deepEqual(f.recovery.all()[0]!.body, frozen);
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
+});
 test('automatic StrictMode observation is once per episode; manual unread and refresh cannot rearm it', async (t) => {
   t.mock.method(document, 'hasFocus', () => true);
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
@@ -520,6 +992,34 @@ test('confirmed conflicts retain exact bounded custody; failed dismissal and lat
   await journal.recordConflict(sent);
   await journal.rejectFirst(sent);
   assert.deepEqual(journal.all(), []);
+});
+test('historical conflict feedback retires only after a newer successful version', async () => {
+  const journal = new ReadingRecovery(randomUUID(), randomUUID());
+  const body = {
+    idempotency_key: randomUUID(),
+    basis: 'presentation' as const,
+    episode_id: randomUUID(),
+    targets: [{ ...target, read: true, expected_version: 0 }],
+  };
+  const saved = await journal.save(body, () => true);
+  const sent = await journal.begin(saved);
+  const refusal = {
+    operation_state: 'version_conflict' as const,
+    operation_id: randomUUID(),
+    idempotency: 'created' as const,
+    outcome: {
+      basis: body.basis,
+      episode_id: body.episode_id,
+      targets: [{ ...body.targets[0]!, result_version: 2 }],
+    },
+    current: [{ ...target, read: false, version: 2, availability: 'available' as const }],
+  };
+  await journal.recordConflict(sent, refusal);
+  await journal.supersedeConflicts([{ ...body.targets[0]!, result_version: 1 }]);
+  assert.deepEqual(journal.all()[0]!.superseded_revisions, undefined);
+  await journal.supersedeConflicts([{ ...body.targets[0]!, result_version: 3 }]);
+  assert.deepEqual(journal.all()[0]!.superseded_revisions, [target.revision_id]);
+  assert.deepEqual(journal.all()[0]!.body, body);
 });
 
 test('presentation gate excludes hidden, unfocused, covered, offscreen and horizontally incomplete main text', (t) => {

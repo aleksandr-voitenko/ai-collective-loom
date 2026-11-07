@@ -1,7 +1,13 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
-import { closed } from '../contracts/participation.js';
-import { ReadingUpdate, readingLimits, type ReadingUpdateInput } from '../contracts/reading.js';
+import { closed, UUID } from '../contracts/participation.js';
+import {
+  ReadingUpdate,
+  ReadingVersion,
+  readingLimits,
+  type ReadingResultView,
+  type ReadingUpdateInput,
+} from '../contracts/reading.js';
 import { identityGeneration } from './participation-client.js';
 import { BoundedRecoveryRecords } from './recovery-storage.js';
 
@@ -15,6 +21,12 @@ const RecordSchema = Type.Object(
       Type.Literal('rejected'),
       Type.Literal('conflicted'),
     ]),
+    superseded_revisions: Type.Optional(Type.Array(UUID, { maxItems: readingLimits.batch })),
+    conflict_versions: Type.Optional(
+      Type.Array(Type.Object({ revision_id: UUID, version: ReadingVersion }, closed), {
+        maxItems: readingLimits.batch,
+      }),
+    ),
   },
   closed,
 );
@@ -98,8 +110,13 @@ export class ReadingRecovery {
     return record;
   }
   save(body: ReadingUpdateInput, active: () => boolean) {
+    return this.savePrepared(() => body, active);
+  }
+  savePrepared(prepare: () => ReadingUpdateInput | undefined, active: () => boolean) {
     return this.locked(() => {
       if (!active()) throw new DOMException('View changed.', 'AbortError');
+      const body = prepare();
+      if (!body) throw new DOMException('Reading observation changed.', 'AbortError');
       if (this.all().some((r) => r.body.idempotency_key === body.idempotency_key))
         throw new Error('Reading operation already exists. Recover its exact request.');
       return this.write({ version: 1, body, attempts: 0, state: 'uncertain' });
@@ -128,7 +145,7 @@ export class ReadingRecovery {
         this.write({ ...current, state: 'rejected' });
     });
   }
-  recordConflict(record: ReadingIntent) {
+  recordConflict(record: ReadingIntent, result?: ReadingResultView) {
     return this.locked(() => {
       const current = this.all().find(
         (r) => r.body.idempotency_key === record.body.idempotency_key,
@@ -138,7 +155,36 @@ export class ReadingRecovery {
         throw new Error('Reading intent changed. Refresh recovery.');
       // Keep exact, bounded feedback until explicitly dismissed. A late duplicate
       // response must not recreate a notice another tab has already dismissed.
-      if (current.state === 'uncertain') this.write({ ...current, state: 'conflicted' });
+      if (current.state === 'uncertain')
+        this.write({
+          ...current,
+          state: 'conflicted',
+          ...(result
+            ? {
+                conflict_versions: result.outcome.targets.map((target) => ({
+                  revision_id: target.revision_id,
+                  version: target.result_version,
+                })),
+              }
+            : {}),
+        });
+    });
+  }
+  supersedeConflicts(targets: ReadingResultView['outcome']['targets']) {
+    return this.locked(() => {
+      for (const record of this.all()) {
+        if (record.state !== 'conflicted') continue;
+        const superseded = new Set(record.superseded_revisions ?? []);
+        for (const target of targets) {
+          const refused = record.conflict_versions?.find(
+            (item) => item.revision_id === target.revision_id,
+          );
+          if (refused && target.result_version > refused.version)
+            superseded.add(target.revision_id);
+        }
+        if (superseded.size !== (record.superseded_revisions?.length ?? 0))
+          this.write({ ...record, superseded_revisions: [...superseded] });
+      }
     });
   }
   finish(record: ReadingIntent, resolvedOnly = false) {

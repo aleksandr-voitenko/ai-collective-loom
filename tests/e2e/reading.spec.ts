@@ -1,13 +1,53 @@
 import { chromium, type Page, type BrowserContext } from '@playwright/test';
 import { test, expect } from '../helpers/browser-fixtures.js';
 import { randomUUID } from 'node:crypto';
-import { access, mkdtemp, rm, readFile } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
+import { access, mkdir, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { execFileSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { syntheticServer } from '../helpers/participation-server.js';
 import type { BrowserDiagnostics } from '../helpers/browser-diagnostics.js';
 const endpoint = '/api/v1/me/reading';
+const batchReviewRoot = '/private/tmp/loom-review-evidence/reading-batch';
+async function batchReviewCapture(page: Page, state: string, width: 1440 | 390) {
+  await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+  if (state === 'recovery-continuation' && width === 390)
+    await page.getByText(/1 revision was synchronized/).scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true);
+  await mkdir(batchReviewRoot, { recursive: true });
+  const name = `${state}-${width}x${width === 1440 ? 1000 : 844}`;
+  await page.screenshot({ path: join(batchReviewRoot, name + '.png'), fullPage: false });
+  await writeFile(
+    join(batchReviewRoot, name + '.json'),
+    JSON.stringify(
+      {
+        source_commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+        dirty_tree: execFileSync('git', ['status', '--short'], { encoding: 'utf8' })
+          .trim()
+          .split('\n')
+          .filter(Boolean),
+        route: new URL(page.url()).pathname,
+        viewport: { width, height: width === 1440 ? 1000 : 844 },
+        browser: 'Chromium',
+        account_role: 'synthetic enrolled administrator',
+        state,
+        reproduction:
+          'LOOM_READING_BATCH_REVIEW=1 npm run test:e2e -- reading.spec.ts --grep "manual selective reading"',
+        authentication: 'ordinary virtual WebAuthn passkey',
+        mocked_responses: [],
+        injected_failures: state.includes('conflict')
+          ? [
+              'A was marked unread through the ordinary UI before the held automatic batch reached the server.',
+            ]
+          : [],
+      },
+      null,
+      2,
+    ),
+  );
+}
 const text = (text: string) => ({ format: 'loom-markdown-v1', text, mentions: [] });
 function barrier() {
   let release!: () => void;
@@ -275,6 +315,8 @@ test('manual selective reading, exact historical IDs and a frozen bounded select
     await page.screenshot({ path: '/private/tmp/loom-reading-mobile.png', fullPage: true });
   expect(errors).toEqual([]);
   expect(await page.title()).not.toBe('');
+  if (process.env.LOOM_READING_BATCH_REVIEW === '1')
+    await batchReviewViewportEvidence(page, context, server, d);
 });
 
 test('a reading conflict stays on its exact revision after another change succeeds and survives reload until dismissal', async ({
@@ -420,6 +462,100 @@ test('opt-in presentation covers full long text, excludes unpresented branches a
   expect((await state(page, deep)).version).toBe(0);
 });
 
+async function batchReviewViewportEvidence(
+  page: Page,
+  context: BrowserContext,
+  server: Awaited<ReturnType<typeof syntheticServer>>,
+  d: Awaited<ReturnType<typeof setup>>,
+) {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const a = await d.reply('First exact reading target'),
+    b = await d.reply('Second exact reading target');
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  await readingTools(page, a.revision_id);
+  await readingTools(page, b.revision_id);
+  await expect(
+    control(page, a.revision_id).getByRole('button', { name: 'Mark unread' }),
+  ).toBeEnabled();
+  await batchReviewCapture(page, 'normal', 1440);
+  await batchReviewCapture(page, 'normal', 390);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await readingTools(page, d.opening.revision_id);
+  await control(page, d.opening.revision_id)
+    .getByRole('button', { name: 'Mark unread', exact: true })
+    .click();
+  await expect(
+    control(page, d.opening.revision_id).getByText(/Marked unread · private/),
+  ).toBeVisible();
+  await batchReviewCapture(page, 'manual-unread', 1440);
+  await batchReviewCapture(page, 'manual-unread', 390);
+  const held = barrier(),
+    release = barrier();
+  let original: any;
+  await page.route('**' + endpoint + '/state', async (route) => {
+    const body = route.request().postDataJSON();
+    if (
+      body.basis === 'presentation' &&
+      body.targets.some((item: any) => item.revision_id === a.revision_id)
+    ) {
+      original = body;
+      held.release();
+      await release.promise;
+    }
+    await route.continue();
+  });
+  try {
+    await page.evaluate(
+      ({ a, b }) => {
+        const first = document
+          .querySelector(`[data-reading-target="${a}"] .prose`)!
+          .getBoundingClientRect();
+        const second = document
+          .querySelector(`[data-reading-target="${b}"] .prose`)!
+          .getBoundingClientRect();
+        scrollBy(0, (first.top + second.bottom) / 2 - innerHeight / 2);
+      },
+      { a: a.revision_id, b: b.revision_id },
+    );
+    const settings = await context.newPage();
+    try {
+      await enable(settings, server.origin);
+    } finally {
+      await settings.close();
+    }
+    await page.bringToFront();
+    await Promise.race([
+      held.promise,
+      page.waitForTimeout(8000).then(() => {
+        throw new Error('Two-target automatic batch did not qualify.');
+      }),
+    ]);
+    expect(original.targets.map((item: any) => item.revision_id).sort()).toEqual(
+      [a.revision_id, b.revision_id].sort(),
+    );
+    await expect(control(page, a.revision_id).getByText(/Pending reading change/)).toBeVisible();
+    await batchReviewCapture(page, 'pending', 1440);
+    await batchReviewCapture(page, 'pending', 390);
+    await control(page, a.revision_id).getByRole('button', { name: 'Mark unread' }).click();
+    await expect.poll(async () => (await state(page, a)).version).toBe(1);
+    release.release();
+    await page.unrouteAll({ behavior: 'wait' });
+    await expect.poll(async () => (await state(page, b)).read).toBe(true);
+    await expect(control(page, a.revision_id).getByText(/Reading change conflicted/)).toBeVisible();
+    await expect(control(page, b.revision_id).getByText(/Reading change conflicted/)).toHaveCount(
+      0,
+    );
+    await batchReviewCapture(page, 'conflict-continuation', 1440);
+    await batchReviewCapture(page, 'conflict-continuation', 390);
+    await page.goto(server.origin + '/loom/reading');
+    await expect(page.getByText(/1 revision was synchronized/)).toBeVisible();
+    await batchReviewCapture(page, 'recovery-continuation', 1440);
+    await batchReviewCapture(page, 'recovery-continuation', 390);
+  } finally {
+    release.release();
+  }
+}
+
 for (const committed of [false, true])
   test(`manual unread defeats ${committed ? 'committed but unacknowledged' : 'queued'} automatic read across tabs without passive rearm`, async ({
     page,
@@ -480,7 +616,7 @@ for (const committed of [false, true])
     }
   });
 
-test('reading response loss survives a browser process restart and original Read replay reports current Unread', async ({
+test('manual and automatic reading response loss survive browser process restarts with exact bodies', async ({
   server,
   diagnostics,
 }) => {
@@ -529,6 +665,64 @@ test('reading response loss survives a browser process restart and original Read
     expect(replay).toEqual(body);
     expect((await state(page, a)).read).toBe(false);
     expect((await state(page, a)).version).toBe(2);
+    await page
+      .getByLabel(
+        'Automatically mark presented text read — prototype, this account on this browser',
+      )
+      .check();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Object.keys(localStorage).some(
+            (key) => key.endsWith(':automatic') && localStorage.getItem(key) === 'true',
+          ),
+        ),
+      )
+      .toBe(true);
+    const automaticTarget = await api(page, '/api/v1/artifacts', {
+      idempotency_key: randomUUID(),
+      area_id: d.area,
+      title: 'Automatic restart target',
+      content: text('A fresh exact automatic reading target'),
+    });
+    const automaticLost = barrier();
+    let automaticBody: any;
+    await page.route('**' + endpoint + '/state', async (route) => {
+      const request = route.request().postDataJSON();
+      if (request.basis !== 'presentation') return route.continue();
+      automaticBody = request;
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      await route.abort('connectionfailed');
+      automaticLost.release();
+    });
+    await exact(page, server.origin, automaticTarget);
+    await page.bringToFront();
+    await Promise.race([
+      automaticLost.promise,
+      page.waitForTimeout(8000).then(() => {
+        throw new Error('Automatic reading did not dispatch after process restart.');
+      }),
+    ]);
+    expect(automaticBody.targets).toEqual([
+      { ...pair(automaticTarget), read: true, expected_version: 0 },
+    ]);
+    await context.close();
+    context = await diagnostics.launchPersistentContext(directory, {
+      ignoreHTTPSErrors: true,
+      headless: true,
+    });
+    page = await context.newPage();
+    await page.goto(server.origin + '/loom/reading');
+    let automaticReplay: any;
+    page.on('request', (request) => {
+      if (request.url().endsWith(endpoint + '/state')) automaticReplay = request.postDataJSON();
+    });
+    await page.getByRole('button', { name: 'Retry same reading change' }).click();
+    await expect(page.getByText('No pending reading changes.')).toBeVisible();
+    expect(automaticReplay).toEqual(automaticBody);
+    expect((await state(page, automaticTarget)).read).toBe(true);
+    expect((await state(page, automaticTarget)).version).toBe(1);
   } finally {
     await context.close();
     await rm(directory, { recursive: true, force: true });

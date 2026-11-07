@@ -82,6 +82,15 @@ disclosure and reveals pending/conflict/error controls. Empty summaries use a sm
 invitation. Reading disclosures retain the user's open choice after settlement;
 only a new pending/error/conflict opens them automatically. The
 available/unavailable/error summary states retain their existing meaning.
+ReadingProvider keeps the full-text presentation gate separate from
+`reading-coordinator.ts`: a 128-candidate in-memory buffer flushes at 25 targets
+or the oldest candidate's 250 ms deadline, with one automatic batch in flight.
+The final storage-lock check freezes only still-authorized original versions.
+Manual choices cancel unfrozen members without delaying their own command; one
+validated terminal atomic refusal may form a new unchanged-version subset, never
+after uncertainty or recursively. Local journal transitions update private state
+from safe receipts without broad registered-target lookups; source-host lookup
+ownership and positive-receipt lease limits remain. See ADR-026.
 Reply parent labels reuse only current leased parent metadata with a matching ID;
 otherwise the link stays generic. They open the actual parent in discussion context
 without extra reads. Preview parent separately reads current context only on demand,

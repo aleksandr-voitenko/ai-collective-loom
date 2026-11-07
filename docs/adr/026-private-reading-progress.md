@@ -29,9 +29,16 @@ exact expected-version equality. A manual Unread may also supersede intervening
 presentation-only writes when `deliberate_version <= expected_version < version`.
 It may never supersede an intervening deliberate choice. This explicit exception
 lets Unread win both commit orders against an older automatic Read without client
-timestamps, arrival-wins semantics or automatic rebasing. A stale presentation is
+timestamps, arrival-wins semantics or automatic rebasing. A stale target is
 terminal for its episode. Batches validate every member and apply all or none;
 one invalid target fails the request, one stale member retains a refusal for all.
+After a validated terminal atomic refusal, the browser may form one new automatic
+subset operation. Only members whose returned current state is available, unread
+and still at their original expected version qualify. The refused body and conflict
+record remain unchanged; the subset has a new key and unchanged expected versions.
+A second conflict cannot continue. Transport uncertainty, absent status, failed
+status lookup and old journal records never create a subset. This is neither
+uncertain-key retry nor stale-version rebasing.
 
 ## Persistence, disclosure and finite work
 
@@ -74,6 +81,9 @@ reconciliation; ordinary restart is not a coordinated backup/restore test.
 Off by default, labelled prototype, preference scoped to origin/instance/participant
 in this browser. External clients choose their own consumption policy. Disabling
 stops new observations; dispatched commands can still commit.
+The current full-text eligibility, default-off preference and route-wide Unread
+hold remain the human policy for this synchronization increment. They are separate
+from transport coordination and due for a later policy change.
 
 Only successful, expanded main-text representations on current/exact resource views
 and loaded discussion contributions qualify. Require the active route/identity,
@@ -98,7 +108,7 @@ within it; rerender, StrictMode replay, status response, tab activation or cross
 announcements do not create a fresh episode. Manual Unread and any observed later
 version stop automatic qualification for the target until explicit navigation away
 and reopening (a full reload is reopening). Capture version before presentation,
-never fetch/rebase after a stale automatic refusal. Known-read revisions generate
+never fetch/rebase a stale target after automatic refusal. Known-read revisions generate
 no further automatic outcomes. Preview/note/coverage/feed components are deliberately
 outside the instrumented boundary.
 
@@ -108,11 +118,25 @@ dispatch; edits/new arrivals do not expand it. It is explicitly manual selection
 not proof that selected material was presented. Status failures preserve readable
 content, page position, focus, drafts and branch navigation.
 
+Qualified browser observations enter an in-memory buffer of at most 128 exact
+targets. Duplicate, already-read and unresolved automatic targets do not enter it.
+The oldest candidate starts a 250 ms maximum transport buffer; a full 25-target
+batch flushes promptly, and arrivals cannot reset the oldest deadline. One
+automatic batch is in flight per provider; later bounded candidates drain after
+capacity returns. Manual commands dispatch independently. At capacity, further
+observations are refused from the buffer and may be observed again as space opens.
+This buffering is not presentation dwell and is not durable: departure, disabling,
+identity loss, source withdrawal or a later deliberate choice cancels unfrozen
+work, and page/process exit can lose it. Immediately before freezing, the browser
+rechecks participant, instance, provider episode, preference, source generation,
+original private version and local intent. The saved operation keeps the original
+expected versions and the episode ID of that viewing session.
+
 Use an independent, Web-Locked journal: 128 recovery records, 512 KiB total,
 16 KiB per record. Persist/read back exact body/key before any dispatch. No network
 operation holds the storage lock. Remove only recorded terminal decisions; quota,
 storage, transport and absent outcomes remain distinguishable and recoverable.
-No unresolved eviction or automatic retry/rebase. Identity fencing precedes sign-out
+No unresolved eviction or uncertain-operation retry/rebase. Identity fencing precedes sign-out
 cleanup; late completions cannot recreate cleared records. Confirmed removal is
 idempotent, while retry verifies the exact retained body. Publication journals remain
 independent. Export and explicit cleanup concern only this owner's recovery.
@@ -123,6 +147,13 @@ error-message race found in self-review. Known conflicts cannot dispatch again a
 uncertain work, late duplicate responses cannot recreate a dismissed record, and
 dismissal does not change private server state. Rejected/conflicted records share the
 existing quota with uncertain work; no extra unbounded feedback cache is introduced.
+Backward-compatible conflict metadata records original result versions and later
+separate successful versions. A later success may stop showing a warning beside a
+revision only when its version is newer than the refusal; the original conflict
+record remains reviewable. Private receipt state may advance monotonically but its
+positive availability never renews a protected content lease. Initial, explicit,
+cross-tab and recovery lookups use registered source hosts; local journal
+save/begin/finish events do not rescan every registered target.
 
 ## Verification and reconsideration
 

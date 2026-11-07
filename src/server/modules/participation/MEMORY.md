@@ -489,7 +489,11 @@ a later version blocks the episode; passive rerender/status/StrictMode/tab chang
 never rearm. Explicit away/reopen or reload can. Preserve Changes controls' existing
 query-independent provider lifetime. Badge cache follows mounted text;4096 episode
 fences pause automatic observation without eviction until reopening. Manual controls
-remain usable. `reading-recovery.ts` has separate Web-Locked
+remain usable. Qualified observations are buffered at most128 targets; the oldest
+candidate becomes ready within250ms, or earlier at25 targets. One automatic batch
+is in flight, so ready work waits for capacity. An atomic known refusal may yield
+one new unchanged-version subset for
+unaffected members; uncertain operations do not. `reading-recovery.ts` has separate Web-Locked
 128-record/16KiB-per-record/512KiB custody, exact bodies and attempt counts, no
 network under storage locks and identity fencing before cleanup. First-refusal
 classification checks current attempts; retry/terminal late responses cannot
