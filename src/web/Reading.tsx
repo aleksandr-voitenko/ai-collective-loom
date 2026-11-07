@@ -91,7 +91,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
     knownRecords = useRef<ReadingIntent[]>([]),
     intentVersions = useRef(new Map<string, number>()),
     pendingAutomatic = useRef(new Set<string>()),
-    dispatchAutomatic = useRef<(batch: Candidate[]) => Promise<void>>(async () => {}),
+    dispatchAutomatic = useRef<(batch: Candidate[]) => Promise<Candidate[] | void>>(async () => {}),
     automatic = useRef<AutomaticReadingQueue<Candidate> | undefined>(undefined),
     enabledNow = useRef(false);
   const latestContext = useRef(context);
@@ -221,21 +221,46 @@ export function ReadingProvider({ context, children }: { context: Context; child
     },
     [requestLookup],
   );
+  function invalidateAutomatic(id: string) {
+    automatic.current?.cancel(id);
+    if (
+      !intentVersions.current.has(id) &&
+      intentVersions.current.size >= presentationPolicy.episodeTargets
+    )
+      fences.current.paused = true;
+    else intentVersions.current.set(id, (intentVersions.current.get(id) ?? 0) + 1);
+    if (fences.current.paused) automatic.current?.clear();
+  }
   useEffect(() => {
     live.current = true;
     automatic.current?.open();
-    const changed = () => {
+    const changed = (event?: Event) => {
       if (!active()) return;
       try {
+        const before = knownRecords.current;
         const all = journal.all();
+        const observed =
+          event instanceof StorageEvent && event.key?.startsWith(journal.prefix + 'intent:')
+            ? journal.storedIntent(event.newValue)
+            : undefined;
         knownRecords.current = all;
         setRecords(all);
         enabledNow.current = journal.enabled();
         setEnabled(enabledNow.current);
         if (!enabledNow.current) automatic.current?.clear();
-        for (const record of all)
+        // A completed operation can disappear before its storage event arrives.
+        // The validated event value still carries the later deliberate intent.
+        const manual = new Map(all.map((record) => [record.body.idempotency_key, record]));
+        if (observed) manual.set(observed.body.idempotency_key, observed);
+        for (const record of manual.values())
           if (record.body.basis === 'manual')
-            for (const v of record.body.targets) fences.current.block(v.revision_id);
+            for (const v of record.body.targets) {
+              fences.current.block(v.revision_id);
+              if (
+                !before.some((known) => known.body.idempotency_key === record.body.idempotency_key)
+              )
+                invalidateAutomatic(v.revision_id);
+            }
       } catch (failure) {
         setError((failure as Error).message);
         enabledNow.current = false;
@@ -246,7 +271,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
     const storage = (event: StorageEvent) => {
       if (event.key !== null && !event.key.startsWith(journal.prefix)) return;
       const before = knownRecords.current;
-      changed();
+      changed(event);
       // Another tab may settle a record between events. Unknown removal needs a
       // full revalidation; known records only refresh their exact registered IDs.
       if (
@@ -260,6 +285,9 @@ export function ReadingProvider({ context, children }: { context: Context; child
         const ids = new Set(
           before.flatMap((record) => record.body.targets.map((v) => v.revision_id)),
         );
+        if (event.key?.startsWith(journal.prefix + 'intent:'))
+          for (const target of journal.storedIntent(event.newValue)?.body.targets ?? [])
+            ids.add(target.revision_id);
         for (const record of knownRecords.current)
           for (const target of record.body.targets) ids.add(target.revision_id);
         for (const id of ids) {
@@ -326,7 +354,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
         if (result.operation_state === 'version_conflict')
           await journal.recordConflict(record, result);
         else {
-          await journal.supersedeConflicts(result.outcome.targets);
+          await journal.supersedeConflicts(result.outcome.targets, record.body.idempotency_key);
           await journal.finish(record);
         }
         applyPrivateCurrent(result.current);
@@ -360,21 +388,8 @@ export function ReadingProvider({ context, children }: { context: Context; child
     if (!active()) return;
     for (const target of targets) {
       fences.current.block(target.revision_id);
-      if (basis === 'manual') {
-        automatic.current?.cancel(target.revision_id);
-        if (
-          !intentVersions.current.has(target.revision_id) &&
-          intentVersions.current.size >= presentationPolicy.episodeTargets
-        )
-          fences.current.paused = true;
-        else
-          intentVersions.current.set(
-            target.revision_id,
-            (intentVersions.current.get(target.revision_id) ?? 0) + 1,
-          );
-      }
+      if (basis === 'manual') invalidateAutomatic(target.revision_id);
     }
-    if (fences.current.paused) automatic.current?.clear();
     setError('');
     try {
       const record = await journal.save(
@@ -464,13 +479,14 @@ export function ReadingProvider({ context, children }: { context: Context; child
       if (
         result?.operation_state !== 'version_conflict' ||
         !matchesFrozenRefusal(result, record) ||
-        frozen[0]?.continuation ||
         !active()
       )
         return;
       // A terminal atomic refusal alone permits one new subset. Retain original
       // expected versions and require each returned current member to be unchanged.
+      const continuation: Candidate[] = [];
       for (const candidate of frozen) {
+        if (candidate.continuation) continue;
         const current = result.current.find((item) => item.revision_id === candidate.id);
         if (
           current?.resource_id === candidate.target.resource_id &&
@@ -479,8 +495,9 @@ export function ReadingProvider({ context, children }: { context: Context; child
           current.version === candidate.target.expected_version &&
           validCandidate({ ...candidate, continuation: true })
         )
-          automatic.current?.enqueue({ ...candidate, continuation: true });
+          continuation.push({ ...candidate, continuation: true });
       }
+      return continuation;
     } catch (failure) {
       if (active() && (failure as Error).name !== 'AbortError') {
         for (const candidate of eligible) fences.current.block(candidate.id);

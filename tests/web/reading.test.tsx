@@ -125,6 +125,40 @@ function presentedFixture(t: TestContext) {
     configurable: true,
   });
 }
+function selectivelyPresentedFixture(t: TestContext, qualified: Set<string>) {
+  t.mock.method(document, 'hasFocus', () => true);
+  Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  Object.defineProperty(globalThis, 'innerHeight', { value: 20000, configurable: true });
+  t.after(() =>
+    Object.defineProperty(globalThis, 'innerHeight', { value: 800, configurable: true }),
+  );
+  t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+    const index = [...document.querySelectorAll('.prose')].indexOf(this);
+    const top = 100 + index * 110;
+    return {
+      top,
+      left: 0,
+      bottom: top + 100,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    };
+  });
+  Object.defineProperty(document, 'elementFromPoint', {
+    value: (_x: number, y: number) => {
+      const prose = document.querySelectorAll<HTMLElement>('.prose')[Math.floor((y - 100) / 110)];
+      return qualified.has(
+        prose?.closest('[data-reading-target]')?.getAttribute('data-reading-target') ?? '',
+      )
+        ? prose
+        : null;
+    },
+    configurable: true,
+  });
+}
 async function twoAutomatic(t: TestContext) {
   presentedFixture(t);
   const other = { resource_id: randomUUID(), revision_id: randomUUID() };
@@ -655,9 +689,237 @@ test('atomic automatic refusal continues only unchanged B with a new key and ret
   await new Promise((resolve) => setTimeout(resolve, 350));
   assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
 });
+test('fresh work ahead of a continuation cannot give it a second continuation', async (t) => {
+  const b = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const c = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const qualified = new Set([target.revision_id, b.revision_id]);
+  selectivelyPresentedFixture(t, qualified);
+  const f = mount(t, true, [target, b, c]);
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/lookup'))));
+  await act(async () => {
+    for (const call of f.calls.filter((entry) => entry.path.endsWith('/lookup')))
+      call.finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [target, b, c].map((source) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      );
+  });
+  await waitFor(
+    () => assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+    {
+      timeout: 4000,
+    },
+  );
+  const original = f.calls.find((call) => call.path.endsWith('/state'))!;
+  assert.deepEqual(
+    original.body.targets.map((member: { revision_id: string }) => member.revision_id),
+    [target.revision_id, b.revision_id],
+  );
+  qualified.add(c.revision_id);
+  await new Promise((resolve) => setTimeout(resolve, 1250));
+  await act(async () =>
+    original.finish(
+      receipt(original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...b, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const continuation = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  assert.deepEqual(
+    continuation.body.targets.map((member: any) => member.revision_id),
+    [b.revision_id],
+  );
+  await act(async () =>
+    continuation.finish(
+      receipt(continuation, 'version_conflict', [
+        { ...b, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 3),
+  );
+  const fresh = f.calls.filter((call) => call.path.endsWith('/state'))[2]!;
+  assert.deepEqual(
+    fresh.body.targets.map((member: any) => member.revision_id),
+    [c.revision_id],
+  );
+  await act(async () =>
+    fresh.finish(
+      receipt(fresh, 'version_conflict', [
+        { ...c, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(
+    f.calls.filter(
+      (call) =>
+        call.path.endsWith('/state') &&
+        call.body.targets.some((member: any) => member.revision_id === b.revision_id),
+    ).length,
+    2,
+  );
+});
+test('a continuation ahead of fresh work leaves the fresh members their first allowance', async (t) => {
+  const b = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const c = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const d = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const qualified = new Set([target.revision_id, b.revision_id]);
+  selectivelyPresentedFixture(t, qualified);
+  const f = mount(t, true, [target, b, c, d]);
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/lookup'))));
+  await act(async () => {
+    for (const call of f.calls.filter((entry) => entry.path.endsWith('/lookup')))
+      call.finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [target, b, c, d].map((source) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      );
+  });
+  await waitFor(
+    () => assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+    {
+      timeout: 4000,
+    },
+  );
+  const original = f.calls.find((call) => call.path.endsWith('/state'))!;
+  const realSetTimeout = setTimeout;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+  await act(async () =>
+    original.finish(
+      receipt(original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...b, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  qualified.add(c.revision_id);
+  qualified.add(d.revision_id);
+  await new Promise((resolve) => realSetTimeout(resolve, 1250));
+  await act(async () => t.mock.timers.tick(0));
+  t.mock.timers.reset();
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
+  const bContinuation = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  assert.deepEqual(
+    bContinuation.body.targets.map((member: any) => member.revision_id),
+    [b.revision_id],
+  );
+  await act(async () =>
+    bContinuation.finish(
+      receipt(bContinuation, 'applied', [
+        { ...b, read: true, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 3),
+  );
+  const fresh = f.calls.filter((call) => call.path.endsWith('/state'))[2]!;
+  assert.deepEqual(
+    fresh.body.targets.map((member: any) => member.revision_id),
+    [c.revision_id, d.revision_id],
+  );
+  await act(async () =>
+    fresh.finish(
+      receipt(fresh, 'version_conflict', [
+        { ...c, read: false, version: 0, availability: 'available' },
+        { ...d, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 4),
+  );
+  assert.deepEqual(
+    f.calls
+      .filter((call) => call.path.endsWith('/state'))[3]!
+      .body.targets.map((member: any) => member.revision_id),
+    [c.revision_id],
+  );
+});
+test('a full fresh buffer still dispatches an eligible continuation', async (t) => {
+  const b = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const fresh = Array.from({ length: 129 }, () => ({
+    resource_id: randomUUID(),
+    revision_id: randomUUID(),
+  }));
+  const qualified = new Set([target.revision_id, b.revision_id]);
+  selectivelyPresentedFixture(t, qualified);
+  const all = [target, b, ...fresh];
+  const f = mount(t, true, all);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 6),
+  );
+  await act(async () => {
+    for (const call of f.calls.filter((entry) => entry.path.endsWith('/lookup')))
+      call.finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: call.body.targets.map((source: typeof target) => ({
+            ...source,
+            read: false,
+            version: 0,
+            availability: 'available',
+          })),
+        }),
+      );
+  });
+  await waitFor(
+    () => assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+    {
+      timeout: 5000,
+    },
+  );
+  const original = f.calls.find((call) => call.path.endsWith('/state'))!;
+  assert.deepEqual(
+    original.body.targets.map((member: { revision_id: string }) => member.revision_id),
+    [target.revision_id, b.revision_id],
+  );
+  for (const source of fresh) qualified.add(source.revision_id);
+  await waitFor(() => assert.ok(screen.getAllByText(/Automatic reading buffer is full/).length), {
+    timeout: 5000,
+  });
+  await act(async () =>
+    original.finish(
+      receipt(original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...b, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  assert.deepEqual(
+    f.calls
+      .filter((call) => call.path.endsWith('/state'))[1]!
+      .body.targets.map((member: any) => member.revision_id),
+    [b.revision_id],
+  );
+});
 
 test('later manual choice cancels pending automatic continuation', async (t) => {
   const f = await twoAutomatic(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
   await act(async () =>
     f.original.finish(
       receipt(f.original, 'version_conflict', [
@@ -670,6 +932,8 @@ test('later manual choice cancels pending automatic continuation', async (t) => 
     document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
   );
   await act(async () => fireEvent.click(b.getByRole('button', { name: 'Mark unread' })));
+  await act(async () => t.mock.timers.tick(0));
+  t.mock.timers.reset();
   await waitFor(() =>
     assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
   );
@@ -677,6 +941,48 @@ test('later manual choice cancels pending automatic continuation', async (t) => 
   assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
   assert.equal(f.calls.filter((call) => call.path.endsWith('/state'))[1]!.body.basis, 'manual');
 });
+for (const retained of [true, false])
+  test(`a cross-tab ${retained ? 'pending' : 'already settled'} manual intent cancels a queued continuation`, async (t) => {
+    const f = await twoAutomatic(t);
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    t.after(() => t.mock.timers.reset());
+    await act(async () =>
+      f.original.finish(
+        receipt(f.original, 'version_conflict', [
+          { ...target, read: false, version: 1, availability: 'available' },
+          { ...f.other, read: false, version: 0, availability: 'available' },
+        ]),
+      ),
+    );
+    const manual = {
+      version: 1,
+      body: {
+        idempotency_key: randomUUID(),
+        basis: 'manual',
+        episode_id: null,
+        targets: [{ ...f.other, read: false, expected_version: 0 }],
+      },
+      attempts: 0,
+      state: 'uncertain',
+    };
+    const key = f.recovery.prefix + 'intent:' + manual.body.idempotency_key;
+    if (retained) localStorage.setItem(key, JSON.stringify(manual));
+    const lookups = f.calls.filter((call) => call.path.endsWith('/lookup')).length;
+    await act(async () =>
+      window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(manual) })),
+    );
+    await act(async () => t.mock.timers.tick(0));
+    t.mock.timers.reset();
+    assert.ok(f.calls.filter((call) => call.path.endsWith('/lookup')).length > lookups);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
+    assert.equal(
+      document
+        .querySelector(`[data-reading-target="${f.other.revision_id}"]`)
+        ?.getAttribute('data-reading-version'),
+      '0',
+    );
+  });
 test('a continuation conflict stops and an uncertain original makes no subset', async (t) => {
   const f = await twoAutomatic(t);
   await act(async () =>
@@ -1020,6 +1326,61 @@ test('historical conflict feedback retires only after a newer successful version
   await journal.supersedeConflicts([{ ...body.targets[0]!, result_version: 3 }]);
   assert.deepEqual(journal.all()[0]!.superseded_revisions, [target.revision_id]);
   assert.deepEqual(journal.all()[0]!.body, body);
+});
+test('a delayed refusal keeps historical custody without restoring a newer target warning', async (t) => {
+  const f = await twoAutomatic(t);
+  const b = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+  );
+  await act(async () => fireEvent.click(b.getByRole('button', { name: 'Mark unread' })));
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const manual = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  await act(async () =>
+    manual.finish(
+      receipt(manual, 'applied', [
+        { ...f.other, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await act(async () =>
+    f.original.finish(
+      receipt(f.original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...f.other, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() => assert.equal(f.recovery.all()[0]?.state, 'conflicted'));
+  assert.deepEqual(f.recovery.all()[0]!.body, f.original.body);
+  assert.deepEqual(f.recovery.all()[0]!.superseded_revisions, [f.other.revision_id]);
+  assert.equal(!!b.queryByText(/Reading change conflicted/), false);
+  assert.equal(
+    document
+      .querySelector(`[data-reading-target="${f.other.revision_id}"]`)
+      ?.getAttribute('data-reading-version'),
+    '1',
+  );
+  const a = within(
+    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+  );
+  assert.ok(a.queryByText(/Reading change conflicted/));
+  await act(async () => f.router.navigate('/other'));
+  await act(async () => f.router.navigate('/read'));
+  await waitFor(() =>
+    assert.equal(
+      !!within(
+        document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+      ).queryByText(/Reading change conflicted/),
+      false,
+    ),
+  );
+  assert.ok(
+    within(
+      document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+    ).queryByText(/Reading change conflicted/),
+  );
 });
 
 test('presentation gate excludes hidden, unfocused, covered, offscreen and horizontally incomplete main text', (t) => {

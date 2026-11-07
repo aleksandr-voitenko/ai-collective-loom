@@ -27,6 +27,11 @@ const RecordSchema = Type.Object(
         maxItems: readingLimits.batch,
       }),
     ),
+    successful_versions: Type.Optional(
+      Type.Array(Type.Object({ revision_id: UUID, version: ReadingVersion }, closed), {
+        maxItems: readingLimits.batch,
+      }),
+    ),
   },
   closed,
 );
@@ -83,6 +88,15 @@ export class ReadingRecovery {
   }
   all(): ReadingIntent[] {
     return this.records.all();
+  }
+  storedIntent(raw: string | null): ReadingIntent | undefined {
+    if (!raw) return undefined;
+    try {
+      const record: unknown = JSON.parse(raw);
+      return Value.Check(RecordSchema, record) ? record : undefined;
+    } catch {
+      return undefined;
+    }
   }
   enabled() {
     return this.storage.getItem(this.preference) === 'true';
@@ -155,35 +169,72 @@ export class ReadingRecovery {
         throw new Error('Reading intent changed. Refresh recovery.');
       // Keep exact, bounded feedback until explicitly dismissed. A late duplicate
       // response must not recreate a notice another tab has already dismissed.
-      if (current.state === 'uncertain')
+      if (current.state === 'uncertain') {
+        const conflicts = result?.outcome.targets.map((target) => ({
+          revision_id: target.revision_id,
+          version: target.result_version,
+        }));
+        const superseded = new Set(current.superseded_revisions ?? []);
+        for (const conflict of conflicts ?? [])
+          if (
+            current.successful_versions?.some(
+              (success) =>
+                success.revision_id === conflict.revision_id && success.version > conflict.version,
+            )
+          )
+            superseded.add(conflict.revision_id);
         this.write({
           ...current,
           state: 'conflicted',
-          ...(result
-            ? {
-                conflict_versions: result.outcome.targets.map((target) => ({
-                  revision_id: target.revision_id,
-                  version: target.result_version,
-                })),
-              }
-            : {}),
+          ...(conflicts ? { conflict_versions: conflicts } : {}),
+          ...(superseded.size ? { superseded_revisions: [...superseded] } : {}),
         });
+      }
     });
   }
-  supersedeConflicts(targets: ReadingResultView['outcome']['targets']) {
+  supersedeConflicts(targets: ReadingResultView['outcome']['targets'], operationKey?: string) {
     return this.locked(() => {
       for (const record of this.all()) {
-        if (record.state !== 'conflicted') continue;
+        if (record.body.idempotency_key === operationKey) continue;
+        const successes = new Map(
+          record.successful_versions?.map((item) => [item.revision_id, item.version]) ?? [],
+        );
         const superseded = new Set(record.superseded_revisions ?? []);
         for (const target of targets) {
+          if (
+            !record.body.targets.some(
+              (member) =>
+                member.revision_id === target.revision_id &&
+                member.resource_id === target.resource_id,
+            )
+          )
+            continue;
+          const seen = successes.get(target.revision_id);
+          if (seen === undefined || target.result_version > seen)
+            successes.set(target.revision_id, target.result_version);
           const refused = record.conflict_versions?.find(
             (item) => item.revision_id === target.revision_id,
           );
-          if (refused && target.result_version > refused.version)
+          if (record.state === 'conflicted' && refused && target.result_version > refused.version)
             superseded.add(target.revision_id);
         }
-        if (superseded.size !== (record.superseded_revisions?.length ?? 0))
-          this.write({ ...record, superseded_revisions: [...superseded] });
+        if (
+          successes.size !== (record.successful_versions?.length ?? 0) ||
+          [...successes].some(
+            ([id, version]) =>
+              record.successful_versions?.find((item) => item.revision_id === id)?.version !==
+              version,
+          ) ||
+          superseded.size !== (record.superseded_revisions?.length ?? 0)
+        )
+          this.write({
+            ...record,
+            successful_versions: [...successes].map(([revision_id, version]) => ({
+              revision_id,
+              version,
+            })),
+            ...(superseded.size ? { superseded_revisions: [...superseded] } : {}),
+          });
       }
     });
   }

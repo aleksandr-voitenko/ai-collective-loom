@@ -88,3 +88,25 @@ test('occupied automatic capacity retains a finite candidate buffer', async (t) 
   await turn();
   assert.equal(queue.size, 0);
 });
+
+test('a reserved continuation stays separate when fresh work arrives afterward', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const batches: string[][] = [];
+  const queue = new AutomaticReadingQueue<{ id: string }>(async (batch) => {
+    batches.push(batch.map((candidate) => candidate.id));
+    if (batches.length === 1) return [{ id: 'b' }];
+  });
+  queue.enqueue({ id: 'a' });
+  queue.enqueue({ id: 'b' });
+  t.mock.timers.tick(250);
+  await turn();
+  queue.enqueue({ id: 'c' });
+  assert.equal(queue.has('b'), true);
+  t.mock.timers.tick(0);
+  await turn();
+  assert.deepEqual(batches, [['a', 'b'], ['b']]);
+  t.mock.timers.tick(250);
+  await turn();
+  assert.deepEqual(batches, [['a', 'b'], ['b'], ['c']]);
+  queue.close();
+});
