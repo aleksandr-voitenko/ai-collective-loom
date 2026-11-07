@@ -94,7 +94,11 @@ may form a new unchanged-version subset, never
 after uncertainty or recursively. Acknowledged operations retain compact versioned
 evidence in their own bounded journal slot while overlapping intents remain; this
 suppresses stale target warnings after delayed refusals and reload without expanding
-every sibling near the byte cap. Older per-intent metadata remains readable.
+every sibling near the byte cap. Pruning keeps the maximum version per still-referenced
+exact pair, ignoring dismissed pairs; covered old per-intent versions compact only
+after durable receipt evidence, while uncovered versions remain readable. Admission
+prunes obsolete receipts only after checking for a duplicate operation key; admission
+and conflict recording can retry covered legacy compaction after a storage fault.
 Local journal transitions update private state
 from safe receipts without broad registered-target lookups; source-host lookup
 ownership and positive-receipt lease limits remain. See ADR-026.

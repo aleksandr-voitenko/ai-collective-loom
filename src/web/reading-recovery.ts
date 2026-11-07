@@ -201,6 +201,10 @@ export class ReadingRecovery {
           )
       )
         throw new Error('Reading operation already exists. Recover its exact request.');
+      this.compactCoveredLegacySuccesses();
+      // An older client may have filled the shared slot limit with receipts that
+      // are no longer needed; free only proven obsolete evidence before admission.
+      this.pruneEvidence();
       return this.write({ version: 1, body, attempts: 0, state: 'uncertain' });
     });
   }
@@ -241,12 +245,17 @@ export class ReadingRecovery {
       // Keep exact, bounded feedback until explicitly dismissed. A late duplicate
       // response must not recreate a notice another tab has already dismissed.
       if (current.state === 'uncertain') {
+        this.compactCoveredLegacySuccesses();
+        const compacted = this.records
+          .all()
+          .filter(isIntent)
+          .find((item) => item.body.idempotency_key === record.body.idempotency_key)!;
         const conflicts = result?.outcome.targets.map((target) => ({
           revision_id: target.revision_id,
           version: target.result_version,
         }));
         this.write({
-          ...current,
+          ...compacted,
           state: 'conflicted',
           ...(conflicts ? { conflict_versions: conflicts } : {}),
         });
@@ -260,6 +269,7 @@ export class ReadingRecovery {
         .filter(isIntent)
         .find((item) => item.body.idempotency_key === record.body.idempotency_key);
       if (!current) {
+        this.compactCoveredLegacySuccesses();
         this.pruneEvidence();
         return;
       }
@@ -290,38 +300,63 @@ export class ReadingRecovery {
         this.storage.removeItem(this.prefix + 'intent:' + record.body.idempotency_key);
         this.changed();
       }
+      this.compactCoveredLegacySuccesses();
       this.pruneEvidence();
     });
+  }
+  private compactCoveredLegacySuccesses() {
+    const stored = this.records.all();
+    const evidence = stored.filter((item): item is SuccessEvidence => !isIntent(item));
+    for (const intent of stored.filter(isIntent)) {
+      if (!intent.successful_versions?.length) continue;
+      const remaining = intent.successful_versions.filter((success) => {
+        const target = intent.body.targets.find((item) => item.revision_id === success.revision_id);
+        return (
+          !target ||
+          !evidence.some((receipt) =>
+            receipt.targets.some(
+              (item) => sameTarget(item, target) && item.version >= success.version,
+            ),
+          )
+        );
+      });
+      if (remaining.length === intent.successful_versions.length) continue;
+      const compacted = { ...intent };
+      if (remaining.length) compacted.successful_versions = remaining;
+      else delete compacted.successful_versions;
+      this.records.write(
+        compacted,
+        'Reading acknowledgement compaction could not be saved. Check the retained outcome again.',
+      );
+      this.changed();
+    }
   }
   private pruneEvidence() {
     const stored = this.records.all();
     const intents = stored.filter(isIntent);
     const evidence = stored.filter((item): item is SuccessEvidence => !isIntent(item));
-    const retained: SuccessEvidence[] = [];
-    for (const receipt of evidence.sort(
-      (a, b) =>
-        Math.max(...b.targets.map((target) => target.version)) -
-          Math.max(...a.targets.map((target) => target.version)) ||
-        a.idempotency_key.localeCompare(b.idempotency_key),
-    )) {
-      const needed = receipt.targets.filter((target) =>
-        intents.some((intent) => intent.body.targets.some((member) => sameTarget(member, target))),
-      );
-      if (
-        needed.length &&
-        !needed.every((target) =>
-          retained.some((other) =>
-            other.targets.some(
-              (member) => sameTarget(member, target) && member.version >= target.version,
-            ),
-          ),
+    const needed = new Set(
+      intents.flatMap((intent) =>
+        intent.body.targets.map((target) => `${target.resource_id}:${target.revision_id}`),
+      ),
+    );
+    const newest = new Map<string, { version: number; receipt: string }>();
+    for (const receipt of evidence)
+      for (const target of receipt.targets) {
+        const key = `${target.resource_id}:${target.revision_id}`;
+        if (!needed.has(key)) continue;
+        const prior = newest.get(key);
+        if (
+          !prior ||
+          target.version > prior.version ||
+          (target.version === prior.version && receipt.idempotency_key < prior.receipt)
         )
-      ) {
-        retained.push(receipt);
-        continue;
+          newest.set(key, { version: target.version, receipt: receipt.idempotency_key });
       }
-      this.storage.removeItem(this.prefix + 'intent:' + receipt.idempotency_key);
-    }
+    const retained = new Set([...newest.values()].map((item) => item.receipt));
+    for (const receipt of evidence)
+      if (!retained.has(receipt.idempotency_key))
+        this.storage.removeItem(this.prefix + 'intent:' + receipt.idempotency_key);
   }
   finish(record: ReadingIntent, resolvedOnly = false) {
     return this.locked(() => {

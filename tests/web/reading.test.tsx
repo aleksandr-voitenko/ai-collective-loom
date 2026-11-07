@@ -8,6 +8,7 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { ReadingProvider, ReadingText, ReadingPageViewComponent } from '../../src/web/Reading.js';
 import { ReadingRecovery } from '../../src/web/reading-recovery.js';
+import { readingLimits } from '../../src/contracts/reading.js';
 import { viewportPresentation } from '../../src/web/reading-presentation.js';
 import { invalidateIdentity } from '../../src/web/participation-client.js';
 import type { Context } from '../../src/web/participation-state.js';
@@ -1335,6 +1336,110 @@ test('historical conflict feedback retires only after a newer successful version
   assert.deepEqual(journal.all()[0]!.body, body);
   assert.equal(journal.successEvidence().length, 1, 'newer evidence subsumes older evidence');
 });
+test('mixed-target receipts release obsolete slots after other targets are dismissed', async () => {
+  const journal = new ReadingRecovery(randomUUID(), randomUUID());
+  const b = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const body = (
+    targets: { resource_id: string; revision_id: string; expected_version: number }[],
+  ) => ({
+    idempotency_key: randomUUID(),
+    basis: 'manual' as const,
+    episode_id: null,
+    targets: targets.map((item) => ({ ...item, read: true })),
+  });
+  const bIntent = await journal.save(body([{ ...b, expected_version: 0 }]), () => true);
+  for (let i = 0; i < 126; i++) {
+    const a = { resource_id: randomUUID(), revision_id: randomUUID() };
+    const aIntent = await journal.save(body([{ ...a, expected_version: 0 }]), () => true);
+    const success = await journal.save(
+      body([
+        { ...a, expected_version: 299 - i },
+        { ...b, expected_version: i },
+      ]),
+      () => true,
+    );
+    await journal.settleSuccess(success, [
+      { ...success.body.targets[0]!, result_version: 300 - i },
+      { ...success.body.targets[1]!, result_version: i + 1 },
+    ]);
+    await journal.finish(aIntent);
+  }
+  assert.deepEqual(journal.all(), [bIntent]);
+  const unrelated = () => [
+    { resource_id: randomUUID(), revision_id: randomUUID(), expected_version: 0 },
+  ];
+  await journal.save(body(unrelated()), () => true);
+  await journal.save(body(unrelated()), () => true);
+  assert.equal(journal.successEvidence().length, 1);
+  assert.equal(
+    journal.successEvidence()[0]!.targets.find((item) => item.revision_id === b.revision_id)
+      ?.version,
+    126,
+  );
+});
+test('a full prior receipt journal frees obsolete slots before saving new work', async () => {
+  const journal = new ReadingRecovery(randomUUID(), randomUUID());
+  const b = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const unresolved = await journal.save(
+    {
+      idempotency_key: randomUUID(),
+      basis: 'manual',
+      episode_id: null,
+      targets: [{ ...b, read: true, expected_version: 0 }],
+    },
+    () => true,
+  );
+  let oldKey = '';
+  for (let i = 1; i < readingLimits.localOperations; i++) {
+    const idempotency_key = randomUUID();
+    if (i === 1) oldKey = idempotency_key;
+    localStorage.setItem(
+      journal.prefix + 'intent:' + idempotency_key,
+      JSON.stringify({
+        version: 1,
+        state: 'acknowledged',
+        idempotency_key,
+        targets: [
+          { resource_id: randomUUID(), revision_id: randomUUID(), version: 400 - i },
+          { ...b, version: i },
+        ],
+      }),
+    );
+  }
+  assert.equal(journal.successEvidence().length, readingLimits.localOperations - 1);
+  await assert.rejects(
+    journal.save(
+      {
+        idempotency_key: oldKey,
+        basis: 'manual',
+        episode_id: null,
+        targets: [
+          { resource_id: randomUUID(), revision_id: randomUUID(), read: true, expected_version: 0 },
+        ],
+      },
+      () => true,
+    ),
+    /operation already exists/,
+  );
+  const fresh = await journal.save(
+    {
+      idempotency_key: randomUUID(),
+      basis: 'manual',
+      episode_id: null,
+      targets: [
+        { resource_id: randomUUID(), revision_id: randomUUID(), read: true, expected_version: 0 },
+      ],
+    },
+    () => true,
+  );
+  assert.deepEqual(journal.all(), [unresolved, fresh]);
+  assert.equal(journal.successEvidence().length, 1);
+  assert.equal(
+    journal.successEvidence()[0]!.targets.find((item) => item.revision_id === b.revision_id)
+      ?.version,
+    readingLimits.localOperations - 1,
+  );
+});
 test('a near-full journal settles success before later conflict feedback', async () => {
   const instance = randomUUID(),
     participant = randomUUID();
@@ -1394,6 +1499,174 @@ test('a near-full journal settles success before later conflict feedback', async
       .find((record) => record.body.idempotency_key === refused.body.idempotency_key)
       ?.superseded_revisions?.sort(),
     targets.map((target) => target.revision_id).sort(),
+  );
+});
+test('partially expanded legacy journal compacts only durably covered success metadata', async () => {
+  const instance = randomUUID(),
+    participant = randomUUID();
+  const journal = new ReadingRecovery(instance, participant);
+  const targets = Array.from({ length: readingLimits.batch }, () => ({
+    resource_id: randomUUID(),
+    revision_id: randomUUID(),
+  }));
+  const body = () => ({
+    idempotency_key: randomUUID(),
+    basis: 'manual' as const,
+    episode_id: null,
+    targets: targets.map((item) => ({ ...item, read: true, expected_version: 0 })),
+  });
+  for (let i = 0; i < readingLimits.localOperations; i++) await journal.save(body(), () => true);
+  const initial = journal.all();
+  const successful = await journal.begin(initial[0]!);
+  const results = successful.body.targets.map((item) => ({ ...item, result_version: 1 }));
+  const bytes = (raw: string) => new TextEncoder().encode(raw).length;
+  let total = initial.reduce((sum, record) => sum + bytes(JSON.stringify(record)), 0);
+  let expanded = 0;
+  for (const record of initial.slice(1)) {
+    const key = journal.prefix + 'intent:' + record.body.idempotency_key;
+    const oldRaw = localStorage.getItem(key)!;
+    const nextRaw = JSON.stringify({
+      ...record,
+      successful_versions: results.map((item) => ({ revision_id: item.revision_id, version: 1 })),
+    });
+    if (total - bytes(oldRaw) + bytes(nextRaw) > readingLimits.localBytes) break;
+    localStorage.setItem(key, nextRaw);
+    total += bytes(nextRaw) - bytes(oldRaw);
+    expanded++;
+  }
+  assert.ok(expanded > 0 && expanded < initial.length - 1);
+  assert.ok(total > readingLimits.localBytes - 100);
+  await journal.settleSuccess(successful, results);
+  await journal.settleSuccess(successful, results);
+  const refused = await journal.begin(initial[1]!);
+  await journal.recordConflict(refused, {
+    operation_state: 'version_conflict',
+    operation_id: randomUUID(),
+    idempotency: 'created',
+    outcome: {
+      basis: refused.body.basis,
+      episode_id: refused.body.episode_id,
+      targets: refused.body.targets.map((item, index) => ({
+        ...item,
+        result_version: index === 0 ? 2 : 0,
+      })),
+    },
+    current: targets.map((item, index) => ({
+      ...item,
+      read: false,
+      version: index === 0 ? 2 : 0,
+      availability: 'available',
+    })),
+  });
+  const reopened = new ReadingRecovery(instance, participant);
+  const current = reopened
+    .all()
+    .find((item) => item.body.idempotency_key === refused.body.idempotency_key)!;
+  assert.equal(current.state, 'conflicted');
+  assert.deepEqual(current.body, refused.body);
+  assert.deepEqual(
+    current.superseded_revisions?.sort(),
+    targets
+      .slice(1)
+      .map((item) => item.revision_id)
+      .sort(),
+  );
+  assert.equal(reopened.all().filter((item) => item.successful_versions?.length).length, 0);
+  const originalBodies = new Map(
+    initial.map((item) => [item.body.idempotency_key, JSON.stringify(item.body)]),
+  );
+  for (const intent of reopened.all())
+    assert.equal(JSON.stringify(intent.body), originalBodies.get(intent.body.idempotency_key));
+});
+test('legacy success metadata remains until exact equal-or-newer receipt evidence is durable', async (t) => {
+  const journal = new ReadingRecovery(randomUUID(), randomUUID());
+  const a = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const unresolved = await journal.save(
+    {
+      idempotency_key: randomUUID(),
+      basis: 'manual',
+      episode_id: null,
+      targets: [a, target].map((item) => ({ ...item, read: true, expected_version: 0 })),
+    },
+    () => true,
+  );
+  const key = journal.prefix + 'intent:' + unresolved.body.idempotency_key;
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      ...unresolved,
+      successful_versions: [
+        { revision_id: a.revision_id, version: 3 },
+        { revision_id: target.revision_id, version: 1 },
+      ],
+    }),
+  );
+  const successful = await journal.save(
+    {
+      idempotency_key: randomUUID(),
+      basis: 'manual',
+      episode_id: null,
+      targets: [{ ...target, read: true, expected_version: 0 }],
+    },
+    () => true,
+  );
+  const outcome = [{ ...successful.body.targets[0]!, result_version: 1 }];
+  const failure = t.mock.method(dom.window.Storage.prototype, 'setItem', () => {
+    throw new Error('Synthetic receipt write failure');
+  });
+  await assert.rejects(
+    journal.settleSuccess(successful, outcome),
+    /success evidence could not be saved/,
+  );
+  failure.mock.restore();
+  assert.deepEqual(
+    journal.all().find((item) => item.body.idempotency_key === unresolved.body.idempotency_key)
+      ?.successful_versions,
+    [
+      { revision_id: a.revision_id, version: 3 },
+      { revision_id: target.revision_id, version: 1 },
+    ],
+  );
+  const setItem = dom.window.Storage.prototype.setItem;
+  let refusedCompaction = false;
+  const compactionFailure = t.mock.method(
+    dom.window.Storage.prototype,
+    'setItem',
+    function (this: Storage, storageKey: string, raw: string) {
+      if (storageKey === key && !refusedCompaction) {
+        refusedCompaction = true;
+        throw new Error('Synthetic compaction failure');
+      }
+      return setItem.call(this, storageKey, raw);
+    },
+  );
+  await assert.rejects(journal.settleSuccess(successful, outcome), /acknowledgement compaction/);
+  compactionFailure.mock.restore();
+  assert.equal(journal.successEvidence().length, 1);
+  assert.equal(journal.all()[0]!.successful_versions?.length, 2);
+  await journal.recordConflict(unresolved, {
+    operation_state: 'version_conflict',
+    operation_id: randomUUID(),
+    idempotency: 'created',
+    outcome: {
+      basis: 'manual',
+      episode_id: null,
+      targets: [
+        { ...unresolved.body.targets[0]!, result_version: 2 },
+        { ...unresolved.body.targets[1]!, result_version: 0 },
+      ],
+    },
+    current: [
+      { ...a, read: false, version: 2, availability: 'available' },
+      { ...target, read: false, version: 0, availability: 'available' },
+    ],
+  });
+  assert.deepEqual(journal.all()[0]!.successful_versions, [
+    { revision_id: a.revision_id, version: 3 },
+  ]);
+  assert.deepEqual(
+    journal.all()[0]!.superseded_revisions?.sort(),
+    [a.revision_id, target.revision_id].sort(),
   );
 });
 test('success evidence preserves an exact uncertain body on failed write and clears with custody', async (t) => {

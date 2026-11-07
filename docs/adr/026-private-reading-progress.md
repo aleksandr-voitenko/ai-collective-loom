@@ -157,8 +157,15 @@ An acknowledged operation replaces its own journal slot with compact, versioned
 success evidence while overlapping unresolved operations remain. This avoids
 expanding every sibling record near the journal's byte cap. The evidence uses the
 same 128-record/512-KiB custody limit, is exported with recovery, and is pruned
-when no unresolved operation needs it or newer evidence covers it. Existing records
-with per-intent success metadata remain readable. A refusal delivered after a newer
+by the highest acknowledged version for each exact pair still referenced by an
+unresolved operation; versions for dismissed pairs do not affect retention. Older
+receipt-filled journals also prune proven obsolete evidence before admitting a
+new operation, after checking that its key has never been used locally. Older
+per-intent success metadata remains readable. Once equal-or-newer compact evidence
+has been durably read back, covered legacy entries can be removed without changing
+their request bodies or keys; uncovered entries remain. If a later storage write
+fails, subsequent admission or conflict recording can repeat the covered compaction
+without replaying the acknowledged request. A refusal delivered after a newer
 success reconciles in either response order and after reload. A later success may
 stop showing a warning beside a revision only when its version is newer than the
 refusal; the original conflict record remains reviewable. Private receipt state may
