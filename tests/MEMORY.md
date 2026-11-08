@@ -1034,8 +1034,14 @@ The journey uses ordinary non-admin WebAuthn and asserts mention publication,
 explicit focus, close/reopen custody and unchanged actual reply parentage. Mounted
 close tests refuse dismissal after failed storage and preserve the visible fields.
 The same compiled participation journey checks named parent destinations, accessible
-reply disclosure state, nested draft retention while hidden, bounded first/continuation
-counts and an empty branch's failed-refresh/retry. `LOOM_REPLY_REVIEW=1` uses the same
+reply disclosure state, nested draft retention while hidden, accumulated bounded
+counts and an empty branch's failed-refresh/retry. A separate continuous-discussion
+journey covers three comment pages, two direct-reply pages, failed exact-cursor retry,
+pending editor focus/selection/position, terminal focus, refresh and later-page return.
+It also checks opening, nested and focused publication callbacks after accumulation,
+invalid-cursor replay, empty/non-progressing continuations and old-page withdrawal.
+`LOOM_CONTINUOUS_REVIEW=1` captures its desktop/mobile states under
+`/tmp/loom-review-evidence/continuous-discussion`. `LOOM_REPLY_REVIEW=1` uses the same
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error
 states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifies the
 deliberate children503. The suppressed-parent journey retains traversal after body loss.

@@ -542,6 +542,23 @@
   font-size: 12px;
   margin: 0;
 }
+.loom-app .comment-tree > .continuation-action {
+  margin: 12px 0 16px 39px;
+  color: var(--accent);
+  border-color: #c6d8c3;
+  font-weight: 600;
+}
+.loom-app .continuation-status,
+.loom-app .continuation-notice {
+  margin: 12px 0 16px 39px;
+  font-size: 12px;
+}
+.loom-app .continuation-status {
+  color: var(--muted);
+}
+.loom-app .continuation-notice.notice {
+  padding: 12px 14px;
+}
 .loom-app .focus-banner {
   display: flex;
   justify-content: space-between;
@@ -855,6 +872,11 @@
     margin-left: 0;
   }
   .loom-app .branch-link {
+    margin-left: 0;
+  }
+  .loom-app .comment-tree > .continuation-action,
+  .loom-app .continuation-status,
+  .loom-app .continuation-notice {
     margin-left: 0;
   }
   .loom-app .list-row {

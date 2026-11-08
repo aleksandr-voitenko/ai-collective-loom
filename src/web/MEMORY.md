@@ -124,12 +124,17 @@ survives an unavailable-parent response so fresh negative evidence stays visible
 older projections still withdraw. App-scoped discussion navigation stores only up to64
 branch control snapshots and a return anchor, scoped to account/instance/path. It
 survives query remounts while preserving their authorization and composer isolation;
-return waits for the fresh message DOM before restoring offset/focus. Leaving the
-path or identity discards it. Children remain on-demand and six-item bounded: counts describe
-that page, never an inferred thread total. Opened branches stay mounted while hidden,
-preserving nested drafts/cursors; same-page refresh retains surviving branch IDs.
-Failed refresh qualifies retained observations. Projection withdrawal still removes
-all page-derived labels/counts and older bodies before fresh structural responses.
+return rebuilds each previously loaded branch through fresh six-item pages, up to eight
+pages per automatic run, before restoring a later-page offset/focus. A remaining
+restoration goal has an explicit Continue control; leaving the path or identity
+discards it. Children remain on-demand and six-item bounded: counts describe unique
+loaded direct entries, never an inferred thread total. Each accepted page retains
+its own authorization lease and continuation; append leaves existing rows mounted.
+Opened branches stay mounted while hidden, preserving nested drafts and cursors.
+Refresh reconstructs through the prior tail at page granularity, then reconciles
+surviving branch IDs. Failed append/refresh retains only still-authorized earlier
+content. Projection withdrawal removes old labels, counts and bodies before fresh
+structural responses; navigation metadata never authorizes cached source content.
 
 Discussion headers distinguish local closure from inherited topic closure; only
 administrators receive the contextual close/reopen organization links. The existing

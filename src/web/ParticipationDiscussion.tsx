@@ -1,7 +1,15 @@
 import type { DiscussionNavigationState } from './discussion-navigation.js';
 import { AddPrivateNote } from './PrivateNotes.js';
 import { FileBrowser } from './Files.js';
-import { useState, useRef, useEffect, useId, createContext, useContext } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useId,
+  createContext,
+  useContext,
+} from 'react';
 import { useLocation, Link } from 'react-router';
 import {
   type ResourceView,
@@ -11,6 +19,8 @@ import {
   Page,
 } from '../contracts/participation.js';
 import { type Context, useQuery } from './participation-state.js';
+import { ApiError } from './participation-client.js';
+import type { AuthorizedValue } from './AuthorizationBoundary.js';
 import { OrganizationActions } from './Organization.js';
 import { ChangeDetails } from './Changes.js';
 import { ReferenceViews } from './References.js';
@@ -25,7 +35,8 @@ import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { EditingIntent } from './EditingIntent.js';
 
-type BranchNavigation = { cursor: string; opened: string[]; expanded: string[] };
+type BranchNavigation =
+  DiscussionNavigationState['branches'] extends Map<string, infer V> ? V : never;
 const ParentPreviewContext = createContext<((id: string) => void) | null>(null);
 const DiscussionNavigation = createContext<Map<string, BranchNavigation> | null>(null);
 
@@ -52,21 +63,38 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
   );
   const navigation = useRef(navigationState.branches);
   const [preview, setPreview] = useState<string>();
+  const [returnUnavailable, setReturnUnavailable] = useState(false);
   const previewTrigger = useRef<HTMLElement | null>(null);
   const shouldRestore = useRef(!!navigationState.focus && !focus);
   useEffect(() => {
     const position = navigationState.returnPosition;
     navigationState.focus = focus;
     if (!shouldRestore.current || !position) return;
-    let focused = false;
+    let focused: HTMLElement | null = null;
     const restore = () => {
       const target = document.querySelector<HTMLElement>(
         `article[data-resource-id="${position.resource}"]`,
       );
-      if (!target) return;
-      if (!focused) {
+      if (!target) {
+        if (
+          document.querySelector(`[data-resource-id="${position.resource}"][data-loading="true"]`)
+        )
+          return;
+        const trees = [
+          ...main.querySelectorAll<HTMLElement>('.conversation-content .comment-tree'),
+        ];
+        if (
+          trees.length &&
+          trees.every((tree) => tree.dataset.ready === 'true' && tree.dataset.restoring !== 'true')
+        ) {
+          setReturnUnavailable(true);
+          stop();
+        }
+        return;
+      }
+      if (focused !== target) {
         target.focus({ preventScroll: true });
-        focused = true;
+        focused = target;
       }
       window.scrollBy({
         top: target.getBoundingClientRect().top - position.top,
@@ -78,15 +106,31 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     const main = document.getElementById('loom-main') ?? document.body;
     const mutations = new MutationObserver(restore),
       resize = new ResizeObserver(restore);
+    let frame = 0;
+    let frameCount = 0;
+    let stopped = false;
     const stop = () => {
+      stopped = true;
       mutations.disconnect();
       resize.disconnect();
+      cancelAnimationFrame(frame);
     };
-    mutations.observe(main, { childList: true, subtree: true });
+    mutations.observe(main, {
+      childList: true,
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['data-ready', 'data-restoring'],
+    });
     resize.observe(main);
     for (const event of ['wheel', 'touchstart', 'pointerdown', 'keydown'])
       window.addEventListener(event, stop, { once: true, passive: true });
     restore();
+    const correctLayout = () => {
+      if (stopped || frameCount++ >= 120) return;
+      restore();
+      if (!stopped) frame = requestAnimationFrame(correctLayout);
+    };
+    frame = requestAnimationFrame(correctLayout);
     return () => {
       stop();
       for (const event of ['wheel', 'touchstart', 'pointerdown', 'keydown'])
@@ -223,6 +267,12 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                 }}
               >
                 <>
+                  {returnUnavailable && (
+                    <p className="notice" role="status">
+                      The earlier reading position is unavailable. Refresh the conversation or
+                      choose another branch.
+                    </p>
+                  )}
                   <Contribution
                     id={opening.current!}
                     context={context}
@@ -231,17 +281,18 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                   />
                   <div className="discussion-controls">
                     <h2>
-                      Conversation <span>Direct replies</span>
+                      Conversation <span>Comments</span>
                     </h2>
                     <span>Oldest first</span>
                   </div>
                   <Children
-                    key={opening.current! + reload}
                     id={opening.current!}
                     parent={data?.opening}
                     discussionId={id}
                     context={context}
                     depth={0}
+                    role="comments"
+                    refreshVersion={reload}
                   />
                 </>
               </div>
@@ -273,11 +324,12 @@ function FocusedBranch({
   discussionId: string;
   context: Context;
 }) {
-  const { data, error, refresh } = useQuery<ContributionContextView>(
+  const { data, generation, error, refresh } = useQuery<ContributionContextView>(
     `/api/v1/contributions/${id}/context`,
     ContributionContext,
   );
   const [reload, setReload] = useState(0);
+  const authority = useAuthorization();
   if (error || (data && data.discussion_id !== discussionId))
     return (
       <div className="notice">
@@ -304,7 +356,9 @@ function FocusedBranch({
         id={id}
         data={data}
         context={context}
-        onPosted={() => setReload((n) => n + 1)}
+        onPosted={() => {
+          if (authority.current(generation)) setReload((n) => n + 1);
+        }}
       />
       <div className="discussion-controls">
         <h2>
@@ -313,12 +367,13 @@ function FocusedBranch({
         <span>Oldest first</span>
       </div>
       <Children
-        key={id + reload}
         id={id}
         parent={'state' in data ? undefined : data}
         discussionId={discussionId}
         context={context}
         depth={0}
+        role="replies"
+        refreshVersion={reload}
       />
     </>
   );
@@ -362,10 +417,11 @@ type ContributionProps = {
 };
 
 function Contribution(props: ContributionProps) {
-  const { data, error, refresh } = useQuery<ContributionContextView>(
+  const { data, generation, error, refresh } = useQuery<ContributionContextView>(
     `/api/v1/contributions/${props.id}/context`,
     ContributionContext,
   );
+  const authority = useAuthorization();
   if (error)
     return (
       <div className="notice">
@@ -373,8 +429,21 @@ function Contribution(props: ContributionProps) {
         <button onClick={refresh}>Retry contribution</button>
       </div>
     );
-  if (!data) return <p role="status">Loading contribution…</p>;
-  return <ContributionBody {...props} data={data} />;
+  if (!data)
+    return (
+      <p role="status" data-resource-id={props.id} data-loading="true">
+        Loading contribution…
+      </p>
+    );
+  return (
+    <ContributionBody
+      {...props}
+      data={data}
+      onPosted={() => {
+        if (authority.current(generation)) props.onPosted?.();
+      }}
+    />
+  );
 }
 
 function ContributionBody({
@@ -505,12 +574,39 @@ function ContributionBody({
   );
 }
 
+type ChildPage = AuthorizedValue<PageView>;
+type ChildItem = Extract<PageView['items'][number], { resource_id: string }>;
+type RestorationGoal = { loadedCount: number; tailId?: string };
+type ChildrenWindow = {
+  pages: ChildPage[];
+  requestedCursors: string[];
+  continuation: string | null;
+  complete: boolean;
+  busy: boolean;
+  error?: { kind: 'append' | 'refresh'; message: string; cursor?: string | undefined } | undefined;
+  goal?: RestorationGoal;
+  notice?: string | undefined;
+};
+const restorationPageBudget = 8;
+
+function uniqueChildren(pages: ChildPage[]) {
+  const ids = new Set<string>();
+  return pages.flatMap((page) =>
+    page.value.items.filter((item): item is ChildItem => {
+      if (!('resource_id' in item) || ids.has(item.resource_id)) return false;
+      ids.add(item.resource_id);
+      return true;
+    }),
+  );
+}
+
 function Children({
   id,
   parent,
   discussionId,
   context,
   depth,
+  role,
   refreshVersion = 0,
 }: {
   id: string;
@@ -518,84 +614,277 @@ function Children({
   discussionId: string;
   context: Context;
   depth: number;
+  role: 'comments' | 'replies';
   refreshVersion?: number;
 }) {
   const authority = useAuthorization();
   const treeId = useId();
+  const tree = useRef<HTMLDivElement>(null);
+  const summary = useRef<HTMLParagraphElement>(null);
+  const loadButton = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef(false);
+  const readingAnchor = useRef<{ resource: string; top: number } | undefined>(undefined);
   const navigation = useContext(DiscussionNavigation),
     navigationKey = id + ':' + depth;
-  const initial = navigation?.get(navigationKey);
-  const [projection, setPage] = useState<{ value: PageView; generation?: number | undefined }>(),
-    [cursor, setCursor] = useState(initial?.cursor ?? ''),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [expanded, setExpanded] = useState<string[]>(initial?.expanded ?? []),
-    [opened, setOpened] = useState<string[]>(initial?.opened ?? []),
-    [branchVersions, setBranchVersions] = useState<Record<string, number>>({}),
-    [reload, setReload] = useState(0);
+  const initial = useRef(navigation?.get(navigationKey));
+  const [windowState, setWindowState] = useState<ChildrenWindow>({
+    pages: [],
+    requestedCursors: [],
+    continuation: '',
+    complete: false,
+    busy: false,
+  });
+  const state = useRef(windowState);
+  const request = useRef<AbortController | undefined>(undefined);
+  const sequence = useRef(0);
+  const [expanded, setExpanded] = useState<string[]>(initial.current?.expanded ?? []),
+    [opened, setOpened] = useState<string[]>(initial.current?.opened ?? []),
+    [branchVersions, setBranchVersions] = useState<Record<string, number>>({});
+  const publish = (next: ChildrenWindow) => {
+    state.current = next;
+    setWindowState(next);
+  };
+  const validPages = (pages: ChildPage[]) =>
+    pages.every((page) => authority.current(page.generation));
+  const withheld = windowState.pages.length > 0 && !validPages(windowState.pages);
+  const accepted = withheld ? [] : windowState.pages;
+  const items = uniqueChildren(accepted);
   useEffect(() => {
     if (!navigation) return;
-    navigation.set(navigationKey, { cursor, expanded, opened });
+    const rows = uniqueChildren(state.current.pages);
+    const goal = state.current.goal;
+    navigation.set(navigationKey, {
+      loadedCount: goal?.loadedCount ?? rows.length,
+      ...(goal?.tailId
+        ? { tailId: goal.tailId }
+        : rows.at(-1)
+          ? { tailId: rows.at(-1)!.resource_id }
+          : {}),
+      expanded,
+      opened,
+    });
     if (navigation.size > 64) navigation.delete(navigation.keys().next().value!);
-  }, [cursor, expanded, opened]);
-  const page =
-    projection && authority.current(projection.generation) ? projection.value : undefined;
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    setBusy(true);
-    setError('');
-    const read =
-      authority.sourcePolicy === 'projections'
-        ? authority.readProjection.bind(authority)
-        : authority.readAuthorized.bind(authority);
-    void read<PageView>(
-      `/api/v1/contributions/${id}/children?limit=6${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`,
-      { signal: controller.signal, schema: Page },
-    )
-      .then(
-        (value) => {
-          if (active) {
-            setPage(value);
-            const retained = (ids: string[]) =>
-              ids.filter((id) =>
-                value.value.items.some((item) => 'resource_id' in item && item.resource_id === id),
-              );
-            setExpanded(retained);
-            setOpened(retained);
-          }
-        },
-        (failure) => {
-          if (active && failure.name !== 'AbortError') setError(failure.message);
-        },
-      )
-      .finally(() => {
-        if (active) setBusy(false);
+  }, [windowState.pages, expanded, opened, navigation, navigationKey]);
+  useLayoutEffect(() => {
+    const anchor = readingAnchor.current;
+    if (anchor) {
+      const target = [
+        ...(tree.current?.querySelectorAll<HTMLElement>('article[data-resource-id]') ?? []),
+      ].find((node) => node.dataset.resourceId === anchor.resource);
+      if (target)
+        window.scrollBy({
+          top: target.getBoundingClientRect().top - anchor.top,
+          behavior: 'instant',
+        });
+      readingAnchor.current = undefined;
+    }
+    if (pendingFocus.current) {
+      pendingFocus.current = false;
+      if (document.activeElement === document.body) summary.current?.focus({ preventScroll: true });
+    }
+  }, [windowState.pages]);
+  const captureReadingAnchor = () => {
+    const candidate = [
+      ...(tree.current?.querySelectorAll<HTMLElement>('article[data-resource-id]') ?? []),
+    ].find(
+      (node) =>
+        node.getBoundingClientRect().bottom > 0 && node.getBoundingClientRect().top < innerHeight,
+    );
+    if (candidate)
+      readingAnchor.current = {
+        resource: candidate.dataset.resourceId!,
+        top: candidate.getBoundingClientRect().top,
+      };
+  };
+  const read = (cursor: string, signal: AbortSignal) => {
+    const path = `/api/v1/contributions/${id}/children?limit=6${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`;
+    return authority.sourcePolicy === 'projections'
+      ? authority.readProjection<PageView>(path, { signal, schema: Page })
+      : authority.readAuthorized<PageView>(path, { signal, schema: Page });
+  };
+  const continuation = (page: PageView, requested: string, history: string[]) => {
+    if (page.complete) return null;
+    if (!page.next_cursor || page.next_cursor === requested || history.includes(page.next_cursor))
+      throw new Error(
+        `${role === 'comments' ? 'Comments' : 'Replies'} could not continue from this response. Refresh this list to recover.`,
+      );
+    return page.next_cursor;
+  };
+  const goalFrom = (snapshot: ChildrenWindow): RestorationGoal => {
+    const rows = uniqueChildren(snapshot.pages);
+    return (
+      snapshot.goal ?? {
+        loadedCount: rows.length,
+        ...(rows.at(-1) ? { tailId: rows.at(-1)!.resource_id } : {}),
+      }
+    );
+  };
+  const rebuild = async (goal: RestorationGoal, resume = false) => {
+    request.current?.abort();
+    const controller = new AbortController(),
+      turn = ++sequence.current;
+    request.current = controller;
+    const previous = state.current;
+    if (!resume && previous.pages.length) captureReadingAnchor();
+    publish({ ...previous, busy: true, error: undefined, notice: undefined });
+    let pages = resume ? [...previous.pages] : [];
+    let history = resume ? [...previous.requestedCursors] : [];
+    let cursor = resume ? previous.continuation : '';
+    try {
+      for (let step = 0; step < restorationPageBudget && cursor !== null; step++) {
+        const response = await read(cursor, controller.signal);
+        if (turn !== sequence.current || controller.signal.aborted) return;
+        if (!validPages([...pages, response]))
+          throw new Error('Authorization changed while restoring this list. Retry its refresh.');
+        const next = continuation(response.value, cursor, history);
+        pages.push(response);
+        history.push(cursor);
+        cursor = next;
+        const rows = uniqueChildren(pages);
+        if (!goal.tailId || rows.some((row) => row.resource_id === goal.tailId) || cursor === null)
+          break;
+      }
+      if (turn !== sequence.current) return;
+      const rows = uniqueChildren(pages);
+      const reached = !goal.tailId || rows.some((row) => row.resource_id === goal.tailId);
+      publish({
+        pages,
+        requestedCursors: history,
+        continuation: cursor,
+        complete: cursor === null,
+        busy: false,
+        ...(cursor && !reached ? { goal } : {}),
+        ...(!reached && cursor === null
+          ? { notice: 'The earlier end of this list is no longer available.' }
+          : {}),
       });
+      if (reached || cursor === null) {
+        const surviving = new Set(rows.map((row) => row.resource_id));
+        setOpened((value) => value.filter((key) => surviving.has(key)));
+        setExpanded((value) => value.filter((key) => surviving.has(key)));
+      }
+    } catch (failure) {
+      if (turn !== sequence.current || (failure as Error).name === 'AbortError') return;
+      if (!previous.pages.length && pages.length) {
+        publish({
+          pages,
+          requestedCursors: history,
+          continuation: cursor,
+          complete: false,
+          busy: false,
+          goal,
+          error: {
+            kind: 'append',
+            message: (failure as Error).message,
+            cursor: cursor ?? undefined,
+          },
+        });
+      } else
+        publish({
+          ...previous,
+          busy: false,
+          error: { kind: 'refresh', message: (failure as Error).message },
+        });
+      readingAnchor.current = undefined;
+    } finally {
+      if (turn === sequence.current) request.current = undefined;
+    }
+  };
+  const append = async (retryCursor?: string) => {
+    if (request.current) return;
+    const previous = state.current;
+    const cursor = retryCursor ?? previous.continuation;
+    if (!cursor || previous.complete || !validPages(previous.pages)) return;
+    const controller = new AbortController(),
+      turn = ++sequence.current;
+    const activatedLoadButton = document.activeElement === loadButton.current;
+    request.current = controller;
+    publish({ ...previous, busy: true, error: undefined });
+    try {
+      const response = await read(cursor, controller.signal);
+      if (turn !== sequence.current || controller.signal.aborted) return;
+      if (!validPages([...previous.pages, response]))
+        throw new Error('Earlier content is no longer authorized. Refresh this list to recover.');
+      const next = continuation(response.value, cursor, previous.requestedCursors);
+      pendingFocus.current =
+        next === null &&
+        activatedLoadButton &&
+        (document.activeElement === loadButton.current || document.activeElement === document.body);
+      publish({
+        ...previous,
+        pages: [...previous.pages, response],
+        requestedCursors: [...previous.requestedCursors, cursor],
+        continuation: next,
+        complete: next === null,
+        busy: false,
+        error: undefined,
+      });
+    } catch (failure) {
+      if (turn !== sequence.current || (failure as Error).name === 'AbortError') return;
+      if (failure instanceof ApiError && failure.code === 'invalid_cursor') {
+        void rebuild(goalFrom(previous));
+        return;
+      }
+      if (!validPages(previous.pages)) {
+        void rebuild(goalFrom(previous));
+        return;
+      }
+      publish({
+        ...previous,
+        busy: false,
+        error: { kind: 'append', message: (failure as Error).message, cursor },
+      });
+    } finally {
+      if (turn === sequence.current) request.current = undefined;
+    }
+  };
+  useEffect(() => {
+    void rebuild(
+      goalFrom(state.current).tailId
+        ? goalFrom(state.current)
+        : (initial.current ?? { loadedCount: 0 }),
+    );
     return () => {
-      active = false;
-      controller.abort();
+      sequence.current++;
+      request.current?.abort();
+      request.current = undefined;
     };
-  }, [id, cursor, reload, refreshVersion]);
-  const refreshControl = page && !error && (
-    <button className="text-button" disabled={busy} onClick={() => setReload((n) => n + 1)}>
-      {busy ? 'Checking replies…' : 'Refresh replies'}
+  }, [id, refreshVersion]);
+  const noun = role === 'comments' ? 'comments' : 'replies';
+  const refreshControl = accepted.length > 0 && !windowState.error && (
+    <button
+      className="text-button"
+      disabled={windowState.busy}
+      onClick={() => void rebuild(goalFrom(state.current))}
+    >
+      Refresh {noun}
     </button>
   );
   return (
-    <div className="comment-tree" aria-busy={busy}>
-      {page && page.items.length > 0 && (
+    <div
+      ref={tree}
+      className="comment-tree"
+      aria-busy={windowState.busy}
+      data-ready={accepted.length > 0 || !!windowState.error}
+      data-restoring={windowState.busy || !!windowState.goal}
+    >
+      {accepted.length > 0 && (
         <div className="reply-page-toolbar">
-          <p className="reply-page-summary" role="status">
-            {error ? 'Earlier page: ' : ''}
-            {page.items.length} direct {page.items.length === 1 ? 'reply' : 'replies'}
-            {cursor || !page.complete ? ' on this page' : ''}
-            {page.next_cursor ? ' · More replies available' : ''}
+          <p ref={summary} tabIndex={-1} className="reply-page-summary" role="status">
+            {items.length} direct{' '}
+            {role === 'comments'
+              ? items.length === 1
+                ? 'comment'
+                : 'comments'
+              : items.length === 1
+                ? 'reply'
+                : 'replies'}{' '}
+            loaded
           </p>
           {refreshControl}
         </div>
       )}
-      {page?.items.map((item) => {
+      {items.map((item) => {
         const resource = item as ResourceView;
         return (
           <div className="comment-branch" key={resource.resource_id}>
@@ -659,6 +948,7 @@ function Children({
                       discussionId={discussionId}
                       context={context}
                       depth={depth + 1}
+                      role="replies"
                       refreshVersion={branchVersions[resource.resource_id] ?? 0}
                     />
                   )}
@@ -668,33 +958,61 @@ function Children({
           </div>
         );
       })}
-      {error && (
-        <div className="notice">
-          <ErrorText error={error} />
-          <button onClick={() => setReload((n) => n + 1)}>Retry replies</button>
+      {windowState.error && (
+        <div className="notice continuation-notice" role="alert">
+          <p>{windowState.error.message}</p>
+          <button
+            onClick={() =>
+              windowState.error?.kind === 'append'
+                ? void append(windowState.error.cursor)
+                : void rebuild(goalFrom(state.current))
+            }
+          >
+            Retry {noun}
+          </button>
         </div>
       )}
-      {!page && !error && <p role="status">Loading replies…</p>}
-      {page && !page.items.length && (
-        <p className="empty-replies">
-          {error
-            ? 'Earlier check: no replies on this page.'
-            : !cursor && page.complete
-              ? 'No replies yet.'
-              : 'No replies on this page.'}
+      {withheld && !windowState.busy && !windowState.error && (
+        <div className="notice continuation-notice" role="status">
+          <p>Earlier {noun} are unavailable until this list is checked again.</p>
+          <button onClick={() => void rebuild(goalFrom(state.current))}>Refresh {noun}</button>
+        </div>
+      )}
+      {!accepted.length && !windowState.error && !withheld && <p role="status">Loading {noun}…</p>}
+      {accepted.length > 0 && !items.length && windowState.complete && (
+        <p className="empty-replies">No {noun} yet.</p>
+      )}
+      {windowState.notice && (
+        <p className="continuation-notice" role="status">
+          {windowState.notice}
         </p>
       )}
-      {page && !page.items.length && refreshControl}
-      {page?.next_cursor && (
-        <button disabled={busy} onClick={() => setCursor(page.next_cursor!)}>
-          Next replies →
+      {windowState.busy && accepted.length > 0 && (
+        <p className="continuation-status" role="status">
+          Loading {noun}…
+        </p>
+      )}
+      {!windowState.busy && !windowState.error && windowState.goal && (
+        <button
+          className="continuation-action"
+          onClick={() => void rebuild(windowState.goal!, true)}
+        >
+          Continue restoring {noun}
         </button>
       )}
-      {cursor && (
-        <button disabled={busy} onClick={() => setCursor('')}>
-          Back to first replies
-        </button>
-      )}
+      {!windowState.goal &&
+        !windowState.error &&
+        windowState.continuation &&
+        accepted.length > 0 && (
+          <button
+            className="continuation-action"
+            ref={loadButton}
+            disabled={windowState.busy}
+            onClick={() => void append()}
+          >
+            Load more {noun}
+          </button>
+        )}
     </div>
   );
 }
