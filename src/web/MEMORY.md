@@ -131,10 +131,18 @@ discards it. Children remain on-demand and six-item bounded: counts describe uni
 loaded direct entries, never an inferred thread total. Each accepted page retains
 its own authorization lease and continuation; append leaves existing rows mounted.
 Opened branches stay mounted while hidden, preserving nested drafts and cursors.
-Refresh reconstructs through the prior tail at page granularity, then reconciles
-surviving branch IDs. Failed append/refresh retains only still-authorized earlier
-content. Projection withdrawal removes old labels, counts and bodies before fresh
-structural responses; navigation metadata never authorizes cached source content.
+Refresh stages a fresh traversal through the prior tail at page granularity, then
+reconciles surviving branch IDs. A bounded partial stage leaves a fully authorized
+old window mounted until the tail is reached; scrolling, wheel, touch, pointer or
+keyboard input cancels its pending reading-position correction. A later unavailable entry can
+withdraw earlier page leases without invalidating its own accepted page or stopping
+the traversal. Failed append/refresh retains only still-authorized earlier content;
+a still-current authorization AbortError ends the busy state and exposes recovery.
+Projection withdrawal removes old labels, counts and bodies before fresh structural
+responses; navigation metadata never authorizes cached source content. After the
+focused branch's discussion identity is verified, ancestor context remains mounted
+while its branch is loading, so an unavailable ancestor does not repeatedly restart
+the same negative read during branch recovery.
 
 Discussion headers distinguish local closure from inherited topic closure; only
 administrators receive the contextual close/reopen organization links. The existing

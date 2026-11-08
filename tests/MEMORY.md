@@ -1040,6 +1040,14 @@ journey covers three comment pages, two direct-reply pages, failed exact-cursor 
 pending editor focus/selection/position, terminal focus, refresh and later-page return.
 It also checks opening, nested and focused publication callbacks after accumulation,
 invalid-cursor replay, empty/non-progressing continuations and old-page withdrawal.
+The return journey also fails a later-page reconstruction once, retries its exact
+cursor, continues the remaining window, and uses an injected completed empty child
+response to verify the lost-anchor notice. The same compiled journey loads 54 root
+comments, holds a refresh while the reader scrolls, checks the eight-page staging
+boundary with a ninth-page editor/branch, and verifies a page-two unavailable entry
+through refresh, eligible descendant navigation and focused return. A held root
+continuation becomes stale after an independent unavailable parent preview; recovery
+must clear busy without reviving withdrawn source text.
 `LOOM_CONTINUOUS_REVIEW=1` captures its desktop/mobile states under
 `/tmp/loom-review-evidence/continuous-discussion`. `LOOM_REPLY_REVIEW=1` uses the same
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error

@@ -330,6 +330,8 @@ function FocusedBranch({
   );
   const [reload, setReload] = useState(0);
   const authority = useAuthorization();
+  const verifiedDiscussion = useRef<string | undefined>(undefined);
+  if (data?.discussion_id === discussionId) verifiedDiscussion.current = discussionId;
   if (error || (data && data.discussion_id !== discussionId))
     return (
       <div className="notice">
@@ -342,6 +344,7 @@ function FocusedBranch({
     return (
       <>
         <p role="status">Opening branch…</p>
+        {verifiedDiscussion.current === discussionId && <AncestorContext id={id} />}
         <button onClick={refresh}>Refresh branch</button>
       </>
     );
@@ -577,17 +580,23 @@ function ContributionBody({
 type ChildPage = AuthorizedValue<PageView>;
 type ChildItem = Extract<PageView['items'][number], { resource_id: string }>;
 type RestorationGoal = { loadedCount: number; tailId?: string };
-type ChildrenWindow = {
+type ChildTraversal = {
   pages: ChildPage[];
   requestedCursors: string[];
   continuation: string | null;
   complete: boolean;
+};
+type ChildrenWindow = ChildTraversal & {
   busy: boolean;
-  error?: { kind: 'append' | 'refresh'; message: string; cursor?: string | undefined } | undefined;
-  goal?: RestorationGoal;
+  error?:
+    | { kind: 'append' | 'refresh' | 'restore'; message: string; cursor?: string | undefined }
+    | undefined;
+  goal?: RestorationGoal | undefined;
+  staged?: ChildTraversal | undefined;
   notice?: string | undefined;
 };
 const restorationPageBudget = 8;
+class ContinuationError extends Error {}
 
 function uniqueChildren(pages: ChildPage[]) {
   const ids = new Set<string>();
@@ -620,10 +629,13 @@ function Children({
   const authority = useAuthorization();
   const treeId = useId();
   const tree = useRef<HTMLDivElement>(null);
-  const summary = useRef<HTMLParagraphElement>(null);
+  const completion = useRef<HTMLParagraphElement>(null);
+  const recoveryFocus = useRef<HTMLButtonElement>(null);
   const loadButton = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef(false);
-  const readingAnchor = useRef<{ resource: string; top: number } | undefined>(undefined);
+  const readingAnchor = useRef<{ resource: string; top: number; scroll: number } | undefined>(
+    undefined,
+  );
   const navigation = useContext(DiscussionNavigation),
     navigationKey = id + ':' + depth;
   const initial = useRef(navigation?.get(navigationKey));
@@ -644,10 +656,18 @@ function Children({
     state.current = next;
     setWindowState(next);
   };
-  const validPages = (pages: ChildPage[]) =>
-    pages.every((page) => authority.current(page.generation));
-  const withheld = windowState.pages.length > 0 && !validPages(windowState.pages);
-  const accepted = withheld ? [] : windowState.pages;
+  const validPage = (page: ChildPage) => authority.current(page.generation);
+  const validPages = (pages: ChildPage[]) => pages.every(validPage);
+  const displayed =
+    windowState.pages.length && validPages(windowState.pages)
+      ? windowState
+      : windowState.staged?.pages.length
+        ? windowState.staged
+        : windowState;
+  const accepted = displayed.pages.filter(validPage);
+  const withheld =
+    displayed.pages.length > accepted.length ||
+    (windowState.pages.length > 0 && displayed !== windowState);
   const items = uniqueChildren(accepted);
   useEffect(() => {
     if (!navigation) return;
@@ -671,7 +691,7 @@ function Children({
       const target = [
         ...(tree.current?.querySelectorAll<HTMLElement>('article[data-resource-id]') ?? []),
       ].find((node) => node.dataset.resourceId === anchor.resource);
-      if (target)
+      if (target && Math.abs(window.scrollY - anchor.scroll) < 8)
         window.scrollBy({
           top: target.getBoundingClientRect().top - anchor.top,
           behavior: 'instant',
@@ -680,9 +700,21 @@ function Children({
     }
     if (pendingFocus.current) {
       pendingFocus.current = false;
-      if (document.activeElement === document.body) summary.current?.focus({ preventScroll: true });
+      if (document.activeElement === document.body)
+        (completion.current ?? recoveryFocus.current)?.focus({ preventScroll: true });
     }
   }, [windowState.pages]);
+  useEffect(() => {
+    const cancel = () => {
+      readingAnchor.current = undefined;
+    };
+    for (const event of ['scroll', 'wheel', 'touchstart', 'pointerdown', 'keydown'])
+      window.addEventListener(event, cancel, { passive: true });
+    return () => {
+      for (const event of ['scroll', 'wheel', 'touchstart', 'pointerdown', 'keydown'])
+        window.removeEventListener(event, cancel);
+    };
+  }, []);
   const captureReadingAnchor = () => {
     const candidate = [
       ...(tree.current?.querySelectorAll<HTMLElement>('article[data-resource-id]') ?? []),
@@ -694,6 +726,7 @@ function Children({
       readingAnchor.current = {
         resource: candidate.dataset.resourceId!,
         top: candidate.getBoundingClientRect().top,
+        scroll: window.scrollY,
       };
   };
   const read = (cursor: string, signal: AbortSignal) => {
@@ -705,7 +738,7 @@ function Children({
   const continuation = (page: PageView, requested: string, history: string[]) => {
     if (page.complete) return null;
     if (!page.next_cursor || page.next_cursor === requested || history.includes(page.next_cursor))
-      throw new Error(
+      throw new ContinuationError(
         `${role === 'comments' ? 'Comments' : 'Replies'} could not continue from this response. Refresh this list to recover.`,
       );
     return page.next_cursor;
@@ -725,17 +758,28 @@ function Children({
       turn = ++sequence.current;
     request.current = controller;
     const previous = state.current;
-    if (!resume && previous.pages.length) captureReadingAnchor();
-    publish({ ...previous, busy: true, error: undefined, notice: undefined });
-    let pages = resume ? [...previous.pages] : [];
-    let history = resume ? [...previous.requestedCursors] : [];
-    let cursor = resume ? previous.continuation : '';
+    if (!resume && previous.pages.length && validPages(previous.pages)) captureReadingAnchor();
+    const starting: ChildTraversal =
+      resume && previous.staged
+        ? previous.staged
+        : { pages: [], requestedCursors: [], continuation: '', complete: false };
+    publish({
+      ...previous,
+      busy: true,
+      error: undefined,
+      notice: undefined,
+      goal,
+      staged: starting,
+    });
+    const pages = [...starting.pages];
+    const history = [...starting.requestedCursors];
+    let cursor = starting.continuation;
     try {
       for (let step = 0; step < restorationPageBudget && cursor !== null; step++) {
         const response = await read(cursor, controller.signal);
         if (turn !== sequence.current || controller.signal.aborted) return;
-        if (!validPages([...pages, response]))
-          throw new Error('Authorization changed while restoring this list. Retry its refresh.');
+        if (!validPage(response))
+          throw new DOMException('View authorization changed.', 'AbortError');
         const next = continuation(response.value, cursor, history);
         pages.push(response);
         history.push(cursor);
@@ -747,44 +791,58 @@ function Children({
       if (turn !== sequence.current) return;
       const rows = uniqueChildren(pages);
       const reached = !goal.tailId || rows.some((row) => row.resource_id === goal.tailId);
-      publish({
+      const traversal: ChildTraversal = {
         pages,
         requestedCursors: history,
         continuation: cursor,
         complete: cursor === null,
-        busy: false,
-        ...(cursor && !reached ? { goal } : {}),
-        ...(!reached && cursor === null
-          ? { notice: 'The earlier end of this list is no longer available.' }
-          : {}),
-      });
+      };
       if (reached || cursor === null) {
+        publish({
+          ...traversal,
+          busy: false,
+          goal: undefined,
+          staged: undefined,
+          ...(!reached ? { notice: 'The earlier end of this list is no longer available.' } : {}),
+        });
         const surviving = new Set(rows.map((row) => row.resource_id));
         setOpened((value) => value.filter((key) => surviving.has(key)));
         setExpanded((value) => value.filter((key) => surviving.has(key)));
-      }
-    } catch (failure) {
-      if (turn !== sequence.current || (failure as Error).name === 'AbortError') return;
-      if (!previous.pages.length && pages.length) {
-        publish({
-          pages,
-          requestedCursors: history,
-          continuation: cursor,
-          complete: false,
-          busy: false,
-          goal,
-          error: {
-            kind: 'append',
-            message: (failure as Error).message,
-            cursor: cursor ?? undefined,
-          },
-        });
       } else
         publish({
           ...previous,
           busy: false,
-          error: { kind: 'refresh', message: (failure as Error).message },
+          error: undefined,
+          notice: undefined,
+          goal,
+          staged: traversal,
         });
+    } catch (failure) {
+      if (turn !== sequence.current || controller.signal.aborted) return;
+      const staged: ChildTraversal = {
+        pages,
+        requestedCursors: history,
+        continuation: cursor,
+        complete: false,
+      };
+      const restart =
+        failure instanceof ContinuationError ||
+        (failure instanceof ApiError && failure.code === 'invalid_cursor') ||
+        !validPages(pages);
+      publish({
+        ...previous,
+        busy: false,
+        goal,
+        staged,
+        error: {
+          kind: restart || !pages.length ? 'refresh' : 'restore',
+          message:
+            (failure as Error).name === 'AbortError'
+              ? 'Authorization changed while restoring this list. Retry its refresh.'
+              : (failure as Error).message,
+          cursor: cursor ?? undefined,
+        },
+      });
       readingAnchor.current = undefined;
     } finally {
       if (turn === sequence.current) request.current = undefined;
@@ -794,7 +852,13 @@ function Children({
     if (request.current) return;
     const previous = state.current;
     const cursor = retryCursor ?? previous.continuation;
-    if (!cursor || previous.complete || !validPages(previous.pages)) return;
+    if (
+      !cursor ||
+      previous.complete ||
+      previous.staged ||
+      !authority.current(previous.pages.at(-1)?.generation)
+    )
+      return;
     const controller = new AbortController(),
       turn = ++sequence.current;
     const activatedLoadButton = document.activeElement === loadButton.current;
@@ -803,36 +867,58 @@ function Children({
     try {
       const response = await read(cursor, controller.signal);
       if (turn !== sequence.current || controller.signal.aborted) return;
-      if (!validPages([...previous.pages, response]))
-        throw new Error('Earlier content is no longer authorized. Refresh this list to recover.');
+      if (!validPage(response)) throw new DOMException('View authorization changed.', 'AbortError');
       const next = continuation(response.value, cursor, previous.requestedCursors);
+      const pages = [...previous.pages, response];
+      const rows = uniqueChildren(pages);
+      const reached =
+        !previous.goal?.tailId || rows.some((row) => row.resource_id === previous.goal?.tailId);
+      const restored = !!previous.goal && (reached || next === null);
       pendingFocus.current =
         next === null &&
         activatedLoadButton &&
         (document.activeElement === loadButton.current || document.activeElement === document.body);
       publish({
         ...previous,
-        pages: [...previous.pages, response],
+        pages,
         requestedCursors: [...previous.requestedCursors, cursor],
         continuation: next,
         complete: next === null,
         busy: false,
         error: undefined,
+        ...(restored
+          ? {
+              goal: undefined,
+              notice: reached ? undefined : 'The earlier end of this list is no longer available.',
+            }
+          : {}),
       });
+      if (restored) {
+        const surviving = new Set(rows.map((row) => row.resource_id));
+        setOpened((value) => value.filter((key) => surviving.has(key)));
+        setExpanded((value) => value.filter((key) => surviving.has(key)));
+      }
     } catch (failure) {
-      if (turn !== sequence.current || (failure as Error).name === 'AbortError') return;
+      if (turn !== sequence.current || controller.signal.aborted) return;
       if (failure instanceof ApiError && failure.code === 'invalid_cursor') {
         void rebuild(goalFrom(previous));
         return;
       }
-      if (!validPages(previous.pages)) {
+      if (!authority.current(previous.pages.at(-1)?.generation)) {
         void rebuild(goalFrom(previous));
         return;
       }
       publish({
         ...previous,
         busy: false,
-        error: { kind: 'append', message: (failure as Error).message, cursor },
+        error: {
+          kind: 'append',
+          message:
+            (failure as Error).name === 'AbortError'
+              ? 'Authorization changed while loading this list. Refresh to recover.'
+              : (failure as Error).message,
+          cursor,
+        },
       });
     } finally {
       if (turn === sequence.current) request.current = undefined;
@@ -851,15 +937,18 @@ function Children({
     };
   }, [id, refreshVersion]);
   const noun = role === 'comments' ? 'comments' : 'replies';
-  const refreshControl = accepted.length > 0 && !windowState.error && (
-    <button
-      className="text-button"
-      disabled={windowState.busy}
-      onClick={() => void rebuild(goalFrom(state.current))}
-    >
-      Refresh {noun}
-    </button>
-  );
+  const refreshControl = accepted.length > 0 &&
+    !withheld &&
+    !windowState.error &&
+    (!windowState.complete || !items.length) && (
+      <button
+        className="text-button"
+        disabled={windowState.busy}
+        onClick={() => void rebuild(goalFrom(state.current))}
+      >
+        Refresh {noun}
+      </button>
+    );
   return (
     <div
       ref={tree}
@@ -870,7 +959,7 @@ function Children({
     >
       {accepted.length > 0 && (
         <div className="reply-page-toolbar">
-          <p ref={summary} tabIndex={-1} className="reply-page-summary" role="status">
+          <p className="reply-page-summary" role="status">
             {items.length} direct{' '}
             {role === 'comments'
               ? items.length === 1
@@ -965,7 +1054,9 @@ function Children({
             onClick={() =>
               windowState.error?.kind === 'append'
                 ? void append(windowState.error.cursor)
-                : void rebuild(goalFrom(state.current))
+                : windowState.error?.kind === 'restore'
+                  ? void rebuild(goalFrom(state.current), true)
+                  : void rebuild(goalFrom(state.current))
             }
           >
             Retry {noun}
@@ -975,11 +1066,13 @@ function Children({
       {withheld && !windowState.busy && !windowState.error && (
         <div className="notice continuation-notice" role="status">
           <p>Earlier {noun} are unavailable until this list is checked again.</p>
-          <button onClick={() => void rebuild(goalFrom(state.current))}>Refresh {noun}</button>
+          <button ref={recoveryFocus} onClick={() => void rebuild(goalFrom(state.current))}>
+            Refresh {noun}
+          </button>
         </div>
       )}
       {!accepted.length && !windowState.error && !withheld && <p role="status">Loading {noun}…</p>}
-      {accepted.length > 0 && !items.length && windowState.complete && (
+      {accepted.length > 0 && !items.length && displayed.complete && (
         <p className="empty-replies">No {noun} yet.</p>
       )}
       {windowState.notice && (
@@ -987,7 +1080,7 @@ function Children({
           {windowState.notice}
         </p>
       )}
-      {windowState.busy && accepted.length > 0 && (
+      {windowState.busy && (
         <p className="continuation-status" role="status">
           Loading {noun}…
         </p>
@@ -1007,11 +1100,31 @@ function Children({
           <button
             className="continuation-action"
             ref={loadButton}
-            disabled={windowState.busy}
+            aria-disabled={windowState.busy}
             onClick={() => void append()}
           >
             Load more {noun}
           </button>
+        )}
+      {!windowState.goal &&
+        !windowState.error &&
+        !withheld &&
+        windowState.complete &&
+        items.length > 0 && (
+          <div className="continuation-complete">
+            <p ref={completion} tabIndex={-1} className="continuation-status" role="status">
+              No more {noun} right now.
+            </p>
+            <button
+              className="text-button"
+              aria-disabled={windowState.busy}
+              onClick={() => {
+                if (!windowState.busy) void rebuild(goalFrom(state.current));
+              }}
+            >
+              Refresh {noun}
+            </button>
+          </div>
         )}
     </div>
   );

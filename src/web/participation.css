@@ -548,6 +548,10 @@
   border-color: #c6d8c3;
   font-weight: 600;
 }
+.loom-app .comment-tree > .continuation-action[aria-disabled='true'] {
+  opacity: 0.65;
+  cursor: wait;
+}
 .loom-app .continuation-status,
 .loom-app .continuation-notice {
   margin: 12px 0 16px 39px;
@@ -555,6 +559,16 @@
 }
 .loom-app .continuation-status {
   color: var(--muted);
+}
+.loom-app .continuation-complete {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 12px 0 16px 39px;
+}
+.loom-app .continuation-complete .continuation-status {
+  margin: 0;
 }
 .loom-app .continuation-notice.notice {
   padding: 12px 14px;
@@ -876,7 +890,8 @@
   }
   .loom-app .comment-tree > .continuation-action,
   .loom-app .continuation-status,
-  .loom-app .continuation-notice {
+  .loom-app .continuation-notice,
+  .loom-app .continuation-complete {
     margin-left: 0;
   }
   .loom-app .list-row {

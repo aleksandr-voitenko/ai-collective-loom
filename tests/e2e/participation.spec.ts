@@ -507,7 +507,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
       response.status() === 200,
   );
   await page
-    .locator('.conversation-content > .comment-tree > .reply-page-toolbar')
+    .locator('.conversation-content > .comment-tree')
     .getByRole('button', { name: 'Refresh comments', exact: true })
     .click();
   await refreshedRoot;
@@ -1261,13 +1261,13 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     await held;
     await route.fulfill({ response });
   });
-  await root
-    .getByRole('button', { name: 'Load more comments' })
-    .evaluate((button: HTMLButtonElement) => {
-      button.click();
-      button.click();
-    });
+  const pendingLoad = root.getByRole('button', { name: 'Load more comments' });
+  await pendingLoad.focus();
+  await pendingLoad.press('Enter');
   await ready;
+  await expect(pendingLoad).toBeFocused();
+  await expect(pendingLoad).toHaveAttribute('aria-disabled', 'true');
+  await pendingLoad.evaluate((button: HTMLButtonElement) => button.click());
   expect(rootAppendRequests).toBe(1);
   await editor.focus();
   await editor.fill('A retained draft while loading');
@@ -1310,7 +1310,10 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   const load = root.getByRole('button', { name: 'Load more comments' });
   await load.focus();
   await load.press('Enter');
-  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeFocused();
+  const completed = root.getByText('No more comments right now.', { exact: true });
+  await expect(completed).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(root.getByRole('button', { name: 'Refresh comments' })).toBeFocused();
   await expect(rootRows).toHaveCount(14);
   await expect(root.getByText('Continuous comment 14', { exact: true })).toBeVisible();
   expect(
@@ -1359,6 +1362,49 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     )
     .toBeLessThan(8);
   await capture('restored-later-page', laterChild);
+  await thread.click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  let failedReturnCursor = '';
+  let retriedReturnCursor = '';
+  await page.route(`**/api/v1/contributions/${discussion.resource}/children?*`, async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor');
+    if (!cursor) return route.continue();
+    if (!failedReturnCursor) {
+      failedReturnCursor = cursor;
+      return route.abort('connectionfailed');
+    }
+    if (!retriedReturnCursor) retriedReturnCursor = cursor;
+    return route.continue();
+  });
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(root.getByText('6 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByRole('button', { name: 'Retry comments' })).toBeVisible();
+  await expect(root.getByText('Continuous comment 1', { exact: true })).toBeVisible();
+  await expect(root.getByText('Continuous comment 13', { exact: true })).toHaveCount(0);
+  await root.getByRole('button', { name: 'Retry comments' }).click();
+  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeVisible();
+  expect(retriedReturnCursor).toBe(failedReturnCursor);
+  await expect(laterChild.getByText('Reply beneath later comment', { exact: true })).toBeVisible();
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toHaveCount(0);
+  await page.unrouteAll({ behavior: 'wait' });
+
+  await thread.click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await page.route(`**/api/v1/contributions/${roots[12]}/children?*`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      body: JSON.stringify({ ...body, items: [], complete: true, next_cursor: null }),
+    });
+  });
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(later.getByText('No replies yet.', { exact: true })).toBeVisible();
+  await expect(page.getByText('The earlier reading position is unavailable.')).toBeVisible();
+  await expect(page.getByText('Reply beneath later comment', { exact: true })).toHaveCount(0);
+  await page.unrouteAll({ behavior: 'wait' });
+
   const otherArticle = rootRows.nth(1).locator('article').first();
   await otherArticle.getByRole('button', { name: 'Reply', exact: true }).click();
   const otherEditor = otherArticle.getByLabel('Your reply', { exact: true });
@@ -1403,6 +1449,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
       content: text(`Continuous comment ${index}`),
     });
     expect(result.status).toBe(201);
+    roots.push(result.body.resource_id);
   }
   await root.getByRole('button', { name: 'Refresh comments' }).click();
   await expect(root.getByText('18 direct comments loaded', { exact: true })).toBeVisible();
@@ -1469,17 +1516,198 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await expect(root.getByText('22 direct comments loaded', { exact: true })).toBeVisible();
   await expect(root.getByText('Continuous comment 28', { exact: true })).toBeVisible();
   await page.unrouteAll({ behavior: 'wait' });
-  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
-    roots[0],
-  ]);
+
+  // A ninth accepted page must remain mounted while the bounded refresh stages
+  // its first eight pages, including the editor and branch on the loaded tail.
   await root.getByRole('button', { name: 'Refresh comments' }).click();
   await expect(root.getByText('28 direct comments loaded', { exact: true })).toBeVisible();
+  for (let index = 29; index <= 54; index++) {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: discussion.resource,
+      content: text(`Continuous comment ${index}`),
+    });
+    expect(result.status).toBe(201);
+    roots.push(result.body.resource_id);
+  }
+  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await expect(root.getByText('28 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root).toHaveAttribute('aria-busy', 'false');
+  while ((await rootRows.count()) < 54) {
+    const before = await rootRows.count();
+    await root.getByRole('button', { name: 'Load more comments' }).click();
+    await expect.poll(() => rootRows.count()).toBeGreaterThan(before);
+    await expect(root).toHaveAttribute('aria-busy', 'false');
+  }
+  await expect(root.getByText('54 direct comments loaded', { exact: true })).toBeVisible();
+  const tail = rootRows.last();
+  await tail.getByRole('button', { name: 'Check replies' }).click();
+  await expect(tail.getByText('No replies yet.', { exact: true })).toBeVisible();
+  const tailArticle = tail.locator('article').first();
+  const tailHandle = await tailArticle.elementHandle();
+  await tailArticle.getByRole('button', { name: 'Reply', exact: true }).click();
+  const tailEditor = tailArticle.getByLabel('Your reply', { exact: true });
+  await tailEditor.fill('A draft on the ninth page');
+  await tailEditor.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(3, 9));
+  await rootRows.nth(25).scrollIntoViewIfNeeded();
+  let releaseRefresh!: () => void;
+  let refreshStarted!: () => void;
+  const heldRefresh = new Promise<void>((resolve) => (releaseRefresh = resolve));
+  const refreshReady = new Promise<void>((resolve) => (refreshStarted = resolve));
+  let holdFirst = true;
+  await page.route(`**/api/v1/contributions/${discussion.resource}/children?*`, async (route) => {
+    if (!holdFirst || new URL(route.request().url()).searchParams.has('cursor'))
+      return route.continue();
+    holdFirst = false;
+    const response = await route.fetch();
+    refreshStarted();
+    await heldRefresh;
+    await route.fulfill({ response });
+  });
+  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshReady;
+  await expect(rootRows).toHaveCount(54);
+  await capture('pending-refresh-long-window', rootRows.nth(25));
+  await rootRows.nth(25).scrollIntoViewIfNeeded();
+  const startingScroll = await page.evaluate(() => scrollY);
+  await page.mouse.wheel(0, 500);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(startingScroll + 400);
+  const readerScroll = await page.evaluate(() => scrollY);
+  releaseRefresh();
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  await expect(rootRows).toHaveCount(54);
+  await expect(tailEditor).toHaveValue('A draft on the ninth page');
+  await expect(tail.getByText('No replies yet.', { exact: true })).toBeVisible();
+  expect(await page.evaluate((node) => node?.isConnected, tailHandle)).toBe(true);
+  expect(Math.abs((await page.evaluate(() => scrollY)) - readerScroll)).toBeLessThan(40);
+  await capture(
+    'bounded-refresh-long-window',
+    root.getByRole('button', { name: 'Continue restoring comments' }),
+  );
+  await root.getByRole('button', { name: 'Continue restoring comments' }).click();
+  await expect(root.getByText('54 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toHaveCount(0);
+  await expect(tailEditor).toHaveValue('A draft on the ninth page');
+  expect(await page.evaluate((node) => node?.isConnected, tailHandle)).toBe(true);
+  await page.unrouteAll({ behavior: 'wait' });
+
+  // A partial negative projection on page two withdraws older leases, while
+  // its own structural entry and later readable siblings still progress.
+  const eligibleDescendant = await external.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: discussion.discussion,
+    parent_id: roots[6],
+    content: text('Eligible descendant of unavailable comment'),
+  });
+  expect(eligibleDescendant.status).toBe(201);
+  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
+    roots[6],
+  ]);
+  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  await root.getByRole('button', { name: 'Continue restoring comments' }).click();
+  await expect(root.getByText('Continuous comment 8', { exact: true })).toBeVisible();
   await expect(root.getByText('Continuous comment 1', { exact: true })).toHaveCount(0);
-  await expect(first.getByText('Contribution unavailable', { exact: true })).toBeVisible();
-  await expect(replies.getByRole('button', { name: 'Refresh replies' })).toBeVisible();
-  await replies.getByRole('button', { name: 'Refresh replies' }).click();
-  await expect(replies.getByText('10 direct replies loaded', { exact: true })).toBeVisible();
-  await expect(replies.getByText('Direct reply 8', { exact: true })).toBeVisible();
+  const unavailable = root.locator('.comment-branch').filter({
+    has: page.locator(`[data-resource-id="${roots[6]}"]`),
+  });
+  await expect(unavailable.getByText('Contribution unavailable', { exact: true })).toBeVisible();
+  await unavailable.getByRole('button', { name: 'Check replies' }).click();
+  await expect(unavailable.getByText('Eligible descendant of unavailable comment')).toBeVisible();
+  const descendantThread = unavailable.getByRole('link', { name: 'Open reply thread →' });
+  await descendantThread.click();
+  await page.getByRole('button', { name: 'Refresh branch' }).click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  await root.getByRole('button', { name: 'Continue restoring comments' }).click();
+  await expect(unavailable.getByText('Eligible descendant of unavailable comment')).toBeVisible();
+  await expect(root.getByText('Continuous comment 54', { exact: true })).toBeVisible();
+  await expect(root.getByText('Continuous comment 1', { exact: true })).toHaveCount(0);
+  const afterUnavailable = await external.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: discussion.discussion,
+    parent_id: discussion.resource,
+    content: text('After unavailable page'),
+  });
+  expect(afterUnavailable.status).toBe(201);
+  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  await root.getByRole('button', { name: 'Continue restoring comments' }).click();
+  let markStaleReady!: () => void;
+  let releaseStale!: () => void;
+  const staleReady = new Promise<void>((resolve) => (markStaleReady = resolve));
+  const heldStaleResponse = new Promise<void>((resolve) => (releaseStale = resolve));
+  let heldStale = false;
+  await page.route(`**/api/v1/contributions/${discussion.resource}/children?*`, async (route) => {
+    if (heldStale || !new URL(route.request().url()).searchParams.has('cursor'))
+      return route.continue();
+    heldStale = true;
+    const response = await route.fetch();
+    markStaleReady();
+    await heldStaleResponse;
+    await route.fulfill({ response });
+  });
+  await root.getByRole('button', { name: 'Load more comments' }).click();
+  await staleReady;
+  await unavailable.getByRole('button', { name: 'Preview parent' }).click();
+  await expect(page.getByText('Parent unavailable.', { exact: true })).toBeVisible();
+  releaseStale();
+  await expect(root).toHaveAttribute('aria-busy', 'false');
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  await expect(root.getByText('Continuous comment 1', { exact: true })).toHaveCount(0);
+  await root.getByRole('button', { name: 'Continue restoring comments' }).click();
+  await expect(root.getByRole('button', { name: 'Load more comments' })).toBeVisible();
+  const finalLoad = root.getByRole('button', { name: 'Load more comments' });
+  await finalLoad.focus();
+  await finalLoad.press('Enter');
+  await expect(root.getByText('After unavailable page', { exact: true })).toBeVisible();
+  await expect(root.getByText('Continuous comment 8', { exact: true })).toBeVisible();
+  await expect(root.getByRole('button', { name: 'Refresh comments' })).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.unrouteAll({ behavior: 'wait' });
+
+  // Reproduce the original six-row failure directly: page two contains an
+  // unavailable child, followed by an eligible sibling and descendant.
+  const pageTwo = await createDiscussion(page, 'Unavailable second page');
+  const pageTwoIds: string[] = [];
+  for (let index = 1; index <= 8; index++) {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: pageTwo.discussion,
+      parent_id: pageTwo.resource,
+      content: text(`Second-page comment ${index}`),
+    });
+    expect(result.status).toBe(201);
+    pageTwoIds.push(result.body.resource_id);
+  }
+  const pageTwoChild = await external.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: pageTwo.discussion,
+    parent_id: pageTwoIds[6],
+    content: text('Second-page eligible descendant'),
+  });
+  expect(pageTwoChild.status).toBe(201);
+  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
+    pageTwoIds[6],
+  ]);
+  await page.goto(server.origin + `/loom/discussion/${pageTwo.discussion}`);
+  await expect(root.getByText('6 direct comments loaded', { exact: true })).toBeVisible();
+  await root.getByRole('button', { name: 'Load more comments' }).click();
+  await expect(root.getByText('Second-page comment 8', { exact: true })).toBeVisible();
+  await expect(root.getByText('Second-page comment 1', { exact: true })).toHaveCount(0);
+  const unavailableOnPageTwo = root.locator(':scope > .comment-branch').filter({
+    has: page.locator(`[data-resource-id="${pageTwoIds[6]}"]`),
+  });
+  await expect(
+    unavailableOnPageTwo.getByText('Contribution unavailable', { exact: true }),
+  ).toBeVisible();
+  await unavailableOnPageTwo.getByRole('button', { name: 'Check replies' }).click();
+  await expect(unavailableOnPageTwo.getByText('Second-page eligible descendant')).toBeVisible();
+  await capture('page-two-unavailable', unavailableOnPageTwo, [
+    'Synthetic comment 7 was deliberately suppressed before the second-page request.',
+  ]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 

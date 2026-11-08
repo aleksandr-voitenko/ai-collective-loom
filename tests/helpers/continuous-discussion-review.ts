@@ -53,7 +53,7 @@ export async function captureContinuousDiscussion(
       {
         screenshots,
         reproduction:
-          'LOOM_CONTINUOUS_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "continuous comments and replies"',
+          'npm run app:build && LOOM_CONTINUOUS_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "continuous comments and replies"',
         isolation:
           'Actual compiled React app, disposable PostgreSQL/HTTPS and virtual passkey. No credentials, cookies or authentication exports.',
       },
