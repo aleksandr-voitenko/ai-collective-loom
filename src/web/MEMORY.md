@@ -76,13 +76,18 @@ an empty completed continuation without retaining earlier pages. Source grouping
 never becomes a semantic reference or personal action.
 `AuthoredText` shares safe instance-root local-link resolution with the parser;
 normalized local hrefs must remain single-root-relative, never protocol-relative.
-Native disclosures keep secondary message/discussion controls mounted and authorized;
-ReadingText's compact mode leaves the prose/presentation observer outside its reading
-disclosure and reveals pending/conflict/error controls. Empty summaries use a small
-invitation. Reading disclosures retain the user's open choice after settlement;
-only a new pending/error/conflict opens them automatically. The
+Native disclosures keep secondary message/discussion controls mounted and authorized.
+ReadingText observes only mounted prose; a separate status component consumes its
+private state without another observer or lookup. Discussion and full-resource More
+disclosures contain Mark unread, while quiet pending feedback and error/conflict
+recovery stay outside the menu. Empty summaries use a small invitation. The
 available/unavailable/error summary states retain their existing meaning.
-ReadingProvider keeps the full-text presentation gate separate from
+ReadingProvider defaults automation on for a missing scoped preference and fails
+closed on invalid/unavailable storage. Shared event-driven viewport observation
+tracks presence separately from write eligibility; measured full exits rearm held
+Unread and terminally attempted visits, while cleanup, partial scrolling and
+repeated cross-tab intent events cannot. Visible brief observations survive the
+batch delay. The presentation gate remains separate from
 `reading-coordinator.ts`: a 128-candidate in-memory buffer flushes at 25 targets
 or the oldest candidate's 250 ms deadline, with one automatic batch in flight.
 A known atomic refusal reserves one separate at-most-25-member continuation

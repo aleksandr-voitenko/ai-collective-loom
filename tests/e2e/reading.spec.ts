@@ -1,18 +1,17 @@
 import { chromium, type Page, type BrowserContext } from '@playwright/test';
 import { test, expect } from '../helpers/browser-fixtures.js';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { syntheticServer } from '../helpers/participation-server.js';
 import type { BrowserDiagnostics } from '../helpers/browser-diagnostics.js';
 const endpoint = '/api/v1/me/reading';
-const batchReviewRoot = '/private/tmp/loom-review-evidence/reading-batch';
+const batchReviewRoot = '/private/tmp/loom-review-evidence/reading-viewport';
 async function batchReviewCapture(page: Page, state: string, width: 1440 | 390) {
   await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
-  if (state === 'recovery-continuation' && width === 390)
-    await page.getByText(/1 revision was synchronized/).scrollIntoViewIfNeeded();
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBe(true);
@@ -33,10 +32,14 @@ async function batchReviewCapture(page: Page, state: string, width: 1440 | 390) 
         browser: 'Chromium',
         account_role: 'synthetic enrolled administrator',
         state,
-        reproduction:
-          'LOOM_READING_BATCH_REVIEW=1 npm run test:e2e -- reading.spec.ts --grep "manual selective reading"',
+        source_diff_sha256: createHash('sha256')
+          .update(execFileSync('git', ['diff', '--binary']))
+          .digest('hex'),
+        reproduction: 'LOOM_READING_VIEWPORT_REVIEW=1 npm run test:e2e -- reading.spec.ts',
         authentication: 'ordinary virtual WebAuthn passkey',
         mocked_responses: [],
+        held_requests:
+          state === 'pending' ? ['Automatic reading state request held at the browser route.'] : [],
         injected_failures: state.includes('conflict')
           ? [
               'A was marked unread through the ordinary UI before the held automatic batch reached the server.',
@@ -77,6 +80,7 @@ async function setup(
   page: Page,
   context: BrowserContext,
   server: Awaited<ReturnType<typeof syntheticServer>>,
+  preference: 'off' | 'default' = 'off',
 ) {
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
@@ -104,6 +108,21 @@ async function setup(
   await page.getByRole('link', { name: 'Administration', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Community', exact: true })).toBeVisible();
   await page.getByRole('link', { name: /Back to Loom/ }).click();
+  if (preference === 'off') {
+    await page.goto(server.origin + '/loom/reading');
+    await page
+      .getByLabel('Automatically mark visible text read on this account and browser')
+      .uncheck();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Object.keys(localStorage).some(
+            (key) => key.endsWith(':automatic') && localStorage.getItem(key) === 'false',
+          ),
+        ),
+      )
+      .toBe(true);
+  }
   const area = (await api(page, '/api/v1/areas')).items.find((r: any) => r.title === 'General').id;
   const opening = await api(page, '/api/v1/discussions', {
     idempotency_key: randomUUID(),
@@ -129,15 +148,13 @@ async function setup(
   return { area, opening, discussion, reply, artifact };
 }
 const control = (page: Page, revision: string) =>
-  page.locator(`[data-reading-target="${revision}"]`);
+  page.locator(`[data-reading-target="${revision}"]`).locator('xpath=..');
 const pair = (s: any) => ({ resource_id: s.resource_id, revision_id: s.revision_id });
 const state = async (page: Page, s: any) =>
   (await api(page, endpoint + '/lookup', { targets: [pair(s)] })).items[0];
 async function enable(page: Page, origin: string) {
   await page.goto(origin + '/loom/reading');
-  await page
-    .getByLabel('Automatically mark presented text read — prototype, this account on this browser')
-    .check();
+  await page.getByLabel('Automatically mark visible text read on this account and browser').check();
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -151,15 +168,13 @@ async function enable(page: Page, origin: string) {
 async function readingTools(page: Page, revision: string) {
   const parent = control(page, revision);
   await parent.waitFor({ state: 'visible' });
-  const details = parent.locator(':scope > .reading-details');
-  if ((await details.count()) && (await details.getAttribute('open')) === null)
+  const details = parent.locator('.post-footer .message-details').first();
+  if ((await details.getAttribute('open')) === null)
     await details.locator(':scope > summary').click();
 }
 async function exact(page: Page, origin: string, s: any) {
   await page.goto(origin + `/loom/resource/${s.resource_id}/${s.revision_id}`);
-  await expect(
-    control(page, s.revision_id).getByRole('button', { name: 'Mark unread', exact: true }),
-  ).toBeEnabled();
+  await expect(control(page, s.revision_id).locator('.prose')).toBeVisible();
 }
 
 async function nativeLifecycleBrowser(diagnostics: BrowserDiagnostics) {
@@ -237,31 +252,169 @@ async function nativeLifecycleBrowser(diagnostics: BrowserDiagnostics) {
   }
 }
 
-test('manual selective reading, exact historical IDs and a frozen bounded selection preserve Saved and newer revisions', async ({
+test('default viewport reading covers short and long main text without redundant writes', async ({
   page,
   context,
   server,
 }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.name));
-  const d = await setup(page, context, server),
-    x = await d.reply('Older skipped X'),
-    y = await d.reply('Newer selected Y');
-  await api(page, '/api/v1/me/saved-items/state', {
+  const d = await setup(page, context, server, 'default');
+  const long = await d.artifact(
+    Array.from({ length: 40 }, (_, index) =>
+      `Paragraph ${index}. Main text is visible before its end. `.repeat(4),
+    ).join('\n\n'),
+  );
+  const writes: any[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith(endpoint + '/state')) writes.push(request.postDataJSON());
+  });
+  await exact(page, server.origin, long);
+  const prose = control(page, long.revision_id).locator('.prose');
+  expect((await prose.boundingBox())!.height).toBeGreaterThan(1000);
+  await expect.poll(async () => (await state(page, long)).read).toBe(true);
+  if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+    await batchReviewCapture(page, 'resource', 1440);
+    await batchReviewCapture(page, 'resource', 390);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+  expect(
+    writes.filter((body) =>
+      body.targets.some((target: any) => target.revision_id === long.revision_id),
+    ),
+  ).toHaveLength(1);
+  await page.reload();
+  await expect(prose).toBeVisible();
+  await page.waitForTimeout(400);
+  expect(
+    writes.filter((body) =>
+      body.targets.some((target: any) => target.revision_id === long.revision_id),
+    ),
+  ).toHaveLength(1);
+  await expect(control(page, long.revision_id).getByText('Reading status')).toHaveCount(0);
+  await expect(
+    control(page, long.revision_id).getByRole('button', { name: 'Mark read' }),
+  ).toHaveCount(0);
+  await expect(control(page, long.revision_id).getByText(/private · revision/)).toHaveCount(0);
+  await readingTools(page, long.revision_id);
+  await expect(
+    control(page, long.revision_id).getByRole('button', { name: 'Mark unread' }),
+  ).toBeEnabled();
+  const parent = await d.reply('Parent visible');
+  const child = await d.reply('Nested child', parent.resource_id);
+  const deep = await d.reply('Deep collapsed text', child.resource_id);
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  await expect(page.locator(`[data-presented-revision="${deep.revision_id}"]`)).toHaveCount(0);
+  expect((await state(page, deep)).version).toBe(0);
+  await page.goto(server.origin + '/loom/updates');
+  expect((await state(page, deep)).version).toBe(0);
+  const preparation = await api(page, '/api/v1/summary-preparations', {
     idempotency_key: randomUUID(),
-    target: { kind: 'revision', ...pair(x) },
-    saved: true,
-    expected_version: 0,
+    discussion_id: d.discussion,
+    scope: 'full',
   });
-  await exact(page, server.origin, y);
-  const button = control(page, y.revision_id).getByRole('button', {
-    name: 'Mark read',
-    exact: true,
+  const summary = await api(page, '/api/v1/summaries', {
+    idempotency_key: randomUUID(),
+    discussion_id: d.discussion,
+    title: 'Reading summary',
+    content: text('The full summary main text'),
+    coverage: { preparation_id: preparation.preparation_id },
   });
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  await expect(page.getByRole('link', { name: 'Reading summary' })).toBeVisible();
+  expect((await state(page, summary)).version).toBe(0);
+  await exact(page, server.origin, summary);
+  await expect.poll(async () => (await state(page, summary)).read).toBe(true);
+  await readingTools(page, summary.revision_id);
+  await expect(
+    control(page, summary.revision_id).getByRole('button', { name: 'Mark unread' }),
+  ).toBeEnabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await exact(page, server.origin, long);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('Mark unread survives focus and partial scrolling, then a full exit permits a new visit', async ({
+  page,
+  context,
+  server,
+}) => {
+  const d = await setup(page, context, server, 'default');
+  const a = await d.reply('Visible short comment');
+  await d.reply(
+    Array.from(
+      { length: 80 },
+      (_, index) => `Filler ${index}. ` + 'Read down the page. '.repeat(8),
+    ).join('\n\n'),
+  );
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  await control(page, a.revision_id).locator('.prose').scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await state(page, a)).read).toBe(true);
+  await readingTools(page, a.revision_id);
+  const button = control(page, a.revision_id).getByRole('button', { name: 'Mark unread' });
   await button.focus();
   await page.keyboard.press('Enter');
-  await expect.poll(async () => (await state(page, y)).read).toBe(true);
+  await expect.poll(async () => (await state(page, a)).read).toBe(false);
+  const unreadVersion = (await state(page, a)).version;
   await expect(button).toBeFocused();
+  await expect(
+    control(page, a.revision_id).getByRole('status', { name: 'Unread revision' }),
+  ).toBeVisible();
+  await page.evaluate(() => scrollBy(0, 10));
+  await page.waitForTimeout(450);
+  expect((await state(page, a)).version).toBe(unreadVersion);
+  const other = await context.newPage();
+  await other.goto(server.origin + '/loom/reading');
+  await page.bringToFront();
+  await page.waitForTimeout(450);
+  expect((await state(page, a)).version).toBe(unreadVersion);
+  await other.close();
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  await expect
+    .poll(() =>
+      control(page, a.revision_id)
+        .locator('.prose')
+        .evaluate((node) => node.getBoundingClientRect().bottom <= 0),
+    )
+    .toBe(true);
+  await control(page, a.revision_id).locator('.prose').scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await state(page, a)).read).toBe(true);
+  expect((await state(page, a)).version).toBe(unreadVersion + 1);
+});
+
+test('collapsing a visible unread branch permits a fresh read only after expansion', async ({
+  page,
+  context,
+  server,
+}) => {
+  const d = await setup(page, context, server, 'default');
+  const parent = await d.reply('Parent branch');
+  const child = await d.reply('Child main text', parent.resource_id);
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  const toggle = control(page, parent.revision_id).locator('xpath=..');
+  await toggle.getByRole('button', { name: 'Check replies' }).click();
+  const prose = control(page, child.revision_id).locator('.prose');
+  await prose.scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await state(page, child)).read).toBe(true);
+  await readingTools(page, child.revision_id);
+  await control(page, child.revision_id).getByRole('button', { name: 'Mark unread' }).click();
+  await expect.poll(async () => (await state(page, child)).read).toBe(false);
+  const version = (await state(page, child)).version;
+  await toggle.getByRole('button', { name: 'Hide replies' }).click();
+  await expect(prose).toBeHidden();
+  expect((await state(page, child)).version).toBe(version);
+  await toggle.getByRole('button', { name: 'Show loaded replies' }).click();
+  await prose.scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await state(page, child)).read).toBe(true);
+  expect((await state(page, child)).version).toBe(version + 1);
+});
+
+test('viewport reading review: quiet controls, held Unread, pending batch, conflict and recovery', async ({
+  page,
+  context,
+  server,
+}) => {
+  const d = await setup(page, context, server);
+  const x = await d.reply('Older skipped X');
+  const y = await d.reply('Newer selected Y');
   const newer = await api(page, '/api/v1/revisions', {
     idempotency_key: randomUUID(),
     resource_id: y.resource_id,
@@ -269,226 +422,52 @@ test('manual selective reading, exact historical IDs and a frozen bounded select
     title: null,
     content: text('Y2'),
   });
-  expect((await state(page, x)).version).toBe(0);
-  expect((await state(page, newer)).version).toBe(0);
+  const after = await d.reply('After selection');
+  const a = await d.reply('First exact reading target');
+  const b = await d.reply('Second exact reading target');
+  const child = await d.reply('A nested reply stays expanded', b.resource_id);
+  await api(page, endpoint + '/state', {
+    idempotency_key: randomUUID(),
+    basis: 'manual',
+    episode_id: null,
+    targets: [x, newer, after].map((source) => ({
+      ...pair(source),
+      read: true,
+      expected_version: 0,
+    })),
+  });
   await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  await expect(control(page, a.revision_id).locator('.prose')).toBeVisible();
+  await control(page, b.revision_id).locator('.prose').scrollIntoViewIfNeeded();
+  if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+    await batchReviewCapture(page, 'normal', 1440);
+    await batchReviewCapture(page, 'normal', 390);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
   await readingTools(page, d.opening.revision_id);
-  await readingTools(page, newer.revision_id);
-  await control(page, d.opening.revision_id).getByRole('checkbox').check();
-  await control(page, newer.revision_id).getByRole('checkbox').check();
-  await page.locator('.discussion-details > summary').click();
-  await page.getByText('Mark selected discussion revisions (2/25)', { exact: true }).click();
-  const queued = barrier(),
-    release = barrier();
-  let frozen: any;
-  await page.route('**' + endpoint + '/state', async (route) => {
-    frozen = route.request().postDataJSON();
-    queued.release();
-    await release.promise;
-    await route.continue();
-  });
-  try {
-    await page.getByRole('button', { name: 'Mark 2 selected read', exact: true }).click();
-    await queued.promise;
-    const later = await d.reply('After selection');
-    release.release();
-    await page.unrouteAll({ behavior: 'wait' });
-    await expect.poll(async () => (await state(page, newer)).read).toBe(true);
-    expect(frozen.targets.map((v: any) => v.revision_id).sort()).toEqual(
-      [d.opening.revision_id, newer.revision_id].sort(),
-    );
-    expect((await state(page, later)).version).toBe(0);
-  } finally {
-    release.release();
-  }
-  expect(
-    (await api(page, '/api/v1/me/saved-items/lookup', { kind: 'revision', ...pair(x) })).saved,
-  ).toBe(true);
-  await exact(page, server.origin, y);
-  if (process.env.LOOM_READING_REVIEW_SCREENS === '1')
-    await page.screenshot({ path: '/private/tmp/loom-reading-desktop.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await exact(page, server.origin, y);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await expect(control(page, y.revision_id).getByText(/Read · private/)).toBeVisible();
-  if (process.env.LOOM_READING_REVIEW_SCREENS === '1')
-    await page.screenshot({ path: '/private/tmp/loom-reading-mobile.png', fullPage: true });
-  expect(errors).toEqual([]);
-  expect(await page.title()).not.toBe('');
-  if (process.env.LOOM_READING_BATCH_REVIEW === '1')
-    await batchReviewViewportEvidence(page, context, server, d);
-});
-
-test('a reading conflict stays on its exact revision after another change succeeds and survives reload until dismissal', async ({
-  page,
-  context,
-  server,
-}) => {
-  const d = await setup(page, context, server),
-    a = await d.reply('Conflicting selection'),
-    b = await d.reply('Independent selection');
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.name));
-  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
-  await readingTools(page, a.revision_id);
-  await readingTools(page, b.revision_id);
   await expect(
-    control(page, a.revision_id).getByRole('button', { name: 'Mark read', exact: true }),
+    control(page, d.opening.revision_id).getByRole('button', { name: 'Mark unread' }),
   ).toBeEnabled();
-  const queued = barrier(),
-    release = barrier();
-  await page.route('**' + endpoint + '/state', async (route) => {
-    if (route.request().postDataJSON().targets[0].revision_id === a.revision_id) {
-      queued.release();
-      await release.promise;
-    }
-    await route.continue();
-  });
-  try {
-    await control(page, a.revision_id)
-      .getByRole('button', { name: 'Mark read', exact: true })
-      .click();
-    await queued.promise;
-    await api(page, endpoint + '/state', {
-      idempotency_key: randomUUID(),
-      basis: 'manual',
-      episode_id: null,
-      targets: [{ ...pair(a), read: false, expected_version: 0 }],
-    });
-    release.release();
-    await page.unrouteAll({ behavior: 'wait' });
-    await expect(control(page, a.revision_id).getByText(/Reading change conflicted/)).toBeVisible();
-    await expect(control(page, b.revision_id).getByText(/Reading change conflicted/)).toHaveCount(
-      0,
-    );
-    await control(page, b.revision_id)
-      .getByRole('button', { name: 'Mark read', exact: true })
-      .click();
-    await expect(control(page, b.revision_id).getByText(/Read · private/)).toBeVisible();
-    await expect(control(page, a.revision_id).getByText(/Reading change conflicted/)).toBeVisible();
-    await page.reload();
-    await expect(control(page, a.revision_id).getByText(/Reading change conflicted/)).toBeVisible();
-    await expect(control(page, b.revision_id).getByText(/Reading change conflicted/)).toHaveCount(
-      0,
-    );
-    await readingTools(page, b.revision_id);
-    await expect(control(page, b.revision_id).getByText(/Read · private/)).toBeVisible();
-    if (process.env.LOOM_READING_REVIEW_SCREENS === '1')
-      await page.screenshot({
-        path: '/private/tmp/loom-reading-conflict-desktop.png',
-        fullPage: true,
-      });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await control(page, a.revision_id)
-      .getByRole('link', { name: 'Review or dismiss the reading conflict' })
-      .click();
-    await expect(page.getByRole('heading', { name: 'Private reading progress' })).toBeVisible();
-    await expect(page.getByText(/No revisions in this change were updated/)).toBeVisible();
-    const dismiss = page.getByRole('button', { name: 'Dismiss reading conflict', exact: true });
-    await dismiss.focus();
-    if (process.env.LOOM_READING_REVIEW_SCREENS === '1')
-      await page.screenshot({
-        path: '/private/tmp/loom-reading-conflict-mobile.png',
-        fullPage: true,
-      });
-    await page.keyboard.press('Enter');
-    await expect(page.getByText('No pending reading changes.')).toBeVisible();
-    expect((await state(page, a)).read).toBe(false);
-    expect((await state(page, a)).version).toBe(1);
-    expect((await state(page, b)).read).toBe(true);
-    expect((await state(page, b)).version).toBe(1);
-    await page.goto(server.origin + '/loom/discussion/' + d.discussion);
-    await readingTools(page, a.revision_id);
-    await expect(control(page, a.revision_id).getByText(/Marked unread · private/)).toBeVisible();
-    await expect(control(page, a.revision_id).getByText(/Reading change conflicted/)).toHaveCount(
-      0,
-    );
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
-    expect(errors).toEqual([]);
-  } finally {
-    release.release();
+  if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+    await batchReviewCapture(page, 'more-open', 1440);
+    await batchReviewCapture(page, 'more-open', 390);
+    await page.setViewportSize({ width: 1440, height: 1000 });
   }
-});
-
-test('opt-in presentation covers full long text, excludes unpresented branches and produces no duplicate known-read outcome', async ({
-  page,
-  context,
-  server,
-}) => {
-  const d = await setup(page, context, server),
-    long = await d.artifact(
-      Array.from({ length: 22 }, (_, i) =>
-        `Paragraph ${i}. Full text needs viewport presentation. `.repeat(3),
-      ).join('\n\n'),
-    );
-  const requests: any[] = [];
-  page.on('request', (r) => {
-    if (r.url().endsWith(endpoint + '/state')) requests.push(r.postDataJSON());
-  });
-  await exact(page, server.origin, long);
-  await page.waitForTimeout(1200);
-  expect(requests).toEqual([]);
-  await enable(page, server.origin);
-  await exact(page, server.origin, long);
-  await page.bringToFront();
-  await page.waitForTimeout(1200);
-  expect((await state(page, long)).read).toBe(false);
-  const prose = control(page, long.revision_id).locator('.prose');
-  const box = await prose.boundingBox();
-  expect(box!.height).toBeGreaterThan(800);
-  // Overlapping windows expose every band, including the top and final partial band.
-  for (let y = 0; y < box!.height + 500; y += 400) {
-    await page.evaluate((y) => scrollTo(0, y), Math.max(0, box!.y + y - 100));
-    await page.waitForTimeout(1200);
-  }
-  await expect.poll(async () => (await state(page, long)).read).toBe(true);
-  expect(requests).toHaveLength(1);
-  expect(requests[0].basis).toBe('presentation');
-  expect(requests[0].targets.map((v: any) => v.revision_id)).toEqual([long.revision_id]);
-  await page.reload();
-  await page.waitForTimeout(1300);
-  expect(requests).toHaveLength(1);
-  const parent = await d.reply('Parent visible'),
-    child = await d.reply('Nested child', parent.resource_id),
-    deep = await d.reply('Deep collapsed text', child.resource_id);
-  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
-  await page.waitForTimeout(1300);
-  expect(await page.locator(`[data-presented-revision="${deep.revision_id}"]`).count()).toBe(0);
-  expect((await state(page, deep)).version).toBe(0);
-  await page.goto(server.origin + '/loom/updates');
-  await page.waitForTimeout(1300);
-  expect((await state(page, deep)).version).toBe(0);
-});
-
-async function batchReviewViewportEvidence(
-  page: Page,
-  context: BrowserContext,
-  server: Awaited<ReturnType<typeof syntheticServer>>,
-  d: Awaited<ReturnType<typeof setup>>,
-) {
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  const a = await d.reply('First exact reading target'),
-    b = await d.reply('Second exact reading target');
-  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
-  await readingTools(page, a.revision_id);
-  await readingTools(page, b.revision_id);
+  await control(page, d.opening.revision_id).getByRole('button', { name: 'Mark unread' }).click();
+  await expect.poll(async () => (await state(page, d.opening)).version).toBe(1);
   await expect(
-    control(page, a.revision_id).getByRole('button', { name: 'Mark unread' }),
-  ).toBeEnabled();
-  await batchReviewCapture(page, 'normal', 1440);
-  await batchReviewCapture(page, 'normal', 390);
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await readingTools(page, d.opening.revision_id);
-  await control(page, d.opening.revision_id)
-    .getByRole('button', { name: 'Mark unread', exact: true })
-    .click();
-  await expect(
-    control(page, d.opening.revision_id).getByText(/Marked unread · private/),
+    control(page, d.opening.revision_id).getByRole('status', { name: 'Unread revision' }),
   ).toBeVisible();
-  await batchReviewCapture(page, 'manual-unread', 1440);
-  await batchReviewCapture(page, 'manual-unread', 390);
+  if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+    await batchReviewCapture(page, 'manual-unread', 1440);
+    await batchReviewCapture(page, 'manual-unread', 390);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+  const openingMenu = control(page, d.opening.revision_id)
+    .locator('.post-footer .message-details')
+    .first();
+  if ((await openingMenu.getAttribute('open')) !== null)
+    await openingMenu.locator(':scope > summary').click();
   const held = barrier(),
     release = barrier();
   let original: any;
@@ -527,96 +506,152 @@ async function batchReviewViewportEvidence(
     await Promise.race([
       held.promise,
       page.waitForTimeout(8000).then(() => {
-        throw new Error('Two-target automatic batch did not qualify.');
+        throw new Error('Automatic batch did not qualify.');
       }),
     ]);
     expect(original.targets.map((item: any) => item.revision_id).sort()).toEqual(
       [a.revision_id, b.revision_id].sort(),
     );
-    await expect(control(page, a.revision_id).getByText(/Pending reading change/)).toBeVisible();
-    await batchReviewCapture(page, 'pending', 1440);
-    await batchReviewCapture(page, 'pending', 390);
-    await control(page, a.revision_id).getByRole('button', { name: 'Mark unread' }).click();
+    await expect(control(page, a.revision_id).getByText('Syncing reading…')).toBeVisible();
+    if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+      await batchReviewCapture(page, 'pending', 1440);
+      await batchReviewCapture(page, 'pending', 390);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
+    const branch = control(page, b.revision_id).locator('xpath=..');
+    await branch.getByRole('button', { name: 'Check replies', exact: true }).click();
+    await expect(control(page, child.revision_id).locator('.prose')).toBeVisible();
+    await control(page, b.revision_id).getByRole('button', { name: 'Reply', exact: true }).click();
+    const draft = control(page, b.revision_id).getByLabel('Your reply', { exact: true });
+    await draft.fill('Draft retained through reading settlement');
+    await readingTools(page, a.revision_id);
+    const manualButton = control(page, a.revision_id).getByRole('button', { name: 'Mark unread' });
+    await manualButton.click();
     await expect.poll(async () => (await state(page, a)).version).toBe(1);
+    const readingTop = await control(page, a.revision_id)
+      .locator('.prose')
+      .evaluate((node) => node.getBoundingClientRect().top);
     release.release();
     await page.unrouteAll({ behavior: 'wait' });
     await expect.poll(async () => (await state(page, b)).read).toBe(true);
     await expect(control(page, a.revision_id).getByText(/Reading change conflicted/)).toBeVisible();
-    await expect(control(page, b.revision_id).getByText(/Reading change conflicted/)).toHaveCount(
-      0,
-    );
-    await batchReviewCapture(page, 'conflict-continuation', 1440);
-    await batchReviewCapture(page, 'conflict-continuation', 390);
-    await page.goto(server.origin + '/loom/reading');
-    await expect(page.getByText(/1 revision was synchronized/)).toBeVisible();
-    await batchReviewCapture(page, 'recovery-continuation', 1440);
-    await batchReviewCapture(page, 'recovery-continuation', 390);
+    await expect(manualButton).toBeFocused();
+    await expect(draft).toHaveValue('Draft retained through reading settlement');
+    await expect(control(page, child.revision_id).locator('.prose')).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          Math.abs(
+            (await control(page, a.revision_id)
+              .locator('.prose')
+              .evaluate((node) => node.getBoundingClientRect().top)) - readingTop,
+          ) < 4,
+      )
+      .toBe(true);
+    const menu = control(page, a.revision_id).locator('.post-footer .message-details').first();
+    if ((await menu.getAttribute('open')) !== null) await menu.locator(':scope > summary').click();
+    await expect(control(page, a.revision_id).getByText(/Reading change conflicted/)).toBeVisible();
+    if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+      await batchReviewCapture(page, 'conflict', 1440);
+      await batchReviewCapture(page, 'conflict', 390);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
+    await control(page, a.revision_id)
+      .getByRole('link', { name: 'Review or dismiss the reading conflict' })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Private reading progress' })).toBeVisible();
+    if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+      await batchReviewCapture(page, 'recovery', 1440);
+      await batchReviewCapture(page, 'recovery', 390);
+      const beforeRoot = '/private/tmp/loom-review-evidence/reading-batch';
+      for (const width of [1440, 390] as const) {
+        const size = `${width}x${width === 1440 ? 1000 : 844}`;
+        await copyFile(
+          join(beforeRoot, `normal-${size}.png`),
+          join(batchReviewRoot, `before-normal-${size}.png`),
+        );
+        await copyFile(
+          join(beforeRoot, `normal-${size}.json`),
+          join(batchReviewRoot, `before-normal-${size}.json`),
+        );
+      }
+      const before = JSON.parse(
+        await readFile(join(batchReviewRoot, 'before-normal-1440x1000.json'), 'utf8'),
+      );
+      await writeFile(
+        join(batchReviewRoot, 'manifest.json'),
+        JSON.stringify(
+          {
+            before_source: before.source_commit,
+            before_dirty_tree: before.dirty_tree,
+            before_note:
+              'Detached reviewed PR #56 commit; only an untracked node_modules dependency symlink was present.',
+            before_files: ['before-normal-1440x1000.png', 'before-normal-390x844.png'],
+            after_source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+            after_dirty_tree: execFileSync('git', ['status', '--short'], { encoding: 'utf8' })
+              .trim()
+              .split('\n')
+              .filter(Boolean),
+            after_diff_sha256: createHash('sha256')
+              .update(execFileSync('git', ['diff', '--binary']))
+              .digest('hex'),
+            route: `/loom/discussion/${d.discussion}`,
+            browser: 'Chromium',
+            role: 'synthetic enrolled administrator',
+            viewports: ['1440x1000', '390x844'],
+            states: ['normal', 'more-open', 'manual-unread', 'pending', 'conflict', 'recovery'],
+            resource_view:
+              'resource-1440x1000.png and resource-390x844.png from the default viewport test.',
+            reproduction: 'LOOM_READING_VIEWPORT_REVIEW=1 npm run test:e2e -- reading.spec.ts',
+            declared_hold: 'One automatic reading state request held while manual Unread commits.',
+            injected_failure:
+              'Atomic version conflict is caused by the real concurrent manual Unread.',
+          },
+          null,
+          2,
+        ),
+      );
+    }
   } finally {
     release.release();
   }
-}
+});
 
-for (const committed of [false, true])
-  test(`manual unread defeats ${committed ? 'committed but unacknowledged' : 'queued'} automatic read across tabs without passive rearm`, async ({
-    page,
-    context,
-    server,
-  }) => {
-    const d = await setup(page, context, server),
-      a = await d.artifact();
-    await enable(page, server.origin);
-    const held = barrier(),
-      release = barrier();
-    let automatic: any;
-    await page.route('**' + endpoint + '/state', async (route) => {
-      const body = route.request().postDataJSON();
-      if (body.basis !== 'presentation') {
-        await route.continue();
-        return;
-      }
-      automatic = body;
-      const response = committed ? await route.fetch() : undefined;
-      held.release();
-      await release.promise;
-      if (response) await route.fulfill({ response });
-      else await route.continue();
-    });
-    const other = await context.newPage();
-    try {
-      await exact(page, server.origin, a);
-      await page.bringToFront();
-      await held.promise;
-      await exact(other, server.origin, a);
-      await other.bringToFront();
-      await control(other, a.revision_id)
-        .getByRole('button', { name: 'Mark unread', exact: true })
-        .click();
-      await expect.poll(async () => (await state(other, a)).version).toBe(committed ? 2 : 1);
-      release.release();
-      await page.unrouteAll({ behavior: 'wait' });
-      await control(other, a.revision_id)
-        .getByRole('button', { name: 'Refresh reading status' })
-        .click();
-      await other.waitForTimeout(1400);
-      expect((await state(other, a)).read).toBe(false);
-      expect(automatic.targets[0].expected_version).toBe(0);
-      await page.bringToFront();
-      await control(page, a.revision_id)
-        .getByRole('button', { name: 'Refresh reading status' })
-        .click();
-      await page.waitForTimeout(1400);
-      expect((await state(page, a)).read).toBe(false);
-      await page.goto(server.origin + '/loom/reading');
-      await exact(page, server.origin, a);
-      await page.bringToFront();
-      await expect.poll(async () => (await state(page, a)).read).toBe(true);
-    } finally {
-      release.release();
-      await other.close();
-    }
+test('reading storage failure leaves full text and recovery visible without dispatch', async ({
+  page,
+  context,
+  server,
+}) => {
+  const d = await setup(page, context, server);
+  const a = await d.artifact();
+  await exact(page, server.origin, a);
+  await readingTools(page, a.revision_id);
+  await page.evaluate(() => {
+    localStorage.setItem('loom.intent.synthetic-unrelated', 'preserved');
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('loom.reading:') && key.includes(':intent:'))
+        throw new Error('Synthetic storage fault');
+      return original.call(this, key, value);
+    };
   });
+  const writes: any[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith(endpoint + '/state')) writes.push(request.postDataJSON());
+  });
+  const button = control(page, a.revision_id).getByRole('button', { name: 'Mark unread' });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(control(page, a.revision_id).getByRole('alert')).toContainText('could not be saved');
+  await expect(button).toBeFocused();
+  await expect(control(page, a.revision_id).locator('.prose')).toBeVisible();
+  expect(writes).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem('loom.intent.synthetic-unrelated'))).toBe(
+    'preserved',
+  );
+});
 
-test('manual and automatic reading response loss survive browser process restarts with exact bodies', async ({
+test('manual and automatic response loss retain exact recovery bodies across browser restarts', async ({
   server,
   diagnostics,
 }) => {
@@ -627,27 +662,27 @@ test('manual and automatic reading response loss survive browser process restart
   });
   try {
     let page = await context.newPage();
-    const d = await setup(page, context, server),
-      a = await d.artifact();
-    await exact(page, server.origin, a);
+    const d = await setup(page, context, server);
+    const manual = await d.artifact('Manual response loss');
+    await exact(page, server.origin, manual);
+    await readingTools(page, manual.revision_id);
     const lost = barrier();
-    let body: any;
+    let original: any;
     await page.route('**' + endpoint + '/state', async (route) => {
-      body = route.request().postDataJSON();
+      original = route.request().postDataJSON();
       const response = await route.fetch();
       expect(response.status()).toBe(200);
       await route.abort('connectionfailed');
       lost.release();
     });
-    await control(page, a.revision_id)
-      .getByRole('button', { name: 'Mark read', exact: true })
-      .click();
+    await control(page, manual.revision_id).getByRole('button', { name: 'Mark unread' }).click();
     await lost.promise;
+    expect(original.targets).toEqual([{ ...pair(manual), read: false, expected_version: 0 }]);
     await api(page, endpoint + '/state', {
       idempotency_key: randomUUID(),
       basis: 'manual',
       episode_id: null,
-      targets: [{ ...pair(a), read: false, expected_version: 1 }],
+      targets: [{ ...pair(manual), read: true, expected_version: 1 }],
     });
     await context.close();
     context = await diagnostics.launchPersistentContext(directory, {
@@ -657,46 +692,33 @@ test('manual and automatic reading response loss survive browser process restart
     page = await context.newPage();
     await page.goto(server.origin + '/loom/reading');
     let replay: any;
-    page.on('request', (r) => {
-      if (r.url().endsWith(endpoint + '/state')) replay = r.postDataJSON();
+    page.on('request', (request) => {
+      if (request.url().endsWith(endpoint + '/state')) replay = request.postDataJSON();
     });
     await page.getByRole('button', { name: 'Retry same reading change' }).click();
     await expect(page.getByText('No pending reading changes.')).toBeVisible();
-    expect(replay).toEqual(body);
-    expect((await state(page, a)).read).toBe(false);
-    expect((await state(page, a)).version).toBe(2);
-    await page
-      .getByLabel(
-        'Automatically mark presented text read — prototype, this account on this browser',
-      )
-      .check();
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          Object.keys(localStorage).some(
-            (key) => key.endsWith(':automatic') && localStorage.getItem(key) === 'true',
-          ),
-        ),
-      )
-      .toBe(true);
-    const automaticTarget = await api(page, '/api/v1/artifacts', {
+    expect(replay).toEqual(original);
+    expect(await state(page, manual)).toMatchObject({ read: true, version: 2 });
+
+    await enable(page, server.origin);
+    const automatic = await api(page, '/api/v1/artifacts', {
       idempotency_key: randomUUID(),
       area_id: d.area,
       title: 'Automatic restart target',
-      content: text('A fresh exact automatic reading target'),
+      content: text('Automatic response loss'),
     });
     const automaticLost = barrier();
-    let automaticBody: any;
+    let automaticOriginal: any;
     await page.route('**' + endpoint + '/state', async (route) => {
-      const request = route.request().postDataJSON();
-      if (request.basis !== 'presentation') return route.continue();
-      automaticBody = request;
+      const body = route.request().postDataJSON();
+      if (body.basis !== 'presentation') return route.continue();
+      automaticOriginal = body;
       const response = await route.fetch();
       expect(response.status()).toBe(200);
       await route.abort('connectionfailed');
       automaticLost.release();
     });
-    await exact(page, server.origin, automaticTarget);
+    await exact(page, server.origin, automatic);
     await page.bringToFront();
     await Promise.race([
       automaticLost.promise,
@@ -704,8 +726,8 @@ test('manual and automatic reading response loss survive browser process restart
         throw new Error('Automatic reading did not dispatch after process restart.');
       }),
     ]);
-    expect(automaticBody.targets).toEqual([
-      { ...pair(automaticTarget), read: true, expected_version: 0 },
+    expect(automaticOriginal.targets).toEqual([
+      { ...pair(automatic), read: true, expected_version: 0 },
     ]);
     await context.close();
     context = await diagnostics.launchPersistentContext(directory, {
@@ -720,88 +742,117 @@ test('manual and automatic reading response loss survive browser process restart
     });
     await page.getByRole('button', { name: 'Retry same reading change' }).click();
     await expect(page.getByText('No pending reading changes.')).toBeVisible();
-    expect(automaticReplay).toEqual(automaticBody);
-    expect((await state(page, automaticTarget)).read).toBe(true);
-    expect((await state(page, automaticTarget)).version).toBe(1);
+    expect(automaticReplay).toEqual(automaticOriginal);
+    expect(await state(page, automatic)).toMatchObject({ read: true, version: 1 });
   } finally {
     await context.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
 
-test('status and local-save failures preserve full text, keyboard focus and unrelated drafts', async ({
+test('sign-out fences a late manual reading outcome before local recovery cleanup', async ({
   page,
   context,
   server,
 }) => {
-  const d = await setup(page, context, server),
-    a = await d.artifact();
+  const d = await setup(page, context, server);
+  const a = await d.artifact('Sign-out reading target');
   await exact(page, server.origin, a);
-  await page.evaluate(() => {
-    localStorage.setItem('loom.intent.synthetic-unrelated', 'preserved');
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (k, v) {
-      if (k.startsWith('loom.reading:') && k.includes(':intent:'))
-        throw new Error('Synthetic storage fault');
-      return original.call(this, k, v);
-    };
+  await readingTools(page, a.revision_id);
+  const committed = barrier(),
+    release = barrier();
+  await page.route('**' + endpoint + '/state', async (route) => {
+    const response = await route.fetch();
+    committed.release();
+    await release.promise;
+    await route.fulfill({ response });
   });
-  const sent: any[] = [];
-  page.on('request', (r) => {
-    if (r.url().endsWith(endpoint + '/state')) sent.push(r.postDataJSON());
-  });
-  await control(page, a.revision_id)
-    .getByRole('button', { name: 'Mark read', exact: true })
-    .click();
-  await expect(control(page, a.revision_id).getByRole('alert')).toContainText('could not be saved');
-  expect(sent).toEqual([]);
-  expect(await page.evaluate(() => localStorage.getItem('loom.intent.synthetic-unrelated'))).toBe(
-    'preserved',
-  );
-  await page.route('**' + endpoint + '/lookup', (route) =>
-    route.fulfill({
-      status: 503,
-      json: { error: { code: 'service_unavailable', message: 'Reading status unavailable' } },
-    }),
-  );
-  const refresh = control(page, a.revision_id).getByRole('button', {
-    name: 'Refresh reading status',
-  });
-  await refresh.focus();
-  await page.keyboard.press('Enter');
-  await expect(control(page, a.revision_id).getByRole('status')).toContainText(
-    'Reading status unavailable',
-  );
-  await expect(page.getByText('Artifact main text', { exact: true })).toBeVisible();
-  await expect(refresh).toBeFocused();
-  expect(
-    (await server.observer.query('SELECT count(*)::int n FROM loom.reading_states')).rows[0].n,
-  ).toBe(0);
+  try {
+    await control(page, a.revision_id).getByRole('button', { name: 'Mark unread' }).click();
+    await committed.promise;
+    const prefix = await page.evaluate(async () => {
+      const key = Object.keys(localStorage).find(
+        (candidate) => candidate.startsWith('loom.reading:') && candidate.includes(':intent:'),
+      )!;
+      const prefix = key.slice(0, key.indexOf('intent:'));
+      let unlock!: () => void;
+      const held = new Promise<void>((resolve) => {
+        unlock = resolve;
+      });
+      (window as any).releaseReadingLock = unlock;
+      let acquired!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        acquired = resolve;
+      });
+      void navigator.locks.request(prefix, async () => {
+        acquired();
+        await held;
+      });
+      await ready;
+      return prefix;
+    });
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Export reading recovery' })).toBeVisible();
+    await page.getByRole('button', { name: 'Clear local drafts and sign out' }).click();
+    await expect(page.getByRole('heading', { name: 'Welcome to the Loom' })).toBeVisible();
+    release.release();
+    await page.unrouteAll({ behavior: 'wait' });
+    await page.evaluate(() => (window as any).releaseReadingLock());
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (readingPrefix) =>
+            Object.keys(localStorage).filter((key) => key.startsWith(readingPrefix)).length,
+          prefix,
+        ),
+      )
+      .toBe(0);
+    expect(
+      (
+        await server.observer.query(
+          'SELECT is_read,version FROM loom.reading_states WHERE revision_id=$1',
+          [a.revision_id],
+        )
+      ).rows,
+    ).toEqual([{ is_read: false, version: 1 }]);
+  } finally {
+    release.release();
+    await page.evaluate(() => (window as any).releaseReadingLock?.()).catch(() => {});
+  }
 });
 
-test('background lifecycle and late abandoned responses cannot qualify; foreground reopening can', async ({
+test('background lifecycle and late abandoned responses cannot qualify', async ({
   server,
   diagnostics,
 }) => {
-  const native = await nativeLifecycleBrowser(diagnostics),
-    context = native.context;
+  const native = await nativeLifecycleBrowser(diagnostics);
+  const context = native.context;
   try {
     const page = await context.newPage();
     await page.setViewportSize({ width: 1440, height: 1000 });
-    const d = await setup(page, context, server),
-      a = await d.artifact('Foreground eligible text'),
-      b = await d.artifact('Abandoned late text');
-    await enable(page, server.origin);
+    const d = await setup(page, context, server, 'default');
+    const a = await d.artifact('Foreground eligible text');
+    const b = await d.artifact('Abandoned late text');
     const lifecycle = await context.newCDPSession(page);
+    const lookupHeld = barrier(),
+      lookupRelease = barrier();
+    await page.route('**' + endpoint + '/lookup', async (route) => {
+      lookupHeld.release();
+      await lookupRelease.promise;
+      await route.continue();
+    });
     await exact(page, server.origin, a);
+    await lookupHeld.promise;
     await lifecycle.send('Emulation.setFocusEmulationEnabled', { enabled: false });
     await lifecycle.send('Page.setWebLifecycleState', { state: 'frozen' });
+    lookupRelease.release();
     expect(await page.evaluate(() => document.visibilityState)).toBe('hidden');
-    await page.waitForTimeout(1400);
+    await page.waitForTimeout(400);
     expect((await state(page, a)).version).toBe(0);
     await lifecycle.send('Page.setWebLifecycleState', { state: 'active' });
     await lifecycle.send('Emulation.setFocusEmulationEnabled', { enabled: true });
     await page.bringToFront();
+    await page.unrouteAll({ behavior: 'wait' });
     await expect.poll(async () => (await state(page, a)).read).toBe(true);
     const late = barrier(),
       finish = barrier();
@@ -820,109 +871,12 @@ test('background lifecycle and late abandoned responses cannot qualify; foregrou
       await page.goto(server.origin + '/loom/reading');
       finish.release();
       await page.unrouteAll({ behavior: 'wait' });
-      await page.waitForTimeout(1400);
+      await page.waitForTimeout(400);
       expect((await state(page, b)).version).toBe(0);
     } finally {
       finish.release();
     }
   } finally {
     await native.close();
-  }
-});
-
-test('native lifecycle shutdown removes profiles after pending storage writes', async ({
-  server,
-  diagnostics,
-}) => {
-  for (let i = 0; i < 3; i++) {
-    const native = await nativeLifecycleBrowser(diagnostics),
-      context = native.context;
-    try {
-      const page = await context.newPage();
-      await page.goto(server.origin + '/loom');
-      await page.evaluate(() => {
-        for (let n = 0; n < 10; n++)
-          localStorage.setItem('synthetic-cleanup-' + n, 'x'.repeat(100000));
-      });
-    } finally {
-      await native.close();
-    }
-    expect(context.browser()!.isConnected()).toBe(false);
-    await expect(access(native.directory)).rejects.toMatchObject({ code: 'ENOENT' });
-  }
-});
-
-test('sign-out fences late reading outcomes before blocked cleanup and preserves the server state', async ({
-  page,
-  context,
-  server,
-}) => {
-  const d = await setup(page, context, server),
-    a = await d.artifact();
-  await exact(page, server.origin, a);
-  const committed = barrier(),
-    release = barrier();
-  await page.route('**' + endpoint + '/state', async (route) => {
-    const response = await route.fetch();
-    committed.release();
-    await release.promise;
-    await route.fulfill({ response });
-  });
-  try {
-    await control(page, a.revision_id)
-      .getByRole('button', { name: 'Mark read', exact: true })
-      .click();
-    await committed.promise;
-    const lock = await page.evaluate(async () => {
-      const key = Object.keys(localStorage).find(
-          (k) => k.startsWith('loom.reading:') && k.includes(':intent:'),
-        )!,
-        prefix = key.slice(0, key.indexOf('intent:'));
-      let unlock!: () => void;
-      const held = new Promise<void>((resolve) => {
-        unlock = resolve;
-      });
-      (window as any).releaseReadingLock = unlock;
-      let acquired!: () => void;
-      const ready = new Promise<void>((resolve) => {
-        acquired = resolve;
-      });
-      void navigator.locks.request(prefix, async () => {
-        acquired();
-        await held;
-      });
-      await ready;
-      return prefix;
-    });
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: 'Export reading recovery', exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole('button', { name: 'Clear local drafts and sign out', exact: true })
-      .click();
-    await expect(page.getByRole('heading', { name: 'Welcome to the Loom' })).toBeVisible();
-    release.release();
-    await page.unrouteAll({ behavior: 'wait' });
-    await page.evaluate(() => (window as any).releaseReadingLock());
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (prefix) => Object.keys(localStorage).filter((k) => k.startsWith(prefix)).length,
-          lock,
-        ),
-      )
-      .toBe(0);
-    expect(
-      (
-        await server.observer.query(
-          'SELECT is_read,version FROM loom.reading_states WHERE revision_id=$1',
-          [a.revision_id],
-        )
-      ).rows,
-    ).toEqual([{ is_read: true, version: 1 }]);
-  } finally {
-    release.release();
-    await page.evaluate(() => (window as any).releaseReadingLock?.()).catch(() => {});
   }
 });

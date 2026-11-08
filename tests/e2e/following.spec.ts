@@ -599,6 +599,16 @@ test('summary context keeps one exact text and control set when community revali
     article(source).locator(`[data-presented-revision="${source.revision_id}"] .prose`);
   const controls = (source: { resource_id: string; revision_id: string }) =>
     article(source).locator(`[data-reading-target="${source.revision_id}"]`);
+  const more = (source: { resource_id: string }) =>
+    article(source).locator(':scope > .post-footer > .message-details');
+  const checkReadingAction = async (source: { resource_id: string }) => {
+    const disclosure = more(source);
+    if ((await disclosure.getAttribute('open')) === null)
+      await disclosure.locator(':scope > summary').click();
+    await expect(
+      disclosure.getByRole('button', { name: 'Mark unread', exact: true }),
+    ).toBeEnabled();
+  };
   try {
     await page
       .locator('.notification-list > li')
@@ -610,12 +620,7 @@ test('summary context keeps one exact text and control set when community revali
     await ready.promise;
     for (const source of [opening, reply]) {
       await expect(body(source)).toHaveText('Repeated navigation text');
-      const disclosure = controls(source).locator(':scope > .reading-details');
-      if ((await disclosure.getAttribute('open')) === null)
-        await disclosure.locator(':scope > summary').click();
-      await expect(
-        controls(source).getByRole('button', { name: 'Mark read', exact: true }),
-      ).toBeEnabled();
+      await checkReadingAction(source);
     }
     release.release();
     await expect(
@@ -629,16 +634,7 @@ test('summary context keeps one exact text and control set when community revali
       await expect(body(source)).toHaveCount(1);
       await expect(body(source)).toHaveText('Repeated navigation text');
       await expect(controls(source)).toHaveCount(1);
-      const disclosure = controls(source).locator(':scope > .reading-details');
-      if ((await disclosure.getAttribute('open')) === null)
-        await disclosure.locator(':scope > summary').click();
-      await expect(
-        controls(source).getByRole('button', { name: 'Mark read', exact: true }),
-      ).toBeEnabled();
-      await expect(
-        controls(source).getByRole('button', { name: 'Mark unread', exact: true }),
-      ).toBeEnabled();
-      await article(source).locator(':scope > .post-footer > .message-details > summary').click();
+      await checkReadingAction(source);
       await expect(
         article(source).getByRole('region', { name: 'Source references', exact: true }),
       ).toHaveCount(1);

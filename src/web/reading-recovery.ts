@@ -9,7 +9,7 @@ import {
   type ReadingUpdateInput,
 } from '../contracts/reading.js';
 import { identityGeneration } from './participation-client.js';
-import { BoundedRecoveryRecords } from './recovery-storage.js';
+import { BoundedRecoveryRecords, verifiedStorageWrite } from './recovery-storage.js';
 
 const RecordSchema = Type.Object(
   {
@@ -157,7 +157,10 @@ export class ReadingRecovery {
     return record ? (isIntent(record) ? record.body.targets : record.targets) : undefined;
   }
   enabled() {
-    return this.storage.getItem(this.preference) === 'true';
+    const stored = this.storage.getItem(this.preference);
+    if (stored === null || stored === 'true') return true;
+    if (stored === 'false') return false;
+    throw new Error('Reading preference is invalid. Automatic reading is paused.');
   }
   private async locked<T>(work: () => T) {
     if (!navigator.locks)
@@ -377,7 +380,13 @@ export class ReadingRecovery {
   }
   setEnabled(enabled: boolean) {
     return this.locked(() => {
-      this.storage.setItem(this.preference, String(enabled));
+      verifiedStorageWrite({
+        storage: this.storage,
+        key: this.preference,
+        raw: String(enabled),
+        previous: this.storage.getItem(this.preference),
+        failureMessage: 'Reading preference could not be saved. Automatic reading is paused.',
+      });
       this.changed();
     });
   }

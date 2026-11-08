@@ -18,7 +18,7 @@ import { MentionedIn } from './DiscussionBacklinks.js';
 import { SaveControl } from './SavedItems.js';
 import { FollowControl } from './Following.js';
 import { AuthorizationBoundary, useAuthorization } from './AuthorizationBoundary.js';
-import { ReadingSelection, ReadingText } from './Reading.js';
+import { ReadingMarkUnread, ReadingText } from './Reading.js';
 import { SuppressLink } from './Moderation.js';
 import { SummarySection } from './Summaries.js';
 import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
@@ -147,7 +147,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                       History & details
                     </Link>
                     <ReferenceViews key={id} target={{ kind: 'discussion', resource_id: id }} />
-                    <ReadingSelection />
                     {context.self.role === 'administrator' && (
                       <OrganizationActions id={id} kind="discussion" localOpen={data.local_open} />
                     )}
@@ -432,11 +431,8 @@ function ContributionBody({
       <ReadingText
         key={'reading:' + data.revision_id}
         target={{ resource_id: id, revision_id: data.revision_id }}
-        number={data.revision_number}
-        selectable
         content={data.content}
         participants={data.mentioned_participants}
-        compact
       />
       {!!data.attachment_set?.files.length && (
         <FileBrowser
@@ -467,6 +463,7 @@ function ContributionBody({
         <details className="message-details">
           <summary>More</summary>
           <div className="message-details-content">
+            <ReadingMarkUnread target={{ resource_id: id, revision_id: data.revision_id }} />
             <EditingIntent
               context={context}
               resource={id}

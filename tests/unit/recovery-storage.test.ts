@@ -342,15 +342,17 @@ perIntentCases<AttentionCommandView, AttentionIntent>({
   withCommand: (record, command) => ({ ...record, command }),
 });
 
-test('Reading preference has separate custody and is cleared with only its own journal', async () => {
+test('Reading preference preserves explicit choices and clearing returns to default-on', async () => {
   const store = new ReadingRecovery(randomUUID(), randomUUID());
   localStorage.setItem('loom.intent.unrelated', 'preserve');
   await store.setEnabled(true);
   assert.equal(store.enabled(), true);
+  await store.setEnabled(false);
+  assert.equal(store.enabled(), false);
   assert.deepEqual(store.all(), []);
   await store.save(readingCommand(), () => true);
   await store.clear();
-  assert.equal(store.enabled(), false);
+  assert.equal(store.enabled(), true);
   assert.deepEqual(contents(), [['loom.intent.unrelated', 'preserve']]);
 });
 

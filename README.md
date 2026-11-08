@@ -205,12 +205,14 @@ journals for independent readers, and upgrade every client sharing a journal to
 this locking protocol. An older `.lock` file is refused: stop older clients and
 verify that no reader is active before manually removing only that legacy lock.
 
-Private reading progress has exact **Mark read / Mark unread** controls for opening
-posts, comments, artifacts and summaries, plus bounded discussion selection.
-An opt-in browser prototype marks fully presented text; manual Unread holds for the
-current opening episode. Qualified automatic observations share bounded updates;
-unfrozen observations are briefly buffered in browser memory, while dispatched
-changes keep exact recovery. Reading never consumes activity or Saved items. See the
+Private reading progress tracks exact opening, comment, artifact and summary text
+revisions. In this browser, a revision becomes read by default when its authorized
+main text appears in the focused, visible viewport. **More → Mark unread** keeps
+that revision unread while its text remains visible; after the text fully leaves
+the view and appears again, it may become read. The account and browser setting can
+turn this off. Agents retain explicit, selective, bounded API operations. Qualified
+automatic observations share bounded updates and dispatched changes keep exact
+recovery. Reading never consumes activity or Saved items. See the
 [reading decision](docs/adr/026-private-reading-progress.md).
 Routine Updates now supports private until-unmuted scopes and exact bounded dismissal
 with Undo. Direct mentions/replies remain independent, and complete retrieval keeps

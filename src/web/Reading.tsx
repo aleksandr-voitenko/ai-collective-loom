@@ -27,15 +27,15 @@ import type { Context } from './participation-state.js';
 import { ApiError, identityGeneration, commandRequest } from './participation-client.js';
 import { ReadingRecovery, exportReadingRecovery, type ReadingIntent } from './reading-recovery.js';
 import {
-  PresentedBands,
   PresentationEpisode,
+  observeReadingRegion,
   presentationPolicy,
   viewportPresentation,
 } from './reading-presentation.js';
 import { AuthoredText } from './AuthoredText.js';
 
 type Authority = ReturnType<typeof useAuthorization>;
-type Entry = { target: ReadingTargetView; label: string; authorities: Map<Authority, number> };
+type Entry = { target: ReadingTargetView; authorities: Map<Authority, number> };
 type State = { item?: ReadingItemView; error?: string };
 type Candidate = {
   id: string;
@@ -52,17 +52,16 @@ type Candidate = {
 interface Session {
   states: Map<string, State>;
   entries: Map<string, Entry>;
-  selected: Set<string>;
   records: ReadingIntent[];
   enabled: boolean;
   error: string;
   fences: PresentationEpisode;
   episode: string;
   active: () => boolean;
-  register: (target: ReadingTargetView, label: string, authority: Authority) => () => void;
+  register: (target: ReadingTargetView, authority: Authority) => () => void;
   observe: (target: ReadingUpdateInput['targets'][number], authority: Authority) => void;
+  pendingAutomatic: Set<string>;
   refresh: () => void;
-  select: (id: string, selected: boolean) => void;
   mark: (targets: ReadingUpdateInput['targets'], basis: 'manual' | 'presentation') => Promise<void>;
   recover: (record: ReadingIntent, retry: boolean) => Promise<void>;
   dismiss: (record: ReadingIntent) => Promise<void>;
@@ -70,12 +69,38 @@ interface Session {
   exportRecovery: () => void;
 }
 const ReadingContext = createContext<Session | null>(null);
+function readingStorage(): Storage {
+  try {
+    return window.localStorage;
+  } catch {
+    const unavailable = () => {
+      throw new Error('Reading storage is unavailable. Automatic reading is paused.');
+    };
+    return {
+      getItem: unavailable,
+      setItem: unavailable,
+      removeItem: unavailable,
+      clear: unavailable,
+      key: unavailable,
+      get length(): number {
+        return unavailable();
+      },
+    };
+  }
+}
+export function useReadingSession() {
+  return useContext(ReadingContext);
+}
 export function ReadingProvider({ context, children }: { context: Context; children: ReactNode }) {
   const [journal] = useState(
-    () => new ReadingRecovery(context.community.instance_id, context.self.participant_id),
+    () =>
+      new ReadingRecovery(
+        context.community.instance_id,
+        context.self.participant_id,
+        readingStorage(),
+      ),
   );
   const [states, setStates] = useState(new Map<string, State>()),
-    [selected, setSelected] = useState(new Set<string>()),
     [records, setRecords] = useState<ReadingIntent[]>([]),
     [enabled, setEnabled] = useState(false),
     [error, setError] = useState(''),
@@ -89,6 +114,9 @@ export function ReadingProvider({ context, children }: { context: Context; child
     lookupInFlight = useRef(new Map<Authority, Set<string>>()),
     lookupTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     knownRecords = useRef<ReadingIntent[]>([]),
+    seenManualIntents = useRef(new Set<string>()),
+    preferenceFault = useRef(false),
+    disablingPreference = useRef(false),
     intentVersions = useRef(new Map<string, number>()),
     pendingAutomatic = useRef(new Set<string>()),
     dispatchAutomatic = useRef<(batch: Candidate[]) => Promise<Candidate[] | void>>(async () => {}),
@@ -142,7 +170,6 @@ export function ReadingProvider({ context, children }: { context: Context; child
                   if (!entries.current.get(item.revision_id)?.authorities.has(authority)) continue;
                   const old = next.get(item.revision_id)?.item;
                   if (old && old.version > item.version) continue;
-                  fences.current.track(item.revision_id, item.version);
                   next.set(item.revision_id, { item });
                 }
                 return next;
@@ -188,12 +215,12 @@ export function ReadingProvider({ context, children }: { context: Context; child
       for (const authority of entry.authorities.keys()) requestLookup(entry.target, authority);
   }, [requestLookup]);
   const register = useCallback(
-    (target: ReadingTargetView, label: string, authority: Authority) => {
+    (target: ReadingTargetView, authority: Authority) => {
       const old = entries.current.get(target.revision_id);
       const newAuthority = !old?.authorities.has(authority);
       const authorities = old?.authorities ?? new Map<Authority, number>();
       authorities.set(authority, (authorities.get(authority) ?? 0) + 1);
-      entries.current.set(target.revision_id, { target, label, authorities });
+      entries.current.set(target.revision_id, { target, authorities });
       redraw((n) => n + 1);
       if (newAuthority || !knownStates.current.has(target.revision_id))
         requestLookup(target, authority);
@@ -211,11 +238,6 @@ export function ReadingProvider({ context, children }: { context: Context; child
             return next;
           });
         }
-        setSelected((previous) => {
-          const next = new Set(previous);
-          next.delete(target.revision_id);
-          return next;
-        });
         lookupPending.current.get(authority)?.delete(target.revision_id);
       };
     },
@@ -234,10 +256,9 @@ export function ReadingProvider({ context, children }: { context: Context; child
   useEffect(() => {
     live.current = true;
     automatic.current?.open();
-    const changed = (event?: Event) => {
+    const changed = (event?: Event, initial = false) => {
       if (!active()) return;
       try {
-        const before = knownRecords.current;
         const all = journal.all();
         const observed =
           event instanceof StorageEvent && event.key?.startsWith(journal.prefix + 'intent:')
@@ -245,22 +266,30 @@ export function ReadingProvider({ context, children }: { context: Context; child
             : undefined;
         knownRecords.current = all;
         setRecords(all);
-        enabledNow.current = journal.enabled();
+        enabledNow.current =
+          journal.enabled() && !preferenceFault.current && !disablingPreference.current;
         setEnabled(enabledNow.current);
         if (!enabledNow.current) automatic.current?.clear();
         // A completed operation can disappear before its storage event arrives.
         // The validated event value still carries the later deliberate intent.
         const manual = new Map(all.map((record) => [record.body.idempotency_key, record]));
         if (observed) manual.set(observed.body.idempotency_key, observed);
-        for (const record of manual.values())
-          if (record.body.basis === 'manual')
-            for (const v of record.body.targets) {
-              fences.current.block(v.revision_id);
-              if (
-                !before.some((known) => known.body.idempotency_key === record.body.idempotency_key)
-              )
-                invalidateAutomatic(v.revision_id);
-            }
+        for (const record of manual.values()) {
+          const key = record.body.idempotency_key;
+          if (record.body.basis !== 'manual' || seenManualIntents.current.has(key)) continue;
+          if (seenManualIntents.current.size >= presentationPolicy.episodeTargets) {
+            fences.current.paused = true;
+            automatic.current?.clear();
+            break;
+          }
+          seenManualIntents.current.add(key);
+          if (initial) continue;
+          for (const target of record.body.targets) {
+            if (target.read) fences.current.attempted(target.revision_id);
+            else fences.current.manualUnread(target.revision_id);
+            invalidateAutomatic(target.revision_id);
+          }
+        }
       } catch (failure) {
         setError((failure as Error).message);
         enabledNow.current = false;
@@ -303,7 +332,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
         }
       }
     };
-    changed();
+    changed(undefined, true);
     window.addEventListener('loom-reading', changed);
     window.addEventListener('storage', storage);
     return () => {
@@ -326,7 +355,6 @@ export function ReadingProvider({ context, children }: { context: Context; child
         const old = next.get(item.revision_id)?.item;
         if (!old || old.version > item.version) continue;
         if (![...entry.authorities.keys()].some((authority) => authority.active())) continue;
-        fences.current.track(item.revision_id, item.version);
         // A private receipt never renews a source lease or restores withdrawn text.
         next.set(item.revision_id, {
           item: { ...item, availability: old.availability },
@@ -389,14 +417,26 @@ export function ReadingProvider({ context, children }: { context: Context; child
   async function mark(targets: ReadingUpdateInput['targets'], basis: 'manual' | 'presentation') {
     if (!active()) return;
     for (const target of targets) {
-      fences.current.block(target.revision_id);
-      if (basis === 'manual') invalidateAutomatic(target.revision_id);
+      if (basis === 'manual') {
+        if (target.read) fences.current.attempted(target.revision_id);
+        else fences.current.manualUnread(target.revision_id);
+        invalidateAutomatic(target.revision_id);
+      }
     }
     setError('');
     try {
+      const key = crypto.randomUUID();
+      if (basis === 'manual') {
+        if (seenManualIntents.current.size < presentationPolicy.episodeTargets)
+          seenManualIntents.current.add(key);
+        else {
+          fences.current.paused = true;
+          automatic.current?.clear();
+        }
+      }
       const record = await journal.save(
         {
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: key,
           basis,
           episode_id: basis === 'presentation' ? episode.current : null,
           targets,
@@ -459,6 +499,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
     const eligible = batch.filter(validCandidate);
     if (!eligible.length) return;
     for (const candidate of eligible) pendingAutomatic.current.add(candidate.id);
+    redraw((n) => n + 1);
     try {
       // The lock callback is the final pre-freeze check. Save reads back the exact
       // body; a later cancellation cannot mutate that frozen operation.
@@ -476,7 +517,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
       const frozen = eligible.filter((candidate) =>
         record.body.targets.some((target) => target.revision_id === candidate.id),
       );
-      for (const candidate of frozen) fences.current.block(candidate.id);
+      for (const candidate of frozen) fences.current.attempted(candidate.id);
       const result = await send(record, true);
       if (
         result?.operation_state !== 'version_conflict' ||
@@ -502,11 +543,12 @@ export function ReadingProvider({ context, children }: { context: Context; child
       return continuation;
     } catch (failure) {
       if (active() && (failure as Error).name !== 'AbortError') {
-        for (const candidate of eligible) fences.current.block(candidate.id);
+        for (const candidate of eligible) fences.current.attempted(candidate.id);
         setError((failure as Error).message);
       }
     } finally {
       for (const candidate of eligible) pendingAutomatic.current.delete(candidate.id);
+      if (active()) redraw((n) => n + 1);
     }
   };
   function observe(target: ReadingUpdateInput['targets'][number], authority: Authority) {
@@ -524,7 +566,6 @@ export function ReadingProvider({ context, children }: { context: Context; child
           .all()
           .some(
             (record) =>
-              record.body.basis === 'presentation' &&
               record.state === 'uncertain' &&
               record.body.targets.some((member) => member.revision_id === target.revision_id),
           )
@@ -552,7 +593,6 @@ export function ReadingProvider({ context, children }: { context: Context; child
   const value: Session = {
     states,
     entries: entries.current,
-    selected,
     records,
     enabled,
     error,
@@ -561,15 +601,9 @@ export function ReadingProvider({ context, children }: { context: Context; child
     active,
     register,
     observe,
+    pendingAutomatic: pendingAutomatic.current,
     refresh,
     mark,
-    select: (id, on) =>
-      setSelected((previous) => {
-        const next = new Set(previous);
-        if (on && next.size < readingLimits.batch) next.add(id);
-        else if (!on) next.delete(id);
-        return next;
-      }),
     recover: async (record, retry) => {
       await send(record, retry);
     },
@@ -581,13 +615,30 @@ export function ReadingProvider({ context, children }: { context: Context; child
       }
     },
     setEnabled: async (value) => {
-      enabledNow.current = value;
-      if (!value) automatic.current?.clear();
-      setEnabled(value);
+      if (value) setEnabled(true);
+      else {
+        disablingPreference.current = true;
+        enabledNow.current = false;
+        automatic.current?.clear();
+        setEnabled(false);
+      }
       try {
         await journal.setEnabled(value);
+        if (active()) {
+          preferenceFault.current = false;
+          disablingPreference.current = false;
+          enabledNow.current = value;
+          setEnabled(value);
+          setError((previous) =>
+            previous.startsWith('Reading preference') || previous.startsWith('Reading storage')
+              ? ''
+              : previous,
+          );
+        }
       } catch (failure) {
         if (active()) {
+          preferenceFault.current = true;
+          disablingPreference.current = false;
           enabledNow.current = false;
           automatic.current?.clear();
           setEnabled(false);
@@ -618,143 +669,125 @@ export function ReadingProvider({ context, children }: { context: Context; child
 
 export function ReadingText({
   target,
-  number,
   content,
   participants,
-  selectable = false,
-  compact = false,
 }: {
   target: ReadingTargetView;
-  number: string;
   content: AuthoredContent;
   participants: { id: string; nickname: string }[];
-  selectable?: boolean;
-  compact?: boolean;
 }) {
   const authority = useAuthorization();
   const session = useContext(ReadingContext),
     node = useRef<HTMLDivElement>(null),
-    observed = useRef<{ version: number; bands: PresentedBands } | undefined>(undefined);
-  const [expanded, setExpanded] = useState(false);
+    occurrence = useRef(Symbol('reading text')),
+    check = useRef<() => void>(() => {});
   const latest = useRef(session);
   latest.current = session;
   const register = session?.register;
   useEffect(
-    () => register?.(target, 'Revision ' + number, authority),
-    [register, target.resource_id, target.revision_id, number, authority],
+    () => register?.(target, authority),
+    [register, target.resource_id, target.revision_id, authority],
   );
-  const state = session?.states.get(target.revision_id),
-    item = state?.item;
+  check.current = () => {
+    const current = latest.current;
+    const prose = node.current?.querySelector<HTMLElement>('.prose');
+    if (!current || !prose) return;
+    const view = viewportPresentation(prose);
+    current.fences.presence(target.revision_id, occurrence.current, view.present);
+    const item = current.states.get(target.revision_id)?.item;
+    if (
+      view.eligible &&
+      current.active() &&
+      current.enabled &&
+      item?.availability === 'available' &&
+      !item.read
+    )
+      current.observe({ ...target, read: true, expected_version: item.version }, authority);
+  };
   useEffect(() => {
-    const tick = () => {
-      const current = latest.current,
-        state = current?.states.get(target.revision_id)?.item;
-      if (
-        !current?.active() ||
-        !current.enabled ||
-        current.fences.excludes(target.revision_id) ||
-        !state ||
-        state.availability !== 'available' ||
-        state.read
-      ) {
-        observed.current?.bands.pause();
-        return;
-      }
-      observed.current ??= { version: state.version, bands: new PresentedBands() };
-      if (observed.current.version !== state.version) {
-        current.fences.block(target.revision_id);
-        return;
-      }
-      const prose = node.current?.querySelector<HTMLElement>('.prose');
-      if (!prose) return;
-      const view = viewportPresentation(prose);
-      if (observed.current.bands.sample(view.height, view.visible, performance.now()))
-        current.observe(
-          { ...target, read: true, expected_version: observed.current.version },
-          authority,
-        );
-    };
-    const pause = () => observed.current?.bands.pause();
-    const timer = setInterval(tick, presentationPolicy.sampleMs);
-    document.addEventListener('visibilitychange', pause);
-    window.addEventListener('blur', pause);
+    const prose = node.current?.querySelector<HTMLElement>('.prose');
+    if (!prose) return;
+    const unsubscribe = observeReadingRegion(prose, () => check.current());
+    check.current();
     return () => {
-      clearInterval(timer);
-      pause();
-      document.removeEventListener('visibilitychange', pause);
-      window.removeEventListener('blur', pause);
+      unsubscribe();
+      latest.current?.fences.unregister(target.revision_id, occurrence.current);
     };
   }, [target.resource_id, target.revision_id, authority]);
-  const pending = session?.records.some(
-    (r) =>
-      r.state === 'uncertain' && r.body.targets.some((v) => v.revision_id === target.revision_id),
+  useEffect(() => check.current(), [session]);
+  return (
+    <div
+      className="reading-text"
+      data-reading-target={target.revision_id}
+      data-reading-version={session?.states.get(target.revision_id)?.item?.version}
+    >
+      <div ref={node} data-presented-revision={target.revision_id}>
+        <AuthoredText content={content} participants={participants} />
+      </div>
+      <ReadingActionStatus target={target} />
+    </div>
   );
-  const conflicted = session?.records.some(
-    (r) =>
-      r.state === 'conflicted' &&
-      !r.superseded_revisions?.includes(target.revision_id) &&
-      r.body.targets.some((v) => v.revision_id === target.revision_id),
+}
+
+export function ReadingMarkUnread({ target }: { target: ReadingTargetView }) {
+  const session = useContext(ReadingContext);
+  const item = session?.states.get(target.revision_id)?.item;
+  if (!session) return null;
+  return (
+    <button
+      className="text-button"
+      disabled={!item || item.availability !== 'available'}
+      onClick={() =>
+        void session.mark([{ ...target, read: false, expected_version: item!.version }], 'manual')
+      }
+    >
+      Mark unread
+    </button>
   );
-  useEffect(() => {
-    if (compact && (pending || conflicted || session?.error || state?.error)) setExpanded(true);
-  }, [compact, pending, conflicted, session?.error, state?.error]);
-  const controls = session && (
-    <div className="reading-controls">
-      <span role="status">
-        {pending
-          ? 'Pending reading change'
-          : state?.error
+}
+
+export function ReadingActionStatus({ target }: { target: ReadingTargetView }) {
+  const session = useContext(ReadingContext);
+  if (!session) return null;
+  const state = session.states.get(target.revision_id);
+  const item = state?.item;
+  const pending =
+    session.pendingAutomatic.has(target.revision_id) ||
+    session.records.some(
+      (record) =>
+        record.state === 'uncertain' &&
+        record.body.targets.some((member) => member.revision_id === target.revision_id),
+    );
+  const conflicted = session.records.some(
+    (record) =>
+      record.state === 'conflicted' &&
+      !record.superseded_revisions?.includes(target.revision_id) &&
+      record.body.targets.some((member) => member.revision_id === target.revision_id),
+  );
+  if (!pending && !conflicted && !session.error && !state?.error && item?.read) return null;
+  return (
+    <div className="reading-feedback">
+      {pending ? (
+        <span className="reading-indicator" role="status">
+          Syncing reading…
+        </span>
+      ) : state?.error || !item || item.availability !== 'available' ? (
+        <span className="reading-indicator" role="status">
+          {state?.error
             ? 'Reading status unavailable'
             : !item
-              ? 'Checking reading status…'
-              : item.availability === 'unavailable'
-                ? 'Reading source unavailable'
-                : item.read
-                  ? 'Read'
-                  : item.version
-                    ? 'Marked unread'
-                    : 'Unmarked / unread'}{' '}
-        · private · revision {number}
-      </span>
-      <button
-        className="text-button"
-        disabled={!item || item.availability !== 'available'}
-        onClick={() =>
-          void session.mark([{ ...target, read: true, expected_version: item!.version }], 'manual')
-        }
-      >
-        Mark read
-      </button>
-      <button
-        className="text-button"
-        disabled={!item}
-        onClick={() =>
-          void session.mark([{ ...target, read: false, expected_version: item!.version }], 'manual')
-        }
-      >
-        Mark unread
-      </button>
-      <button className="text-button" onClick={session.refresh}>
-        Refresh reading status
-      </button>
-      {selectable && (
-        <label>
-          <input
-            type="checkbox"
-            checked={session.selected.has(target.revision_id)}
-            disabled={
-              !session.selected.has(target.revision_id) &&
-              session.selected.size >= readingLimits.batch
-            }
-            onChange={(e) => session.select(target.revision_id, e.target.checked)}
-          />
-          Select revision {number} for bulk marking
-        </label>
-      )}
+              ? 'Checking reading…'
+              : 'Reading source unavailable'}
+        </span>
+      ) : !item.read ? (
+        <span className="reading-indicator" role="status" aria-label="Unread revision">
+          Unread
+        </span>
+      ) : null}
       {conflicted && (
         <p className="notice" role="alert">
-          Reading change conflicted for this revision. Review its current state before making
-          another choice. <Link to="/loom/reading">Review or dismiss the reading conflict</Link>
+          Reading change conflicted.{' '}
+          <Link to="/loom/reading">Review or dismiss the reading conflict</Link>
         </p>
       )}
       {(session.error || state?.error) && (
@@ -763,77 +796,6 @@ export function ReadingText({
         </p>
       )}
     </div>
-  );
-  return (
-    <div
-      className="reading-text"
-      data-reading-target={target.revision_id}
-      data-reading-version={item?.version}
-    >
-      <div ref={node} data-presented-revision={target.revision_id}>
-        <AuthoredText content={content} participants={participants} />
-      </div>
-      {compact && controls ? (
-        <details
-          className="reading-details"
-          open={expanded}
-          onToggle={(event) => setExpanded(event.currentTarget.open)}
-        >
-          <summary>
-            Reading status
-            {item?.availability === 'available' ? (item.read ? ' · read' : ' · unread') : ''}
-          </summary>
-          {controls}
-        </details>
-      ) : (
-        controls
-      )}
-    </div>
-  );
-}
-export function ReadingSelection() {
-  const session = useContext(ReadingContext);
-  if (!session) return null;
-  const entries = [...session.selected].flatMap((id) => {
-    const entry = session.entries.get(id);
-    return entry ? [entry] : [];
-  });
-  const ready =
-    entries.length > 0 &&
-    entries.every(
-      (e) => session.states.get(e.target.revision_id)?.item?.availability === 'available',
-    );
-  const mark = (read: boolean) => {
-    const frozen = entries.map((e) => ({
-      ...e.target,
-      read,
-      expected_version: session.states.get(e.target.revision_id)!.item!.version,
-    }));
-    void session.mark(frozen, 'manual');
-  };
-  return (
-    <details className="reading-selection">
-      <summary>
-        Mark selected discussion revisions ({entries.length}/{readingLimits.batch})
-      </summary>
-      <p>
-        Select individual displayed openings or comments below. This is a manual declaration for
-        these exact revisions, including selected text you have not opened.
-      </p>
-      <ul>
-        {entries.map((e) => (
-          <li key={e.target.revision_id}>
-            {e.label} · <code>{e.target.revision_id}</code>
-          </li>
-        ))}
-      </ul>
-      <button disabled={!ready} onClick={() => mark(true)}>
-        Mark {entries.length} selected read
-      </button>{' '}
-      <button disabled={!ready} onClick={() => mark(false)}>
-        Mark {entries.length} selected unread
-      </button>
-    </details>
   );
 }
 export function ReadingPageViewComponent() {
@@ -852,19 +814,16 @@ export function ReadingPageViewComponent() {
           checked={session.enabled}
           onChange={(e) => void session.setEnabled(e.target.checked)}
         />
-        Automatically mark presented text read — prototype, this account on this browser
+        Automatically mark visible text read on this account and browser
       </label>
       <p>
-        Off by default. While this window is focused and visible, each 160-pixel band of the full
-        text must be visible for one continuous second. Scroll through every band of long text.
-        Horizontally overflowing code needs manual marking. This approximates presentation, not
-        comprehension or review.
+        Content becomes read when its main text appears on screen. Mark unread keeps it unread while
+        it remains visible. It becomes read after it leaves the view and appears again.
       </p>
       <p>
-        Supported: full opening posts, comments, artifacts and summaries. Excerpts, collapsed
-        branches, notes, references and activity cards do not qualify. Mark unread keeps this
-        opening episode unread; navigate away and reopen (or reload) to allow another observation.
-        Refreshing status or switching tabs does not rearm it.
+        This applies to full openings, comments, artifacts and summaries while this window is
+        visible and focused. Excerpts, collapsed branches, notes, references and activity cards do
+        not count.
       </p>
       <p>
         Disabling stops new observations. Already dispatched changes can still commit. This
@@ -872,7 +831,7 @@ export function ReadingPageViewComponent() {
       </p>
       <p>
         Automatic marking pauses after 4,096 exact revisions in one view. Manual marking stays
-        available; navigate away and reopen to resume.
+        available.
       </p>
       {session.error && (
         <p role="alert" className="notice">
@@ -887,7 +846,7 @@ export function ReadingPageViewComponent() {
       <button onClick={session.exportRecovery}>Export reading recovery</button>
       {!session.records.length && <p>No pending reading changes.</p>}
       {session.records.map((record) => (
-        <article className="card" key={record.body.idempotency_key}>
+        <article className="card reading-recovery-record" key={record.body.idempotency_key}>
           <p>
             {record.state === 'conflicted'
               ? 'Reading change conflicted'
