@@ -29,8 +29,10 @@ exact expected-version equality. A manual Unread may also supersede intervening
 presentation-only writes when `deliberate_version <= expected_version < version`.
 It may never supersede an intervening deliberate choice. This explicit exception
 lets Unread win both commit orders against an older automatic Read without client
-timestamps, arrival-wins semantics or automatic rebasing. A stale target is
-terminal for its episode. Batches validate every member and apply all or none;
+timestamps, arrival-wins semantics or automatic rebasing. A stale automatic request
+is terminal for its viewport visit. A later measured exit and eligible re-entry may
+create a fresh operation at the current confirmed version; it never changes or
+retries the stale request. Batches validate every member and apply all or none;
 one invalid target fails the request, one stale member retains a refusal for all.
 After a validated terminal atomic refusal, the browser may form one new automatic
 subset operation. Only members whose returned current state is available, unread
@@ -80,45 +82,59 @@ reconciliation; ordinary restart is not a coordinated backup/restore test.
 
 ## Browser presentation policy
 
-Off by default, labelled prototype, preference scoped to origin/instance/participant
-in this browser. External clients choose their own consumption policy. Disabling
-stops new observations; dispatched commands can still commit.
-The current full-text eligibility, default-off preference and route-wide Unread
-hold remain the human policy for this synchronization increment. They are separate
-from transport coordination and due for a later policy change.
+The browser enables automatic reading when no preference is stored, while preserving
+explicit true or false choices at the origin/instance/participant/browser boundary.
+Invalid or unavailable storage pauses automatic writes. External clients choose
+their own consumption policy. Disabling stops new observations; dispatched commands
+can still commit.
 
 Only successful, expanded main-text representations on current/exact resource views
-and loaded discussion contributions qualify. Require the active route/identity,
-visible document, focused window, no covering modal, and actual viewport exposure.
-Split the rendered text rectangle into vertical bands no taller than 160 CSS pixels.
-Every band must be wholly visible for at least 1,000 continuous milliseconds;
-sample every 100 ms, resetting an unfinished band's dwell when hidden/offscreen.
-Accumulate completed bands only within that presentation episode. Width must fit
-the viewport. Horizontally overflowing code requires manual marking in this prototype.
-Long text qualifies by scrolling through all bands, never by a short excerpt.
-More than 2,048 bands requires manual marking, bounding observer memory/work.
-Mounted text alone retains badge data. A route retains at most 4,096 first-version
-and 4,096 blocked-target fences; at capacity it pauses all automatic observation
-until reopening, preserving every existing Unread fence and manual controls.
-This final-review refinement prevents paging from growing a route cache indefinitely.
-A 4,096-ID synthetic pair of fence collections serialized to 335,897 bytes; this
-sizes identifiers, not actual JavaScript heap or production browser performance.
-No comprehension, agreement, review or file-inspection claim follows.
+and loaded discussion contributions qualify. A positive intersection of the actual
+rendered prose qualifies while its source is authorized, private state is known,
+the document is visible and focused, and the text is genuinely displayed and
+uncovered. Complete message height, dwell, horizontal traversal, avatars, headers,
+action rows and collapsed labels are irrelevant. A long message qualifies when a
+portion of its main text appears. Shared intersection, scroll, focus and DOM events
+drive checks without a timer per message. Fetched but offscreen text, collapsed
+content, parent previews, excerpts, references, activity cards, file previews and
+summary links/cards remain excluded. No comprehension, agreement or review claim
+follows.
 
-An episode is one route opening. Revision replacement creates another exact target
-within it; rerender, StrictMode replay, status response, tab activation or cross-tab
-announcements do not create a fresh episode. Manual Unread and any observed later
-version stop automatic qualification for the target until explicit navigation away
-and reopening (a full reload is reopening). Capture version before presentation,
-never fetch/rebase a stale target after automatic refusal. Known-read revisions generate
-no further automatic outcomes. Preview/note/coverage/feed components are deliberately
-outside the instrumented boundary.
+An episode is one route opening. Revision replacement creates another exact target.
+Within an episode, each exact revision can have repeated viewport visits. A manual
+Unread immediately cancels its unfrozen observation and holds the revision while
+any rendered occurrence remains in the viewport. Partial scrolling, rerenders,
+StrictMode cleanup, status responses, menu changes, focus changes and repeated
+cross-tab notifications do not release the hold. A measured full exit, including
+deliberate branch collapse, followed by an eligible re-entry permits a fresh
+observation at the current confirmed private version. Removing a duplicate
+occurrence alone is not an exit. A terminal automatic refusal suppresses the same
+visit; a new visit may create a new key without changing the refused request or
+its single continuation allowance. Any overlapping unresolved operation still
+blocks automatic writes. Known-read revisions generate no redundant outcomes.
+Each visibility event measures all mounted occurrences before reconciling exits
+and qualifying entries, so a handoff between copies cannot end a held visit.
+Automatic attempt suppression belongs to the visit that produced its candidate;
+a delayed freeze after exit cannot suppress a later visit. A cross-tab intent
+change gates its affected revisions until a fresh registered-host lookup settles
+their private versions, then rechecks any already-visible eligible visit. The gate
+starts when a journal change is observed, even if a receipt event reveals the
+intent's removal before that removal event arrives.
+Derived conflict feedback affects only the exact member whose feedback changed;
+it does not cancel a sibling's already-qualified observation when that sibling's
+private version and the underlying operation are unchanged.
+At most 4,096 exact targets are tracked in one view; capacity pauses automation
+without evicting a manual hold. Mounted text alone shows reading feedback.
 
-Manual controls remain usable independently of observation. A bounded discussion
-selection lists the exact displayed revision IDs/count and freezes them before
-dispatch; edits/new arrivals do not expand it. It is explicitly manual selection,
-not proof that selected material was presented. Status failures preserve readable
-content, page position, focus, drafts and branch navigation.
+Human full-text views show a subtle unread indication in a stable author-line
+slot, quiet synchronization and visible error/conflict recovery. Ordinary
+settlement therefore does not change message height or the reading anchor.
+Discussion messages put Mark unread in their
+existing More disclosure; full resource text uses the same small action disclosure.
+The former routine status row, Mark read, status refresh and browser bulk selector
+are removed. Explicit selective and atomic list operations remain available to
+agents through the unchanged API. Status failures preserve readable content, page
+position, focus, drafts and branch navigation.
 
 Qualified browser observations enter an in-memory buffer of at most 128 exact
 targets. Duplicate, already-read and unresolved automatic targets do not enter it.
@@ -130,7 +146,7 @@ outside the 128 fresh slots and dispatch them next, so a full fresh buffer canno
 discard unaffected members. Combined unfrozen storage is at most 153 candidates.
 Manual commands dispatch independently. At fresh-buffer capacity, further
 observations are refused from the buffer and may be observed again as space opens.
-This buffering is not presentation dwell and is not durable: departure, disabling,
+This buffering is not presentation dwell and is not durable: route departure, disabling,
 identity loss, source withdrawal or a later deliberate choice (including a manual
 intent observed from another tab) cancels unfrozen work, and page/process exit can
 lose it. Immediately before freezing, the browser

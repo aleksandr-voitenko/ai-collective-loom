@@ -546,25 +546,36 @@ preservation, independent revision sets, atomic lists, deliberate Unread precede
 ABA/retry, quota/failure rollback and native HTTPS credential/restart/COMMIT loss.
 Guard tests pause the final reading transaction, not the earlier authentication
 probe. Shape sizing and actual API row-growth measurements are distinct evidence.
-`web/reading.test.tsx` tests StrictMode, ownership, monotonic responses, storage
-bounds, presentation batching, manual/freeze races, targeted lookup counts, one
+`web/reading.test.tsx` tests default-on and explicit-off preference, StrictMode,
+ownership, monotonic responses, storage bounds, event-driven viewport observation,
+manual Unread exit/re-entry and immutable fresh-version recovery, batching,
+manual/freeze races, targeted lookup counts, one
 atomic-refusal subset, mixed fresh/continuation order, full-buffer continuation,
 cross-tab manual cancellation, reversed success/refusal feedback, near-capacity
 receipt settlement/reload, failed-write custody, targeted cross-tab receipt removal,
+same-cycle duplicate-copy handoff, delayed offscreen freeze followed by a fresh
+visit, cross-tab settlement revalidation on both sides of the batch deadline,
+receipt-before-removal notification order, and A-only feedback supersession beside
+an already-qualified offscreen B in an older mixed conflict,
 mixed-target receipt pruning, partially expanded legacy-journal recovery and
 full prior-receipt admission recovery without key reuse, a compaction-write fault
 followed by conflict recovery, and presentation exclusions.
-`unit/reading-coordinator.test.ts`
-uses fake time for 25/25/10 draining, oldest-deadline fairness, separate reserved
-continuation dispatch and finite occupied capacity; `e2e/reading.spec.ts` checks rendered exact IDs,
-real requests, long scrolling, cross-tab delayed automation, manual and automatic
-exact-key process restart,
-focus/mobile and blocked sign-out. Optional LOOM_READING_REVIEW_SCREENS=1 writes
-explicit synthetic review images under /private/tmp, outside diagnostic uploads.
-The opt-in LOOM_READING_BATCH_REVIEW=1 path in the existing selective-reading journey uses a second authenticated tab
-to arm two simultaneous observations, holds the real automatic request through a
-manual Unread, and captures normal, pending, manual-Unread, conflict/continuation
-and recovery at 1440x1000/390x844 with private provenance records.
+`unit/reading-presentation.test.ts` checks bounded visit holds, duplicate occurrences
+and cleanup without manufactured exits. `unit/reading-coordinator.test.ts` uses fake
+time for 25/25/10 draining, oldest-deadline fairness, separate reserved continuation
+dispatch and finite occupied capacity. `e2e/reading.spec.ts` checks default-on short/
+long full text, collapsed and preview exclusions, resource/discussion More actions,
+real viewport exit/re-entry, deliberate branch collapse/expand, focus, quiet pending
+and conflict recovery, stable message height/position through routine settlement,
+manual and automatic exact-body process restart, blocked
+sign-out cleanup, storage failure, background/abandoned source reads and mobile
+width. The opt-in
+LOOM_READING_VIEWPORT_REVIEW=1 journey captures actual 1440x1000/390x844 normal,
+More, manually unread, pending, conflict, recovery, full-resource and resource-More
+viewports in
+`/private/tmp/loom-review-evidence/reading-viewport`, with PR #56 before images and
+per-image provenance. It holds a real two-target automatic request while manual
+Unread commits, so B's bounded continuation and A's conflict use the normal API.
 Conflict regressions use two exact targets and both completion orders; assert the
 warning belongs only to the refused target and survives refresh/reopening until
 dismissal. The journal keeps known conflicts distinct from uncertain dispatches;

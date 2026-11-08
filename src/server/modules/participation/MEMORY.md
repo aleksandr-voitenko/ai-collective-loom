@@ -482,14 +482,24 @@ lookup and exact reconciliation remain usable at quota. See ADR-026.
 `web/ParticipationDiscussion.tsx` contribution bodies give reading and reference siblings
 distinct revision-based keys. Sharing a revision key can leave duplicate text/controls
 after a late community rerender; `e2e/following.spec.ts` gates that order explicitly.
-Opt-in presentation requires every<=160px vertical band visible/foreground/focused
-for1000ms sampled100ms. It accumulates across scrolling within the route episode;
-overflowing horizontal code and>2048 bands remain manual. Manual Unread or observing
-a later version blocks the episode; passive rerender/status/StrictMode/tab changes
-never rearm. Explicit away/reopen or reload can. Preserve Changes controls' existing
-query-independent provider lifetime. Badge cache follows mounted text;4096 episode
-fences pause automatic observation without eviction until reopening. Manual controls
-remain usable. Qualified observations are buffered at most128 targets; the oldest
+Browser automation defaults on for a missing origin/instance/participant preference;
+explicit false and invalid/unavailable storage pause it. Authorized main text needs
+only a positive displayed viewport intersection while the document is foreground and
+focused. Shared event-driven observation tracks presence even for read/held targets.
+Each event measures all mounted copies before reconciling a full exit; delayed
+automatic attempts suppress only their originating visit. Cross-tab journal changes,
+including a receipt event that first reveals intent removal, gate affected revisions
+until a fresh registered-host private lookup completes. Derived feedback for one
+member of a historical mixed conflict does not cancel an unchanged sibling's
+qualified candidate.
+Manual Unread holds the exact revision through rerenders, refreshes, StrictMode and
+tab changes until a measured full exit and later eligible entry. A new visit uses
+the latest confirmed version and a new operation key without changing older custody.
+Preserve Changes controls' existing query-independent provider lifetime. The
+4096-target view limit pauses automation without evicting holds. Human More actions
+and quiet feedback are separate from the text observer; a fixed author-line status
+slot prevents routine settlement from changing message height. Agent API lists stay bounded.
+Qualified observations are buffered at most128 targets; the oldest
 candidate becomes ready within250ms, or earlier at25 targets. One automatic batch
 is in flight, so ready work waits for capacity. An atomic known refusal may reserve
 one separate at-most25-member unchanged-version subset ahead of the fresh buffer;

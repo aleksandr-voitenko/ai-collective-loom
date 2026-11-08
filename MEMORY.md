@@ -189,9 +189,11 @@ for typed opening/comment/artifact/summary main text. Every accepted command adv
 its private version, including Unread no-ops; a deliberate-choice fence gives manual
 Unread precedence over intervening presentation-only writes. Retained exact decisions
 return original/current state without reapplication. No shared events, worker, clock,
-Saved/Following/notification or feed changes. Browser automatic presentation is an
-opt-in per-browser/identity prototype, with separate bounded recovery and explicit
-reopening after Unread. Qualified observations use a bounded short-lived browser
+Saved/Following/notification or feed changes. Browser automatic presentation defaults
+on for a missing origin/instance/participant preference; an explicit opt-out persists
+in that browser. Eligible visible main text qualifies without full-text dwell. Manual
+Unread holds the exact revision through rerenders and focus changes until a measured
+full viewport exit and later entry. Qualified observations use a bounded short-lived browser
 batch buffer before immutable journal freeze; a known atomic conflict may produce
 one new unchanged-version subset, while manual Unread and uncertain recovery retain
 their original guarantees. See ADR-026 and the

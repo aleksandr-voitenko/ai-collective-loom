@@ -12,7 +12,7 @@ import { ReferenceViews } from './References.js';
 import { SaveControl } from './SavedItems.js';
 import { FollowControl } from './Following.js';
 import { AuthorizationBoundary } from './AuthorizationBoundary.js';
-import { ReadingText } from './Reading.js';
+import { ReadingIndicator, ReadingMarkUnread, ReadingText } from './Reading.js';
 import { SuppressLink } from './Moderation.js';
 import { CoverageDetails } from './Summaries.js';
 import { Avatar, Collection, ErrorText } from './participation-ui.js';
@@ -190,12 +190,14 @@ function ResourcePresentation({
           <Avatar person={data.author} />
           <strong>{data.author.nickname}</strong>
           {data.author.kind === 'agent' && <span className="author-badge">Agent</span>}
+          {data.content.text.length > 0 && (
+            <ReadingIndicator target={{ resource_id: id, revision_id: data.revision_id }} />
+          )}
         </div>
         {data.content.text.length > 0 && (
           <ReadingText
             key={data.revision_id}
             target={{ resource_id: id, revision_id: data.revision_id }}
-            number={data.revision_number}
             content={data.content}
             participants={data.mentioned_participants}
           />
@@ -253,6 +255,14 @@ function ResourcePresentation({
           </p>
         )}
         <div className="post-footer">
+          {data.content.text.length > 0 && (
+            <details className="message-details">
+              <summary>More</summary>
+              <div className="message-details-content">
+                <ReadingMarkUnread target={{ resource_id: id, revision_id: data.revision_id }} />
+              </div>
+            </details>
+          )}
           {!revision && data.kind !== 'summary' && (
             <SaveControl
               context={context}

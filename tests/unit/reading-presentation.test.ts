@@ -1,48 +1,47 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PresentedBands, PresentationEpisode } from '../../src/web/reading-presentation.js';
-test('full long text needs every band; hidden intervals reset unfinished dwell and resizing resets coverage', () => {
-  const bands = new PresentedBands();
-  const top = (a: number, b: number) => a >= 0 && b <= 320,
-    bottom = (a: number, b: number) => a >= 320 && b <= 640;
-  assert.equal(bands.sample(640, top, 0), false);
-  assert.equal(bands.sample(640, top, 1000), false);
-  assert.equal(bands.sample(640, bottom, 1100), false);
-  assert.equal(
-    bands.sample(640, () => false, 1500),
-    false,
-  );
-  assert.equal(bands.sample(640, bottom, 2100), false);
-  assert.equal(bands.sample(640, bottom, 3100), true);
-  assert.equal(
-    bands.sample(800, () => true, 3200),
-    false,
-  );
-  bands.pause();
-  assert.equal(
-    bands.sample(800, () => true, 10000),
-    false,
-  );
-  assert.equal(
-    bands.sample(800, () => true, 11000),
-    true,
-  );
-});
-test('episode fences survive target removal/revisit and capacity pauses instead of evicting unread decisions', () => {
+import { PresentationEpisode } from '../../src/web/reading-presentation.js';
+
+test('manual unread survives partial presence and component replay until a measured full exit', () => {
   const episode = new PresentationEpisode(2);
-  episode.track('old', 0);
-  episode.block('old');
-  episode.track('second', 0);
-  episode.track('old', 0);
-  assert.equal(episode.excludes('old'), true);
-  assert.equal(episode.excludes('second'), false);
-  episode.track('second', 1);
-  assert.equal(episode.excludes('second'), true);
-  episode.track('overflow', 0);
+  const first = Symbol('first');
+  episode.presence('revision', first, true);
+  episode.manualUnread('revision');
+  assert.equal(episode.excludes('revision'), true);
+  episode.unregister('revision', first);
+  assert.equal(episode.excludes('revision'), true);
+  episode.presence('revision', first, true);
+  assert.equal(episode.excludes('revision'), true);
+  episode.presence('revision', first, false);
+  assert.equal(episode.excludes('revision'), false);
+  episode.presence('revision', first, true);
+  assert.equal(episode.excludes('revision'), false);
+});
+
+test('duplicate occurrences need a full measured exit and the tracker remains bounded', () => {
+  const episode = new PresentationEpisode(2);
+  const first = Symbol('first');
+  const second = Symbol('second');
+  episode.presence('revision', first, true);
+  episode.presence('revision', second, true);
+  episode.manualUnread('revision');
+  episode.unregister('revision', first);
+  assert.equal(episode.excludes('revision'), true);
+  episode.presence('revision', second, false);
+  assert.equal(episode.excludes('revision'), false);
+  episode.presence('other', Symbol('other'), true);
+  episode.presence('overflow', Symbol('overflow'), true);
   assert.equal(episode.paused, true);
   assert.equal(episode.excludes('overflow'), true);
-  assert.equal(episode.excludes('old'), true);
-  const reopened = new PresentationEpisode(2);
-  reopened.track('old', 1);
-  assert.equal(reopened.excludes('old'), false);
+});
+
+test('an attempted automatic visit can rearm after exit, without changing manual intent', () => {
+  const episode = new PresentationEpisode();
+  const occurrence = Symbol('text');
+  episode.presence('revision', occurrence, true);
+  episode.attempted('revision');
+  assert.equal(episode.excludes('revision'), true);
+  episode.presence('revision', occurrence, false);
+  episode.presence('revision', occurrence, true);
+  assert.equal(episode.excludes('revision'), false);
 });

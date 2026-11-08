@@ -6,7 +6,14 @@ import { JSDOM } from 'jsdom';
 import { StrictMode } from 'react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
-import { ReadingProvider, ReadingText, ReadingPageViewComponent } from '../../src/web/Reading.js';
+import {
+  ReadingProvider,
+  ReadingText,
+  ReadingIndicator,
+  ReadingMarkUnread,
+  ReadingPageViewComponent,
+  useReadingSession,
+} from '../../src/web/Reading.js';
 import { ReadingRecovery } from '../../src/web/reading-recovery.js';
 import { readingLimits } from '../../src/contracts/reading.js';
 import { viewportPresentation } from '../../src/web/reading-presentation.js';
@@ -46,13 +53,24 @@ afterEach(() => {
   localStorage.clear();
 });
 const target = { resource_id: randomUUID(), revision_id: randomUUID() };
-function mount(t: TestContext, automatic = false, targets = [target], compact = false) {
+function mount(
+  t: TestContext,
+  automatic: boolean | 'default' | 'invalid' = false,
+  targets = [target],
+  seed?: (recovery: ReadingRecovery) => void,
+) {
   const context = {
     community: { instance_id: randomUUID() },
     self: { participant_id: randomUUID(), csrf: 'fixture' },
   } as Context;
   const recovery = new ReadingRecovery(context.community.instance_id, context.self.participant_id);
-  if (automatic) localStorage.setItem(recovery.preference, 'true');
+  if (automatic !== 'default') localStorage.setItem(recovery.preference, String(automatic));
+  seed?.(recovery);
+  let session: ReturnType<typeof useReadingSession>;
+  function Commands() {
+    session = useReadingSession();
+    return null;
+  }
   const calls: { path: string; body: any; finish: (r: Response) => void }[] = [];
   t.mock.method(
     globalThis,
@@ -69,19 +87,26 @@ function mount(t: TestContext, automatic = false, targets = [target], compact = 
         element: (
           <ReadingProvider context={context}>
             <AuthorizationBoundary>
+              <Commands />
               {targets.map((target, index) => (
-                <ReadingText
-                  key={target.revision_id}
-                  target={target}
-                  number={String(index + 1)}
-                  content={{
-                    format: 'loom-markdown-v1',
-                    text: 'Exact readable text',
-                    mentions: [],
-                  }}
-                  participants={[]}
-                  compact={compact}
-                />
+                <div className="test-message" key={`${target.revision_id}:${index}`}>
+                  <div className="author-line">
+                    <ReadingIndicator target={target} />
+                  </div>
+                  <ReadingText
+                    target={target}
+                    content={{
+                      format: 'loom-markdown-v1',
+                      text: 'Exact readable text',
+                      mentions: [],
+                    }}
+                    participants={[]}
+                  />
+                  <details open>
+                    <summary>More</summary>
+                    <ReadingMarkUnread target={target} />
+                  </details>
+                </div>
               ))}
               <ReadingPageViewComponent />
             </AuthorizationBoundary>
@@ -98,17 +123,28 @@ function mount(t: TestContext, automatic = false, targets = [target], compact = 
       <RouterProvider router={router} />
     </StrictMode>,
   );
-  return { context, recovery, calls, router };
+  return {
+    context,
+    recovery,
+    calls,
+    router,
+    get session() {
+      return session!;
+    },
+  };
 }
 const page = (read = false, version = 0) => ({
   scope: 'own_exact_revisions',
   items: [{ ...target, read, version, availability: 'available' }],
 });
 function presentedFixture(t: TestContext) {
+  const hidden = new Set<string>();
   t.mock.method(document, 'hasFocus', () => true);
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
   t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
-    const top = this === document.querySelectorAll('.prose')[1] ? 250 : 100;
+    const id = this.closest('[data-reading-target]')?.getAttribute('data-reading-target');
+    const top =
+      id && hidden.has(id) ? 900 : this === document.querySelectorAll('.prose')[1] ? 250 : 100;
     return {
       top,
       left: 0,
@@ -125,6 +161,16 @@ function presentedFixture(t: TestContext) {
     value: (_x: number, y: number) => document.querySelectorAll('.prose')[y >= 250 ? 1 : 0],
     configurable: true,
   });
+  return {
+    hide: (id: string) => {
+      hidden.add(id);
+      fireEvent.scroll(window);
+    },
+    show: (id: string) => {
+      hidden.delete(id);
+      fireEvent.scroll(window);
+    },
+  };
 }
 function selectivelyPresentedFixture(t: TestContext, qualified: Set<string>) {
   t.mock.method(document, 'hasFocus', () => true);
@@ -161,7 +207,7 @@ function selectivelyPresentedFixture(t: TestContext, qualified: Set<string>) {
   });
 }
 async function twoAutomatic(t: TestContext) {
-  presentedFixture(t);
+  const visibility = presentedFixture(t);
   const other = { resource_id: randomUUID(), revision_id: randomUUID() };
   const f = mount(t, true, [target, other]);
   await waitFor(() =>
@@ -189,7 +235,7 @@ async function twoAutomatic(t: TestContext) {
   const original = f.calls.find((call) => call.path.endsWith('/state'))!;
   assert.equal(original.body.basis, 'presentation');
   assert.equal(original.body.targets.length, 2);
-  return { ...f, other, original };
+  return { ...f, other, original, visibility };
 }
 function receipt(
   command: { body: any },
@@ -225,12 +271,59 @@ async function settle(calls: ReturnType<typeof mount>['calls'], read = false, ve
     ),
   );
 }
-test('compact reading controls preserve the open disclosure and focused button after successful marking', async (t) => {
-  const f = mount(t, false, [target], true);
-  const details = document.querySelector<HTMLDetailsElement>('.reading-details')!;
-  await act(async () => fireEvent.click(details.querySelector('summary')!));
+test('missing preference enables automation, explicit opt-out stays off, and invalid storage pauses', async (t) => {
+  const visibility = presentedFixture(t);
+  const f = mount(t, 'default');
+  assert.equal(f.recovery.enabled(), true);
   await settle(f.calls);
-  const button = screen.getByRole('button', { name: 'Mark read' });
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+  );
+  visibility.hide(target.revision_id);
+  const another = new ReadingRecovery(randomUUID(), randomUUID());
+  localStorage.setItem(another.preference, 'false');
+  assert.equal(another.enabled(), false);
+  localStorage.setItem(another.preference, 'invalid');
+  assert.throws(() => another.enabled(), /preference is invalid/);
+  const inaccessible = new ReadingRecovery(randomUUID(), randomUUID(), {
+    getItem() {
+      throw new Error('Storage unavailable');
+    },
+  } as unknown as Storage);
+  assert.throws(() => inaccessible.enabled(), /Storage unavailable/);
+});
+
+test('invalid preference and a silently failed opt-in cannot enable browser writes', async (t) => {
+  presentedFixture(t);
+  const f = mount(t, 'invalid');
+  await settle(f.calls);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+  assert.ok(screen.getAllByText(/Reading preference is invalid/).length);
+  const storage = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  } as unknown as Storage;
+  const journal = new ReadingRecovery(randomUUID(), randomUUID(), storage);
+  await assert.rejects(journal.setEnabled(true), /could not be saved/);
+});
+
+test('brief valid main-text appearance remains queued after ordinary scrolling away', async (t) => {
+  const visibility = presentedFixture(t);
+  const f = mount(t, true);
+  await settle(f.calls);
+  visibility.hide(target.revision_id);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+  );
+  assert.equal(f.calls.find((call) => call.path.endsWith('/state'))!.body.basis, 'presentation');
+});
+test('More keeps its focused Mark unread action after successful marking', async (t) => {
+  const f = mount(t);
+  const details = document.querySelector<HTMLDetailsElement>('.test-message details')!;
+  await settle(f.calls);
+  const button = screen.getByRole('button', { name: 'Mark unread' });
   button.focus();
   await act(async () => fireEvent.click(button));
   await waitFor(() => assert.ok(f.calls.some((c) => c.path.endsWith('/state'))));
@@ -246,12 +339,12 @@ test('compact reading controls preserve the open disclosure and focused button a
           episode_id: null,
           targets: [{ ...command.body.targets[0], result_version: 1 }],
         },
-        current: page(true, 1).items,
+        current: page(false, 1).items,
       }),
     ),
   );
   await waitFor(() => assert.equal(f.recovery.all().length, 0));
-  assert.equal(details.open, true, 'Successful marking does not close the user-opened controls');
+  assert.equal(details.open, true, 'Successful marking does not close More');
   assert.ok(document.activeElement === button);
 });
 test('reading lookup withdrawal clears its text host while a pending private command settles and a fresh read recovers', async (t) => {
@@ -262,9 +355,7 @@ test('reading lookup withdrawal clears its text host while a pending private com
   const command = f.calls.find((c) => c.path.endsWith('/state'))!,
     frozen = JSON.stringify(f.recovery.all()[0]!.body),
     before = f.calls.length;
-  await act(async () =>
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh reading status' })),
-  );
+  await act(async () => f.session.refresh());
   await waitFor(() => assert.ok(f.calls.length > before));
   await act(async () =>
     f.calls
@@ -335,9 +426,7 @@ test('StrictMode saves exact manual unread before dispatch; old status cannot re
     ),
   );
   await waitFor(() => assert.equal(f.recovery.all().length, 0));
-  await act(async () =>
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh reading status' })),
-  );
+  await act(async () => f.session.refresh());
   await waitFor(() => assert.ok(f.calls.filter((c) => c.path.endsWith('/lookup')).length >= 2));
   const lookups = f.calls.filter((c) => c.path.endsWith('/lookup'));
   await act(async () => lookups.at(-1)!.finish(Response.json(page(false, 2))));
@@ -350,7 +439,7 @@ test('StrictMode saves exact manual unread before dispatch; old status cannot re
       '2',
     ),
   );
-  assert.ok(screen.getByText(/Marked unread · private/));
+  assert.ok(screen.getByText('Unread'));
   assert.equal(document.activeElement, button);
 });
 for (const conflictFirst of [true, false])
@@ -359,7 +448,11 @@ for (const conflictFirst of [true, false])
       targets = [target, other],
       f = mount(t, false, targets);
     const controls = (source: typeof target) =>
-      within(document.querySelector<HTMLElement>(`[data-reading-target="${source.revision_id}"]`)!);
+      within(
+        document
+          .querySelector<HTMLElement>(`[data-reading-target="${source.revision_id}"]`)!
+          .closest<HTMLElement>('.test-message')!,
+      );
     const lookup = (version: number) => ({
       scope: 'own_exact_revisions',
       items: targets.map((source, index) => ({
@@ -374,15 +467,10 @@ for (const conflictFirst of [true, false])
       for (const c of f.calls.filter((c) => c.path.endsWith('/lookup')))
         c.finish(Response.json(lookup(0)));
     });
-    await waitFor(() =>
-      assert.equal(
-        (controls(target).getByRole('button', { name: 'Mark read' }) as HTMLButtonElement).disabled,
-        false,
-      ),
-    );
+    await waitFor(() => assert.ok(f.session.states.get(target.revision_id)?.item));
     await act(async () => {
       for (const source of targets)
-        fireEvent.click(controls(source).getByRole('button', { name: 'Mark read' }));
+        void f.session.mark([{ ...source, read: true, expected_version: 0 }], 'manual');
     });
     await waitFor(() => assert.equal(f.calls.filter((c) => c.path.endsWith('/state')).length, 2));
     const commands = f.calls.filter((c) => c.path.endsWith('/state'));
@@ -410,9 +498,7 @@ for (const conflictFirst of [true, false])
     assert.equal(retained.length, 1);
     assert.deepEqual(retained[0]!.body, commands[0]!.body);
     assert.equal(retained[0]!.state, 'conflicted');
-    await act(async () =>
-      fireEvent.click(controls(other).getByRole('button', { name: 'Refresh reading status' })),
-    );
+    await act(async () => f.session.refresh());
     await waitFor(() => assert.ok(f.calls.filter((c) => c.path.endsWith('/lookup')).length >= 2));
     await act(async () => {
       for (const c of f.calls.filter((c) => c.path.endsWith('/lookup')))
@@ -449,14 +535,14 @@ test('failed local save and failed lookup leave source readable and unrelated pu
       original.call(this, key, value);
     },
   );
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Mark read' })));
+  await act(
+    async () => void f.session.mark([{ ...target, read: true, expected_version: 0 }], 'manual'),
+  );
   await waitFor(() => assert.ok(screen.getAllByText(/could not be saved/).length));
   assert.equal(f.calls.filter((c) => c.path.endsWith('/state')).length, 0);
   assert.equal(localStorage.getItem('loom.intent.unrelated'), 'preserve');
   assert.equal(f.recovery.all().length, 0);
-  await act(async () =>
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh reading status' })),
-  );
+  await act(async () => f.session.refresh());
   await waitFor(() => assert.ok(f.calls.length >= 2));
   await act(async () =>
     f.calls
@@ -468,7 +554,9 @@ test('failed local save and failed lookup leave source readable and unrelated pu
         ),
       ),
   );
-  await waitFor(() => assert.ok(screen.getByText(/Reading status unavailable · private/)));
+  await waitFor(() =>
+    assert.ok(screen.getByRole('status', { name: 'Reading status unavailable' })),
+  );
   assert.ok(screen.getByText('Exact readable text'));
 });
 test('late route and identity responses cannot create progress or repopulate cleared recovery', async (t) => {
@@ -545,7 +633,9 @@ test('manual unread dispatches beside a held frozen batch and keeps its exact bo
   const f = await twoAutomatic(t);
   const frozen = JSON.stringify(f.recovery.all()[0]!.body);
   const controls = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   await act(async () => fireEvent.click(controls.getByRole('button', { name: 'Mark unread' })));
   await waitFor(() =>
@@ -587,7 +677,7 @@ test('manual unread dispatches beside a held frozen batch and keeps its exact bo
       '2',
     ),
   );
-  assert.ok(controls.getByText(/Marked unread · private/));
+  assert.ok(controls.getByText('Unread'));
 });
 test('manual unread during pre-freeze custody removes only its candidate', async (t) => {
   presentedFixture(t);
@@ -636,7 +726,9 @@ test('manual unread during pre-freeze custody removes only its candidate', async
   );
   await waiting;
   const a = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   await act(async () => fireEvent.click(a.getByRole('button', { name: 'Mark unread' })));
   await act(async () => release());
@@ -680,16 +772,440 @@ test('atomic automatic refusal continues only unchanged B with a new key and ret
   assert.deepEqual(retained.body, f.original.body);
   assert.deepEqual(retained.superseded_revisions, [f.other.revision_id]);
   const a = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   const b = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   assert.ok(a.queryByText(/Reading change conflicted/));
   assert.equal(!!b.queryByText(/Reading change conflicted/), false);
   await new Promise((resolve) => setTimeout(resolve, 350));
   assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
 });
+
+test('manual Unread wins A, B continues, and A re-enters with a fresh version and key', async (t) => {
+  const f = await twoAutomatic(t);
+  const a = within(
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
+  );
+  await act(async () => fireEvent.click(a.getByRole('button', { name: 'Mark unread' })));
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const manual = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  await act(async () =>
+    manual.finish(
+      receipt(manual, 'applied', [
+        { ...target, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await act(async () =>
+    f.original.finish(
+      receipt(f.original, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+        { ...f.other, read: false, version: 0, availability: 'available' },
+      ]),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 3),
+  );
+  const continuation = f.calls.filter((call) => call.path.endsWith('/state'))[2]!;
+  assert.deepEqual(continuation.body.targets, [{ ...f.other, read: true, expected_version: 0 }]);
+  await act(async () =>
+    continuation.finish(
+      receipt(continuation, 'applied', [
+        { ...f.other, read: true, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 3);
+  f.visibility.hide(target.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  f.visibility.show(target.revision_id);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 4),
+  );
+  const fresh = f.calls.filter((call) => call.path.endsWith('/state'))[3]!;
+  assert.notEqual(fresh.body.idempotency_key, f.original.body.idempotency_key);
+  assert.notEqual(fresh.body.idempotency_key, continuation.body.idempotency_key);
+  assert.deepEqual(fresh.body.targets, [{ ...target, read: true, expected_version: 1 }]);
+  assert.deepEqual(
+    f.recovery
+      .all()
+      .find((record) => record.body.idempotency_key === f.original.body.idempotency_key)?.body,
+    f.original.body,
+  );
+});
+
+test('an unresolved automatic operation cannot be bypassed by leaving and re-entering', async (t) => {
+  const f = await twoAutomatic(t);
+  await act(async () =>
+    f.original.finish(
+      Response.json(
+        {
+          error: { code: 'service_unavailable', message: 'Synthetic uncertain outcome' },
+        },
+        { status: 503 },
+      ),
+    ),
+  );
+  await waitFor(() => assert.equal(f.recovery.all()[0]?.state, 'uncertain'));
+  f.visibility.hide(target.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  f.visibility.show(target.revision_id);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
+});
+
+test('duplicate visible copies hand off in one scroll without releasing manual Unread', async (t) => {
+  let visible = 0;
+  t.mock.method(document, 'hasFocus', () => true);
+  Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+    const index = [...document.querySelectorAll('.prose')].indexOf(this);
+    const top = index === visible ? 100 + index * 150 : 900;
+    return {
+      top,
+      left: 0,
+      bottom: top + 100,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    };
+  });
+  Object.defineProperty(document, 'elementFromPoint', {
+    value: (_x: number, y: number) => document.querySelectorAll('.prose')[y >= 250 ? 1 : 0],
+    configurable: true,
+  });
+  const f = mount(t, false, [target, target]);
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/lookup'))));
+  await act(async () =>
+    f.calls.find((call) => call.path.endsWith('/lookup'))!.finish(Response.json(page())),
+  );
+  await waitFor(() =>
+    assert.equal(
+      (screen.getAllByRole('button', { name: 'Mark unread' })[0] as HTMLButtonElement).disabled,
+      false,
+    ),
+  );
+  await act(async () =>
+    fireEvent.click(screen.getAllByRole('button', { name: 'Mark unread' })[0]!),
+  );
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))));
+  const manual = f.calls.find((call) => call.path.endsWith('/state'))!;
+  await act(async () =>
+    manual.finish(
+      receipt(manual, 'applied', [
+        { ...target, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await act(async () => f.session.setEnabled(true));
+  visible = 1;
+  await act(async () => fireEvent.scroll(window));
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
+});
+
+test('an offscreen frozen candidate cannot suppress the first later visit after conflict', async (t) => {
+  const visibility = presentedFixture(t);
+  const f = mount(t, true);
+  await settle(f.calls);
+  visibility.hide(target.revision_id);
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))));
+  const old = f.calls.find((call) => call.path.endsWith('/state'))!;
+  await act(async () =>
+    old.finish(
+      receipt(old, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  visibility.show(target.revision_id);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const fresh = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  assert.notEqual(fresh.body.idempotency_key, old.body.idempotency_key);
+  assert.deepEqual(fresh.body.targets, [{ ...target, read: true, expected_version: 1 }]);
+  assert.deepEqual(f.recovery.all()[0]?.body, old.body);
+});
+
+test('an old cross-tab Unread notification is consumed once; a new intent holds the new visit', async (t) => {
+  const visibility = presentedFixture(t);
+  const f = mount(t, true);
+  await settle(f.calls);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+  );
+  const first = f.calls.find((call) => call.path.endsWith('/state'))!;
+  await act(async () =>
+    first.finish(
+      receipt(first, 'applied', [{ ...target, read: true, version: 1, availability: 'available' }]),
+    ),
+  );
+  const intent = (key: string) => ({
+    version: 1,
+    body: {
+      idempotency_key: key,
+      basis: 'manual',
+      episode_id: null,
+      targets: [{ ...target, read: false, expected_version: 1 }],
+    },
+    attempts: 1,
+    state: 'uncertain',
+  });
+  const oldKey = randomUUID();
+  const announce = async (key: string) =>
+    act(async () =>
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: f.recovery.prefix + 'intent:' + key,
+          newValue: JSON.stringify(intent(key)),
+        }),
+      ),
+    );
+  await announce(oldKey);
+  await act(async () => f.session.refresh());
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 2),
+  );
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))[1]!
+      .finish(Response.json(page(false, 2))),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
+  visibility.hide(target.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  visibility.show(target.revision_id);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const fresh = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  assert.deepEqual(fresh.body.targets, [{ ...target, read: true, expected_version: 2 }]);
+  await announce(oldKey);
+  await act(async () =>
+    fresh.finish(
+      receipt(fresh, 'applied', [{ ...target, read: true, version: 3, availability: 'available' }]),
+    ),
+  );
+  await announce(randomUUID());
+  await act(async () => f.session.refresh());
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 3),
+  );
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))[2]!
+      .finish(Response.json(page(false, 4))),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
+});
+
+async function crossTabSettlementDuringVisit(
+  t: TestContext,
+  waitPastBatchDeadline: boolean,
+  settlementEvent: 'intent' | 'receipt' = 'intent',
+) {
+  const visibility = presentedFixture(t);
+  const f = mount(t, true);
+  await settle(f.calls);
+  const key = f.recovery.prefix + 'intent:' + randomUUID();
+  const manual = {
+    version: 1,
+    body: {
+      idempotency_key: key.slice(key.lastIndexOf(':') + 1),
+      basis: 'manual',
+      episode_id: null,
+      targets: [{ ...target, read: false, expected_version: 0 }],
+    },
+    attempts: 1,
+    state: 'uncertain',
+  };
+  const raw = JSON.stringify(manual);
+  localStorage.setItem(key, raw);
+  await act(async () => window.dispatchEvent(new StorageEvent('storage', { key, newValue: raw })));
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 2),
+  );
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))[1]!
+      .finish(Response.json(page(false, 0))),
+  );
+  visibility.hide(target.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  visibility.show(target.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+  const priorLookups = f.calls.filter((call) => call.path.endsWith('/lookup')).length;
+  localStorage.removeItem(key);
+  const eventKey =
+    settlementEvent === 'intent' ? key : f.recovery.prefix + 'receipt:' + randomUUID();
+  await act(async () =>
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: eventKey,
+        oldValue: settlementEvent === 'intent' ? raw : null,
+        newValue: null,
+      }),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, priorLookups + 1),
+  );
+  if (waitPastBatchDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+  }
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))
+      .at(-1)!
+      .finish(Response.json(page(false, 1))),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+  );
+  assert.deepEqual(f.calls.find((call) => call.path.endsWith('/state'))!.body.targets, [
+    { ...target, read: true, expected_version: 1 },
+  ]);
+}
+
+test('a cross-tab settlement revalidates before the batch deadline without stranding the visit', async (t) => {
+  await crossTabSettlementDuringVisit(t, false);
+});
+
+test('a cross-tab settlement remains gated past the batch deadline and resumes the same visit', async (t) => {
+  await crossTabSettlementDuringVisit(t, true);
+});
+
+test('a receipt event cannot expose a removed cross-tab intent before its removal event arrives', async (t) => {
+  await crossTabSettlementDuringVisit(t, true, 'receipt');
+});
+
+test('A-only settlement does not cancel B brief appearance through older mixed conflict feedback', async (t) => {
+  const b = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const visibility = presentedFixture(t);
+  visibility.hide(target.revision_id);
+  const conflictKey = randomUUID();
+  const manualKey = randomUUID();
+  const manual = {
+    version: 1,
+    body: {
+      idempotency_key: manualKey,
+      basis: 'manual',
+      episode_id: null,
+      targets: [{ ...target, read: false, expected_version: 0 }],
+    },
+    attempts: 1,
+    state: 'uncertain',
+  };
+  const f = mount(t, true, [target, b], (recovery) => {
+    localStorage.setItem(
+      recovery.prefix + 'intent:' + conflictKey,
+      JSON.stringify({
+        version: 1,
+        body: {
+          idempotency_key: conflictKey,
+          basis: 'presentation',
+          episode_id: randomUUID(),
+          targets: [target, b].map((item) => ({ ...item, read: true, expected_version: 0 })),
+        },
+        attempts: 1,
+        state: 'conflicted',
+        conflict_versions: [target, b].map((item) => ({
+          revision_id: item.revision_id,
+          version: 0,
+        })),
+      }),
+    );
+    localStorage.setItem(recovery.prefix + 'intent:' + manualKey, JSON.stringify(manual));
+  });
+  await waitFor(() =>
+    assert.ok(
+      f.calls.some((call) => call.path.endsWith('/lookup') && call.body.targets.length === 2),
+    ),
+  );
+  await act(async () =>
+    f.calls
+      .find((call) => call.path.endsWith('/lookup'))!
+      .finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [
+            { ...target, read: true, version: 0, availability: 'available' },
+            { ...b, read: false, version: 0, availability: 'available' },
+          ],
+        }),
+      ),
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+  visibility.hide(b.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+
+  const receiptKey = randomUUID();
+  const receiptValue = JSON.stringify({
+    version: 1,
+    state: 'acknowledged',
+    idempotency_key: receiptKey,
+    targets: [{ ...target, version: 1 }],
+  });
+  localStorage.removeItem(f.recovery.prefix + 'intent:' + manualKey);
+  localStorage.setItem(f.recovery.prefix + 'intent:' + receiptKey, receiptValue);
+  await act(async () =>
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: f.recovery.prefix + 'intent:' + receiptKey,
+        newValue: receiptValue,
+      }),
+    ),
+  );
+  assert.deepEqual(
+    f.recovery.all().find((record) => record.body.idempotency_key === conflictKey)
+      ?.superseded_revisions,
+    [target.revision_id],
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 2),
+  );
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))[1]!
+      .finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [
+            { ...target, read: false, version: 1, availability: 'available' },
+            { ...b, read: false, version: 0, availability: 'available' },
+          ],
+        }),
+      ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+  );
+  assert.deepEqual(f.calls.find((call) => call.path.endsWith('/state'))!.body.targets, [
+    { ...b, read: true, expected_version: 0 },
+  ]);
+});
+
 test('fresh work ahead of a continuation cannot give it a second continuation', async (t) => {
   const b = { resource_id: randomUUID(), revision_id: randomUUID() };
   const c = { resource_id: randomUUID(), revision_id: randomUUID() };
@@ -895,6 +1411,7 @@ test('a full fresh buffer still dispatches an eligible continuation', async (t) 
     [target.revision_id, b.revision_id].sort(),
   );
   for (const source of fresh) qualified.add(source.revision_id);
+  fireEvent.scroll(window);
   await waitFor(() => assert.ok(screen.getAllByText(/Automatic reading buffer is full/).length), {
     timeout: 5000,
   });
@@ -930,7 +1447,9 @@ test('later manual choice cancels pending automatic continuation', async (t) => 
     ),
   );
   const b = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   await act(async () => fireEvent.click(b.getByRole('button', { name: 'Mark unread' })));
   await act(async () => t.mock.timers.tick(0));
@@ -1064,7 +1583,9 @@ test('local reading save, begin and finish do not repeat whole-provider lookups'
     ),
   );
   const a = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   await act(async () => fireEvent.click(a.getByRole('button', { name: 'Mark unread' })));
   await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))));
@@ -1159,7 +1680,7 @@ test('a frozen automatic batch survives navigation with the same saved body and 
   assert.deepEqual(f.recovery.all()[0]!.body, frozen);
   assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
 });
-test('automatic StrictMode observation is once per episode; manual unread and refresh cannot rearm it', async (t) => {
+test('automatic StrictMode observation is once per viewport visit; manual unread and refresh do not rearm it', async (t) => {
   t.mock.method(document, 'hasFocus', () => true);
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
   t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', () => ({
@@ -1219,7 +1740,7 @@ test('automatic StrictMode observation is once per episode; manual unread and re
     ),
   );
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await new Promise((resolve) => setTimeout(resolve, 350));
   });
   assert.equal(f.calls.filter((c) => c.path.endsWith('/state')).length, 2);
   assert.deepEqual(
@@ -1743,7 +2264,9 @@ test('cross-tab success evidence removal looks up only its registered target', a
 test('a delayed refusal keeps historical custody without restoring a newer target warning', async (t) => {
   const f = await twoAutomatic(t);
   const b = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   await act(async () => fireEvent.click(b.getByRole('button', { name: 'Mark unread' })));
   await waitFor(() =>
@@ -1776,7 +2299,9 @@ test('a delayed refusal keeps historical custody without restoring a newer targe
     '1',
   );
   const a = within(
-    document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+    document
+      .querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!
+      .closest<HTMLElement>('.test-message')!,
   );
   assert.ok(a.queryByText(/Reading change conflicted/));
   await act(async () => f.router.navigate('/other'));
@@ -1784,19 +2309,23 @@ test('a delayed refusal keeps historical custody without restoring a newer targe
   await waitFor(() =>
     assert.equal(
       !!within(
-        document.querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!,
+        document
+          .querySelector<HTMLElement>(`[data-reading-target="${f.other.revision_id}"]`)!
+          .closest<HTMLElement>('.test-message')!,
       ).queryByText(/Reading change conflicted/),
       false,
     ),
   );
   assert.ok(
     within(
-      document.querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!,
+      document
+        .querySelector<HTMLElement>(`[data-reading-target="${target.revision_id}"]`)!
+        .closest<HTMLElement>('.test-message')!,
     ).queryByText(/Reading change conflicted/),
   );
 });
 
-test('presentation gate excludes hidden, unfocused, covered, offscreen and horizontally incomplete main text', (t) => {
+test('presentation requires displayed, focused, uncovered main text but accepts a partial long view', (t) => {
   const element = document.createElement('div');
   document.body.append(element);
   t.after(() => element.remove());
@@ -1824,10 +2353,11 @@ test('presentation gate excludes hidden, unfocused, covered, offscreen and horiz
     value: () => (covered ? document.body : element),
     configurable: true,
   });
-  const qualifies = () => viewportPresentation(element).visible(0, 100);
+  const qualifies = () => viewportPresentation(element).eligible;
   assert.equal(qualifies(), true);
   visible = false;
   assert.equal(qualifies(), false);
+  assert.equal(viewportPresentation(element).present, true);
   visible = true;
   focused = false;
   assert.equal(qualifies(), false);
@@ -1837,10 +2367,14 @@ test('presentation gate excludes hidden, unfocused, covered, offscreen and horiz
   covered = false;
   top = 900;
   assert.equal(qualifies(), false);
+  assert.equal(viewportPresentation(element).present, false);
   top = 100;
+  element.style.display = 'none';
+  assert.equal(qualifies(), false);
+  element.style.display = '';
   const code = document.createElement('pre');
   element.append(code);
   Object.defineProperty(code, 'scrollWidth', { value: 600 });
   Object.defineProperty(code, 'clientWidth', { value: 500 });
-  assert.equal(qualifies(), false);
+  assert.equal(qualifies(), true);
 });
