@@ -6,6 +6,7 @@ type Visit = {
   wasPresent: boolean;
   heldUnread: boolean;
   attempted: boolean;
+  generation: number;
 };
 
 export class PresentationEpisode {
@@ -25,22 +26,33 @@ export class PresentationEpisode {
       wasPresent: false,
       heldUnread: false,
       attempted: false,
+      generation: 0,
     };
     this.visits.set(id, next);
     return next;
   }
 
   presence(id: string, occurrence: symbol, present: boolean) {
+    this.measurePresence(id, occurrence, present);
+    this.reconcilePresence(id);
+  }
+
+  measurePresence(id: string, occurrence: symbol, present: boolean) {
     const visit = this.visit(id);
     if (!visit) return;
     visit.occurrences.set(occurrence, present);
     if (present) visit.wasPresent = true;
-    else if (visit.wasPresent && ![...visit.occurrences.values()].some(Boolean)) {
+  }
+
+  reconcilePresence(id: string) {
+    const visit = this.visits.get(id);
+    if (visit?.wasPresent && ![...visit.occurrences.values()].some(Boolean)) {
       // Only a measured full exit ends a held or attempted visit. Cleanup alone
       // cannot manufacture an exit during StrictMode replay or branch remounting.
       visit.wasPresent = false;
       visit.heldUnread = false;
       visit.attempted = false;
+      visit.generation++;
     }
   }
 
@@ -56,9 +68,13 @@ export class PresentationEpisode {
     }
   }
 
-  attempted(id: string) {
+  generation(id: string) {
+    return this.visits.get(id)?.generation ?? 0;
+  }
+
+  attempted(id: string, generation = this.generation(id)) {
     const visit = this.visit(id);
-    if (visit) visit.attempted = true;
+    if (visit && visit.generation === generation) visit.attempted = true;
   }
 
   excludes(id: string) {
@@ -104,56 +120,61 @@ export function viewportPresentation(element: HTMLElement) {
 
 // One observer/event set serves every mounted reading region. The geometry check
 // still runs on focus and DOM changes, since intersection alone cannot detect cover.
-const observed = new Map<HTMLElement, Set<() => void>>();
+type ReadingRegionPhase = 'measure' | 'reconcile' | 'qualify';
+const observed = new Map<HTMLElement, Set<(phase: ReadingRegionPhase) => void>>();
 let intersections: IntersectionObserver | undefined;
 let mutations: MutationObserver | undefined;
 let scheduled = false;
 function notifyAll() {
   scheduled = false;
-  for (const callbacks of observed.values()) for (const callback of callbacks) callback();
+  const callbacks = [...observed.values()].flatMap((group) => [...group]);
+  // Reconcile every occurrence before a hold can end or a new visit can qualify.
+  for (const callback of callbacks) callback('measure');
+  for (const callback of callbacks) callback('reconcile');
+  for (const callback of callbacks) callback('qualify');
 }
-function schedule() {
+export function scheduleReadingRegions() {
   if (scheduled) return;
   scheduled = true;
   queueMicrotask(notifyAll);
 }
 function start() {
   if (typeof IntersectionObserver !== 'undefined')
-    intersections = new IntersectionObserver((entries) => {
-      for (const entry of entries)
-        for (const callback of observed.get(entry.target as HTMLElement) ?? []) callback();
-    });
-  mutations = new MutationObserver(schedule);
+    intersections = new IntersectionObserver(scheduleReadingRegions);
+  mutations = new MutationObserver(scheduleReadingRegions);
   mutations.observe(document.documentElement, {
     subtree: true,
     childList: true,
     attributes: true,
     attributeFilter: ['style', 'class', 'hidden', 'open', 'aria-hidden'],
   });
-  window.addEventListener('scroll', schedule, true);
-  window.addEventListener('resize', schedule);
-  window.addEventListener('focus', schedule);
-  window.addEventListener('blur', schedule);
-  document.addEventListener('visibilitychange', schedule);
+  window.addEventListener('scroll', scheduleReadingRegions, true);
+  window.addEventListener('resize', scheduleReadingRegions);
+  window.addEventListener('focus', scheduleReadingRegions);
+  window.addEventListener('blur', scheduleReadingRegions);
+  document.addEventListener('visibilitychange', scheduleReadingRegions);
 }
 function stop() {
   intersections?.disconnect();
   intersections = undefined;
   mutations?.disconnect();
   mutations = undefined;
-  window.removeEventListener('scroll', schedule, true);
-  window.removeEventListener('resize', schedule);
-  window.removeEventListener('focus', schedule);
-  window.removeEventListener('blur', schedule);
-  document.removeEventListener('visibilitychange', schedule);
+  window.removeEventListener('scroll', scheduleReadingRegions, true);
+  window.removeEventListener('resize', scheduleReadingRegions);
+  window.removeEventListener('focus', scheduleReadingRegions);
+  window.removeEventListener('blur', scheduleReadingRegions);
+  document.removeEventListener('visibilitychange', scheduleReadingRegions);
 }
-export function observeReadingRegion(element: HTMLElement, callback: () => void) {
+export function observeReadingRegion(
+  element: HTMLElement,
+  callback: (phase: ReadingRegionPhase) => void,
+) {
   if (!observed.size) start();
-  const callbacks = observed.get(element) ?? new Set<() => void>();
+  const callbacks = observed.get(element) ?? new Set<(phase: ReadingRegionPhase) => void>();
   callbacks.add(callback);
   observed.set(element, callbacks);
   intersections?.observe(element);
-  schedule();
+  scheduleReadingRegions();
   return () => {
     callbacks.delete(callback);
     if (!callbacks.size) {

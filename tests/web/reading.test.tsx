@@ -9,6 +9,7 @@ import { RouterProvider } from 'react-router/dom';
 import {
   ReadingProvider,
   ReadingText,
+  ReadingIndicator,
   ReadingMarkUnread,
   ReadingPageViewComponent,
   useReadingSession,
@@ -85,8 +86,11 @@ function mount(
           <ReadingProvider context={context}>
             <AuthorizationBoundary>
               <Commands />
-              {targets.map((target) => (
-                <div className="test-message" key={target.revision_id}>
+              {targets.map((target, index) => (
+                <div className="test-message" key={`${target.revision_id}:${index}`}>
+                  <div className="author-line">
+                    <ReadingIndicator target={target} />
+                  </div>
                   <ReadingText
                     target={target}
                     content={{
@@ -548,7 +552,9 @@ test('failed local save and failed lookup leave source readable and unrelated pu
         ),
       ),
   );
-  await waitFor(() => assert.ok(screen.getByText('Reading status unavailable')));
+  await waitFor(() =>
+    assert.ok(screen.getByRole('status', { name: 'Reading status unavailable' })),
+  );
   assert.ok(screen.getByText('Exact readable text'));
 });
 test('late route and identity responses cannot create progress or repopulate cleared recovery', async (t) => {
@@ -858,6 +864,83 @@ test('an unresolved automatic operation cannot be bypassed by leaving and re-ent
   assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
 });
 
+test('duplicate visible copies hand off in one scroll without releasing manual Unread', async (t) => {
+  let visible = 0;
+  t.mock.method(document, 'hasFocus', () => true);
+  Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+    const index = [...document.querySelectorAll('.prose')].indexOf(this);
+    const top = index === visible ? 100 + index * 150 : 900;
+    return {
+      top,
+      left: 0,
+      bottom: top + 100,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    };
+  });
+  Object.defineProperty(document, 'elementFromPoint', {
+    value: (_x: number, y: number) => document.querySelectorAll('.prose')[y >= 250 ? 1 : 0],
+    configurable: true,
+  });
+  const f = mount(t, false, [target, target]);
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/lookup'))));
+  await act(async () =>
+    f.calls.find((call) => call.path.endsWith('/lookup'))!.finish(Response.json(page())),
+  );
+  await waitFor(() =>
+    assert.equal(
+      (screen.getAllByRole('button', { name: 'Mark unread' })[0] as HTMLButtonElement).disabled,
+      false,
+    ),
+  );
+  await act(async () =>
+    fireEvent.click(screen.getAllByRole('button', { name: 'Mark unread' })[0]!),
+  );
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))));
+  const manual = f.calls.find((call) => call.path.endsWith('/state'))!;
+  await act(async () =>
+    manual.finish(
+      receipt(manual, 'applied', [
+        { ...target, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  await act(async () => f.session.setEnabled(true));
+  visible = 1;
+  await act(async () => fireEvent.scroll(window));
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1);
+});
+
+test('an offscreen frozen candidate cannot suppress the first later visit after conflict', async (t) => {
+  const visibility = presentedFixture(t);
+  const f = mount(t, true);
+  await settle(f.calls);
+  visibility.hide(target.revision_id);
+  await waitFor(() => assert.ok(f.calls.some((call) => call.path.endsWith('/state'))));
+  const old = f.calls.find((call) => call.path.endsWith('/state'))!;
+  await act(async () =>
+    old.finish(
+      receipt(old, 'version_conflict', [
+        { ...target, read: false, version: 1, availability: 'available' },
+      ]),
+    ),
+  );
+  visibility.show(target.revision_id);
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2),
+  );
+  const fresh = f.calls.filter((call) => call.path.endsWith('/state'))[1]!;
+  assert.notEqual(fresh.body.idempotency_key, old.body.idempotency_key);
+  assert.deepEqual(fresh.body.targets, [{ ...target, read: true, expected_version: 1 }]);
+  assert.deepEqual(f.recovery.all()[0]?.body, old.body);
+});
+
 test('an old cross-tab Unread notification is consumed once; a new intent holds the new visit', async (t) => {
   const visibility = presentedFixture(t);
   const f = mount(t, true);
@@ -930,6 +1013,88 @@ test('an old cross-tab Unread notification is consumed once; a new intent holds 
   );
   await new Promise((resolve) => setTimeout(resolve, 350));
   assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 2);
+});
+
+async function crossTabSettlementDuringVisit(
+  t: TestContext,
+  waitPastBatchDeadline: boolean,
+  settlementEvent: 'intent' | 'receipt' = 'intent',
+) {
+  const visibility = presentedFixture(t);
+  const f = mount(t, true);
+  await settle(f.calls);
+  const key = f.recovery.prefix + 'intent:' + randomUUID();
+  const manual = {
+    version: 1,
+    body: {
+      idempotency_key: key.slice(key.lastIndexOf(':') + 1),
+      basis: 'manual',
+      episode_id: null,
+      targets: [{ ...target, read: false, expected_version: 0 }],
+    },
+    attempts: 1,
+    state: 'uncertain',
+  };
+  const raw = JSON.stringify(manual);
+  localStorage.setItem(key, raw);
+  await act(async () => window.dispatchEvent(new StorageEvent('storage', { key, newValue: raw })));
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 2),
+  );
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))[1]!
+      .finish(Response.json(page(false, 0))),
+  );
+  visibility.hide(target.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  visibility.show(target.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+  const priorLookups = f.calls.filter((call) => call.path.endsWith('/lookup')).length;
+  localStorage.removeItem(key);
+  const eventKey =
+    settlementEvent === 'intent' ? key : f.recovery.prefix + 'receipt:' + randomUUID();
+  await act(async () =>
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: eventKey,
+        oldValue: settlementEvent === 'intent' ? raw : null,
+        newValue: null,
+      }),
+    ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, priorLookups + 1),
+  );
+  if (waitPastBatchDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+  }
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))
+      .at(-1)!
+      .finish(Response.json(page(false, 1))),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+  );
+  assert.deepEqual(f.calls.find((call) => call.path.endsWith('/state'))!.body.targets, [
+    { ...target, read: true, expected_version: 1 },
+  ]);
+}
+
+test('a cross-tab settlement revalidates before the batch deadline without stranding the visit', async (t) => {
+  await crossTabSettlementDuringVisit(t, false);
+});
+
+test('a cross-tab settlement remains gated past the batch deadline and resumes the same visit', async (t) => {
+  await crossTabSettlementDuringVisit(t, true);
+});
+
+test('a receipt event cannot expose a removed cross-tab intent before its removal event arrives', async (t) => {
+  await crossTabSettlementDuringVisit(t, true, 'receipt');
 });
 test('fresh work ahead of a continuation cannot give it a second continuation', async (t) => {
   const b = { resource_id: randomUUID(), revision_id: randomUUID() };

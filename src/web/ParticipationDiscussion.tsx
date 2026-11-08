@@ -18,7 +18,7 @@ import { MentionedIn } from './DiscussionBacklinks.js';
 import { SaveControl } from './SavedItems.js';
 import { FollowControl } from './Following.js';
 import { AuthorizationBoundary, useAuthorization } from './AuthorizationBoundary.js';
-import { ReadingMarkUnread, ReadingText } from './Reading.js';
+import { ReadingIndicator, ReadingMarkUnread, ReadingText } from './Reading.js';
 import { SuppressLink } from './Moderation.js';
 import { SummarySection } from './Summaries.js';
 import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
@@ -405,6 +405,7 @@ function ContributionBody({
         <Avatar person={data.author} />
         <strong>{data.author.nickname}</strong>
         {data.author.kind === 'agent' && <span className="author-badge">Agent</span>}
+        <ReadingIndicator target={{ resource_id: id, revision_id: data.revision_id }} />
         <time>
           {new Date(data.created_at).toLocaleString(undefined, {
             month: 'short',

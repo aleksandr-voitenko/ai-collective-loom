@@ -77,17 +77,23 @@ never becomes a semantic reference or personal action.
 `AuthoredText` shares safe instance-root local-link resolution with the parser;
 normalized local hrefs must remain single-root-relative, never protocol-relative.
 Native disclosures keep secondary message/discussion controls mounted and authorized.
-ReadingText observes only mounted prose; a separate status component consumes its
+ReadingText observes only mounted prose; separate status components consume its
 private state without another observer or lookup. Discussion and full-resource More
-disclosures contain Mark unread, while quiet pending feedback and error/conflict
-recovery stay outside the menu. Empty summaries use a small invitation. The
+disclosures contain Mark unread; a fixed author-line slot keeps routine unread/
+pending settlement from changing message height. Error/conflict recovery stays
+outside the menu. Empty summaries use a small invitation. The
 available/unavailable/error summary states retain their existing meaning.
 ReadingProvider defaults automation on for a missing scoped preference and fails
 closed on invalid/unavailable storage. Shared event-driven viewport observation
 tracks presence separately from write eligibility; measured full exits rearm held
 Unread and terminally attempted visits, while cleanup, partial scrolling and
 repeated cross-tab intent events cannot. Visible brief observations survive the
-batch delay. The presentation gate remains separate from
+batch delay. One event cycle measures every mounted copy before reconciling a
+full exit or qualifying a new entry; delayed automatic attempts suppress only
+their originating visit. Cross-tab intent changes cancel stale queued candidates
+and gate affected revisions until a fresh source-host private lookup completes,
+including when a receipt event first exposes intent removal; then they recheck an
+already-visible eligible visit. The presentation gate remains separate from
 `reading-coordinator.ts`: a 128-candidate in-memory buffer flushes at 25 targets
 or the oldest candidate's 250 ms deadline, with one automatic batch in flight.
 A known atomic refusal reserves one separate at-most-25-member continuation

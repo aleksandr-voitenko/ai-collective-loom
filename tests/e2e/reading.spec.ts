@@ -10,8 +10,14 @@ import type { syntheticServer } from '../helpers/participation-server.js';
 import type { BrowserDiagnostics } from '../helpers/browser-diagnostics.js';
 const endpoint = '/api/v1/me/reading';
 const batchReviewRoot = '/private/tmp/loom-review-evidence/reading-viewport';
-async function batchReviewCapture(page: Page, state: string, width: 1440 | 390) {
+async function batchReviewCapture(
+  page: Page,
+  state: string,
+  width: 1440 | 390,
+  anchorSelector?: string,
+) {
   await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+  if (anchorSelector) await page.locator(anchorSelector).scrollIntoViewIfNeeded();
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBe(true);
@@ -298,6 +304,12 @@ test('default viewport reading covers short and long main text without redundant
   await expect(
     control(page, long.revision_id).getByRole('button', { name: 'Mark unread' }),
   ).toBeEnabled();
+  if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
+    const footer = `[data-reading-target="${long.revision_id}"] ~ .post-footer .message-details`;
+    await batchReviewCapture(page, 'resource-more', 1440, footer);
+    await batchReviewCapture(page, 'resource-more', 390, footer);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
   const parent = await d.reply('Parent visible');
   const child = await d.reply('Nested child', parent.resource_id);
   const deep = await d.reply('Deep collapsed text', child.resource_id);
@@ -380,6 +392,72 @@ test('Mark unread survives focus and partial scrolling, then a full exit permits
   expect((await state(page, a)).version).toBe(unreadVersion + 1);
 });
 
+test('routine automatic settlement keeps message height and reading position stable', async ({
+  page,
+  context,
+  server,
+}) => {
+  const d = await setup(page, context, server, 'default');
+  const a = await d.reply('A short anchored comment');
+  const b = await d.reply('The next comment stays in place');
+  const pending = barrier();
+  const release = barrier();
+  await page.route('**/api/v1/me/reading/state', async (route) => {
+    const body = route.request().postDataJSON();
+    if (
+      body.basis === 'presentation' &&
+      body.targets.some((v: any) => v.revision_id === a.revision_id)
+    ) {
+      pending.release();
+      await release.promise;
+    }
+    await route.continue();
+  });
+  try {
+    await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+    await control(page, a.revision_id).locator('.prose').scrollIntoViewIfNeeded();
+    await pending.promise;
+    await expect(
+      control(page, a.revision_id).getByRole('status', { name: 'Syncing reading' }),
+    ).toBeVisible();
+    const before = await page.evaluate(
+      ({ first, second }) => {
+        const a = document.querySelector(`[data-resource-id="${first}"]`)!;
+        const b = document.querySelector(`[data-resource-id="${second}"]`)!;
+        return {
+          height: a.getBoundingClientRect().height,
+          nextTop: b.getBoundingClientRect().top,
+          scrollY,
+        };
+      },
+      { first: a.resource_id, second: b.resource_id },
+    );
+    release.release();
+    await expect.poll(async () => (await state(page, a)).read).toBe(true);
+    await expect(
+      control(page, a.revision_id).getByRole('status', { name: 'Syncing reading' }),
+    ).toHaveCount(0);
+    const after = await page.evaluate(
+      ({ first, second }) => {
+        const a = document.querySelector(`[data-resource-id="${first}"]`)!;
+        const b = document.querySelector(`[data-resource-id="${second}"]`)!;
+        return {
+          height: a.getBoundingClientRect().height,
+          nextTop: b.getBoundingClientRect().top,
+          scrollY,
+        };
+      },
+      { first: a.resource_id, second: b.resource_id },
+    );
+    expect(Math.abs(after.height - before.height)).toBeLessThan(1);
+    expect(Math.abs(after.nextTop - before.nextTop)).toBeLessThan(1);
+    expect(Math.abs(after.scrollY - before.scrollY)).toBeLessThan(1);
+  } finally {
+    release.release();
+    await page.unroute('**/api/v1/me/reading/state');
+  }
+});
+
 test('collapsing a visible unread branch permits a fresh read only after expansion', async ({
   page,
   context,
@@ -430,7 +508,7 @@ test('viewport reading review: quiet controls, held Unread, pending batch, confl
     idempotency_key: randomUUID(),
     basis: 'manual',
     episode_id: null,
-    targets: [x, newer, after].map((source) => ({
+    targets: [d.opening, x, newer, after].map((source) => ({
       ...pair(source),
       read: true,
       expected_version: 0,
@@ -449,18 +527,20 @@ test('viewport reading review: quiet controls, held Unread, pending batch, confl
     control(page, d.opening.revision_id).getByRole('button', { name: 'Mark unread' }),
   ).toBeEnabled();
   if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
-    await batchReviewCapture(page, 'more-open', 1440);
-    await batchReviewCapture(page, 'more-open', 390);
+    const opening = `[data-reading-target="${d.opening.revision_id}"]`;
+    await batchReviewCapture(page, 'more-open', 1440, opening);
+    await batchReviewCapture(page, 'more-open', 390, opening);
     await page.setViewportSize({ width: 1440, height: 1000 });
   }
   await control(page, d.opening.revision_id).getByRole('button', { name: 'Mark unread' }).click();
-  await expect.poll(async () => (await state(page, d.opening)).version).toBe(1);
+  await expect.poll(async () => (await state(page, d.opening)).version).toBe(2);
   await expect(
     control(page, d.opening.revision_id).getByRole('status', { name: 'Unread revision' }),
   ).toBeVisible();
   if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
-    await batchReviewCapture(page, 'manual-unread', 1440);
-    await batchReviewCapture(page, 'manual-unread', 390);
+    const opening = `[data-reading-target="${d.opening.revision_id}"]`;
+    await batchReviewCapture(page, 'manual-unread', 1440, opening);
+    await batchReviewCapture(page, 'manual-unread', 390, opening);
     await page.setViewportSize({ width: 1440, height: 1000 });
   }
   const openingMenu = control(page, d.opening.revision_id)
@@ -512,7 +592,9 @@ test('viewport reading review: quiet controls, held Unread, pending batch, confl
     expect(original.targets.map((item: any) => item.revision_id).sort()).toEqual(
       [a.revision_id, b.revision_id].sort(),
     );
-    await expect(control(page, a.revision_id).getByText('Syncing reading…')).toBeVisible();
+    await expect(
+      control(page, a.revision_id).getByRole('status', { name: 'Syncing reading' }),
+    ).toBeVisible();
     if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
       await batchReviewCapture(page, 'pending', 1440);
       await batchReviewCapture(page, 'pending', 390);
@@ -599,9 +681,18 @@ test('viewport reading review: quiet controls, held Unread, pending batch, confl
             browser: 'Chromium',
             role: 'synthetic enrolled administrator',
             viewports: ['1440x1000', '390x844'],
-            states: ['normal', 'more-open', 'manual-unread', 'pending', 'conflict', 'recovery'],
+            states: [
+              'normal',
+              'more-open',
+              'manual-unread',
+              'pending',
+              'conflict',
+              'recovery',
+              'resource',
+              'resource-more',
+            ],
             resource_view:
-              'resource-1440x1000.png and resource-390x844.png from the default viewport test.',
+              'Resource main text and its open More action are captured in both viewports.',
             reproduction: 'LOOM_READING_VIEWPORT_REVIEW=1 npm run test:e2e -- reading.spec.ts',
             declared_hold: 'One automatic reading state request held while manual Unread commits.',
             injected_failure:

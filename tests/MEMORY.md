@@ -553,6 +553,9 @@ manual/freeze races, targeted lookup counts, one
 atomic-refusal subset, mixed fresh/continuation order, full-buffer continuation,
 cross-tab manual cancellation, reversed success/refusal feedback, near-capacity
 receipt settlement/reload, failed-write custody, targeted cross-tab receipt removal,
+same-cycle duplicate-copy handoff, delayed offscreen freeze followed by a fresh
+visit, cross-tab settlement revalidation on both sides of the batch deadline,
+and receipt-before-removal notification order,
 mixed-target receipt pruning, partially expanded legacy-journal recovery and
 full prior-receipt admission recovery without key reuse, a compaction-write fault
 followed by conflict recovery, and presentation exclusions.
@@ -562,11 +565,13 @@ time for 25/25/10 draining, oldest-deadline fairness, separate reserved continua
 dispatch and finite occupied capacity. `e2e/reading.spec.ts` checks default-on short/
 long full text, collapsed and preview exclusions, resource/discussion More actions,
 real viewport exit/re-entry, deliberate branch collapse/expand, focus, quiet pending
-and conflict recovery, manual and automatic exact-body process restart, blocked
+and conflict recovery, stable message height/position through routine settlement,
+manual and automatic exact-body process restart, blocked
 sign-out cleanup, storage failure, background/abandoned source reads and mobile
 width. The opt-in
 LOOM_READING_VIEWPORT_REVIEW=1 journey captures actual 1440x1000/390x844 normal,
-More, manually unread, pending, conflict, recovery and full-resource viewports under
+More, manually unread, pending, conflict, recovery, full-resource and resource-More
+viewports in
 `/private/tmp/loom-review-evidence/reading-viewport`, with PR #56 before images and
 per-image provenance. It holds a real two-target automatic request while manual
 Unread commits, so B's bounded continuation and A's conflict use the normal API.

@@ -1365,6 +1365,10 @@
 .reading-feedback {
   margin-top: 0.35rem;
 }
+.loom-app .author-line .reading-indicator-slot {
+  flex: 0 0 5.5rem;
+  white-space: nowrap;
+}
 .reading-indicator {
   color: var(--muted, #58645c);
   font-size: 0.78rem;

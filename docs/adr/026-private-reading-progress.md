@@ -112,11 +112,21 @@ occurrence alone is not an exit. A terminal automatic refusal suppresses the sam
 visit; a new visit may create a new key without changing the refused request or
 its single continuation allowance. Any overlapping unresolved operation still
 blocks automatic writes. Known-read revisions generate no redundant outcomes.
+Each visibility event measures all mounted occurrences before reconciling exits
+and qualifying entries, so a handoff between copies cannot end a held visit.
+Automatic attempt suppression belongs to the visit that produced its candidate;
+a delayed freeze after exit cannot suppress a later visit. A cross-tab intent
+change gates its affected revisions until a fresh registered-host lookup settles
+their private versions, then rechecks any already-visible eligible visit. The gate
+starts when a journal change is observed, even if a receipt event reveals the
+intent's removal before that removal event arrives.
 At most 4,096 exact targets are tracked in one view; capacity pauses automation
 without evicting a manual hold. Mounted text alone shows reading feedback.
 
-Human full-text views show a subtle unread indication, quiet synchronization and
-visible error/conflict recovery. Discussion messages put Mark unread in their
+Human full-text views show a subtle unread indication in a stable author-line
+slot, quiet synchronization and visible error/conflict recovery. Ordinary
+settlement therefore does not change message height or the reading anchor.
+Discussion messages put Mark unread in their
 existing More disclosure; full resource text uses the same small action disclosure.
 The former routine status row, Mark read, status refresh and browser bulk selector
 are removed. Explicit selective and atomic list operations remain available to

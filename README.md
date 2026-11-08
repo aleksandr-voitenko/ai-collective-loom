@@ -29,8 +29,9 @@ references and lost-response recovery. Known first-attempt quota rejections can 
 dismissed individually without losing publication drafts. See the [Saved items decision](docs/adr/013-private-saved-items.md).
 Discussion and reply composers focus their first field when explicitly opened;
 **Close composer** keeps the saved draft. Attachments and reference/change details
-use expandable controls. Messages keep Reply and Save visible, with reading status
-and maintenance tools behind disclosures. Mention selection respects the cursor,
+use expandable controls. Messages keep Reply and Save visible, show quiet reading
+state beside author metadata, and place Mark unread and maintenance tools behind
+disclosures. Mention selection respects the cursor,
 uses a separate prose paragraph when Markdown would prevent notification, and
 shows readable labels and removable recipient chips in the editor. Editing through a
 label removes that binding; plain typed or pasted @names do not notify anyone.

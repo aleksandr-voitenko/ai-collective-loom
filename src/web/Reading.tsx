@@ -30,6 +30,7 @@ import {
   PresentationEpisode,
   observeReadingRegion,
   presentationPolicy,
+  scheduleReadingRegions,
   viewportPresentation,
 } from './reading-presentation.js';
 import { AuthoredText } from './AuthoredText.js';
@@ -37,6 +38,7 @@ import { AuthoredText } from './AuthoredText.js';
 type Authority = ReturnType<typeof useAuthorization>;
 type Entry = { target: ReadingTargetView; authorities: Map<Authority, number> };
 type State = { item?: ReadingItemView; error?: string };
+type Lookup = { target: ReadingTargetView; revalidation?: number };
 type Candidate = {
   id: string;
   target: ReadingUpdateInput['targets'][number];
@@ -47,6 +49,7 @@ type Candidate = {
   instance: string;
   participant: string;
   episode: string;
+  visit: number;
   continuation: boolean;
 };
 interface Session {
@@ -110,11 +113,14 @@ export function ReadingProvider({ context, children }: { context: Context; child
     live = useRef(true),
     owner = useRef(identityGeneration()),
     episode = useRef(crypto.randomUUID()),
-    lookupPending = useRef(new Map<Authority, Map<string, ReadingTargetView>>()),
+    lookupPending = useRef(new Map<Authority, Map<string, Lookup>>()),
     lookupInFlight = useRef(new Map<Authority, Set<string>>()),
     lookupTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
+    revalidating = useRef(new Map<string, { epoch: number; confirmedVersion?: number }>()),
+    revalidationEpoch = useRef(0),
     knownRecords = useRef<ReadingIntent[]>([]),
     seenManualIntents = useRef(new Set<string>()),
+    seenIntentKeys = useRef(new Set<string>()),
     preferenceFault = useRef(false),
     disablingPreference = useRef(false),
     intentVersions = useRef(new Map<string, number>()),
@@ -146,9 +152,13 @@ export function ReadingProvider({ context, children }: { context: Context; child
         continue;
       }
       const inFlight = lookupInFlight.current.get(authority) ?? new Set<string>();
-      const ready = [...pending.values()].filter((target) => !inFlight.has(target.revision_id));
+      const ready = [...pending.values()].filter(({ target }) => !inFlight.has(target.revision_id));
       for (let i = 0; i < ready.length; i += readingLimits.batch) {
-        const targets = ready.slice(i, i + readingLimits.batch);
+        const lookups = ready.slice(i, i + readingLimits.batch);
+        const targets = lookups.map(({ target }) => target);
+        const epochs = new Map(
+          lookups.map(({ target, revalidation }) => [target.revision_id, revalidation]),
+        );
         const generation = authority.capture();
         for (const target of targets) {
           pending.delete(target.revision_id);
@@ -164,6 +174,12 @@ export function ReadingProvider({ context, children }: { context: Context; child
           .then(
             (page) => {
               if (!active() || !authority.current(generation)) return;
+              for (const item of page.items) {
+                if (!entries.current.get(item.revision_id)?.authorities.has(authority)) continue;
+                const gate = revalidating.current.get(item.revision_id);
+                if (gate && gate.epoch === epochs.get(item.revision_id))
+                  gate.confirmedVersion = item.version;
+              }
               setStates((previous) => {
                 const next = new Map(previous);
                 for (const item of page.items) {
@@ -204,7 +220,10 @@ export function ReadingProvider({ context, children }: { context: Context; child
     (target: ReadingTargetView, authority: Authority) => {
       if (!entries.current.get(target.revision_id)?.authorities.has(authority)) return;
       const pending = lookupPending.current.get(authority) ?? new Map();
-      pending.set(target.revision_id, target);
+      pending.set(target.revision_id, {
+        target,
+        revalidation: revalidating.current.get(target.revision_id)?.epoch,
+      });
       lookupPending.current.set(authority, pending);
       if (!lookupTimer.current) lookupTimer.current = setTimeout(flushLookups, 0);
     },
@@ -214,6 +233,19 @@ export function ReadingProvider({ context, children }: { context: Context; child
     for (const entry of entries.current.values())
       for (const authority of entry.authorities.keys()) requestLookup(entry.target, authority);
   }, [requestLookup]);
+  useEffect(() => {
+    let released = false;
+    for (const [id, gate] of revalidating.current) {
+      if (
+        gate.confirmedVersion !== undefined &&
+        (states.get(id)?.item?.version ?? -1) >= gate.confirmedVersion
+      ) {
+        revalidating.current.delete(id);
+        released = true;
+      }
+    }
+    if (released) scheduleReadingRegions();
+  }, [states]);
   const register = useCallback(
     (target: ReadingTargetView, authority: Authority) => {
       const old = entries.current.get(target.revision_id);
@@ -266,6 +298,9 @@ export function ReadingProvider({ context, children }: { context: Context; child
             : undefined;
         knownRecords.current = all;
         setRecords(all);
+        if (initial)
+          for (const record of all)
+            seenIntentKeys.current.add(journal.prefix + 'intent:' + record.body.idempotency_key);
         enabledNow.current =
           journal.enabled() && !preferenceFault.current && !disablingPreference.current;
         setEnabled(enabledNow.current);
@@ -300,10 +335,58 @@ export function ReadingProvider({ context, children }: { context: Context; child
     const storage = (event: StorageEvent) => {
       if (event.key !== null && !event.key.startsWith(journal.prefix)) return;
       const before = knownRecords.current;
+      const intentEvent = event.key?.startsWith(journal.prefix + 'intent:');
+      const firstIntentEvent = !!intentEvent && !seenIntentKeys.current.has(event.key!);
+      if (firstIntentEvent) {
+        if (seenIntentKeys.current.size < presentationPolicy.episodeTargets)
+          seenIntentKeys.current.add(event.key!);
+        else {
+          fences.current.paused = true;
+          automatic.current?.clear();
+        }
+      }
       changed(event);
       // Another tab may settle a record between events. Unknown removal needs a
       // full revalidation; known records only refresh their exact registered IDs.
       const removedTargets = journal.storedTargets(event.oldValue);
+      const affected = new Set<string>();
+      if (event.key === null) {
+        for (const id of entries.current.keys()) affected.add(id);
+      } else {
+        const previous = new Map(before.map((record) => [record.body.idempotency_key, record]));
+        const current = new Map(
+          knownRecords.current.map((record) => [record.body.idempotency_key, record]),
+        );
+        for (const key of new Set([...previous.keys(), ...current.keys()])) {
+          const old = previous.get(key);
+          const next = current.get(key);
+          if (JSON.stringify(old) === JSON.stringify(next)) continue;
+          for (const target of [...(old?.body.targets ?? []), ...(next?.body.targets ?? [])])
+            affected.add(target.revision_id);
+        }
+        if (intentEvent && firstIntentEvent) {
+          for (const target of [
+            ...(removedTargets ?? []),
+            ...(journal.storedTargets(event.newValue) ?? []),
+          ])
+            affected.add(target.revision_id);
+          if (!affected.size && event.oldValue && !event.newValue)
+            for (const id of entries.current.keys()) affected.add(id);
+        }
+      }
+      for (const id of affected) {
+        if (!entries.current.has(id)) continue;
+        if (
+          !revalidating.current.has(id) &&
+          revalidating.current.size >= presentationPolicy.episodeTargets
+        ) {
+          fences.current.paused = true;
+          automatic.current?.clear();
+          break;
+        }
+        revalidating.current.set(id, { epoch: ++revalidationEpoch.current });
+        invalidateAutomatic(id);
+      }
       if (
         event.key === null ||
         (event.oldValue &&
@@ -341,6 +424,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
       if (lookupTimer.current) clearTimeout(lookupTimer.current);
       lookupTimer.current = undefined;
       lookupPending.current.clear();
+      revalidating.current.clear();
       window.removeEventListener('loom-reading', changed);
       window.removeEventListener('storage', storage);
     };
@@ -464,6 +548,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
       entry.authorities.has(candidate.authority) &&
       candidate.authority.current(candidate.generation) &&
       item?.availability === 'available' &&
+      !revalidating.current.has(candidate.id) &&
       !item.read &&
       item.version === candidate.target.expected_version &&
       (candidate.continuation || !fences.current.excludes(candidate.id))
@@ -517,7 +602,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
       const frozen = eligible.filter((candidate) =>
         record.body.targets.some((target) => target.revision_id === candidate.id),
       );
-      for (const candidate of frozen) fences.current.attempted(candidate.id);
+      for (const candidate of frozen) fences.current.attempted(candidate.id, candidate.visit);
       const result = await send(record, true);
       if (
         result?.operation_state !== 'version_conflict' ||
@@ -543,7 +628,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
       return continuation;
     } catch (failure) {
       if (active() && (failure as Error).name !== 'AbortError') {
-        for (const candidate of eligible) fences.current.attempted(candidate.id);
+        for (const candidate of eligible) fences.current.attempted(candidate.id, candidate.visit);
         setError((failure as Error).message);
       }
     } finally {
@@ -552,7 +637,13 @@ export function ReadingProvider({ context, children }: { context: Context; child
     }
   };
   function observe(target: ReadingUpdateInput['targets'][number], authority: Authority) {
-    if (!active() || !enabledNow.current || fences.current.excludes(target.revision_id)) return;
+    if (
+      !active() ||
+      !enabledNow.current ||
+      revalidating.current.has(target.revision_id) ||
+      fences.current.excludes(target.revision_id)
+    )
+      return;
     const item = knownStates.current.get(target.revision_id)?.item;
     if (!item || item.read || item.availability !== 'available') return;
     if (
@@ -585,6 +676,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
       instance: latestContext.current.community.instance_id,
       participant: latestContext.current.self.participant_id,
       episode: episode.current,
+      visit: fences.current.generation(target.revision_id),
       continuation: false,
     };
     if (automatic.current?.enqueue(candidate) === 'full')
@@ -680,7 +772,8 @@ export function ReadingText({
   const session = useContext(ReadingContext),
     node = useRef<HTMLDivElement>(null),
     occurrence = useRef(Symbol('reading text')),
-    check = useRef<() => void>(() => {});
+    check = useRef<(phase: 'measure' | 'reconcile' | 'qualify') => void>(() => {}),
+    eligible = useRef(false);
   const latest = useRef(session);
   latest.current = session;
   const register = session?.register;
@@ -688,15 +781,23 @@ export function ReadingText({
     () => register?.(target, authority),
     [register, target.resource_id, target.revision_id, authority],
   );
-  check.current = () => {
+  check.current = (phase) => {
     const current = latest.current;
     const prose = node.current?.querySelector<HTMLElement>('.prose');
     if (!current || !prose) return;
-    const view = viewportPresentation(prose);
-    current.fences.presence(target.revision_id, occurrence.current, view.present);
+    if (phase === 'measure') {
+      const view = viewportPresentation(prose);
+      current.fences.measurePresence(target.revision_id, occurrence.current, view.present);
+      eligible.current = view.eligible;
+      return;
+    }
+    if (phase === 'reconcile') {
+      current.fences.reconcilePresence(target.revision_id);
+      return;
+    }
     const item = current.states.get(target.revision_id)?.item;
     if (
-      view.eligible &&
+      eligible.current &&
       current.active() &&
       current.enabled &&
       item?.availability === 'available' &&
@@ -707,14 +808,13 @@ export function ReadingText({
   useEffect(() => {
     const prose = node.current?.querySelector<HTMLElement>('.prose');
     if (!prose) return;
-    const unsubscribe = observeReadingRegion(prose, () => check.current());
-    check.current();
+    const unsubscribe = observeReadingRegion(prose, (phase) => check.current(phase));
     return () => {
       unsubscribe();
       latest.current?.fences.unregister(target.revision_id, occurrence.current);
     };
   }, [target.resource_id, target.revision_id, authority]);
-  useEffect(() => check.current(), [session]);
+  useEffect(() => scheduleReadingRegions(), [session]);
   return (
     <div
       className="reading-text"
@@ -750,40 +850,15 @@ export function ReadingActionStatus({ target }: { target: ReadingTargetView }) {
   const session = useContext(ReadingContext);
   if (!session) return null;
   const state = session.states.get(target.revision_id);
-  const item = state?.item;
-  const pending =
-    session.pendingAutomatic.has(target.revision_id) ||
-    session.records.some(
-      (record) =>
-        record.state === 'uncertain' &&
-        record.body.targets.some((member) => member.revision_id === target.revision_id),
-    );
   const conflicted = session.records.some(
     (record) =>
       record.state === 'conflicted' &&
       !record.superseded_revisions?.includes(target.revision_id) &&
       record.body.targets.some((member) => member.revision_id === target.revision_id),
   );
-  if (!pending && !conflicted && !session.error && !state?.error && item?.read) return null;
+  if (!conflicted && !session.error && !state?.error) return null;
   return (
     <div className="reading-feedback">
-      {pending ? (
-        <span className="reading-indicator" role="status">
-          Syncing reading…
-        </span>
-      ) : state?.error || !item || item.availability !== 'available' ? (
-        <span className="reading-indicator" role="status">
-          {state?.error
-            ? 'Reading status unavailable'
-            : !item
-              ? 'Checking reading…'
-              : 'Reading source unavailable'}
-        </span>
-      ) : !item.read ? (
-        <span className="reading-indicator" role="status" aria-label="Unread revision">
-          Unread
-        </span>
-      ) : null}
       {conflicted && (
         <p className="notice" role="alert">
           Reading change conflicted.{' '}
@@ -796,6 +871,39 @@ export function ReadingActionStatus({ target }: { target: ReadingTargetView }) {
         </p>
       )}
     </div>
+  );
+}
+
+export function ReadingIndicator({ target }: { target: ReadingTargetView }) {
+  const session = useContext(ReadingContext);
+  const state = session?.states.get(target.revision_id);
+  const item = state?.item;
+  const pending =
+    session?.pendingAutomatic.has(target.revision_id) ||
+    session?.records.some(
+      (record) =>
+        record.state === 'uncertain' &&
+        record.body.targets.some((member) => member.revision_id === target.revision_id),
+    );
+  const status = pending
+    ? { text: 'Syncing…', name: 'Syncing reading' }
+    : state?.error
+      ? { text: 'Unavailable', name: 'Reading status unavailable' }
+      : !item
+        ? { text: 'Checking…', name: 'Checking reading' }
+        : item.availability !== 'available'
+          ? { text: 'Unavailable', name: 'Reading source unavailable' }
+          : !item.read
+            ? { text: 'Unread', name: 'Unread revision' }
+            : undefined;
+  return (
+    <span className="reading-indicator-slot">
+      {status && (
+        <span className="reading-indicator" role="status" aria-label={status.name}>
+          {status.text}
+        </span>
+      )}
+    </span>
   );
 }
 export function ReadingPageViewComponent() {
