@@ -672,7 +672,8 @@ function Children({
   useEffect(() => {
     if (!navigation) return;
     const rows = uniqueChildren(state.current.pages);
-    const goal = state.current.goal;
+    // A remount begins empty; retain its saved extent until fresh reads establish another.
+    const goal = state.current.goal ?? (state.current.pages.length ? undefined : initial.current);
     navigation.set(navigationKey, {
       loadedCount: goal?.loadedCount ?? rows.length,
       ...(goal?.tailId
@@ -684,7 +685,7 @@ function Children({
       opened,
     });
     if (navigation.size > 64) navigation.delete(navigation.keys().next().value!);
-  }, [windowState.pages, expanded, opened, navigation, navigationKey]);
+  }, [windowState.pages, windowState.goal, expanded, opened, navigation, navigationKey]);
   useLayoutEffect(() => {
     const anchor = readingAnchor.current;
     if (anchor) {

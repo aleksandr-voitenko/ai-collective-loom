@@ -1048,6 +1048,9 @@ boundary with a ninth-page editor/branch, and verifies a page-two unavailable en
 through refresh, eligible descendant navigation and focused return. A held root
 continuation becomes stale after an independent unavailable parent preview; recovery
 must clear busy without reviving withdrawn source text.
+The 54-comment journey also returns from an expanded comment-43 reply twice before
+continuing the partial eight-page restoration, checking the saved tail, branch,
+private draft, focus and viewport offset on the second return.
 `LOOM_CONTINUOUS_REVIEW=1` captures its desktop/mobile states under
 `/tmp/loom-review-evidence/continuous-discussion`. `LOOM_REPLY_REVIEW=1` uses the same
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error

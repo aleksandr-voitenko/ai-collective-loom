@@ -127,7 +127,10 @@ survives query remounts while preserving their authorization and composer isolat
 return rebuilds each previously loaded branch through fresh six-item pages, up to eight
 pages per automatic run, before restoring a later-page offset/focus. A remaining
 restoration goal has an explicit Continue control; leaving the path or identity
-discards it. Children remain on-demand and six-item bounded: counts describe unique
+discards it. An empty Children remount must keep the saved count/tail until fresh
+reads establish another extent; a partially staged return keeps that goal across
+another focus-query remount. This metadata never authorizes source content.
+Children remain on-demand and six-item bounded: counts describe unique
 loaded direct entries, never an inferred thread total. Each accepted page retains
 its own authorization lease and continuation; append leaves existing rows mounted.
 Opened branches stay mounted while hidden, preserving nested drafts and cursors.

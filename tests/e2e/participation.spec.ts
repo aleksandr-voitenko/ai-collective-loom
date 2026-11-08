@@ -1541,6 +1541,56 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     await expect(root).toHaveAttribute('aria-busy', 'false');
   }
   await expect(root.getByText('54 direct comments loaded', { exact: true })).toBeVisible();
+  const laterBranch = rootRows.nth(42);
+  await expect(laterBranch.getByText('Continuous comment 43', { exact: true })).toBeVisible();
+  const laterBranchReply = await external.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: discussion.discussion,
+    parent_id: roots[41],
+    content: text('Reply beneath comment 43'),
+  });
+  expect(laterBranchReply.status).toBe(201);
+  await laterBranch.getByRole('button', { name: 'Check replies' }).click();
+  await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
+  const laterBranchThread = laterBranch.getByRole('link', { name: 'Open reply thread →' });
+  await laterBranchThread.click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(rootRows).toHaveCount(48);
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
+  await capture(
+    'partial-return-first',
+    root.getByRole('button', { name: 'Continue restoring comments' }),
+  );
+  await laterBranchThread.scrollIntoViewIfNeeded();
+  const laterReplyArticle = laterBranch.locator('article[data-resource-id]').last();
+  const secondReturnTop = await laterReplyArticle.evaluate(
+    (node) => node.getBoundingClientRect().top,
+  );
+  await laterBranchThread.click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(rootRows).toHaveCount(48);
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
+  await expect(laterReplyArticle).toBeFocused();
+  await expect
+    .poll(async () =>
+      Math.abs(
+        (await laterReplyArticle.evaluate((node) => node.getBoundingClientRect().top)) -
+          secondReturnTop,
+      ),
+    )
+    .toBeLessThan(8);
+  await expect(otherEditor).toHaveValue('Another private draft remains here');
+  await capture(
+    'partial-return-second',
+    root.getByRole('button', { name: 'Continue restoring comments' }),
+  );
+  await root.getByRole('button', { name: 'Continue restoring comments' }).click();
+  await expect(rootRows).toHaveCount(54);
+  await expect(root.getByText('Continuous comment 54', { exact: true })).toBeVisible();
   const tail = rootRows.last();
   await tail.getByRole('button', { name: 'Check replies' }).click();
   await expect(tail.getByText('No replies yet.', { exact: true })).toBeVisible();
