@@ -120,6 +120,9 @@ change gates its affected revisions until a fresh registered-host lookup settles
 their private versions, then rechecks any already-visible eligible visit. The gate
 starts when a journal change is observed, even if a receipt event reveals the
 intent's removal before that removal event arrives.
+Derived conflict feedback affects only the exact member whose feedback changed;
+it does not cancel a sibling's already-qualified observation when that sibling's
+private version and the underlying operation are unchanged.
 At most 4,096 exact targets are tracked in one view; capacity pauses automation
 without evicting a manual hold. Mounted text alone shows reading feedback.
 

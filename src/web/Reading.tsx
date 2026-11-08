@@ -52,6 +52,34 @@ type Candidate = {
   visit: number;
   continuation: boolean;
 };
+function changedIntentTargets(old?: ReadingIntent, next?: ReadingIntent) {
+  const ids = new Set([
+    ...(old?.body.targets.map((target) => target.revision_id) ?? []),
+    ...(next?.body.targets.map((target) => target.revision_id) ?? []),
+  ]);
+  if (
+    !old ||
+    !next ||
+    old.version !== next.version ||
+    old.attempts !== next.attempts ||
+    old.state !== next.state ||
+    JSON.stringify(old.body) !== JSON.stringify(next.body)
+  )
+    return ids;
+  // Recovery can derive feedback for one member of an older mixed conflict
+  // without changing the operation or any sibling's private reading state.
+  return new Set(
+    [...ids].filter(
+      (id) =>
+        Boolean(old.superseded_revisions?.includes(id)) !==
+          Boolean(next.superseded_revisions?.includes(id)) ||
+        old.conflict_versions?.find((item) => item.revision_id === id)?.version !==
+          next.conflict_versions?.find((item) => item.revision_id === id)?.version ||
+        old.successful_versions?.find((item) => item.revision_id === id)?.version !==
+          next.successful_versions?.find((item) => item.revision_id === id)?.version,
+    ),
+  );
+}
 interface Session {
   states: Map<string, State>;
   entries: Map<string, Entry>;
@@ -360,9 +388,7 @@ export function ReadingProvider({ context, children }: { context: Context; child
         for (const key of new Set([...previous.keys(), ...current.keys()])) {
           const old = previous.get(key);
           const next = current.get(key);
-          if (JSON.stringify(old) === JSON.stringify(next)) continue;
-          for (const target of [...(old?.body.targets ?? []), ...(next?.body.targets ?? [])])
-            affected.add(target.revision_id);
+          for (const id of changedIntentTargets(old, next)) affected.add(id);
         }
         if (intentEvent && firstIntentEvent) {
           for (const target of [

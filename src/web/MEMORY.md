@@ -93,7 +93,9 @@ full exit or qualifying a new entry; delayed automatic attempts suppress only
 their originating visit. Cross-tab intent changes cancel stale queued candidates
 and gate affected revisions until a fresh source-host private lookup completes,
 including when a receipt event first exposes intent removal; then they recheck an
-already-visible eligible visit. The presentation gate remains separate from
+already-visible eligible visit. Derived feedback changes on a mixed historical
+conflict invalidate only changed members, preserving an unchanged sibling's
+qualified offscreen candidate. The presentation gate remains separate from
 `reading-coordinator.ts`: a 128-candidate in-memory buffer flushes at 25 targets
 or the oldest candidate's 250 ms deadline, with one automatic batch in flight.
 A known atomic refusal reserves one separate at-most-25-member continuation

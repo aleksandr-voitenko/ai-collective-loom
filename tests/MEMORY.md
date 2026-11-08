@@ -555,7 +555,8 @@ cross-tab manual cancellation, reversed success/refusal feedback, near-capacity
 receipt settlement/reload, failed-write custody, targeted cross-tab receipt removal,
 same-cycle duplicate-copy handoff, delayed offscreen freeze followed by a fresh
 visit, cross-tab settlement revalidation on both sides of the batch deadline,
-and receipt-before-removal notification order,
+receipt-before-removal notification order, and A-only feedback supersession beside
+an already-qualified offscreen B in an older mixed conflict,
 mixed-target receipt pruning, partially expanded legacy-journal recovery and
 full prior-receipt admission recovery without key reuse, a compaction-write fault
 followed by conflict recovery, and presentation exclusions.

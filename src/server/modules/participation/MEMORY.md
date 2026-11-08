@@ -489,7 +489,9 @@ focused. Shared event-driven observation tracks presence even for read/held targ
 Each event measures all mounted copies before reconciling a full exit; delayed
 automatic attempts suppress only their originating visit. Cross-tab journal changes,
 including a receipt event that first reveals intent removal, gate affected revisions
-until a fresh registered-host private lookup completes.
+until a fresh registered-host private lookup completes. Derived feedback for one
+member of a historical mixed conflict does not cancel an unchanged sibling's
+qualified candidate.
 Manual Unread holds the exact revision through rerenders, refreshes, StrictMode and
 tab changes until a measured full exit and later eligible entry. A new visit uses
 the latest confirmed version and a new operation key without changing older custody.

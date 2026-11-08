@@ -57,6 +57,7 @@ function mount(
   t: TestContext,
   automatic: boolean | 'default' | 'invalid' = false,
   targets = [target],
+  seed?: (recovery: ReadingRecovery) => void,
 ) {
   const context = {
     community: { instance_id: randomUUID() },
@@ -64,6 +65,7 @@ function mount(
   } as Context;
   const recovery = new ReadingRecovery(context.community.instance_id, context.self.participant_id);
   if (automatic !== 'default') localStorage.setItem(recovery.preference, String(automatic));
+  seed?.(recovery);
   let session: ReturnType<typeof useReadingSession>;
   function Commands() {
     session = useReadingSession();
@@ -1096,6 +1098,114 @@ test('a cross-tab settlement remains gated past the batch deadline and resumes t
 test('a receipt event cannot expose a removed cross-tab intent before its removal event arrives', async (t) => {
   await crossTabSettlementDuringVisit(t, true, 'receipt');
 });
+
+test('A-only settlement does not cancel B brief appearance through older mixed conflict feedback', async (t) => {
+  const b = { resource_id: randomUUID(), revision_id: randomUUID() };
+  const visibility = presentedFixture(t);
+  visibility.hide(target.revision_id);
+  const conflictKey = randomUUID();
+  const manualKey = randomUUID();
+  const manual = {
+    version: 1,
+    body: {
+      idempotency_key: manualKey,
+      basis: 'manual',
+      episode_id: null,
+      targets: [{ ...target, read: false, expected_version: 0 }],
+    },
+    attempts: 1,
+    state: 'uncertain',
+  };
+  const f = mount(t, true, [target, b], (recovery) => {
+    localStorage.setItem(
+      recovery.prefix + 'intent:' + conflictKey,
+      JSON.stringify({
+        version: 1,
+        body: {
+          idempotency_key: conflictKey,
+          basis: 'presentation',
+          episode_id: randomUUID(),
+          targets: [target, b].map((item) => ({ ...item, read: true, expected_version: 0 })),
+        },
+        attempts: 1,
+        state: 'conflicted',
+        conflict_versions: [target, b].map((item) => ({
+          revision_id: item.revision_id,
+          version: 0,
+        })),
+      }),
+    );
+    localStorage.setItem(recovery.prefix + 'intent:' + manualKey, JSON.stringify(manual));
+  });
+  await waitFor(() =>
+    assert.ok(
+      f.calls.some((call) => call.path.endsWith('/lookup') && call.body.targets.length === 2),
+    ),
+  );
+  await act(async () =>
+    f.calls
+      .find((call) => call.path.endsWith('/lookup'))!
+      .finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [
+            { ...target, read: true, version: 0, availability: 'available' },
+            { ...b, read: false, version: 0, availability: 'available' },
+          ],
+        }),
+      ),
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+  visibility.hide(b.revision_id);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 0);
+
+  const receiptKey = randomUUID();
+  const receiptValue = JSON.stringify({
+    version: 1,
+    state: 'acknowledged',
+    idempotency_key: receiptKey,
+    targets: [{ ...target, version: 1 }],
+  });
+  localStorage.removeItem(f.recovery.prefix + 'intent:' + manualKey);
+  localStorage.setItem(f.recovery.prefix + 'intent:' + receiptKey, receiptValue);
+  await act(async () =>
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: f.recovery.prefix + 'intent:' + receiptKey,
+        newValue: receiptValue,
+      }),
+    ),
+  );
+  assert.deepEqual(
+    f.recovery.all().find((record) => record.body.idempotency_key === conflictKey)
+      ?.superseded_revisions,
+    [target.revision_id],
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/lookup')).length, 2),
+  );
+  await act(async () =>
+    f.calls
+      .filter((call) => call.path.endsWith('/lookup'))[1]!
+      .finish(
+        Response.json({
+          scope: 'own_exact_revisions',
+          items: [
+            { ...target, read: false, version: 1, availability: 'available' },
+            { ...b, read: false, version: 0, availability: 'available' },
+          ],
+        }),
+      ),
+  );
+  await waitFor(() =>
+    assert.equal(f.calls.filter((call) => call.path.endsWith('/state')).length, 1),
+  );
+  assert.deepEqual(f.calls.find((call) => call.path.endsWith('/state'))!.body.targets, [
+    { ...b, read: true, expected_version: 0 },
+  ]);
+});
+
 test('fresh work ahead of a continuation cannot give it a second continuation', async (t) => {
   const b = { resource_id: randomUUID(), revision_id: randomUUID() };
   const c = { resource_id: randomUUID(), revision_id: randomUUID() };
