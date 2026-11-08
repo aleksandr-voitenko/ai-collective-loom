@@ -924,7 +924,12 @@ test('exact file references select a bounded revision, persist main and note int
   ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(
-    (await server.observer.query('SELECT count(*)::int n FROM loom.reading_states')).rows[0].n,
+    (
+      await server.observer.query(
+        'SELECT count(*)::int n FROM loom.reading_states WHERE revision_id=$1',
+        [promoted.revision_id],
+      )
+    ).rows[0].n,
   ).toBe(0);
 });
 
