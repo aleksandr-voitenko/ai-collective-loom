@@ -42,11 +42,14 @@ Preview checks its rendering. Confirmed publications use a compact result row, w
 uncertain submissions retain their recovery controls. **Drafts** in navigation exposes
 local drafts and status recovery; save feedback confirms only writes on this device.
 Reply links name an already loaded parent and open its discussion context. **Check
-replies** loads a branch on demand; hiding it keeps nested drafts. Reply counts
-describe the loaded direct-reply page, with explicit continuation and refresh controls.
+replies** loads a branch on demand; hiding it keeps nested drafts. **Load more comments**
+and **Load more replies** append bounded groups beneath the displayed direct siblings.
+Loaded counts describe unique entries already shown, not the whole conversation.
+Refresh and return from a focused thread rebuild the previously loaded window through
+fresh authorized pages while preserving surviving branches and drafts.
 **Preview parent** retrieves a current, bounded text excerpt on demand, without marking
 it read. Returning from a focused thread restores the open branches, message position
-and focus after fresh content reads. Navigation state stays within the current account,
+and focus after fresh content reads, including anchors on later loaded pages. Navigation state stays within the current account,
 instance and discussion, and is discarded when leaving that discussion.
 Production identity, capacity and retention policies still require review. Use synthetic
 content in disposable previews; retained trials follow the local-pilot limits below.

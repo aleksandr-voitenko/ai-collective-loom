@@ -1034,8 +1034,25 @@ The journey uses ordinary non-admin WebAuthn and asserts mention publication,
 explicit focus, close/reopen custody and unchanged actual reply parentage. Mounted
 close tests refuse dismissal after failed storage and preserve the visible fields.
 The same compiled participation journey checks named parent destinations, accessible
-reply disclosure state, nested draft retention while hidden, bounded first/continuation
-counts and an empty branch's failed-refresh/retry. `LOOM_REPLY_REVIEW=1` uses the same
+reply disclosure state, nested draft retention while hidden, accumulated bounded
+counts and an empty branch's failed-refresh/retry. A separate continuous-discussion
+journey covers three comment pages, two direct-reply pages, failed exact-cursor retry,
+pending editor focus/selection/position, terminal focus, refresh and later-page return.
+It also checks opening, nested and focused publication callbacks after accumulation,
+invalid-cursor replay, empty/non-progressing continuations and old-page withdrawal.
+The return journey also fails a later-page reconstruction once, retries its exact
+cursor, continues the remaining window, and uses an injected completed empty child
+response to verify the lost-anchor notice. The same compiled journey loads 54 root
+comments, holds a refresh while the reader scrolls, checks the eight-page staging
+boundary with a ninth-page editor/branch, and verifies a page-two unavailable entry
+through refresh, eligible descendant navigation and focused return. A held root
+continuation becomes stale after an independent unavailable parent preview; recovery
+must clear busy without reviving withdrawn source text.
+The 54-comment journey also returns from an expanded comment-43 reply twice before
+continuing the partial eight-page restoration, checking the saved tail, branch,
+private draft, focus and viewport offset on the second return.
+`LOOM_CONTINUOUS_REVIEW=1` captures its desktop/mobile states under
+`/tmp/loom-review-evidence/continuous-discussion`. `LOOM_REPLY_REVIEW=1` uses the same
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error
 states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifies the
 deliberate children503. The suppressed-parent journey retains traversal after body loss.
