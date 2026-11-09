@@ -179,7 +179,7 @@ test('pilot retained browser draft and committed uncertain command survive reloa
     expect(independent.body.revision_id).toBe(committed.revision_id);
     expect(independent.body.resource_id).toBe(committed.resource_id);
     await page.getByRole('button', { name: 'Retry same reply', exact: true }).click();
-    await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Reply posted', { exact: true })).toBeVisible();
     expect(
       sql(
         p.d,
@@ -284,7 +284,7 @@ test('pilot unreceived request remains uncertain through provider loss and expli
       posted,
     );
     await page.getByRole('button', { name: 'Retry same reply', exact: true }).click();
-    await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Reply posted', { exact: true })).toBeVisible();
     expect(
       sql(
         p.d,

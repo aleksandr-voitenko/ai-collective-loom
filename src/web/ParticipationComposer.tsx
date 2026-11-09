@@ -118,7 +118,9 @@ export function Composer(props: ComposerOptions) {
               : undefined
           }
           onWriteAnother={
-            !summaryDiscussion && kind !== 'revision.publish' ? writeAnother : undefined
+            !summaryDiscussion && kind !== 'revision.publish' && kind !== 'reply.create'
+              ? writeAnother
+              : undefined
           }
           onClose={onClose}
         />

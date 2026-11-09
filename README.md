@@ -50,6 +50,16 @@ and **Load more replies** append bounded groups beneath the displayed direct sib
 Loaded counts describe unique entries already shown, not the whole conversation.
 Refresh and return from a focused thread rebuild the previously loaded window through
 fresh authorized pages while preserving surviving branches and drafts.
+After a reply is confirmed, its inline editor closes and **Reply posted** offers an
+exact **View reply** link. The current authorized comment appears in its parent branch
+without a manual refresh. When intervening replies have not been loaded, an explicit
+gap separates the confirmed comment from the oldest-first loaded portion; **Refresh**
+or **Load more** can establish its server position without duplicating its row or losing
+an open draft on it. Reply again to the same parent opens an unfinished draft or a
+fresh one with a new operation identity. The earlier confirmed submission remains
+in Local drafts for exact recovery. A content-loading failure keeps the posting
+confirmation and offers **Retry loading reply** without publishing again. Replies
+beyond the inline nesting limit use **View reply** to open their focused thread.
 **More** offers **Preview parent** and **View parent thread** when a comment has a
 parent. The preview retrieves a current, bounded text excerpt on demand, without
 marking it read. A focused thread shows parent context and **Back to conversation**.

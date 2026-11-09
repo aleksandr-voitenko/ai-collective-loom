@@ -1058,6 +1058,17 @@ a measured whole-comment hide and re-entry. A small human/agent conversation che
 390px wrapping of a valid 32-character agent name, URL, code, actions and composer,
 including badge and Unread clearance from the collapse control. The long-window
 return asserts a collapsed sibling after each partial return and final restoration.
+Confirmed-reply browser journeys cover opening and inline parents, fresh operation
+identity, focused return, an older uncertain operation confirmed after a newer one,
+a twelve-of-twenty branch with external arrivals between
+own posts, bounded reads, separate gaps, canonical deduplication with a mounted
+draft, an edited older sibling that stays in creation order, failed context-read
+retry without another POST, and depth-limit focused links. The long-window journey
+also places a separately known reply beyond 54 canonical rows and verifies that
+focused return still restores only the saved canonical extent.
+`LOOM_CONFIRMED_REPLY_REVIEW=1` captures the actual compiled app at 1440x1000 and
+390x844 under `/tmp/loom-review-evidence/confirmed-replies`, with source/build
+hashes, route/state, injected failure and per-image hash in its manifest.
 `LOOM_CONTINUOUS_REVIEW=1` captures its desktop/mobile states under
 `/tmp/loom-review-evidence/discussion-redesign`. `LOOM_REPLY_REVIEW=1` uses the same
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error

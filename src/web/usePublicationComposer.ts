@@ -49,9 +49,10 @@ export type ComposerOptions = {
   initialFileSet?: PublicationFileSet | undefined;
   initialCoverage?: CoverageDeclarationValue | undefined;
   heading: string;
-  onCommitted?: (value: CommittedView) => void;
+  onCommitted?: (value: CommittedView, focusWasInComposer: boolean) => void;
   focusOnOpen?: boolean;
   onClose?: () => void;
+  preferUnfinishedReply?: boolean;
 };
 
 // Keep draft custody, request settlement and focus ownership in the same mounted lifetime.
@@ -70,26 +71,37 @@ export function usePublicationComposer({
   onCommitted,
   focusOnOpen = false,
   onClose,
+  preferUnfinishedReply = false,
 }: ComposerOptions) {
   const { kind } = operation;
   const { path, fixed, titleField, canFiles, canNote, summaryDiscussion } =
     composerOperation(operation);
   const authority = useAuthorization();
   const location = useLocation();
-  const chosen = new URLSearchParams(location.search).get('intent');
-  const [record, update] = useIntent(() =>
-    context.store
-      .all()
-      .find((value) =>
-        chosen
-          ? value.key === chosen &&
+  const chosen = preferUnfinishedReply ? null : new URLSearchParams(location.search).get('intent');
+  const [record, update] = useIntent(
+    () => {
+      const records = context.store.all();
+      if (chosen)
+        return records.find(
+          (value) =>
+            value.key === chosen &&
             value.kind === kind &&
             value.path === path &&
             (['area_id', 'resource_id', 'discussion_id', 'parent_id'] as const).every(
               (key) => !(key in fixed) || value.body[key] === fixed[key],
-            )
-          : value.slot === slot,
-      ),
+            ),
+        );
+      if (kind !== 'reply.create') return records.find((value) => value.slot === slot);
+      const matching = records.filter((value) => value.slot === slot);
+      return (
+        matching.filter((value) => value.state === 'draft').at(-1) ??
+        (preferUnfinishedReply
+          ? undefined
+          : matching.find((value) => value.state === 'uncertain' || value.state === 'rejected'))
+      );
+    },
+    preferUnfinishedReply && kind === 'reply.create',
   );
   const original = record?.body.content as AuthoredContent | undefined;
   const [text, setText] = useState(original?.text ?? initialText),
@@ -144,6 +156,7 @@ export function usePublicationComposer({
     selection = useRef<{ start: number; end: number } | undefined>(undefined),
     pendingCaret = useRef<number | undefined>(undefined),
     feedbackTrigger = useRef<Element | null>(null),
+    confirmationFocus = useRef(false),
     [mentionNames, setMentionNames] = useState<Record<string, string>>({}),
     feedback = useRef<HTMLDivElement>(null),
     recovery = useRef<HTMLDivElement>(null),
@@ -201,6 +214,14 @@ export function usePublicationComposer({
       live.current = false;
     };
   }, []);
+  useEffect(() => {
+    if (!busy) return;
+    const moved = (event: FocusEvent) => {
+      if (!section.current?.contains(event.target as Node)) confirmationFocus.current = false;
+    };
+    document.addEventListener('focusin', moved);
+    return () => document.removeEventListener('focusin', moved);
+  }, [busy]);
   const locked = busy || closing || (!!record && (record.state !== 'draft' || !!record.blocked_by));
   const fields: DraftFields = {
     text,
@@ -284,13 +305,19 @@ export function usePublicationComposer({
     });
     if (live.current) {
       setStatus(kind === 'reply.create' ? 'Your reply was posted.' : 'Your publication is saved.');
-      onCommitted?.(found);
+      onCommitted?.(
+        found,
+        confirmationFocus.current &&
+          (document.activeElement === document.body ||
+            !!section.current?.contains(document.activeElement)),
+      );
     }
   }
   async function send() {
     if (busy || record?.blocked_by) return;
     revealRecovery.current = true;
     feedbackTrigger.current = document.activeElement;
+    confirmationFocus.current = !!section.current?.contains(document.activeElement);
     setBusy(true);
     setError('');
     let intent: Intent | undefined,
@@ -353,6 +380,7 @@ export function usePublicationComposer({
   }
   const check = useCallback(async () => {
     if (!record || busy || record.state !== 'uncertain') return;
+    confirmationFocus.current = !!section.current?.contains(document.activeElement);
     const owner = identityGeneration();
     setBusy(true);
     setError('');

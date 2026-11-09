@@ -7,6 +7,7 @@ import {
   useEffect,
   useLayoutEffect,
   useId,
+  useCallback,
   createContext,
   useContext,
 } from 'react';
@@ -16,6 +17,7 @@ import {
   type ContributionContextView,
   ContributionContext,
   type PageView,
+  type CommittedView,
   Page,
 } from '../contracts/participation.js';
 import { type Context, useQuery } from './participation-state.js';
@@ -35,10 +37,8 @@ import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { EditingIntent } from './EditingIntent.js';
 
-type BranchNavigation =
-  DiscussionNavigationState['branches'] extends Map<string, infer V> ? V : never;
 const ParentPreviewContext = createContext<((id: string) => void) | null>(null);
-const DiscussionNavigation = createContext<Map<string, BranchNavigation> | null>(null);
+const DiscussionNavigation = createContext<DiscussionNavigationState | null>(null);
 
 export function DiscussionPage({ id, context }: { id: string; context: Context }) {
   return (
@@ -61,7 +61,6 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
   const [navigationState] = useState<DiscussionNavigationState>(
     () => context.discussionNavigation ?? { branches: new Map() },
   );
-  const navigation = useRef(navigationState.branches);
   const [preview, setPreview] = useState<string>();
   const [returnUnavailable, setReturnUnavailable] = useState(false);
   const previewTrigger = useRef<HTMLElement | null>(null);
@@ -137,8 +136,8 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
         window.removeEventListener(event, stop);
     };
   }, [focus]);
-  const [reload, setReload] = useState(0),
-    [summaryReload, setSummaryReload] = useState(0);
+  const [openingReply, setOpeningReply] = useState<CommittedView>();
+  const [summaryReload, setSummaryReload] = useState(0);
   // Retain only the immutable opening identity as a query seed. Every rendered
   // header, body and traversal response has its own current content lease.
   const opening = useRef<string>(undefined);
@@ -156,7 +155,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     .slice(0, 160)
     .replace(/[\uD800-\uDBFF]$/, '');
   return (
-    <DiscussionNavigation.Provider value={navigation.current}>
+    <DiscussionNavigation.Provider value={navigationState}>
       <ParentPreviewContext.Provider
         value={(id) => {
           previewTrigger.current = document.activeElement as HTMLElement;
@@ -277,7 +276,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                     id={opening.current!}
                     context={context}
                     opening
-                    onPosted={() => setReload((n) => n + 1)}
+                    onPosted={setOpeningReply}
                   />
                   <div className="discussion-controls">
                     <h2>Comments</h2>
@@ -290,7 +289,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                     context={context}
                     depth={0}
                     role="comments"
-                    refreshVersion={reload}
+                    confirmed={openingReply}
                   />
                 </>
               </div>
@@ -326,7 +325,7 @@ function FocusedBranch({
     `/api/v1/contributions/${id}/context`,
     ContributionContext,
   );
-  const [reload, setReload] = useState(0);
+  const [confirmed, setConfirmed] = useState<CommittedView>();
   const [collapsed, setCollapsed] = useState(
     () => context.discussionNavigation?.focusedCollapsed?.includes(id) ?? false,
   );
@@ -374,8 +373,8 @@ function FocusedBranch({
             navigation.focusedCollapsed = [...saved].slice(-64);
           }
         }}
-        onPosted={() => {
-          if (authority.current(generation)) setReload((n) => n + 1);
+        onPosted={(value) => {
+          if (authority.current(generation)) setConfirmed(value);
         }}
       />
       <div className="discussion-controls" hidden={effectiveCollapsed}>
@@ -389,7 +388,7 @@ function FocusedBranch({
         context={context}
         depth={0}
         role="replies"
-        refreshVersion={reload}
+        confirmed={confirmed}
         hidden={effectiveCollapsed}
       />
     </>
@@ -430,7 +429,11 @@ type ContributionProps = {
   context: Context;
   opening?: boolean;
   parent?: ResourceView | undefined;
-  onPosted?: () => void;
+  onPosted?: (value: CommittedView) => void;
+  onReplyOpened?: () => void;
+  expectedParentId?: string | undefined;
+  discussionId?: string;
+  onKnownLoaded?: (id: string, loaded: boolean) => void;
   collapsed?: boolean;
   onToggleCollapse?: (control: HTMLButtonElement) => void;
 };
@@ -441,11 +444,27 @@ function Contribution(props: ContributionProps) {
     ContributionContext,
   );
   const authority = useAuthorization();
+  const matches =
+    !!data &&
+    (!props.expectedParentId ||
+      (data.parent_id === props.expectedParentId && data.discussion_id === props.discussionId));
+  useEffect(() => {
+    if (props.expectedParentId) props.onKnownLoaded?.(props.id, matches);
+  }, [props.id, props.expectedParentId, props.onKnownLoaded, matches]);
   if (error)
     return (
       <div className="notice">
-        <ErrorText error={error} />
-        <button onClick={refresh}>Retry contribution</button>
+        {props.expectedParentId ? (
+          <p>Reply posted, but it could not be displayed. Try loading it again.</p>
+        ) : (
+          <ErrorText error={error} />
+        )}
+        <button onClick={refresh}>
+          {props.expectedParentId ? 'Retry loading reply' : 'Retry contribution'}
+        </button>
+        {props.expectedParentId && (
+          <Link to={`/loom/discussion/${props.discussionId}?focus=${props.id}`}>View reply</Link>
+        )}
       </div>
     );
   if (!data)
@@ -454,12 +473,20 @@ function Contribution(props: ContributionProps) {
         Loading contribution…
       </p>
     );
+  if (!matches)
+    return (
+      <div className="notice" data-resource-id={props.id}>
+        <p>Reply posted, but it could not be shown in this conversation.</p>
+        <button onClick={refresh}>Retry loading reply</button>
+        <Link to={`/loom/discussion/${props.discussionId}?focus=${props.id}`}>View reply</Link>
+      </div>
+    );
   return (
     <ContributionBody
       {...props}
       data={data}
-      onPosted={() => {
-        if (authority.current(generation)) props.onPosted?.();
+      onPosted={(value) => {
+        if (authority.current(generation)) props.onPosted?.(value);
       }}
     />
   );
@@ -472,6 +499,7 @@ function ContributionBody({
   opening = false,
   parent,
   onPosted,
+  onReplyOpened,
   collapsed = false,
   onToggleCollapse,
 }: ContributionProps & { data: ContributionContextView }) {
@@ -480,11 +508,29 @@ function ContributionBody({
   const [reply, setReply] = useState(() =>
     context.store
       .all()
-      .some((record) => record.slot === 'reply:' + id && record.state !== 'committed'),
+      .some(
+        (record) =>
+          record.slot === 'reply:' + id &&
+          (record.state !== 'committed' ||
+            new URLSearchParams(window.location.search).get('intent') === record.key),
+      ),
   );
+  const [confirmed, setConfirmed] = useState<CommittedView>();
+  const seenOperations = useRef(new Set<string>());
+  const [preferUnfinishedReply, setPreferUnfinishedReply] = useState(false);
+  const [composerKey, setComposerKey] = useState(0);
+  const focusConfirmation = useRef(false);
+  const viewReply = useRef<HTMLAnchorElement>(null);
   const replyButton = useRef<HTMLButtonElement>(null);
   const composerHost = useRef<HTMLDivElement>(null);
   const [focusComposer, setFocusComposer] = useState(false);
+  useLayoutEffect(() => {
+    if (!reply && focusConfirmation.current) {
+      focusConfirmation.current = false;
+      if (document.activeElement === document.body)
+        viewReply.current?.focus({ preventScroll: true });
+    }
+  }, [reply, confirmed]);
   if ('state' in data)
     return (
       <div className="comment unavailable-summary" data-resource-id={id}>
@@ -557,11 +603,13 @@ function ContributionBody({
             ref={replyButton}
             className="text-button"
             onClick={() => {
-              if (reply) composerHost.current?.querySelector<HTMLElement>('textarea')?.focus();
-              else {
-                setFocusComposer(true);
-                setReply(true);
-              }
+              const currentEditor = composerHost.current?.querySelector<HTMLElement>('textarea');
+              if (reply && currentEditor) return currentEditor.focus();
+              setPreferUnfinishedReply(true);
+              setComposerKey((value) => value + 1);
+              setFocusComposer(true);
+              setReply(true);
+              onReplyOpened?.();
             }}
             disabled={!data.publication_open}
           >
@@ -613,17 +661,41 @@ function ContributionBody({
         {reply && (
           <div ref={composerHost} className="comment-composer">
             <Composer
+              key={composerKey}
               context={context}
               operation={{ kind: 'reply.create', discussionId: data.discussion_id!, parentId: id }}
               slot={'reply:' + id}
               heading={'Reply to ' + data.author.nickname}
               focusOnOpen={focusComposer}
+              preferUnfinishedReply={preferUnfinishedReply}
               onClose={() => {
                 setReply(false);
                 replyButton.current?.focus();
               }}
-              onCommitted={() => onPosted?.()}
+              onCommitted={(value, focusWasInComposer) => {
+                if (seenOperations.current.has(value.operation_id)) return;
+                seenOperations.current.add(value.operation_id);
+                focusConfirmation.current = focusWasInComposer;
+                setConfirmed(value);
+                setReply(false);
+                setPreferUnfinishedReply(true);
+                onPosted?.(value);
+              }}
             />
+          </div>
+        )}
+        {confirmed && !reply && (
+          <div className="reply-confirmation" role="status">
+            <strong>Reply posted</strong>{' '}
+            <Link
+              ref={viewReply}
+              to={`/loom/discussion/${data.discussion_id}?focus=${confirmed.resource_id}`}
+            >
+              View reply
+            </Link>{' '}
+            <Link to={`/loom/resource/${confirmed.resource_id}/${confirmed.revision_id}`}>
+              Inspect exact revision
+            </Link>
           </div>
         )}
       </div>
@@ -650,6 +722,7 @@ type ChildrenWindow = ChildTraversal & {
   notice?: string | undefined;
 };
 const restorationPageBudget = 8;
+const knownReplyLimit = 16;
 class ContinuationError extends Error {}
 
 function uniqueChildren(pages: ChildPage[]) {
@@ -671,6 +744,7 @@ function Children({
   depth,
   role,
   refreshVersion = 0,
+  confirmed,
   hidden = false,
 }: {
   id: string;
@@ -680,6 +754,7 @@ function Children({
   depth: number;
   role: 'comments' | 'replies';
   refreshVersion?: number;
+  confirmed?: CommittedView | undefined;
   hidden?: boolean;
 }) {
   const authority = useAuthorization();
@@ -692,7 +767,8 @@ function Children({
   const readingAnchor = useRef<{ resource: string; top: number; scroll: number } | undefined>(
     undefined,
   );
-  const navigation = useContext(DiscussionNavigation),
+  const navigationState = useContext(DiscussionNavigation),
+    navigation = navigationState?.branches,
     navigationKey = id + ':' + depth;
   const initial = useRef(navigation?.get(navigationKey));
   const [windowState, setWindowState] = useState<ChildrenWindow>({
@@ -708,7 +784,37 @@ function Children({
   const [expanded, setExpanded] = useState<string[]>(initial.current?.expanded ?? []),
     [opened, setOpened] = useState<string[]>(initial.current?.opened ?? []),
     [collapsed, setCollapsed] = useState<string[]>(initial.current?.collapsed ?? []),
-    [branchVersions, setBranchVersions] = useState<Record<string, number>>({});
+    [confirmedByParent, setConfirmedByParent] = useState<Record<string, CommittedView>>({}),
+    [knownReplyIds, setKnownReplyIds] = useState<string[]>(
+      navigationState?.knownReplies?.get(id) ?? [],
+    ),
+    [knownLoaded, setKnownLoaded] = useState<string[]>([]);
+  useEffect(() => {
+    if (!confirmed) return;
+    setKnownReplyIds((value) =>
+      value.includes(confirmed.resource_id)
+        ? value
+        : [...value, confirmed.resource_id].slice(-knownReplyLimit),
+    );
+  }, [confirmed]);
+  useEffect(() => {
+    if (!navigationState || !knownReplyIds.length) return;
+    const known = (navigationState.knownReplies ??= new Map());
+    known.delete(id);
+    known.set(id, knownReplyIds);
+    if (known.size > 64) known.delete(known.keys().next().value!);
+  }, [id, knownReplyIds, navigationState]);
+  const onKnownLoaded = useCallback((resourceId: string, loaded: boolean) => {
+    setKnownLoaded((value) =>
+      loaded
+        ? value.includes(resourceId)
+          ? value
+          : [...value, resourceId]
+        : value.includes(resourceId)
+          ? value.filter((id) => id !== resourceId)
+          : value,
+    );
+  }, []);
   const publish = (next: ChildrenWindow) => {
     state.current = next;
     setWindowState(next);
@@ -726,6 +832,23 @@ function Children({
     displayed.pages.length > accepted.length ||
     (windowState.pages.length > 0 && displayed !== windowState);
   const items = uniqueChildren(accepted);
+  const canonicalIds = new Set(items.map((item) => item.resource_id));
+  const separateIds = knownReplyIds.filter((resourceId) => !canonicalIds.has(resourceId));
+  const loadedCount =
+    items.length + separateIds.filter((resourceId) => knownLoaded.includes(resourceId)).length;
+  // One keyed array owns both canonical and separately read rows. Moving a row
+  // into an accepted page then preserves its mounted draft and disclosures.
+  const entries: (
+    | { kind: 'canonical'; item: ChildItem }
+    | { kind: 'known'; id: string }
+    | { kind: 'gap'; id: string }
+  )[] = [
+    ...items.map((item) => ({ kind: 'canonical' as const, item })),
+    ...separateIds.flatMap((resourceId) => [
+      { kind: 'gap' as const, id: resourceId },
+      { kind: 'known' as const, id: resourceId },
+    ]),
+  ];
   useEffect(() => {
     if (!navigation) return;
     const rows = uniqueChildren(state.current.pages);
@@ -864,7 +987,7 @@ function Children({
           staged: undefined,
           ...(!reached ? { notice: 'The earlier end of this list is no longer available.' } : {}),
         });
-        const surviving = new Set(rows.map((row) => row.resource_id));
+        const surviving = new Set([...rows.map((row) => row.resource_id), ...knownReplyIds]);
         setOpened((value) => value.filter((key) => surviving.has(key)));
         setExpanded((value) => value.filter((key) => surviving.has(key)));
         const available = new Set(
@@ -957,7 +1080,7 @@ function Children({
           : {}),
       });
       if (restored) {
-        const surviving = new Set(rows.map((row) => row.resource_id));
+        const surviving = new Set([...rows.map((row) => row.resource_id), ...knownReplyIds]);
         setOpened((value) => value.filter((key) => surviving.has(key)));
         setExpanded((value) => value.filter((key) => surviving.has(key)));
         const available = new Set(
@@ -1005,6 +1128,7 @@ function Children({
   }, [id, refreshVersion]);
   const noun = role === 'comments' ? 'comments' : 'replies';
   const refreshControl = accepted.length > 0 &&
+    !separateIds.length &&
     !withheld &&
     !windowState.error &&
     (!windowState.complete || !items.length) && (
@@ -1025,15 +1149,15 @@ function Children({
       data-ready={accepted.length > 0 || !!windowState.error}
       data-restoring={windowState.busy || !!windowState.goal}
     >
-      {accepted.length > 0 && (
+      {(accepted.length > 0 || knownReplyIds.length > 0) && (
         <div className="reply-page-toolbar">
           <p className="reply-page-summary" role="status">
-            {items.length}{' '}
+            {loadedCount}{' '}
             {role === 'comments'
-              ? items.length === 1
+              ? loadedCount === 1
                 ? 'comment'
                 : 'comments'
-              : items.length === 1
+              : loadedCount === 1
                 ? 'reply'
                 : 'replies'}{' '}
             loaded
@@ -1041,21 +1165,42 @@ function Children({
           {refreshControl}
         </div>
       )}
-      {items.map((item) => {
-        const resource = item as ResourceView;
-        const isCollapsed = !('state' in item) && collapsed.includes(resource.resource_id);
+      {entries.map((entry) => {
+        if (entry.kind === 'gap')
+          return (
+            <div className="continuation-notice reply-gap" key={'gap:' + entry.id}>
+              <span>Some {noun} are not loaded.</span>{' '}
+              {entry.id === separateIds[0] && !windowState.error && !withheld && (
+                <button
+                  className="text-button"
+                  disabled={windowState.busy}
+                  onClick={() => void rebuild(goalFrom(state.current))}
+                >
+                  Refresh {noun}
+                </button>
+              )}
+            </div>
+          );
+        const item = entry.kind === 'canonical' ? entry.item : undefined;
+        const resourceId = entry.kind === 'canonical' ? entry.item.resource_id : entry.id;
+        const resource = item && !('state' in item) ? (item as ResourceView) : undefined;
+        const isCollapsed = !!resource && collapsed.includes(resourceId);
+        const branchReady = entry.kind === 'canonical' || knownLoaded.includes(resourceId);
         return (
-          <div className="comment-branch" data-collapsed={isCollapsed} key={resource.resource_id}>
-            {'state' in item ? (
-              <div className="comment unavailable-summary" data-resource-id={resource.resource_id}>
+          <div className="comment-branch" data-collapsed={isCollapsed} key={resourceId}>
+            {item && 'state' in item ? (
+              <div className="comment unavailable-summary" data-resource-id={resourceId}>
                 <p>Contribution unavailable</p>
               </div>
             ) : (
               <Contribution
-                id={resource.resource_id}
+                id={resourceId}
                 parent={parent}
                 context={context}
                 collapsed={isCollapsed}
+                expectedParentId={knownReplyIds.includes(resourceId) ? id : undefined}
+                discussionId={discussionId}
+                onKnownLoaded={onKnownLoaded}
                 onToggleCollapse={(control) => {
                   const active = document.activeElement;
                   if (
@@ -1064,67 +1209,76 @@ function Children({
                   )
                     control.focus({ preventScroll: true });
                   setCollapsed((value) =>
-                    value.includes(resource.resource_id)
-                      ? value.filter((key) => key !== resource.resource_id)
-                      : [...value, resource.resource_id],
+                    value.includes(resourceId)
+                      ? value.filter((key) => key !== resourceId)
+                      : [...value, resourceId],
                   );
                 }}
-                onPosted={() => {
-                  setExpanded((value) => [...new Set([...value, resource.resource_id])]);
-                  setBranchVersions((value) => ({
-                    ...value,
-                    [resource.resource_id]: (value[resource.resource_id] ?? 0) + 1,
-                  }));
+                onReplyOpened={() => {
+                  if (depth >= 1) return;
+                  setOpened((value) =>
+                    value.includes(resourceId) ? value : [...value, resourceId],
+                  );
+                  setExpanded((value) =>
+                    value.includes(resourceId) ? value : [...value, resourceId],
+                  );
+                }}
+                onPosted={(value) => {
+                  setConfirmedByParent((current) =>
+                    current[resourceId]?.operation_id === value.operation_id
+                      ? current
+                      : { ...current, [resourceId]: value },
+                  );
                 }}
               />
             )}
-            {depth >= 1 ? (
-              <Link
-                className="branch-link"
-                hidden={isCollapsed}
-                to={`/loom/discussion/${discussionId}?focus=${resource.resource_id}`}
-              >
-                Continue this thread →
-              </Link>
-            ) : (
-              <>
-                <button
-                  className="text-button branch-link"
+            {branchReady &&
+              (depth >= 1 ? (
+                <Link
+                  className="branch-link"
                   hidden={isCollapsed}
-                  aria-expanded={expanded.includes(resource.resource_id)}
-                  aria-controls={`${treeId}-${resource.resource_id}`}
-                  onClick={() => {
-                    setOpened((value) => [...new Set([...value, resource.resource_id])]);
-                    setExpanded((value) =>
-                      value.includes(resource.resource_id)
-                        ? value.filter((key) => key !== resource.resource_id)
-                        : [...value, resource.resource_id],
-                    );
-                  }}
+                  to={`/loom/discussion/${discussionId}?focus=${resourceId}`}
                 >
-                  {expanded.includes(resource.resource_id) ? 'Hide replies' : 'Show replies'}
-                </button>
-                {/* Hiding retains mounted drafts/cursors; reads still use the current lease. */}
-                <div
-                  className="comment-children"
-                  id={`${treeId}-${resource.resource_id}`}
-                  hidden={isCollapsed || !expanded.includes(resource.resource_id)}
-                >
-                  {(opened.includes(resource.resource_id) ||
-                    expanded.includes(resource.resource_id)) && (
-                    <Children
-                      id={resource.resource_id}
-                      parent={'state' in item ? undefined : resource}
-                      discussionId={discussionId}
-                      context={context}
-                      depth={depth + 1}
-                      role="replies"
-                      refreshVersion={branchVersions[resource.resource_id] ?? 0}
-                    />
-                  )}
-                </div>
-              </>
-            )}
+                  Continue this thread →
+                </Link>
+              ) : (
+                <>
+                  <button
+                    className="text-button branch-link"
+                    hidden={isCollapsed}
+                    aria-expanded={expanded.includes(resourceId)}
+                    aria-controls={`${treeId}-${resourceId}`}
+                    onClick={() => {
+                      setOpened((value) => [...new Set([...value, resourceId])]);
+                      setExpanded((value) =>
+                        value.includes(resourceId)
+                          ? value.filter((key) => key !== resourceId)
+                          : [...value, resourceId],
+                      );
+                    }}
+                  >
+                    {expanded.includes(resourceId) ? 'Hide replies' : 'Show replies'}
+                  </button>
+                  {/* Hiding retains mounted drafts/cursors; reads still use the current lease. */}
+                  <div
+                    className="comment-children"
+                    id={`${treeId}-${resourceId}`}
+                    hidden={isCollapsed || !expanded.includes(resourceId)}
+                  >
+                    {(opened.includes(resourceId) || expanded.includes(resourceId)) && (
+                      <Children
+                        id={resourceId}
+                        parent={resource}
+                        discussionId={discussionId}
+                        context={context}
+                        depth={depth + 1}
+                        role="replies"
+                        confirmed={confirmedByParent[resourceId]}
+                      />
+                    )}
+                  </div>
+                </>
+              ))}
           </div>
         );
       })}
@@ -1153,7 +1307,7 @@ function Children({
         </div>
       )}
       {!accepted.length && !windowState.error && !withheld && <p role="status">Loading {noun}…</p>}
-      {accepted.length > 0 && !items.length && displayed.complete && (
+      {accepted.length > 0 && !items.length && !separateIds.length && displayed.complete && (
         <p className="empty-replies">No {noun} yet.</p>
       )}
       {windowState.notice && (
@@ -1191,6 +1345,7 @@ function Children({
         !windowState.error &&
         !withheld &&
         windowState.complete &&
+        !separateIds.length &&
         items.length > 0 && (
           <div className="continuation-complete">
             <p ref={completion} tabIndex={-1} className="continuation-status" role="status">
