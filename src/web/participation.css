@@ -378,6 +378,14 @@
   font-size: 12px;
   flex-wrap: wrap;
 }
+.loom-app .author-metadata {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
 .loom-app .author-line time {
   font-size: 11px;
   color: var(--muted);
@@ -533,6 +541,13 @@
   margin-bottom: 6px;
   min-height: 32px;
   font-size: 12px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+}
+.loom-app .comment .author-metadata {
+  gap: 4px;
+  min-height: 30px;
 }
 .loom-app .comment .author-name {
   font-size: 14px;

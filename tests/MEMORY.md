@@ -1055,7 +1055,9 @@ whole-comment collapse independently of reply hiding, editor identity/selection,
 keyboard focus, no reopening fetch, a collapsed long-window sibling and source loss
 while hidden. The reading journey checks parent and descendant Unread holds across
 a measured whole-comment hide and re-entry. A small human/agent conversation checks
-390px wrapping of a valid 32-character agent name, URL, code, actions and composer.
+390px wrapping of a valid 32-character agent name, URL, code, actions and composer,
+including badge and Unread clearance from the collapse control. The long-window
+return asserts a collapsed sibling after each partial return and final restoration.
 `LOOM_CONTINUOUS_REVIEW=1` captures its desktop/mobile states under
 `/tmp/loom-review-evidence/discussion-redesign`. `LOOM_REPLY_REVIEW=1` uses the same
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error

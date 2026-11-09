@@ -1,4 +1,4 @@
-import { type Page, type BrowserContext, type CDPSession } from '@playwright/test';
+import { type Page, type BrowserContext, type CDPSession, type Locator } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -1624,6 +1624,11 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to conversation' }).click();
   await expect(rootRows).toHaveCount(48);
+  await expect(collapsedSibling.getByRole('button', { name: /Expand comment by/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(collapsedSibling.getByText('Continuous comment 2', { exact: true })).toBeHidden();
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
   await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
   await capture(
@@ -1639,6 +1644,11 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to conversation' }).click();
   await expect(rootRows).toHaveCount(48);
+  await expect(collapsedSibling.getByRole('button', { name: /Expand comment by/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(collapsedSibling.getByText('Continuous comment 2', { exact: true })).toBeHidden();
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
   await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
   await expect(laterReplyArticle).toBeFocused();
@@ -1657,6 +1667,11 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   );
   await root.getByRole('button', { name: 'Continue restoring comments' }).click();
   await expect(rootRows).toHaveCount(54);
+  await expect(collapsedSibling.getByRole('button', { name: /Expand comment by/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(collapsedSibling.getByText('Continuous comment 2', { exact: true })).toBeHidden();
   await expect(root.getByText('Continuous comment 54', { exact: true })).toBeVisible();
   const tail = rootRows.last();
   await tail.getByRole('button', { name: 'Show replies' }).click();
@@ -1874,6 +1889,25 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     .getByRole('button', { name: /Collapse comment by/ })
     .click();
   await capture('thread-presentation', rootRows.first().locator('article'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  const longNameArticle = visualAgent.locator(':scope > article.comment');
+  const nestedLongNameArticle = visualAgent.locator('.comment-children article.comment').first();
+  const assertHeaderClearance = async (article: Locator) => {
+    const clearance = await article.evaluate((node) => {
+      const control = node.querySelector('.comment-collapse-control')!.getBoundingClientRect();
+      const badge = node.querySelector('.author-badge')!.getBoundingClientRect();
+      const unread = node.querySelector('.reading-indicator')!.getBoundingClientRect();
+      return { controlRight: control.right, badgeLeft: badge.left, unreadLeft: unread.left };
+    });
+    expect(clearance.badgeLeft).toBeGreaterThanOrEqual(clearance.controlRight + 2);
+    expect(clearance.unreadLeft).toBeGreaterThanOrEqual(clearance.controlRight + 2);
+  };
+  for (const article of [longNameArticle, nestedLongNameArticle]) {
+    await article.locator('.message-details > summary').click();
+    await article.getByRole('button', { name: 'Mark unread' }).click();
+    await expect(article.getByRole('status', { name: 'Unread revision' })).toBeVisible();
+    await assertHeaderClearance(article);
+  }
   const longContent =
     'Paragraph one remains readable.\n\n' +
     'https://example.org/research/' +

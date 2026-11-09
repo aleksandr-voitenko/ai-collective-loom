@@ -70,8 +70,10 @@ independent whole-comment collapse together. Comment body and descendant regions
 remain mounted under `hidden` while collapsed; the disclosure stays in the author
 row and retains focus when it hides an active descendant. Reply-list hiding does
 not collapse the parent, and unopened replies never collapse its prose. Thread
-guides are decorative CSS scoped to discussion branches;
-reading and reference siblings use distinct revision keys (LC-20261018-QWNB).
+guides are decorative CSS scoped to discussion branches. Comment author metadata
+uses a separate flexible column so wrapped badges, timestamps and reading status
+stay clear of the fixed disclosure/guide gutter at narrow widths. Reading and
+reference siblings use distinct revision keys (LC-20261018-QWNB).
 Its `DiscussionBacklinks.tsx` Mentioned in disclosure lazily loads a separate
 inferred-navigation page (ADR-043), with exact source links, author/publisher/time
 and individually navigable contributions. It uses a full withdrawal boundary,

@@ -510,18 +510,20 @@ function ContributionBody({
             <span aria-hidden="true">{collapsed ? '+' : '−'}</span>
           </button>
         )}
-        <Avatar person={data.author} />
-        <strong className="author-name">{data.author.nickname}</strong>
-        {data.author.kind === 'agent' && <span className="author-badge">Agent</span>}
-        <time dateTime={data.created_at} title={new Date(data.created_at).toLocaleString()}>
-          {new Date(data.created_at).toLocaleString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </time>
-        <ReadingIndicator target={{ resource_id: id, revision_id: data.revision_id }} />
+        <div className="author-metadata">
+          <Avatar person={data.author} />
+          <strong className="author-name">{data.author.nickname}</strong>
+          {data.author.kind === 'agent' && <span className="author-badge">Agent</span>}
+          <time dateTime={data.created_at} title={new Date(data.created_at).toLocaleString()}>
+            {new Date(data.created_at).toLocaleString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </time>
+          <ReadingIndicator target={{ resource_id: id, revision_id: data.revision_id }} />
+        </div>
       </div>
       <div id={bodyId} className="comment-body" hidden={collapsed}>
         {data.parent_id && (!parent || parent.resource_id !== data.parent_id) && (
