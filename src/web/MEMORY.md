@@ -65,8 +65,15 @@ query edits from its provider key so persistent controls keep their lifetime.
 
 `ParticipationTopics.tsx` owns topics, proposals and overview composition. Overview
 embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundary.
-`ParticipationDiscussion.tsx` keeps discussion traversal and reply expansion together;
-reading and reference siblings use distinct revision keys (LC-20261018-QWNB).
+`ParticipationDiscussion.tsx` keeps discussion traversal, reply expansion and
+independent whole-comment collapse together. Comment body and descendant regions
+remain mounted under `hidden` while collapsed; the disclosure stays in the author
+row and retains focus when it hides an active descendant. Reply-list hiding does
+not collapse the parent, and unopened replies never collapse its prose. Thread
+guides are decorative CSS scoped to discussion branches. Comment author metadata
+uses a separate flexible column so wrapped badges, timestamps and reading status
+stay clear of the fixed disclosure/guide gutter at narrow widths. Reading and
+reference siblings use distinct revision keys (LC-20261018-QWNB).
 Its `DiscussionBacklinks.tsx` Mentioned in disclosure lazily loads a separate
 inferred-navigation page (ADR-043), with exact source links, author/publisher/time
 and individually navigable contributions. It uses a full withdrawal boundary,
@@ -80,7 +87,8 @@ Native disclosures keep secondary message/discussion controls mounted and author
 ReadingText observes only mounted prose; separate status components consume its
 private state without another observer or lookup. Discussion and full-resource More
 disclosures contain Mark unread; a fixed author-line slot keeps routine unread/
-pending settlement from changing message height. Error/conflict recovery stays
+pending settlement from changing message height, including wrapped mobile discussion
+headers and the opening post. Error/conflict recovery stays
 outside the menu. Empty summaries use a small invitation. The
 available/unavailable/error summary states retain their existing meaning.
 ReadingProvider defaults automation on for a missing scoped preference and fails
@@ -115,14 +123,17 @@ and conflict recording can retry covered legacy compaction after a storage fault
 Local journal transitions update private state
 from safe receipts without broad registered-target lookups; source-host lookup
 ownership and positive-receipt lease limits remain. See ADR-026.
-Reply parent labels reuse only current leased parent metadata with a matching ID;
-otherwise the link stays generic. They open the actual parent in discussion context
-without extra reads. Preview parent separately reads current context only on demand,
+The inline hierarchy supplies parent identity for nested comments. A focused or
+direct-link comment shows a compact parent link; its label uses only current leased
+matching metadata, otherwise generic text. More provides View parent thread without
+extra reads. Preview parent separately reads current context only on demand,
 shows an excerpt capped at360 UTF-16 units and never registers ReadingText. Explicit
 preview opening reveals/focuses its panel; closing restores a surviving trigger. Its host
 survives an unavailable-parent response so fresh negative evidence stays visible;
 older projections still withdraw. App-scoped discussion navigation stores only up to64
-branch control snapshots and a return anchor, scoped to account/instance/path. It
+branch control snapshots, bounded focused-comment collapse IDs and a return anchor,
+scoped to account/instance/path. These entries contain IDs and flags, never prose or
+authoritative totals. It
 survives query remounts while preserving their authorization and composer isolation;
 return rebuilds each previously loaded branch through fresh six-item pages, up to eight
 pages per automatic run, before restoring a later-page offset/focus. A remaining
@@ -133,7 +144,10 @@ another focus-query remount. This metadata never authorizes source content.
 Children remain on-demand and six-item bounded: counts describe unique
 loaded direct entries, never an inferred thread total. Each accepted page retains
 its own authorization lease and continuation; append leaves existing rows mounted.
-Opened branches stay mounted while hidden, preserving nested drafts and cursors.
+Opened branches and whole-comment bodies stay mounted while hidden, preserving nested
+drafts, selection, cursors and viewport-reading occurrences. A measured full hide
+and re-entry can rearm automatic reading; no collapse handler marks text read.
+Unavailable comments ignore stale collapse flags so eligible descendants stay reachable.
 Refresh stages a fresh traversal through the prior tail at page granularity, then
 reconciles surviving branch IDs. A bounded partial stage leaves a fully authorized
 old window mounted until the tail is reached; scrolling, wheel, touch, pointer or

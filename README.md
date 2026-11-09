@@ -41,14 +41,19 @@ requests retain their exact bytes. **Formatting help** explains the supported Ma
 Preview checks its rendering. Confirmed publications use a compact result row, while
 uncertain submissions retain their recovery controls. **Drafts** in navigation exposes
 local drafts and status recovery; save feedback confirms only writes on this device.
-Reply links name an already loaded parent and open its discussion context. **Check
-replies** loads a branch on demand; hiding it keeps nested drafts. **Load more comments**
+Comments use compact author rows and connected reply guides. The minus/plus control
+collapses or expands a whole comment, including its body, actions, composer and
+descendants. **Show replies** / **Hide replies** controls only the reply list;
+both disclosures preserve loaded replies and open drafts. **Continue this thread**
+opens a deeper branch when inline nesting ends. **Load more comments**
 and **Load more replies** append bounded groups beneath the displayed direct siblings.
 Loaded counts describe unique entries already shown, not the whole conversation.
 Refresh and return from a focused thread rebuild the previously loaded window through
 fresh authorized pages while preserving surviving branches and drafts.
-**Preview parent** retrieves a current, bounded text excerpt on demand, without marking
-it read. Returning from a focused thread restores the open branches, message position
+**More** offers **Preview parent** and **View parent thread** when a comment has a
+parent. The preview retrieves a current, bounded text excerpt on demand, without
+marking it read. A focused thread shows parent context and **Back to conversation**.
+Returning from a focused thread restores comment and reply disclosures, message position
 and focus after fresh content reads, including anchors on later loaded pages. Navigation state stays within the current account,
 instance and discussion, and is discarded when leaving that discussion.
 Production identity, capacity and retention policies still require review. Use synthetic

@@ -5,7 +5,7 @@ import type { Page } from '@playwright/test';
 import { applicationInputs } from '../../scripts/lib/release-identity.mjs';
 
 const screenshots: unknown[] = [];
-const directory = '/tmp/loom-review-evidence/continuous-discussion';
+const directory = '/tmp/loom-review-evidence/discussion-redesign';
 
 export async function captureContinuousDiscussion(
   page: Page,
@@ -35,6 +35,7 @@ export async function captureContinuousDiscussion(
     state,
     source_commit: git('rev-parse', 'HEAD'),
     dirty_tree: git('status', '--porcelain').length > 0,
+    source_diff_sha256: createHash('sha256').update(git('diff', '--binary')).digest('hex'),
     application_input_sha256: inputs.sha256,
     build_sha256: build.sha256,
     route: new URL(page.url()).pathname,

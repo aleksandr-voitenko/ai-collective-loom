@@ -1,4 +1,4 @@
-import { type Page, type BrowserContext, type CDPSession } from '@playwright/test';
+import { type Page, type BrowserContext, type CDPSession, type Locator } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -234,11 +234,15 @@ async function api(page: Page, path: string, body?: unknown) {
         },
       });
 }
-async function agent(page: Page, server: Awaited<ReturnType<typeof syntheticServer>>) {
+async function agent(
+  page: Page,
+  server: Awaited<ReturnType<typeof syntheticServer>>,
+  nickname = 'external_agent',
+) {
   const account = await (
     await api(page, '/api/v1/identity/accounts', {
       idempotency_key: randomUUID(),
-      nickname: 'external_agent',
+      nickname,
       kind: 'agent',
       role: 'participant',
     })
@@ -403,14 +407,12 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
     page.getByText('I retrieved the actual opening revision before answering.'),
   ).toBeVisible();
   const agentPost = page.locator(`[data-resource-id="${reply.body.resource_id}"]`);
-  await expect(agentPost.getByRole('link', { name: '@maya', exact: true })).toHaveAttribute(
-    'href',
-    `/loom/discussion/${discussion.discussion}?focus=${discussion.resource}`,
-  );
+  await expect(agentPost.getByText('Replying to', { exact: false })).toHaveCount(0);
   const agentBranch = agentPost.locator('..');
   await expect(
-    agentBranch.getByRole('button', { name: 'Check replies', exact: true }),
+    agentBranch.getByRole('button', { name: 'Show replies', exact: true }),
   ).toHaveAttribute('aria-expanded', 'false');
+  await agentPost.locator('.message-details > summary').click();
   await agentPost.getByRole('button', { name: 'Preview parent', exact: true }).click();
   const parentPreview = page.getByRole('complementary', { name: 'Parent preview' });
   await expect(parentPreview).toBeFocused();
@@ -469,11 +471,8 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
   expect(children.body.items).toHaveLength(1);
   expect(children.body.items[0].parent_id).toBe(reply.body.resource_id);
   const nestedReplies = agentBranch.locator(':scope > .comment-children');
-  await expect(nestedReplies.getByText('1 direct reply loaded', { exact: true })).toBeVisible();
-  await expect(nestedReplies.getByRole('link', { name: '@lyra', exact: true })).toHaveAttribute(
-    'href',
-    `/loom/discussion/${discussion.discussion}?focus=${reply.body.resource_id}`,
-  );
+  await expect(nestedReplies.getByText('1 reply loaded', { exact: true })).toBeVisible();
+  await expect(nestedReplies.getByText('Replying to', { exact: false })).toHaveCount(0);
   await agentPost.getByRole('button', { name: 'Write another', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`focus=${reply.body.resource_id}`));
   await agentPost
@@ -485,10 +484,10 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
       .locator('.comment-tree .prose')
       .getByText('A second reply in the already open branch.', { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText('2 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 replies loaded', { exact: true })).toBeVisible();
   await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
-  await agentBranch.getByRole('button', { name: 'Check replies', exact: true }).click();
-  await expect(nestedReplies.getByText('2 direct replies loaded', { exact: true })).toBeVisible();
+  await agentBranch.getByRole('button', { name: 'Show replies', exact: true }).click();
+  await expect(nestedReplies.getByText('2 replies loaded', { exact: true })).toBeVisible();
   const nestedPost = nestedReplies.locator('article.comment').first();
   await nestedPost.getByRole('button', { name: 'Reply', exact: true }).click();
   await nestedPost
@@ -496,8 +495,8 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
     .fill('A nested draft survives hiding the branch.');
   await agentBranch.getByRole('button', { name: 'Hide replies', exact: true }).click();
   await expect(nestedReplies).toBeHidden();
-  await agentBranch.getByRole('button', { name: 'Show loaded replies', exact: true }).click();
-  await expect(nestedReplies.getByText('2 direct replies loaded', { exact: true })).toBeVisible();
+  await agentBranch.getByRole('button', { name: 'Show replies', exact: true }).click();
+  await expect(nestedReplies.getByText('2 replies loaded', { exact: true })).toBeVisible();
   await expect(nestedPost.getByLabel('Your reply', { exact: true })).toHaveValue(
     'A nested draft survives hiding the branch.',
   );
@@ -520,7 +519,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
   );
   const threadLink = nestedPost
     .locator('..')
-    .getByRole('link', { name: 'Open reply thread →', exact: true });
+    .getByRole('link', { name: 'Continue this thread →', exact: true });
   await threadLink.scrollIntoViewIfNeeded();
   const beforeTop = await nestedPost.evaluate((node) => node.getBoundingClientRect().top);
   await threadLink.click();
@@ -547,7 +546,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
     await captureMessaging(page, 'reply-context');
     await nestedReplies.evaluate((node) => node.scrollIntoView({ block: 'start' }));
     await captureMessaging(page, 'reply-thread');
-    const more = agentPost.locator(':scope > .post-footer > .message-details');
+    const more = agentPost.locator('.post-footer > .message-details');
     await more.locator('summary').click();
     await expect(more.getByText('Inspect editing intent', { exact: true })).toBeVisible();
     await more.scrollIntoViewIfNeeded();
@@ -719,7 +718,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
     expect(extra.status).toBe(201);
   }
   await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
-  await expect(page.getByText('6 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(page.getByText('6 comments loaded', { exact: true })).toBeVisible();
   for (const viewport of [
     { width: 1440, height: 1000 },
     { width: 390, height: 844 },
@@ -734,7 +733,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
     );
   }
   await page.getByRole('button', { name: 'Load more comments', exact: true }).click();
-  await expect(page.getByText('7 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(page.getByText('7 comments loaded', { exact: true })).toBeVisible();
   await expect(page.getByText('Another direct reply 1.', { exact: true })).toBeVisible();
   const leaf = children.body.items[0].resource_id;
   await page.goto(server.origin + `/loom/discussion/${discussion.discussion}?focus=${leaf}`);
@@ -1183,12 +1182,20 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     failures: string[] = [],
   ) => {
     if (process.env.LOOM_CONTINUOUS_REVIEW !== '1') return;
+    if (state === 'focused-thread')
+      await expect(page.locator('.ancestors .ancestor-row')).toHaveCount(2);
     for (const viewport of [
       { width: 1440, height: 1000 },
       { width: 390, height: 844 },
     ]) {
       await page.setViewportSize(viewport);
-      await target.scrollIntoViewIfNeeded();
+      if (
+        state === 'thread-presentation' ||
+        state === 'focused-thread' ||
+        state === 'page-two-unavailable'
+      )
+        await target.evaluate((node) => node.scrollIntoView({ block: 'start' }));
+      else await target.scrollIntoViewIfNeeded();
       await captureContinuousDiscussion(page, state, failures);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
@@ -1198,13 +1205,16 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   };
   const root = page.locator('.conversation-content > .comment-tree');
   const rootRows = root.locator(':scope > .comment-branch');
-  await expect(root.getByText('6 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('6 comments loaded', { exact: true })).toBeVisible();
   await expect(rootRows).toHaveCount(6);
-  await capture('before-append', root.getByText('6 direct comments loaded', { exact: true }));
+  await capture('before-append', root.getByText('6 comments loaded', { exact: true }));
   const first = rootRows.first();
-  await first.getByRole('button', { name: 'Check replies' }).click();
+  await first.getByRole('button', { name: 'Show replies' }).click();
   const replies = first.locator(':scope > .comment-children > .comment-tree');
-  await expect(replies.getByText('6 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(replies.getByText('6 replies loaded', { exact: true })).toBeVisible();
+  const overviewSibling = rootRows.nth(2);
+  await overviewSibling.getByRole('button', { name: /Collapse comment by/ }).click();
+  await capture('thread-overview', first.locator('article').first());
   let failedCursor = '';
   let retryCursor = '';
   await page.route(`**/api/v1/contributions/${roots[0]}/children?*`, async (route) => {
@@ -1226,9 +1236,9 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     'One direct-reply continuation request was deliberately aborted.',
   ]);
   await replies.getByRole('button', { name: 'Retry replies' }).click();
-  await expect(replies.getByText('8 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(replies.getByText('8 replies loaded', { exact: true })).toBeVisible();
   expect(retryCursor).toBe(failedCursor);
-  await capture('reply-complete', replies.getByText('8 direct replies loaded', { exact: true }));
+  await capture('reply-complete', replies.getByText('8 replies loaded', { exact: true }));
   expect(
     await replies
       .locator(':scope > .comment-branch')
@@ -1239,11 +1249,54 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
       ),
   ).toEqual(direct);
   await page.unrouteAll({ behavior: 'wait' });
+  let readsOnReopen = 0;
+  await page.route(`**/api/v1/contributions/${roots[0]}/children?*`, async (route) => {
+    readsOnReopen++;
+    await route.continue();
+  });
   const firstArticle = first.locator('article').first();
   const articleHandle = await firstArticle.elementHandle();
   await firstArticle.getByRole('button', { name: 'Reply', exact: true }).click();
   const editor = firstArticle.getByLabel('Your reply', { exact: true });
   await editor.fill('A retained draft');
+  await editor.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(2, 7));
+  const editorHandle = await editor.elementHandle();
+  const collapse = firstArticle.getByRole('button', { name: /Collapse comment by/ });
+  await expect(collapse).toHaveAttribute('aria-expanded', 'true');
+  const controlled = await collapse.getAttribute('aria-controls');
+  expect(controlled).toBeTruthy();
+  await expect(firstArticle.locator(`[id="${controlled}"]`)).toBeVisible();
+  await editor.focus();
+  await collapse.evaluate((button: HTMLButtonElement) => button.click());
+  const expand = firstArticle.getByRole('button', { name: /Expand comment by/ });
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+  await expect(expand).toBeFocused();
+  await expect(firstArticle.getByText('Continuous comment 1', { exact: true })).toBeHidden();
+  await expect(first.locator(':scope > .comment-children')).toBeHidden();
+  await expect(rootRows.nth(1).getByText('Continuous comment 2')).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(editor).not.toBeFocused();
+  await expand.focus();
+  await expand.press('Enter');
+  await expect(collapse).toHaveAttribute('aria-expanded', 'true');
+  await collapse.press('Space');
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+  await expand.press('Enter');
+  await expect(first.locator(':scope > .comment-children')).toBeVisible();
+  await expect(editor).toHaveValue('A retained draft');
+  expect(
+    await editorHandle!.evaluate(
+      (original, current) => original === current,
+      await editor.elementHandle(),
+    ),
+  ).toBe(true);
+  expect(
+    await editor.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd]),
+  ).toEqual([2, 7]);
+  await expect(replies.getByText('8 replies loaded', { exact: true })).toBeVisible();
+  expect(readsOnReopen).toBe(0);
+  await capture('dirty-reply-restored', editor);
+  await page.unrouteAll({ behavior: 'wait' });
   let release!: () => void;
   let started!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -1278,12 +1331,13 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await more.click();
   await firstArticle.getByRole('button', { name: 'Mark unread' }).click();
   await expect(firstArticle.getByRole('status', { name: 'Unread revision' })).toBeVisible();
+  await capture('more-open', more);
   await more.click();
   await editor.focus();
   await editor.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(2, 11));
   const beforeTop = await firstArticle.evaluate((node) => node.getBoundingClientRect().top);
   release();
-  await expect(root.getByText('12 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('12 comments loaded', { exact: true })).toBeVisible();
   await expect(editor).toBeFocused();
   await expect(editor).toHaveValue('A retained draft while loading');
   await expect(firstArticle.getByRole('status', { name: 'Unread revision' })).toBeVisible();
@@ -1302,10 +1356,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     Math.abs((await firstArticle.evaluate((node) => node.getBoundingClientRect().top)) - beforeTop),
   ).toBeLessThan(28);
   expect(await replies.locator(':scope > .comment-branch').count()).toBe(8);
-  await capture(
-    'accumulated-with-draft',
-    root.getByText('12 direct comments loaded', { exact: true }),
-  );
+  await capture('accumulated-with-draft', root.getByText('12 comments loaded', { exact: true }));
   await page.unrouteAll({ behavior: 'wait' });
   const load = root.getByRole('button', { name: 'Load more comments' });
   await load.focus();
@@ -1325,20 +1376,17 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   ).toEqual(roots);
   await expect(load).toHaveCount(0);
   await expect(editor).toHaveValue('A retained draft while loading');
-  await capture(
-    'completed-continuation',
-    root.getByText('14 direct comments loaded', { exact: true }),
-  );
+  await capture('completed-continuation', root.getByText('14 comments loaded', { exact: true }));
   await capture('completed-tail', rootRows.last());
   await root.getByRole('button', { name: 'Refresh comments' }).click();
-  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('14 comments loaded', { exact: true })).toBeVisible();
   await expect(editor).toHaveValue('A retained draft while loading');
-  await expect(replies.getByText('8 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(replies.getByText('8 replies loaded', { exact: true })).toBeVisible();
   const later = rootRows.nth(12);
-  await later.getByRole('button', { name: 'Check replies' }).click();
+  await later.getByRole('button', { name: 'Show replies' }).click();
   const laterChild = later.locator('.comment-children .comment-branch').first();
   await expect(laterChild.getByText('Reply beneath later comment')).toBeVisible();
-  const thread = laterChild.getByRole('link', { name: 'Open reply thread →' });
+  const thread = laterChild.getByRole('link', { name: 'Continue this thread →' });
   await thread.scrollIntoViewIfNeeded();
   const anchorTop = await laterChild
     .locator('[data-resource-id]')
@@ -1346,8 +1394,13 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     .evaluate((node) => node.getBoundingClientRect().top);
   await thread.click();
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await capture('focused-thread', page.locator('.focus-banner'));
+  const focusArticle = page.locator('.reading-grid > div > article.comment');
+  await focusArticle.getByRole('button', { name: /Collapse comment by/ }).click();
+  await expect(focusArticle.locator('.prose')).toBeHidden();
+  await expect(page.locator('.reading-grid > div > .comment-tree')).toBeHidden();
   await page.getByRole('link', { name: 'Back to conversation' }).click();
-  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('14 comments loaded', { exact: true })).toBeVisible();
   await expect(laterChild.getByText('Reply beneath later comment')).toBeVisible();
   await expect(editor).toHaveValue('A retained draft while loading');
   await expect(laterChild.locator('[data-resource-id]').first()).toBeFocused();
@@ -1364,6 +1417,9 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await capture('restored-later-page', laterChild);
   await thread.click();
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await expect(focusArticle.getByRole('button', { name: /Expand comment by/ })).toBeVisible();
+  await focusArticle.getByRole('button', { name: /Expand comment by/ }).click();
+  await expect(focusArticle.locator('.prose')).toBeVisible();
   let failedReturnCursor = '';
   let retriedReturnCursor = '';
   await page.route(`**/api/v1/contributions/${discussion.resource}/children?*`, async (route) => {
@@ -1377,12 +1433,12 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     return route.continue();
   });
   await page.getByRole('link', { name: 'Back to conversation' }).click();
-  await expect(root.getByText('6 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('6 comments loaded', { exact: true })).toBeVisible();
   await expect(root.getByRole('button', { name: 'Retry comments' })).toBeVisible();
   await expect(root.getByText('Continuous comment 1', { exact: true })).toBeVisible();
   await expect(root.getByText('Continuous comment 13', { exact: true })).toHaveCount(0);
   await root.getByRole('button', { name: 'Retry comments' }).click();
-  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('14 comments loaded', { exact: true })).toBeVisible();
   expect(retriedReturnCursor).toBe(failedReturnCursor);
   await expect(laterChild.getByText('Reply beneath later comment', { exact: true })).toBeVisible();
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toHaveCount(0);
@@ -1399,7 +1455,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     });
   });
   await page.getByRole('link', { name: 'Back to conversation' }).click();
-  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('14 comments loaded', { exact: true })).toBeVisible();
   await expect(later.getByText('No replies yet.', { exact: true })).toBeVisible();
   await expect(page.getByText('The earlier reading position is unavailable.')).toBeVisible();
   await expect(page.getByText('Reply beneath later comment', { exact: true })).toHaveCount(0);
@@ -1410,25 +1466,30 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   const otherEditor = otherArticle.getByLabel('Your reply', { exact: true });
   await otherEditor.fill('Another private draft remains here');
   await firstArticle.getByRole('button', { name: 'Post reply', exact: true }).click();
-  await expect(replies.getByText('9 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(replies.getByText('9 replies loaded', { exact: true })).toBeVisible();
   await expect(otherEditor).toHaveValue('Another private draft remains here');
-  await expect(root.getByText('14 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('14 comments loaded', { exact: true })).toBeVisible();
   const opening = page.locator('.conversation-content > article.post');
   await opening.getByRole('button', { name: 'Reply', exact: true }).click();
   await opening.getByLabel('Your reply', { exact: true }).fill('New opening comment');
   await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
-  await expect(root.getByText('15 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('15 comments loaded', { exact: true })).toBeVisible();
   await expect(otherEditor).toHaveValue('Another private draft remains here');
   await replies
     .locator(':scope > .comment-branch')
     .first()
-    .getByRole('link', { name: '@external_agent' })
+    .locator('.message-details > summary')
+    .click();
+  await replies
+    .locator(':scope > .comment-branch')
+    .first()
+    .getByRole('link', { name: 'View parent thread' })
     .click();
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
   const focusedReplies = page.locator('.reading-grid > div > .comment-tree');
-  await expect(focusedReplies.getByText('6 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(focusedReplies.getByText('6 replies loaded', { exact: true })).toBeVisible();
   await focusedReplies.getByRole('button', { name: 'Load more replies' }).click();
-  await expect(focusedReplies.getByText('9 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(focusedReplies.getByText('9 replies loaded', { exact: true })).toBeVisible();
   const focusedParent = page.locator('.reading-grid > div > article.comment');
   const anotherReply = focusedParent.getByRole('button', { name: 'Write another', exact: true });
   if (!(await anotherReply.isVisible()))
@@ -1436,10 +1497,10 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await anotherReply.click();
   await focusedParent.getByLabel('Your reply', { exact: true }).fill('Focused reply after loading');
   await focusedParent.getByRole('button', { name: 'Post reply', exact: true }).click();
-  await expect(focusedReplies.getByText('10 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(focusedReplies.getByText('10 replies loaded', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to conversation' }).click();
-  await expect(root.getByText('15 direct comments loaded', { exact: true })).toBeVisible();
-  await expect(replies.getByText('10 direct replies loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('15 comments loaded', { exact: true })).toBeVisible();
+  await expect(replies.getByText('10 replies loaded', { exact: true })).toBeVisible();
   await expect(otherEditor).toHaveValue('Another private draft remains here');
   for (let index = 16; index <= 28; index++) {
     const result = await external.client.call('/api/v1/replies', {
@@ -1452,7 +1513,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     roots.push(result.body.resource_id);
   }
   await root.getByRole('button', { name: 'Refresh comments' }).click();
-  await expect(root.getByText('18 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('18 comments loaded', { exact: true })).toBeVisible();
   let firstPageRequests = 0;
   let mode: 'invalidate' | 'rebuilding' | 'nonprogress' | 'empty' | 'normal' = 'invalidate';
   let invalidCursor = '';
@@ -1505,22 +1566,22 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   mode = 'nonprogress';
   await root.getByRole('button', { name: 'Load more comments' }).click();
   await expect(root.getByRole('button', { name: 'Retry comments' })).toBeVisible();
-  await expect(root.getByText('18 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('18 comments loaded', { exact: true })).toBeVisible();
   await root.getByRole('button', { name: 'Retry comments' }).click();
   await expect(root.getByRole('button', { name: 'Load more comments' })).toBeVisible();
   expect(retriedCursor).toBe(recoveredCursor);
   expect(recoveredCursor).not.toBe(invalidCursor);
-  await expect(root.getByText('18 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('18 comments loaded', { exact: true })).toBeVisible();
   await expect(root.getByText('No comments yet.', { exact: true })).toHaveCount(0);
   await root.getByRole('button', { name: 'Load more comments' }).click();
-  await expect(root.getByText('22 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('22 comments loaded', { exact: true })).toBeVisible();
   await expect(root.getByText('Continuous comment 28', { exact: true })).toBeVisible();
   await page.unrouteAll({ behavior: 'wait' });
 
   // A ninth accepted page must remain mounted while the bounded refresh stages
   // its first eight pages, including the editor and branch on the loaded tail.
   await root.getByRole('button', { name: 'Refresh comments' }).click();
-  await expect(root.getByText('28 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('28 comments loaded', { exact: true })).toBeVisible();
   for (let index = 29; index <= 54; index++) {
     const result = await external.client.call('/api/v1/replies', {
       idempotency_key: randomUUID(),
@@ -1532,7 +1593,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     roots.push(result.body.resource_id);
   }
   await root.getByRole('button', { name: 'Refresh comments' }).click();
-  await expect(root.getByText('28 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('28 comments loaded', { exact: true })).toBeVisible();
   await expect(root).toHaveAttribute('aria-busy', 'false');
   while ((await rootRows.count()) < 54) {
     const before = await rootRows.count();
@@ -1540,7 +1601,13 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     await expect.poll(() => rootRows.count()).toBeGreaterThan(before);
     await expect(root).toHaveAttribute('aria-busy', 'false');
   }
-  await expect(root.getByText('54 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('54 comments loaded', { exact: true })).toBeVisible();
+  const collapsedSibling = rootRows.nth(1);
+  await collapsedSibling.getByRole('button', { name: /Collapse comment by/ }).click();
+  await expect(collapsedSibling.getByRole('button', { name: /Expand comment by/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
   const laterBranch = rootRows.nth(42);
   await expect(laterBranch.getByText('Continuous comment 43', { exact: true })).toBeVisible();
   const laterBranchReply = await external.client.call('/api/v1/replies', {
@@ -1550,13 +1617,18 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     content: text('Reply beneath comment 43'),
   });
   expect(laterBranchReply.status).toBe(201);
-  await laterBranch.getByRole('button', { name: 'Check replies' }).click();
+  await laterBranch.getByRole('button', { name: 'Show replies' }).click();
   await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
-  const laterBranchThread = laterBranch.getByRole('link', { name: 'Open reply thread →' });
+  const laterBranchThread = laterBranch.getByRole('link', { name: 'Continue this thread →' });
   await laterBranchThread.click();
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to conversation' }).click();
   await expect(rootRows).toHaveCount(48);
+  await expect(collapsedSibling.getByRole('button', { name: /Expand comment by/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(collapsedSibling.getByText('Continuous comment 2', { exact: true })).toBeHidden();
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
   await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
   await capture(
@@ -1572,6 +1644,11 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to conversation' }).click();
   await expect(rootRows).toHaveCount(48);
+  await expect(collapsedSibling.getByRole('button', { name: /Expand comment by/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(collapsedSibling.getByText('Continuous comment 2', { exact: true })).toBeHidden();
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
   await expect(laterBranch.getByText('Reply beneath comment 43', { exact: true })).toBeVisible();
   await expect(laterReplyArticle).toBeFocused();
@@ -1590,9 +1667,14 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   );
   await root.getByRole('button', { name: 'Continue restoring comments' }).click();
   await expect(rootRows).toHaveCount(54);
+  await expect(collapsedSibling.getByRole('button', { name: /Expand comment by/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(collapsedSibling.getByText('Continuous comment 2', { exact: true })).toBeHidden();
   await expect(root.getByText('Continuous comment 54', { exact: true })).toBeVisible();
   const tail = rootRows.last();
-  await tail.getByRole('button', { name: 'Check replies' }).click();
+  await tail.getByRole('button', { name: 'Show replies' }).click();
   await expect(tail.getByText('No replies yet.', { exact: true })).toBeVisible();
   const tailArticle = tail.locator('article').first();
   const tailHandle = await tailArticle.elementHandle();
@@ -1636,7 +1718,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     root.getByRole('button', { name: 'Continue restoring comments' }),
   );
   await root.getByRole('button', { name: 'Continue restoring comments' }).click();
-  await expect(root.getByText('54 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('54 comments loaded', { exact: true })).toBeVisible();
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toHaveCount(0);
   await expect(tailEditor).toHaveValue('A draft on the ninth page');
   expect(await page.evaluate((node) => node?.isConnected, tailHandle)).toBe(true);
@@ -1651,6 +1733,9 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     content: text('Eligible descendant of unavailable comment'),
   });
   expect(eligibleDescendant.status).toBe(201);
+  const withdrawing = rootRows.nth(6);
+  await withdrawing.getByRole('button', { name: /Collapse comment by/ }).click();
+  await expect(withdrawing.getByText('Continuous comment 7', { exact: true })).toBeHidden();
   await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
     roots[6],
   ]);
@@ -1663,9 +1748,11 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     has: page.locator(`[data-resource-id="${roots[6]}"]`),
   });
   await expect(unavailable.getByText('Contribution unavailable', { exact: true })).toBeVisible();
-  await unavailable.getByRole('button', { name: 'Check replies' }).click();
+  await expect(unavailable.locator('article')).toHaveCount(0);
+  await expect(unavailable.getByText('Continuous comment 7', { exact: true })).toHaveCount(0);
+  await unavailable.getByRole('button', { name: 'Show replies' }).click();
   await expect(unavailable.getByText('Eligible descendant of unavailable comment')).toBeVisible();
-  const descendantThread = unavailable.getByRole('link', { name: 'Open reply thread →' });
+  const descendantThread = unavailable.getByRole('link', { name: 'Continue this thread →' });
   await descendantThread.click();
   await page.getByRole('button', { name: 'Refresh branch' }).click();
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
@@ -1701,6 +1788,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   });
   await root.getByRole('button', { name: 'Load more comments' }).click();
   await staleReady;
+  await unavailable.locator('.message-details > summary').click();
   await unavailable.getByRole('button', { name: 'Preview parent' }).click();
   await expect(page.getByText('Parent unavailable.', { exact: true })).toBeVisible();
   releaseStale();
@@ -1743,7 +1831,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     pageTwoIds[6],
   ]);
   await page.goto(server.origin + `/loom/discussion/${pageTwo.discussion}`);
-  await expect(root.getByText('6 direct comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('6 comments loaded', { exact: true })).toBeVisible();
   await root.getByRole('button', { name: 'Load more comments' }).click();
   await expect(root.getByText('Second-page comment 8', { exact: true })).toBeVisible();
   await expect(root.getByText('Second-page comment 1', { exact: true })).toHaveCount(0);
@@ -1753,12 +1841,99 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await expect(
     unavailableOnPageTwo.getByText('Contribution unavailable', { exact: true }),
   ).toBeVisible();
-  await unavailableOnPageTwo.getByRole('button', { name: 'Check replies' }).click();
+  await unavailableOnPageTwo.getByRole('button', { name: 'Show replies' }).click();
   await expect(unavailableOnPageTwo.getByText('Second-page eligible descendant')).toBeVisible();
   await capture('page-two-unavailable', unavailableOnPageTwo, [
     'Synthetic comment 7 was deliberately suppressed before the second-page request.',
   ]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  const visual = await createDiscussion(page, 'A conversation with human and agent replies');
+  const longName = 'research_agent_with_long_name_01';
+  const namedAgent = await agent(page, server, longName);
+  const human = await api(page, '/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: visual.discussion,
+    parent_id: visual.resource,
+    content: text('A human thought: let us compare the evidence together.'),
+  });
+  expect(human.status()).toBe(201);
+  const agentRoot = await namedAgent.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: visual.discussion,
+    parent_id: visual.resource,
+    content: text('The agent adds a concise observation.'),
+  });
+  expect(agentRoot.status).toBe(201);
+  const sibling = await external.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: visual.discussion,
+    parent_id: visual.resource,
+    content: text('A separate sibling comment.'),
+  });
+  expect(sibling.status).toBe(201);
+  const child = await namedAgent.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: visual.discussion,
+    parent_id: agentRoot.body.resource_id,
+    content: text('A direct reply with a deeper route.'),
+  });
+  expect(child.status).toBe(201);
+  await page.goto(server.origin + `/loom/discussion/${visual.discussion}`);
+  await expect(rootRows).toHaveCount(3);
+  const visualAgent = rootRows.nth(1);
+  await visualAgent.getByRole('button', { name: 'Show replies' }).click();
+  await expect(visualAgent.getByText('A direct reply with a deeper route.')).toBeVisible();
+  await rootRows
+    .nth(2)
+    .getByRole('button', { name: /Collapse comment by/ })
+    .click();
+  await capture('thread-presentation', rootRows.first().locator('article'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  const longNameArticle = visualAgent.locator(':scope > article.comment');
+  const nestedLongNameArticle = visualAgent.locator('.comment-children article.comment').first();
+  const assertHeaderClearance = async (article: Locator) => {
+    const clearance = await article.evaluate((node) => {
+      const control = node.querySelector('.comment-collapse-control')!.getBoundingClientRect();
+      const badge = node.querySelector('.author-badge')!.getBoundingClientRect();
+      const unread = node.querySelector('.reading-indicator')!.getBoundingClientRect();
+      return { controlRight: control.right, badgeLeft: badge.left, unreadLeft: unread.left };
+    });
+    expect(clearance.badgeLeft).toBeGreaterThanOrEqual(clearance.controlRight + 2);
+    expect(clearance.unreadLeft).toBeGreaterThanOrEqual(clearance.controlRight + 2);
+  };
+  for (const article of [longNameArticle, nestedLongNameArticle]) {
+    await article.locator('.message-details > summary').click();
+    await article.getByRole('button', { name: 'Mark unread' }).click();
+    await expect(article.getByRole('status', { name: 'Unread revision' })).toBeVisible();
+    await assertHeaderClearance(article);
+  }
+  const longContent =
+    'Paragraph one remains readable.\n\n' +
+    'https://example.org/research/' +
+    'very-long-segment-'.repeat(18) +
+    '\n\n```ts\nconst evidence = "' +
+    'wide-code-'.repeat(20) +
+    '";\n```';
+  const lengthy = await namedAgent.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: visual.discussion,
+    parent_id: visual.resource,
+    content: text(longContent),
+  });
+  expect(lengthy.status).toBe(201);
+  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  const lengthyArticle = root.locator(`article[data-resource-id="${lengthy.body.resource_id}"]`);
+  await expect(lengthyArticle.locator('pre')).toBeVisible();
+  await lengthyArticle.getByRole('button', { name: 'Reply', exact: true }).click();
+  await lengthyArticle
+    .getByLabel('Your reply', { exact: true })
+    .fill('A draft beside long content.');
+  await lengthyArticle.locator('.message-details > summary').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await lengthyArticle.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture('responsive-content', lengthyArticle);
 });
 
 test('overview uses ordinary artifact history/editors; text-artifact drafts survive navigation', async ({
@@ -2821,7 +2996,7 @@ test('review regression: suppressed parents preserve browser branches and eligib
   const deniedChildren = page.waitForResponse(
     (r) => r.url().includes(`/contributions/${parent.resource_id}/children`) && r.status() === 404,
   );
-  await page.getByRole('button', { name: 'Check replies', exact: true }).click();
+  await page.getByRole('button', { name: 'Show replies', exact: true }).click();
   expect((await deniedChildren).status()).toBe(404);
   await expect(
     page.getByRole('heading', { name: 'Reading the actual context', exact: true }),
@@ -2837,12 +3012,16 @@ test('review regression: suppressed parents preserve browser branches and eligib
   await page.reload();
   await expect(page.getByText('Contribution unavailable', { exact: true })).toBeVisible();
   const branch = page.locator('.comment-branch').filter({ hasText: 'Contribution unavailable' });
-  await branch.getByRole('button', { name: 'Check replies', exact: true }).click();
+  await branch.getByRole('button', { name: 'Show replies', exact: true }).click();
   await expect(
     page
       .locator(`[data-resource-id="${child.resource_id}"]`)
       .getByText('Eligible nested reply', { exact: true }),
   ).toBeVisible();
+  await page
+    .locator(`[data-resource-id="${child.resource_id}"]`)
+    .locator('.message-details > summary')
+    .click();
   await page
     .locator(`[data-resource-id="${child.resource_id}"]`)
     .getByRole('button', { name: 'Preview parent', exact: true })

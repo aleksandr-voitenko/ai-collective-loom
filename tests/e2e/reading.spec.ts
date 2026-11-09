@@ -368,7 +368,9 @@ test('Mark unread survives focus and partial scrolling, then a full exit permits
   const unreadVersion = (await state(page, a)).version;
   await expect(button).toBeFocused();
   await expect(
-    control(page, a.revision_id).getByRole('status', { name: 'Unread revision' }),
+    control(page, a.revision_id)
+      .locator('xpath=..')
+      .getByRole('status', { name: 'Unread revision' }),
   ).toBeVisible();
   await page.evaluate(() => scrollBy(0, 10));
   await page.waitForTimeout(450);
@@ -398,6 +400,7 @@ test('routine automatic settlement keeps message height and reading position sta
   server,
 }) => {
   const d = await setup(page, context, server, 'default');
+  await page.setViewportSize({ width: 390, height: 844 });
   const a = await d.reply('A short anchored comment');
   const b = await d.reply('The next comment stays in place');
   const pending = barrier();
@@ -418,7 +421,9 @@ test('routine automatic settlement keeps message height and reading position sta
     await control(page, a.revision_id).locator('.prose').scrollIntoViewIfNeeded();
     await pending.promise;
     await expect(
-      control(page, a.revision_id).getByRole('status', { name: 'Syncing reading' }),
+      control(page, a.revision_id)
+        .locator('xpath=..')
+        .getByRole('status', { name: 'Syncing reading' }),
     ).toBeVisible();
     const before = await page.evaluate(
       ({ first, second }) => {
@@ -435,7 +440,9 @@ test('routine automatic settlement keeps message height and reading position sta
     release.release();
     await expect.poll(async () => (await state(page, a)).read).toBe(true);
     await expect(
-      control(page, a.revision_id).getByRole('status', { name: 'Syncing reading' }),
+      control(page, a.revision_id)
+        .locator('xpath=..')
+        .getByRole('status', { name: 'Syncing reading' }),
     ).toHaveCount(0);
     const after = await page.evaluate(
       ({ first, second }) => {
@@ -467,8 +474,8 @@ test('collapsing a visible unread branch permits a fresh read only after expansi
   const parent = await d.reply('Parent branch');
   const child = await d.reply('Child main text', parent.resource_id);
   await page.goto(server.origin + '/loom/discussion/' + d.discussion);
-  const toggle = control(page, parent.revision_id).locator('xpath=..');
-  await toggle.getByRole('button', { name: 'Check replies' }).click();
+  const toggle = control(page, parent.revision_id).locator('xpath=../..');
+  await toggle.getByRole('button', { name: 'Show replies' }).click();
   const prose = control(page, child.revision_id).locator('.prose');
   await prose.scrollIntoViewIfNeeded();
   await expect.poll(async () => (await state(page, child)).read).toBe(true);
@@ -479,10 +486,52 @@ test('collapsing a visible unread branch permits a fresh read only after expansi
   await toggle.getByRole('button', { name: 'Hide replies' }).click();
   await expect(prose).toBeHidden();
   expect((await state(page, child)).version).toBe(version);
-  await toggle.getByRole('button', { name: 'Show loaded replies' }).click();
+  await toggle.getByRole('button', { name: 'Show replies' }).click();
   await prose.scrollIntoViewIfNeeded();
   await expect.poll(async () => (await state(page, child)).read).toBe(true);
   expect((await state(page, child)).version).toBe(version + 1);
+});
+
+test('whole-comment collapse holds parent and descendant unread until visible expansion', async ({
+  page,
+  context,
+  server,
+}) => {
+  const d = await setup(page, context, server, 'default');
+  const parent = await d.reply('Parent prose for whole collapse');
+  const child = await d.reply('Child prose for whole collapse', parent.resource_id);
+  await page.goto(server.origin + '/loom/discussion/' + d.discussion);
+  const branch = page
+    .locator('.comment-branch')
+    .filter({
+      has: page.locator(`article[data-resource-id="${parent.resource_id}"]`),
+    })
+    .first();
+  await branch.getByRole('button', { name: 'Show replies' }).click();
+  const article = branch.locator(`article[data-resource-id="${parent.resource_id}"]`);
+  const parentProse = article.locator('.prose');
+  const childProse = branch.locator(`article[data-resource-id="${child.resource_id}"] .prose`);
+  await childProse.scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await state(page, parent)).read).toBe(true);
+  await expect.poll(async () => (await state(page, child)).read).toBe(true);
+  for (const target of [parent, child]) {
+    await readingTools(page, target.revision_id);
+    await control(page, target.revision_id).getByRole('button', { name: 'Mark unread' }).click();
+    await expect.poll(async () => (await state(page, target)).read).toBe(false);
+  }
+  const parentVersion = (await state(page, parent)).version;
+  const childVersion = (await state(page, child)).version;
+  await article.getByRole('button', { name: /Collapse comment by/ }).click();
+  await expect(parentProse).toBeHidden();
+  await expect(childProse).toBeHidden();
+  expect((await state(page, parent)).version).toBe(parentVersion);
+  expect((await state(page, child)).version).toBe(childVersion);
+  await article.getByRole('button', { name: /Expand comment by/ }).click();
+  await childProse.scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await state(page, parent)).read).toBe(true);
+  await expect.poll(async () => (await state(page, child)).read).toBe(true);
+  expect((await state(page, parent)).version).toBe(parentVersion + 1);
+  expect((await state(page, child)).version).toBe(childVersion + 1);
 });
 
 test('viewport reading review: quiet controls, held Unread, pending batch, conflict and recovery', async ({
@@ -535,7 +584,9 @@ test('viewport reading review: quiet controls, held Unread, pending batch, confl
   await control(page, d.opening.revision_id).getByRole('button', { name: 'Mark unread' }).click();
   await expect.poll(async () => (await state(page, d.opening)).version).toBe(2);
   await expect(
-    control(page, d.opening.revision_id).getByRole('status', { name: 'Unread revision' }),
+    control(page, d.opening.revision_id)
+      .locator('xpath=..')
+      .getByRole('status', { name: 'Unread revision' }),
   ).toBeVisible();
   if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
     const opening = `[data-reading-target="${d.opening.revision_id}"]`;
@@ -593,15 +644,17 @@ test('viewport reading review: quiet controls, held Unread, pending batch, confl
       [a.revision_id, b.revision_id].sort(),
     );
     await expect(
-      control(page, a.revision_id).getByRole('status', { name: 'Syncing reading' }),
+      control(page, a.revision_id)
+        .locator('xpath=..')
+        .getByRole('status', { name: 'Syncing reading' }),
     ).toBeVisible();
     if (process.env.LOOM_READING_VIEWPORT_REVIEW === '1') {
       await batchReviewCapture(page, 'pending', 1440);
       await batchReviewCapture(page, 'pending', 390);
       await page.setViewportSize({ width: 1440, height: 1000 });
     }
-    const branch = control(page, b.revision_id).locator('xpath=..');
-    await branch.getByRole('button', { name: 'Check replies', exact: true }).click();
+    const branch = control(page, b.revision_id).locator('xpath=../..');
+    await branch.getByRole('button', { name: 'Show replies', exact: true }).click();
     await expect(control(page, child.revision_id).locator('.prose')).toBeVisible();
     await control(page, b.revision_id).getByRole('button', { name: 'Reply', exact: true }).click();
     const draft = control(page, b.revision_id).getByLabel('Your reply', { exact: true });

@@ -600,7 +600,7 @@ test('summary context keeps one exact text and control set when community revali
   const controls = (source: { resource_id: string; revision_id: string }) =>
     article(source).locator(`[data-reading-target="${source.revision_id}"]`);
   const more = (source: { resource_id: string }) =>
-    article(source).locator(':scope > .post-footer > .message-details');
+    article(source).locator(':scope > .comment-body > .post-footer > .message-details');
   const checkReadingAction = async (source: { resource_id: string }) => {
     const disclosure = more(source);
     if ((await disclosure.getAttribute('open')) === null)
