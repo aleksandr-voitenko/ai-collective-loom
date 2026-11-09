@@ -129,7 +129,7 @@ test('displayed source suppression, independent restoration, keyboard cancellati
     .locator(
       '[data-resource-id="' +
         d.comment.resource_id +
-        '"] > .post-footer > .message-details > summary',
+        '"] > .comment-body > .post-footer > .message-details > summary',
     )
     .click();
   await page.getByRole('link', { name: 'Suppress comment', exact: true }).first().click();

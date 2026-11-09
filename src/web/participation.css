@@ -496,29 +496,127 @@
   font-weight: 400;
   color: var(--muted);
 }
+.loom-app .comment-branch {
+  position: relative;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+.loom-app .comment-branch::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 38px;
+  bottom: 0;
+  width: 1px;
+  background: #cbd9cb;
+  pointer-events: none;
+}
+.loom-app .comment-branch[data-collapsed='true']::before {
+  bottom: auto;
+  height: 8px;
+}
 .loom-app .comment {
-  padding: 23px 0 0;
+  padding: 7px 0 0;
+  min-width: 0;
 }
-.loom-app .comment .prose {
-  padding-left: 39px;
-  font-size: 13px;
-}
-.loom-app .comment .post-footer {
-  margin: 8px 0 0 39px;
-  padding: 0;
-  border: 0;
+.loom-app .comment.unavailable-summary {
+  margin: 6px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f3f6f2;
+  color: var(--muted);
+  font-size: 12px;
 }
 .loom-app .comment .author-line {
-  margin-bottom: 9px;
+  gap: 4px;
+  margin-bottom: 6px;
+  min-height: 32px;
+  font-size: 12px;
+}
+.loom-app .comment .author-name {
+  font-size: 14px;
+  font-weight: 680;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.loom-app .comment .author-line time {
+  margin-left: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.loom-app .comment .author-line .reading-indicator-slot {
+  flex: 0 0 4.25rem;
+  height: 1.25rem;
+  line-height: 1.25rem;
+}
+.loom-app .conversation-content > .post .author-line {
+  gap: 4px;
+}
+.loom-app .conversation-content > .post .author-line .reading-indicator-slot {
+  flex: 0 0 4.25rem;
+  height: 1.25rem;
+  line-height: 1.25rem;
+}
+.loom-app .comment-collapse-control {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-color: #cbd9cb;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--bg);
+  font-size: 18px;
+  line-height: 1;
+  flex: 0 0 30px;
+  z-index: 1;
+}
+.loom-app .comment-body {
+  margin-left: 36px;
+  min-width: 0;
+}
+.loom-app .comment-body[hidden],
+.loom-app .comment-children[hidden],
+.loom-app .branch-link[hidden],
+.loom-app .comment-tree[hidden],
+.loom-app .discussion-controls[hidden] {
+  display: none !important;
+}
+.loom-app .comment .prose {
+  padding-left: 0;
+  font-size: 15px;
+  line-height: 1.62;
+}
+.loom-app .comment .prose p {
+  margin-bottom: 10px;
+}
+.loom-app .comment .post-footer {
+  margin: 7px 0 0;
+  padding: 0;
+  gap: 12px;
+  border: 0;
 }
 .loom-app .comment-children {
-  border-left: 1px solid #d6dfd1;
-  padding-left: 25px;
-  margin-left: 13px;
+  --thread-indent: 20px;
+  padding-left: var(--thread-indent);
+  margin-left: 14px;
+  min-width: 0;
+}
+.loom-app .comment-children > .comment-tree > .comment-branch::after {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--thread-indent));
+  top: 22px;
+  width: var(--thread-indent);
+  border-top: 1px solid #cbd9cb;
+  pointer-events: none;
 }
 .loom-app .branch-link {
-  display: inline-block;
-  margin: 6px 0 10px 39px;
+  display: inline-flex;
+  align-items: center;
+  margin: 3px 0 3px 36px;
+  min-height: 34px;
   font-size: 12px;
 }
 .loom-app .parent-context {
@@ -527,7 +625,7 @@
   margin: 0 0 12px;
 }
 .loom-app .comment .parent-context {
-  margin-left: 39px;
+  margin-left: 0;
 }
 .loom-app .reply-page-toolbar {
   display: flex;
@@ -535,18 +633,29 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 4px 16px;
-  margin: 12px 0 4px;
+  margin: 5px 0 4px 36px;
 }
 .loom-app .reply-page-summary {
   color: var(--muted);
   font-size: 12px;
   margin: 0;
 }
+.loom-app .comment-branch .reply-page-toolbar {
+  margin-left: 0;
+}
 .loom-app .comment-tree > .continuation-action {
   margin: 12px 0 16px 39px;
   color: var(--accent);
   border-color: #c6d8c3;
   font-weight: 600;
+}
+.loom-app .comment-composer .composer {
+  padding: 15px 17px;
+  margin: 9px 0 13px;
+}
+.loom-app .comment-composer .composer h2 {
+  font-size: 15px;
+  margin-bottom: 9px;
 }
 .loom-app .comment-tree > .continuation-action[aria-disabled='true'] {
   opacity: 0.65;
@@ -664,6 +773,18 @@
 .loom-app .message-details-content > a {
   display: inline-block;
   margin: 8px 16px 0 0;
+}
+.loom-app .message-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 16px;
+  margin-bottom: 10px;
+}
+.loom-app .message-quick-actions > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
 }
 .loom-app .summary-invitation {
   font-size: 12px;
@@ -876,16 +997,12 @@
     font-size: 13px;
   }
   .loom-app .comment-children {
-    margin-left: 7px;
-    padding-left: 12px;
+    --thread-indent: 12px;
   }
   .loom-app .comment .prose {
     padding-left: 0;
   }
   .loom-app .comment .post-footer {
-    margin-left: 0;
-  }
-  .loom-app .branch-link {
     margin-left: 0;
   }
   .loom-app .comment-tree > .continuation-action,

@@ -280,9 +280,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                     onPosted={() => setReload((n) => n + 1)}
                   />
                   <div className="discussion-controls">
-                    <h2>
-                      Conversation <span>Comments</span>
-                    </h2>
+                    <h2>Comments</h2>
                     <span>Oldest first</span>
                   </div>
                   <Children
@@ -329,6 +327,9 @@ function FocusedBranch({
     ContributionContext,
   );
   const [reload, setReload] = useState(0);
+  const [collapsed, setCollapsed] = useState(
+    () => context.discussionNavigation?.focusedCollapsed?.includes(id) ?? false,
+  );
   const authority = useAuthorization();
   const verifiedDiscussion = useRef<string | undefined>(undefined);
   if (data?.discussion_id === discussionId) verifiedDiscussion.current = discussionId;
@@ -348,6 +349,7 @@ function FocusedBranch({
         <button onClick={refresh}>Refresh branch</button>
       </>
     );
+  const effectiveCollapsed = collapsed && !('state' in data);
   return (
     <>
       <div className="focus-banner">
@@ -359,14 +361,25 @@ function FocusedBranch({
         id={id}
         data={data}
         context={context}
+        collapsed={effectiveCollapsed}
+        onToggleCollapse={(control) => {
+          control.focus({ preventScroll: true });
+          const next = !collapsed;
+          setCollapsed(next);
+          const navigation = context.discussionNavigation;
+          if (navigation) {
+            const saved = new Set(navigation.focusedCollapsed ?? []);
+            if (next) saved.add(id);
+            else saved.delete(id);
+            navigation.focusedCollapsed = [...saved].slice(-64);
+          }
+        }}
         onPosted={() => {
           if (authority.current(generation)) setReload((n) => n + 1);
         }}
       />
-      <div className="discussion-controls">
-        <h2>
-          Conversation <span>Direct replies</span>
-        </h2>
+      <div className="discussion-controls" hidden={effectiveCollapsed}>
+        <h2>Direct replies</h2>
         <span>Oldest first</span>
       </div>
       <Children
@@ -377,6 +390,7 @@ function FocusedBranch({
         depth={0}
         role="replies"
         refreshVersion={reload}
+        hidden={effectiveCollapsed}
       />
     </>
   );
@@ -417,6 +431,8 @@ type ContributionProps = {
   opening?: boolean;
   parent?: ResourceView | undefined;
   onPosted?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: (control: HTMLButtonElement) => void;
 };
 
 function Contribution(props: ContributionProps) {
@@ -456,29 +472,48 @@ function ContributionBody({
   opening = false,
   parent,
   onPosted,
+  collapsed = false,
+  onToggleCollapse,
 }: ContributionProps & { data: ContributionContextView }) {
   const onPreview = useContext(ParentPreviewContext);
+  const bodyId = useId();
   const [reply, setReply] = useState(() =>
     context.store
       .all()
       .some((record) => record.slot === 'reply:' + id && record.state !== 'committed'),
   );
   const replyButton = useRef<HTMLButtonElement>(null);
+  const composerHost = useRef<HTMLDivElement>(null);
   const [focusComposer, setFocusComposer] = useState(false);
   if ('state' in data)
     return (
-      <div className="comment notice" data-resource-id={id}>
+      <div className="comment unavailable-summary" data-resource-id={id}>
         <p>Contribution unavailable</p>
       </div>
     );
   return (
     <article className={opening ? 'post card' : 'comment'} data-resource-id={id} tabIndex={-1}>
       <div className="author-line">
+        {!opening && onToggleCollapse && (
+          <button
+            className="comment-collapse-control"
+            type="button"
+            aria-label={
+              collapsed
+                ? `Expand comment by ${data.author.nickname}`
+                : `Collapse comment by ${data.author.nickname}`
+            }
+            aria-expanded={!collapsed}
+            aria-controls={bodyId}
+            onClick={(event) => onToggleCollapse(event.currentTarget)}
+          >
+            <span aria-hidden="true">{collapsed ? '+' : '−'}</span>
+          </button>
+        )}
         <Avatar person={data.author} />
-        <strong>{data.author.nickname}</strong>
+        <strong className="author-name">{data.author.nickname}</strong>
         {data.author.kind === 'agent' && <span className="author-badge">Agent</span>}
-        <ReadingIndicator target={{ resource_id: id, revision_id: data.revision_id }} />
-        <time>
+        <time dateTime={data.created_at} title={new Date(data.created_at).toLocaleString()}>
           {new Date(data.created_at).toLocaleString(undefined, {
             month: 'short',
             day: 'numeric',
@@ -486,93 +521,110 @@ function ContributionBody({
             minute: '2-digit',
           })}
         </time>
+        <ReadingIndicator target={{ resource_id: id, revision_id: data.revision_id }} />
       </div>
-      {data.parent_id && (
-        <p className="parent-context">
-          Replying to{' '}
-          <Link to={`/loom/discussion/${data.discussion_id}?focus=${data.parent_id}`}>
-            {parent?.resource_id === data.parent_id
-              ? '@' + parent.author.nickname
-              : 'parent message'}
-          </Link>{' '}
-          <button className="text-button" onClick={() => onPreview?.(data.parent_id!)}>
-            Preview parent
+      <div id={bodyId} className="comment-body" hidden={collapsed}>
+        {data.parent_id && (!parent || parent.resource_id !== data.parent_id) && (
+          <p className="parent-context">
+            Replying to{' '}
+            <Link to={`/loom/discussion/${data.discussion_id}?focus=${data.parent_id}`}>
+              {parent?.resource_id === data.parent_id
+                ? '@' + parent.author.nickname
+                : 'parent message'}
+            </Link>{' '}
+          </p>
+        )}
+        {/* Both siblings reset for a new revision, but their keys must remain distinct. */}
+        <ReadingText
+          key={'reading:' + data.revision_id}
+          target={{ resource_id: id, revision_id: data.revision_id }}
+          content={data.content}
+          participants={data.mentioned_participants}
+        />
+        {!!data.attachment_set?.files.length && (
+          <FileBrowser
+            participant={context.self.participant_id}
+            key={'attachments:' + data.revision_id}
+            contribution={id}
+            revision={data.revision_id}
+          />
+        )}
+        <ChangeDetails revision={data} />
+        <div className="post-footer">
+          <button
+            ref={replyButton}
+            className="text-button"
+            onClick={() => {
+              if (reply) composerHost.current?.querySelector<HTMLElement>('textarea')?.focus();
+              else {
+                setFocusComposer(true);
+                setReply(true);
+              }
+            }}
+            disabled={!data.publication_open}
+          >
+            <Icon name="reply" /> Reply
           </button>
-        </p>
-      )}
-      {/* Both siblings reset for a new revision, but their keys must remain distinct. */}
-      <ReadingText
-        key={'reading:' + data.revision_id}
-        target={{ resource_id: id, revision_id: data.revision_id }}
-        content={data.content}
-        participants={data.mentioned_participants}
-      />
-      {!!data.attachment_set?.files.length && (
-        <FileBrowser
-          participant={context.self.participant_id}
-          key={'attachments:' + data.revision_id}
-          contribution={id}
-          revision={data.revision_id}
-        />
-      )}
-      <ChangeDetails revision={data} />
-      <div className="post-footer">
-        <button
-          ref={replyButton}
-          className="text-button"
-          onClick={() => {
-            setFocusComposer(true);
-            setReply((value) => !value);
-          }}
-          disabled={!data.publication_open}
-        >
-          <Icon name="reply" /> Reply
-        </button>
-        <SaveControl
-          context={context}
-          target={{ kind: 'contribution', resource_id: id }}
-          label="contribution"
-        />
-        <details className="message-details">
-          <summary>More</summary>
-          <div className="message-details-content">
-            <ReadingMarkUnread target={{ resource_id: id, revision_id: data.revision_id }} />
-            <EditingIntent
+          <SaveControl
+            context={context}
+            target={{ kind: 'contribution', resource_id: id }}
+            label="contribution"
+          />
+          <details className="message-details">
+            <summary>More</summary>
+            <div className="message-details-content">
+              <div className="message-quick-actions">
+                <ReadingMarkUnread target={{ resource_id: id, revision_id: data.revision_id }} />
+                {data.parent_id && (
+                  <>
+                    <button className="text-button" onClick={() => onPreview?.(data.parent_id!)}>
+                      Preview parent
+                    </button>
+                    <Link to={`/loom/discussion/${data.discussion_id}?focus=${data.parent_id}`}>
+                      View parent thread
+                    </Link>
+                  </>
+                )}
+              </div>
+              <EditingIntent
+                context={context}
+                resource={id}
+                base={data.revision_id}
+                canEdit={data.can_edit}
+              />
+              <ReferenceViews
+                key={'references:' + data.revision_id}
+                sourceId={id}
+                sourceRevision={data.revision_id}
+                target={{ kind: 'contribution', resource_id: id }}
+              />
+              <Link to={`/loom/resource/${id}/${data.revision_id}`}>
+                Revision {data.revision_number}
+              </Link>
+              {data.can_edit && <Link to={'/loom/resource/' + id + '?edit=1'}>Edit</Link>}
+              {!opening && data.parent_id && (
+                <SuppressLink context={context} id={id} kind="comment" />
+              )}
+            </div>
+          </details>
+        </div>
+        {reply && (
+          <div ref={composerHost} className="comment-composer">
+            <Composer
               context={context}
-              resource={id}
-              base={data.revision_id}
-              canEdit={data.can_edit}
+              operation={{ kind: 'reply.create', discussionId: data.discussion_id!, parentId: id }}
+              slot={'reply:' + id}
+              heading={'Reply to ' + data.author.nickname}
+              focusOnOpen={focusComposer}
+              onClose={() => {
+                setReply(false);
+                replyButton.current?.focus();
+              }}
+              onCommitted={() => onPosted?.()}
             />
-            <ReferenceViews
-              key={'references:' + data.revision_id}
-              sourceId={id}
-              sourceRevision={data.revision_id}
-              target={{ kind: 'contribution', resource_id: id }}
-            />
-            <Link to={`/loom/resource/${id}/${data.revision_id}`}>
-              Revision {data.revision_number}
-            </Link>
-            {data.can_edit && <Link to={'/loom/resource/' + id + '?edit=1'}>Edit</Link>}
-            {!opening && data.parent_id && (
-              <SuppressLink context={context} id={id} kind="comment" />
-            )}
           </div>
-        </details>
+        )}
       </div>
-      {reply && (
-        <Composer
-          context={context}
-          operation={{ kind: 'reply.create', discussionId: data.discussion_id!, parentId: id }}
-          slot={'reply:' + id}
-          heading={'Reply to ' + data.author.nickname}
-          focusOnOpen={focusComposer}
-          onClose={() => {
-            setReply(false);
-            replyButton.current?.focus();
-          }}
-          onCommitted={() => onPosted?.()}
-        />
-      )}
     </article>
   );
 }
@@ -617,6 +669,7 @@ function Children({
   depth,
   role,
   refreshVersion = 0,
+  hidden = false,
 }: {
   id: string;
   parent?: ResourceView | undefined;
@@ -625,6 +678,7 @@ function Children({
   depth: number;
   role: 'comments' | 'replies';
   refreshVersion?: number;
+  hidden?: boolean;
 }) {
   const authority = useAuthorization();
   const treeId = useId();
@@ -651,6 +705,7 @@ function Children({
   const sequence = useRef(0);
   const [expanded, setExpanded] = useState<string[]>(initial.current?.expanded ?? []),
     [opened, setOpened] = useState<string[]>(initial.current?.opened ?? []),
+    [collapsed, setCollapsed] = useState<string[]>(initial.current?.collapsed ?? []),
     [branchVersions, setBranchVersions] = useState<Record<string, number>>({});
   const publish = (next: ChildrenWindow) => {
     state.current = next;
@@ -683,9 +738,10 @@ function Children({
           : {}),
       expanded,
       opened,
+      collapsed,
     });
     if (navigation.size > 64) navigation.delete(navigation.keys().next().value!);
-  }, [windowState.pages, windowState.goal, expanded, opened, navigation, navigationKey]);
+  }, [windowState.pages, windowState.goal, expanded, opened, collapsed, navigation, navigationKey]);
   useLayoutEffect(() => {
     const anchor = readingAnchor.current;
     if (anchor) {
@@ -809,6 +865,10 @@ function Children({
         const surviving = new Set(rows.map((row) => row.resource_id));
         setOpened((value) => value.filter((key) => surviving.has(key)));
         setExpanded((value) => value.filter((key) => surviving.has(key)));
+        const available = new Set(
+          rows.filter((row) => !('state' in row)).map((row) => row.resource_id),
+        );
+        setCollapsed((value) => value.filter((key) => available.has(key)));
       } else
         publish({
           ...previous,
@@ -898,6 +958,10 @@ function Children({
         const surviving = new Set(rows.map((row) => row.resource_id));
         setOpened((value) => value.filter((key) => surviving.has(key)));
         setExpanded((value) => value.filter((key) => surviving.has(key)));
+        const available = new Set(
+          rows.filter((row) => !('state' in row)).map((row) => row.resource_id),
+        );
+        setCollapsed((value) => value.filter((key) => available.has(key)));
       }
     } catch (failure) {
       if (turn !== sequence.current || controller.signal.aborted) return;
@@ -954,6 +1018,7 @@ function Children({
     <div
       ref={tree}
       className="comment-tree"
+      hidden={hidden}
       aria-busy={windowState.busy}
       data-ready={accepted.length > 0 || !!windowState.error}
       data-restoring={windowState.busy || !!windowState.goal}
@@ -961,7 +1026,7 @@ function Children({
       {accepted.length > 0 && (
         <div className="reply-page-toolbar">
           <p className="reply-page-summary" role="status">
-            {items.length} direct{' '}
+            {items.length}{' '}
             {role === 'comments'
               ? items.length === 1
                 ? 'comment'
@@ -976,10 +1041,11 @@ function Children({
       )}
       {items.map((item) => {
         const resource = item as ResourceView;
+        const isCollapsed = !('state' in item) && collapsed.includes(resource.resource_id);
         return (
-          <div className="comment-branch" key={resource.resource_id}>
+          <div className="comment-branch" data-collapsed={isCollapsed} key={resource.resource_id}>
             {'state' in item ? (
-              <div className="comment notice" data-resource-id={resource.resource_id}>
+              <div className="comment unavailable-summary" data-resource-id={resource.resource_id}>
                 <p>Contribution unavailable</p>
               </div>
             ) : (
@@ -987,6 +1053,20 @@ function Children({
                 id={resource.resource_id}
                 parent={parent}
                 context={context}
+                collapsed={isCollapsed}
+                onToggleCollapse={(control) => {
+                  const active = document.activeElement;
+                  if (
+                    active instanceof HTMLElement &&
+                    control.closest('.comment-branch')?.contains(active)
+                  )
+                    control.focus({ preventScroll: true });
+                  setCollapsed((value) =>
+                    value.includes(resource.resource_id)
+                      ? value.filter((key) => key !== resource.resource_id)
+                      : [...value, resource.resource_id],
+                  );
+                }}
                 onPosted={() => {
                   setExpanded((value) => [...new Set([...value, resource.resource_id])]);
                   setBranchVersions((value) => ({
@@ -999,14 +1079,16 @@ function Children({
             {depth >= 1 ? (
               <Link
                 className="branch-link"
+                hidden={isCollapsed}
                 to={`/loom/discussion/${discussionId}?focus=${resource.resource_id}`}
               >
-                Open reply thread →
+                Continue this thread →
               </Link>
             ) : (
               <>
                 <button
                   className="text-button branch-link"
+                  hidden={isCollapsed}
                   aria-expanded={expanded.includes(resource.resource_id)}
                   aria-controls={`${treeId}-${resource.resource_id}`}
                   onClick={() => {
@@ -1018,17 +1100,13 @@ function Children({
                     );
                   }}
                 >
-                  {expanded.includes(resource.resource_id)
-                    ? 'Hide replies'
-                    : opened.includes(resource.resource_id)
-                      ? 'Show loaded replies'
-                      : 'Check replies'}
+                  {expanded.includes(resource.resource_id) ? 'Hide replies' : 'Show replies'}
                 </button>
                 {/* Hiding retains mounted drafts/cursors; reads still use the current lease. */}
                 <div
                   className="comment-children"
                   id={`${treeId}-${resource.resource_id}`}
-                  hidden={!expanded.includes(resource.resource_id)}
+                  hidden={isCollapsed || !expanded.includes(resource.resource_id)}
                 >
                   {(opened.includes(resource.resource_id) ||
                     expanded.includes(resource.resource_id)) && (

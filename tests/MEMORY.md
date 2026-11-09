@@ -31,7 +31,7 @@ exact recovery. Moderation, organization, reading and Saved setup helpers return
 through Back to Loom before using participant navigation.
 `helpers/admin-navigation-review.ts` captures opt-in actual viewports
 under `/tmp/loom-review-evidence/ui-05`, separate from diagnostics. Closed diagnostics
-admit the six fixed child paths and the complete 178-case inventory; other limits stay.
+admit the six fixed child paths and the complete 179-case inventory; other limits stay.
 
 Administrative browsing: `identity-browsing.test.ts` joins the existing identity
 PostgreSQL suite. Deterministic >100 account/credential/audit fixtures compare full
@@ -566,7 +566,7 @@ time for 25/25/10 draining, oldest-deadline fairness, separate reserved continua
 dispatch and finite occupied capacity. `e2e/reading.spec.ts` checks default-on short/
 long full text, collapsed and preview exclusions, resource/discussion More actions,
 real viewport exit/re-entry, deliberate branch collapse/expand, focus, quiet pending
-and conflict recovery, stable message height/position through routine settlement,
+and conflict recovery, stable 390px message height/position through routine settlement,
 manual and automatic exact-body process restart, blocked
 sign-out cleanup, storage failure, background/abandoned source reads and mobile
 width. The opt-in
@@ -840,7 +840,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 177 collected tests and <17 MiB/candidate. The test count includes
+128 KiB/document, 179 collected tests and <17 MiB/candidate. The test count includes
 Community settings and Search indexing recovery, including two-tab exact retry on a
 25-row failed-job page, so coverage captures the complete suite;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
@@ -1033,7 +1033,7 @@ message-detail and failed-save PNGs plus provenance under `/tmp/loom-review-evid
 The journey uses ordinary non-admin WebAuthn and asserts mention publication,
 explicit focus, close/reopen custody and unchanged actual reply parentage. Mounted
 close tests refuse dismissal after failed storage and preserve the visible fields.
-The same compiled participation journey checks named parent destinations, accessible
+The same compiled participation journey checks parent navigation through More, accessible
 reply disclosure state, nested draft retention while hidden, accumulated bounded
 counts and an empty branch's failed-refresh/retry. A separate continuous-discussion
 journey covers three comment pages, two direct-reply pages, failed exact-cursor retry,
@@ -1050,9 +1050,14 @@ continuation becomes stale after an independent unavailable parent preview; reco
 must clear busy without reviving withdrawn source text.
 The 54-comment journey also returns from an expanded comment-43 reply twice before
 continuing the partial eight-page restoration, checking the saved tail, branch,
-private draft, focus and viewport offset on the second return.
+private draft, focus and viewport offset on the second return. It also checks
+whole-comment collapse independently of reply hiding, editor identity/selection,
+keyboard focus, no reopening fetch, a collapsed long-window sibling and source loss
+while hidden. The reading journey checks parent and descendant Unread holds across
+a measured whole-comment hide and re-entry. A small human/agent conversation checks
+390px wrapping of a valid 32-character agent name, URL, code, actions and composer.
 `LOOM_CONTINUOUS_REVIEW=1` captures its desktop/mobile states under
-`/tmp/loom-review-evidence/continuous-discussion`. `LOOM_REPLY_REVIEW=1` uses the same
+`/tmp/loom-review-evidence/discussion-redesign`. `LOOM_REPLY_REVIEW=1` uses the same
 command to capture desktop/mobile reply-context, thread, page, empty and refresh-error
 states under `/tmp/loom-review-evidence/reply-navigation`; the manifest identifies the
 deliberate children503. The suppressed-parent journey retains traversal after body loss.
