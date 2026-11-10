@@ -152,6 +152,11 @@ Separately read rows use one keyed branch owner with canonical rows, with an exp
 gap before each unplaced reply. Accepted traversal pages alone establish placement
 and remove gaps, preserving mounted row drafts and disclosures. Publication does
 not fetch missing siblings or mark text read; normal visible-prose policy applies.
+Known replies can collapse before pagination reaches them; their collapse state
+survives branch refresh, focused return and canonical reconciliation. A restored
+inline reply editor opens its parent branch once on mount, while a later deliberate
+hide remains authoritative. Replacing an older recovery intent in the inline URL
+preserves the mounted discussion, editor focus and selection.
 Children remain on-demand and six-item bounded: counts describe unique
 loaded direct entries, never an inferred thread total. Each accepted page retains
 its own authorization lease and continuation; append leaves existing rows mounted.

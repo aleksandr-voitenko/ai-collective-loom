@@ -515,6 +515,12 @@ function ContributionBody({
             new URLSearchParams(window.location.search).get('intent') === record.key),
       ),
   );
+  const restoredReply = useRef(reply);
+  useEffect(() => {
+    if (!restoredReply.current) return;
+    restoredReply.current = false;
+    onReplyOpened?.();
+  }, [onReplyOpened]);
   const [confirmed, setConfirmed] = useState<CommittedView>();
   const seenOperations = useRef(new Set<string>());
   const [preferUnfinishedReply, setPreferUnfinishedReply] = useState(false);
@@ -990,9 +996,13 @@ function Children({
         const surviving = new Set([...rows.map((row) => row.resource_id), ...knownReplyIds]);
         setOpened((value) => value.filter((key) => surviving.has(key)));
         setExpanded((value) => value.filter((key) => surviving.has(key)));
-        const available = new Set(
-          rows.filter((row) => !('state' in row)).map((row) => row.resource_id),
+        const unavailable = new Set(
+          rows.filter((row) => 'state' in row).map((row) => row.resource_id),
         );
+        const available = new Set([
+          ...rows.filter((row) => !('state' in row)).map((row) => row.resource_id),
+          ...knownReplyIds.filter((key) => !unavailable.has(key)),
+        ]);
         setCollapsed((value) => value.filter((key) => available.has(key)));
       } else
         publish({
@@ -1083,9 +1093,13 @@ function Children({
         const surviving = new Set([...rows.map((row) => row.resource_id), ...knownReplyIds]);
         setOpened((value) => value.filter((key) => surviving.has(key)));
         setExpanded((value) => value.filter((key) => surviving.has(key)));
-        const available = new Set(
-          rows.filter((row) => !('state' in row)).map((row) => row.resource_id),
+        const unavailable = new Set(
+          rows.filter((row) => 'state' in row).map((row) => row.resource_id),
         );
+        const available = new Set([
+          ...rows.filter((row) => !('state' in row)).map((row) => row.resource_id),
+          ...knownReplyIds.filter((key) => !unavailable.has(key)),
+        ]);
         setCollapsed((value) => value.filter((key) => available.has(key)));
       }
     } catch (failure) {
@@ -1184,7 +1198,7 @@ function Children({
         const item = entry.kind === 'canonical' ? entry.item : undefined;
         const resourceId = entry.kind === 'canonical' ? entry.item.resource_id : entry.id;
         const resource = item && !('state' in item) ? (item as ResourceView) : undefined;
-        const isCollapsed = !!resource && collapsed.includes(resourceId);
+        const isCollapsed = !(item && 'state' in item) && collapsed.includes(resourceId);
         const branchReady = entry.kind === 'canonical' || knownLoaded.includes(resourceId);
         return (
           <div className="comment-branch" data-collapsed={isCollapsed} key={resourceId}>

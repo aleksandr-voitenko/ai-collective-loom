@@ -167,9 +167,15 @@ export function useIntent(initial: () => Intent | undefined, replaceOldReplyInte
           new URLSearchParams(location.search).get('intent') !== next.key
         ) {
           if (replaceOldReplyIntent && next.kind === 'reply.create') {
-            const search = new URLSearchParams(location.search);
+            const search = new URLSearchParams(window.location.search);
             search.set('intent', next.key);
-            void navigate(`${location.pathname}?${search}${location.hash}`, { replace: true });
+            // An inline draft changes only its recovery URL; routing would remount
+            // the discussion and discard live editor focus and selection.
+            window.history.replaceState(
+              window.history.state,
+              '',
+              `${window.location.pathname}?${search}${window.location.hash}`,
+            );
           } else void navigate(intentUrl(next), { replace: true });
         }
       }

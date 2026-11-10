@@ -1063,7 +1063,11 @@ identity, focused return, an older uncertain operation confirmed after a newer o
 a twelve-of-twenty branch with external arrivals between
 own posts, bounded reads, separate gaps, canonical deduplication with a mounted
 draft, an edited older sibling that stays in creation order, failed context-read
-retry without another POST, and depth-limit focused links. The long-window journey
+retry without another POST, and depth-limit focused links. Regressions additionally
+check known-row collapse through refresh, focused return and reconciliation, typing
+across recovery-intent autosave without remounting either editor, and direct posting
+from a reloaded inline draft. The late-confirmation hide test keeps deliberate hiding
+authoritative. The long-window journey
 also places a separately known reply beyond 54 canonical rows and verifies that
 focused return still restores only the saved canonical extent.
 `LOOM_CONFIRMED_REPLY_REVIEW=1` captures the actual compiled app at 1440x1000 and

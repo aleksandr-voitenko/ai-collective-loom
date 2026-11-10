@@ -61,7 +61,7 @@ export async function captureConfirmedReply(
       {
         screenshots,
         reproduction:
-          'npm run app:build && LOOM_CONFIRMED_REPLY_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "a confirmed reply appears|separately confirmed replies|failed content read|depth-limit reply"',
+          'npm run app:build && LOOM_CONFIRMED_REPLY_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "a confirmed reply appears|separately confirmed replies|a separately confirmed reply collapses|a restored inline reply draft|failed content read|depth-limit reply"',
         isolation:
           'Actual compiled React app, disposable PostgreSQL/HTTPS and virtual passkey. No credentials, cookies or authentication exports.',
       },
