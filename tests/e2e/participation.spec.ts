@@ -14,6 +14,7 @@ import { uxHighReview } from '../helpers/ux-high-review.js';
 import { captureMessaging } from '../helpers/messaging-review.js';
 import { captureMentionSelection } from '../helpers/mention-selection-review.js';
 import { captureContinuousDiscussion } from '../helpers/continuous-discussion-review.js';
+import { captureConfirmedReply } from '../helpers/confirmed-reply-review.js';
 import { publicationJournalBytes } from '../helpers/publication-journal-snapshot.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
@@ -461,7 +462,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
   );
   await agentPost.getByLabel('Your reply', { exact: true }).fill('This reply belongs under Lyra.');
   await agentPost.getByRole('button', { name: 'Post reply', exact: true }).click();
-  await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+  await expect(agentPost.getByText('Reply posted', { exact: true })).toBeVisible();
   await expect(
     page
       .locator('.comment-tree .prose')
@@ -473,8 +474,8 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
   const nestedReplies = agentBranch.locator(':scope > .comment-children');
   await expect(nestedReplies.getByText('1 reply loaded', { exact: true })).toBeVisible();
   await expect(nestedReplies.getByText('Replying to', { exact: false })).toHaveCount(0);
-  await agentPost.getByRole('button', { name: 'Write another', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`focus=${reply.body.resource_id}`));
+  await agentPost.getByRole('button', { name: 'Reply', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/loom/discussion/${discussion.discussion}$`));
   await agentPost
     .getByLabel('Your reply', { exact: true })
     .fill('A second reply in the already open branch.');
@@ -842,7 +843,7 @@ test('a late committed publication cannot repopulate another identity or route a
   await ready;
   await page.getByRole('link', { name: 'Artifacts', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Artifacts', exact: true })).toBeVisible();
-  await expect(page.getByText('Your reply was posted.', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Reply posted', { exact: true })).not.toBeVisible();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.getByRole('button', { name: 'Clear local drafts and sign out' }).click();
   await expect(page.getByRole('button', { name: 'Sign in with passkey' })).toBeVisible();
@@ -850,7 +851,7 @@ test('a late committed publication cannot repopulate another identity or route a
   release();
   await page.unrouteAll({ behavior: 'wait' });
   await expect(page.locator('.sidebar .account strong')).toHaveText('new_owner');
-  await expect(page.getByText('Your reply was posted.', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Reply posted', { exact: true })).not.toBeVisible();
   expect(
     await page.evaluate(() =>
       Object.keys(localStorage).filter((key) => key.startsWith('loom.intent.')),
@@ -939,7 +940,7 @@ test('lost committed response survives actual browser process restart and exact 
       if (request.url().endsWith('/api/v1/replies')) retry = request.postDataJSON();
     });
     await page.getByRole('button', { name: 'Retry same reply' }).click();
-    await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Reply posted', { exact: true })).toBeVisible();
     expect(retry).toEqual(original);
     const count = await server.observer.query(
       'SELECT count(*) FROM loom.idempotency_records WHERE operation_kind=$1 AND idempotency_key=$2',
@@ -948,7 +949,7 @@ test('lost committed response survives actual browser process restart and exact 
     expect(count.rows[0].count).toBe('1');
     await page.setViewportSize({ width: 390, height: 844 });
     const mobileOpening = page.locator(`[data-resource-id="${d.resource}"]`);
-    await mobileOpening.getByRole('button', { name: 'Write another', exact: true }).click();
+    await mobileOpening.getByRole('button', { name: 'Reply', exact: true }).click();
     await mobileOpening
       .getByLabel('Your reply', { exact: true })
       .fill('Recover an unreceived mobile reply without changing its request.');
@@ -986,7 +987,7 @@ test('lost committed response survives actual browser process restart and exact 
     ]);
     expect(mobileAttempts).toHaveLength(1);
     await mobileRecovery.getByRole('button', { name: 'Retry same reply', exact: true }).click();
-    await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Reply posted', { exact: true })).toBeVisible();
     expect(mobileAttempts).toHaveLength(2);
     expect(mobileAttempts[1]).toEqual(mobileAttempts[0]);
     const mobileKey = (mobileAttempts[0] as { idempotency_key: string }).idempotency_key;
@@ -1135,6 +1136,790 @@ test('late reads preserve navigation/account ownership; older-page failure and r
   });
   expect(denied.status).toBe(403);
   await expect(page.locator('.sidebar .account strong')).toHaveText('second_human');
+});
+
+test('a confirmed reply appears in its parent branch and Reply starts a fresh operation', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const opening = page.locator('.conversation-content > article.post');
+  const comments = page.locator('.conversation-content > .comment-tree');
+  await expect(comments.getByText('No comments yet.')).toBeVisible();
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening.getByLabel('Your reply', { exact: true }).fill('First posted comment');
+  await captureConfirmedReply(
+    page,
+    'before-post',
+    opening.getByLabel('Your reply', { exact: true }),
+  );
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(opening.getByText('Reply posted', { exact: true })).toBeVisible();
+  await expect(opening.getByLabel('Your reply', { exact: true })).toHaveCount(0);
+  await expect(opening.getByRole('link', { name: 'View reply' })).toBeFocused();
+  await expect(comments.getByText('First posted comment', { exact: true })).toBeVisible();
+  await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toBeVisible();
+  await expect(comments.locator(':scope > .comment-branch')).toHaveCount(1);
+  await captureConfirmedReply(
+    page,
+    'ordinary-confirmed',
+    comments.locator(':scope > .comment-branch').first(),
+  );
+  const firstId = (await opening
+    .getByRole('link', { name: 'View reply' })
+    .getAttribute('href'))!.split('focus=')[1]!;
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await expect(opening.getByLabel('Your reply', { exact: true })).toHaveValue('');
+  await captureConfirmedReply(
+    page,
+    'next-fresh-editor',
+    opening.getByLabel('Your reply', { exact: true }),
+  );
+  await opening.getByLabel('Your reply', { exact: true }).fill('Second posted comment');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(comments.getByText('Second posted comment', { exact: true })).toBeVisible();
+  const ownRecords = (await savedIntents(page)).filter(
+    (record) => record.kind === 'reply.create' && record.state === 'committed',
+  );
+  expect(new Set(ownRecords.map((record) => record.key)).size).toBe(2);
+  const firstRow = comments.locator(
+    `:scope > .comment-branch:has(article[data-resource-id="${firstId}"])`,
+  );
+  await firstRow.getByRole('button', { name: 'Reply', exact: true }).click();
+  await firstRow.getByLabel('Your reply', { exact: true }).fill('Nested under the first comment');
+  await firstRow.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(firstRow.getByText('Reply posted', { exact: true })).toBeVisible();
+  await expect(firstRow.getByText('Nested under the first comment', { exact: true })).toBeVisible();
+  await firstRow.getByRole('link', { name: 'View reply' }).click();
+  await page.locator('.reading-grid > div > article.comment .message-details > summary').click();
+  await page
+    .locator('.reading-grid > div > article.comment')
+    .getByRole('link', { name: 'View parent thread' })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`focus=${firstId}`));
+  const focusedReplies = page.locator('.reading-grid > div > .comment-tree');
+  await expect(
+    focusedReplies.getByText('Nested under the first comment', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(firstRow.getByText('Nested under the first comment', { exact: true })).toBeVisible();
+});
+
+test('an older uncertain reply confirms after a newer reply in canonical order', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const opening = page.locator('.conversation-content > article.post');
+  const comments = page.locator('.conversation-content > .comment-tree');
+  const rows = comments.locator(':scope > .comment-branch');
+  let published = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/v1/replies' && request.method() === 'POST')
+      published++;
+  });
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening.getByLabel('Your reply', { exact: true }).fill('Older reply awaiting status');
+  let originalRequest: Record<string, unknown> | undefined;
+  await page.route('**/api/v1/replies', async (route) => {
+    originalRequest = route.request().postDataJSON();
+    const response = await route.fetch();
+    expect(response.status()).toBe(201);
+    await route.abort('connectionfailed');
+  });
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(page.getByText('We couldn’t confirm whether your reply was posted.')).toBeVisible();
+  const older = (await savedIntents(page)).find(
+    (record) => record.slot === 'reply:' + discussion.resource && record.state === 'uncertain',
+  )!;
+  await page.unrouteAll({ behavior: 'wait' });
+  await opening.getByRole('button', { name: 'Close composer' }).click();
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await expect(opening.getByLabel('Your reply', { exact: true })).toHaveValue('');
+  await opening.getByLabel('Your reply', { exact: true }).fill('Newer confirmed reply');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(opening.getByText('Reply posted', { exact: true })).toBeVisible();
+  await expect(comments.getByText('Newer confirmed reply', { exact: true })).toBeVisible();
+  const newer = (await savedIntents(page)).find(
+    (record) => record.slot === 'reply:' + discussion.resource && record.state === 'committed',
+  )!;
+  expect(newer.key).not.toBe(older.key);
+  expect(published).toBe(2);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}?intent=${older.key}`);
+  await expect(page.getByText('We couldn’t confirm whether your reply was posted.')).toBeVisible();
+  await opening.getByRole('button', { name: 'Check status', exact: true }).click();
+  await expect(opening.getByText('Reply posted', { exact: true })).toBeVisible();
+  expect(published).toBe(2);
+  const recovered = (await savedIntents(page)).find((record) => record.key === older.key)!;
+  expect(recovered.state).toBe('committed');
+  await expect(rows).toHaveCount(2);
+  await expect(comments.getByText('Older reply awaiting status', { exact: true })).toHaveCount(1);
+  await expect(comments.getByText('Newer confirmed reply', { exact: true })).toHaveCount(1);
+  await expect
+    .poll(() =>
+      rows.evaluateAll((nodes) =>
+        nodes.map((node) => node.querySelector('article')?.getAttribute('data-resource-id')),
+      ),
+    )
+    .toEqual([recovered.result!.resource_id, newer.result!.resource_id]);
+  const replay = await api(page, '/api/v1/replies', originalRequest);
+  expect(replay.ok()).toBe(true);
+  expect((await replay.json()).resource_id).toBe(recovered.result!.resource_id);
+  await expect(rows).toHaveCount(2);
+  const unrelated = rows.first().getByRole('button', { name: 'Reply', exact: true });
+  await unrelated.click();
+  const unrelatedEditor = rows.first().getByLabel('Your reply', { exact: true });
+  const unrelatedHandle = await unrelatedEditor.elementHandle();
+  await page.evaluate(() => {
+    const tracked = window as Window & { replyHistoryReplacements?: number };
+    tracked.replyHistoryReplacements = 0;
+    const replace = history.replaceState.bind(history);
+    history.replaceState = (data, unused, url) => {
+      if (url && new URL(url, location.href).searchParams.has('intent'))
+        tracked.replyHistoryReplacements!++;
+      replace(data, unused, url);
+    };
+  });
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  const freshEditor = opening.getByLabel('Your reply', { exact: true });
+  const freshHandle = await freshEditor.elementHandle();
+  await freshEditor.pressSequentially('F');
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find(
+          (record) =>
+            record.slot === 'reply:' + discussion.resource &&
+            record.state === 'draft' &&
+            record.body.content.text === 'F',
+        )?.key,
+    )
+    .toBeTruthy();
+  const firstDraft = (await savedIntents(page)).find(
+    (record) =>
+      record.slot === 'reply:' + discussion.resource &&
+      record.state === 'draft' &&
+      record.body.content.text === 'F',
+  )!;
+  await expect.poll(() => new URL(page.url()).searchParams.get('intent')).toBe(firstDraft.key);
+  expect(
+    await page.evaluate(
+      () => (window as Window & { replyHistoryReplacements?: number }).replyHistoryReplacements,
+    ),
+  ).toBe(1);
+  expect(await freshHandle!.evaluate((node) => node.isConnected)).toBe(true);
+  expect(await unrelatedHandle!.evaluate((node) => node.isConnected)).toBe(true);
+  expect(
+    await freshHandle!.evaluate(
+      (original, current) => original === current,
+      await freshEditor.elementHandle(),
+    ),
+  ).toBe(true);
+  expect(
+    await unrelatedHandle!.evaluate(
+      (original, current) => original === current,
+      await unrelatedEditor.elementHandle(),
+    ),
+  ).toBe(true);
+  await expect(freshEditor).toBeFocused();
+  expect(
+    await freshEditor.evaluate((node: HTMLTextAreaElement) => [
+      node.selectionStart,
+      node.selectionEnd,
+    ]),
+  ).toEqual([1, 1]);
+  await freshEditor.pressSequentially('resh draft after recovery');
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find(
+          (record) =>
+            record.slot === 'reply:' + discussion.resource &&
+            record.state === 'draft' &&
+            record.body.content.text === 'Fresh draft after recovery',
+        )?.key,
+    )
+    .toBeTruthy();
+  const fresh = (await savedIntents(page)).find(
+    (record) => record.slot === 'reply:' + discussion.resource && record.state === 'draft',
+  )!;
+  expect(
+    await page.evaluate(
+      () => (window as Window & { replyHistoryReplacements?: number }).replyHistoryReplacements,
+    ),
+  ).toBe(1);
+  expect(fresh.key).not.toBe(older.key);
+  await expect
+    .poll(() => {
+      const url = new URL(page.url());
+      return [url.pathname, url.searchParams.get('focus'), url.searchParams.get('intent')];
+    })
+    .toEqual([`/loom/discussion/${discussion.discussion}`, null, fresh.key]);
+  await expect(opening.getByLabel('Your reply', { exact: true })).toHaveValue(
+    'Fresh draft after recovery',
+  );
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}?intent=${older.key}`);
+  await expect(opening.getByText('Publication confirmed.', { exact: true })).toBeVisible();
+});
+
+test('a separately confirmed reply collapses through refresh, return, and reconciliation', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const create = async (parentId: string, body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: parentId,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+    return result.body.resource_id as string;
+  };
+  for (let index = 1; index <= 13; index++)
+    await create(discussion.resource, `Earlier comment ${index}`);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const opening = page.locator('.conversation-content > article.post');
+  const comments = page.locator('.conversation-content > .comment-tree');
+  await expect(comments.locator(':scope > .comment-branch')).toHaveCount(6);
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening.getByLabel('Your reply', { exact: true }).fill('Own comment after gap');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  const ownId = (await opening
+    .getByRole('link', { name: 'View reply' })
+    .getAttribute('href'))!.split('focus=')[1]!;
+  const ownRow = comments.locator(
+    `:scope > .comment-branch:has(article[data-resource-id="${ownId}"])`,
+  );
+  await expect(ownRow.getByText('Own comment after gap', { exact: true })).toBeVisible();
+  await create(ownId, 'Child beneath own comment');
+  await ownRow.getByRole('button', { name: 'Show replies' }).click();
+  await expect(ownRow.getByText('Child beneath own comment', { exact: true })).toBeVisible();
+  await ownRow
+    .locator(':scope > article.comment')
+    .getByRole('button', { name: /Collapse comment by/ })
+    .click();
+  await expect(ownRow).toHaveAttribute('data-collapsed', 'true');
+  await expect(ownRow.getByText('Own comment after gap', { exact: true })).toBeHidden();
+  await expect(ownRow.getByText('Child beneath own comment', { exact: true })).toBeHidden();
+  await captureConfirmedReply(page, 'known-reply-collapsed', ownRow);
+  await opening.getByRole('link', { name: 'View reply' }).click();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(ownRow).toHaveAttribute('data-collapsed', 'true');
+  const refreshed = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api/v1/contributions/${discussion.resource}/children`,
+  );
+  await comments.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshed;
+  await expect(comments.getByRole('button', { name: 'Refresh comments' })).toBeEnabled();
+  await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toBeVisible();
+  await expect(ownRow).toHaveAttribute('data-collapsed', 'true');
+  for (let index = 0; index < 2; index++)
+    await comments.getByRole('button', { name: 'Load more comments' }).click();
+  await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toHaveCount(0);
+  await expect(ownRow).toHaveAttribute('data-collapsed', 'true');
+  await expect(ownRow.getByText('Child beneath own comment', { exact: true })).toBeHidden();
+  await ownRow
+    .locator(':scope > article.comment')
+    .getByRole('button', { name: /Expand comment by/ })
+    .click();
+  await expect(ownRow.getByText('Own comment after gap', { exact: true })).toBeVisible();
+  await expect(ownRow.getByText('Child beneath own comment', { exact: true })).toBeVisible();
+});
+
+test('a restored inline reply draft displays its confirmed child without another opening', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const seeded = await external.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: discussion.discussion,
+    parent_id: discussion.resource,
+    content: text('Parent with a draft'),
+  });
+  expect(seeded.status).toBe(201);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const parent = page.locator('.conversation-content > .comment-tree > .comment-branch').first();
+  await parent.getByRole('button', { name: 'Reply', exact: true }).click();
+  await parent.getByLabel('Your reply', { exact: true }).fill('Posted after draft restoration');
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find(
+          (record) =>
+            record.slot === `reply:${seeded.body.resource_id}` &&
+            record.body.content.text === 'Posted after draft restoration',
+        )?.state,
+    )
+    .toBe('draft');
+  await page.reload();
+  await expect(parent.getByLabel('Your reply', { exact: true })).toHaveValue(
+    'Posted after draft restoration',
+  );
+  await parent.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(parent.getByText('Reply posted', { exact: true })).toBeVisible();
+  await expect(parent.getByText('Posted after draft restoration', { exact: true })).toBeVisible();
+  await captureConfirmedReply(
+    page,
+    'restored-draft-confirmed',
+    parent.getByText('Posted after draft restoration', { exact: true }),
+  );
+});
+
+test('a retained reply draft does not reopen replies hidden before a focused return', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const create = async (body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: discussion.resource,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+    return result.body.resource_id as string;
+  };
+  const parentId = await create('Parent with retained draft');
+  const otherId = await create('Other focused branch');
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const parent = page.locator(
+    `.conversation-content > .comment-tree > .comment-branch:has(article[data-resource-id="${parentId}"])`,
+  );
+  await parent.getByRole('button', { name: 'Reply', exact: true }).click();
+  await parent
+    .getByLabel('Your reply', { exact: true })
+    .fill('Keep this draft while replies stay hidden');
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find(
+          (record) =>
+            record.slot === `reply:${parentId}` &&
+            record.body.content.text === 'Keep this draft while replies stay hidden',
+        )?.state,
+    )
+    .toBe('draft');
+  await parent.getByRole('button', { name: 'Hide replies' }).click();
+  await expect(parent.getByRole('button', { name: 'Show replies' })).toBeVisible();
+  const other = page.locator(`article[data-resource-id="${otherId}"]`);
+  await other.locator('.message-details > summary').click();
+  await other.getByRole('link', { name: 'View parent thread' }).click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(parent.getByRole('button', { name: 'Show replies' })).toBeVisible();
+  await expect(parent.locator(':scope > .comment-children')).toBeHidden();
+  await expect(parent.getByLabel('Your reply', { exact: true })).toHaveValue(
+    'Keep this draft while replies stay hidden',
+  );
+  await captureConfirmedReply(page, 'retained-draft-hidden-after-return', parent);
+});
+
+test('an unavailable separately displayed parent leaves its eligible child reachable', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const create = async (parentId: string, body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: parentId,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+    return result.body.resource_id as string;
+  };
+  for (let index = 1; index <= 7; index++)
+    await create(discussion.resource, `Earlier parent ${index}`);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const opening = page.locator('.conversation-content > article.post');
+  const comments = page.locator('.conversation-content > .comment-tree');
+  await expect(comments.locator(':scope > .comment-branch')).toHaveCount(6);
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening.getByLabel('Your reply', { exact: true }).fill('Parent beyond loaded comments');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  const parentId = (await opening
+    .getByRole('link', { name: 'View reply' })
+    .getAttribute('href'))!.split('focus=')[1]!;
+  const parent = comments.locator(`:scope > .comment-branch:has([data-resource-id="${parentId}"])`);
+  await expect(parent.getByText('Parent beyond loaded comments', { exact: true })).toBeVisible();
+  await create(parentId, 'Eligible child of unavailable parent');
+  await parent.getByRole('button', { name: 'Show replies' }).click();
+  await expect(
+    parent.getByText('Eligible child of unavailable parent', { exact: true }),
+  ).toBeVisible();
+  await parent
+    .locator(':scope > article.comment')
+    .getByRole('button', { name: /Collapse comment by/ })
+    .click();
+  await expect(parent).toHaveAttribute('data-collapsed', 'true');
+  await opening.getByRole('link', { name: 'View reply' }).click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
+    parentId,
+  ]);
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(parent.getByText('Contribution unavailable', { exact: true })).toBeVisible();
+  await expect(parent).toHaveAttribute('data-collapsed', 'false');
+  await expect(parent.getByRole('button', { name: 'Hide replies' })).toBeVisible();
+  await expect(
+    parent.getByText('Eligible child of unavailable parent', { exact: true }),
+  ).toBeVisible();
+  await captureConfirmedReply(page, 'unavailable-known-parent-with-child', parent, [
+    'The separately known parent was externally suppressed after collapse; its child remains eligible.',
+  ]);
+  await parent.getByRole('button', { name: 'Hide replies' }).click();
+  await expect(parent.getByRole('button', { name: 'Show replies' })).toBeVisible();
+  await parent.getByRole('button', { name: 'Show replies' }).click();
+  await expect(
+    parent.getByText('Eligible child of unavailable parent', { exact: true }),
+  ).toBeVisible();
+  await expect(parent.getByText('Parent beyond loaded comments', { exact: true })).toHaveCount(0);
+});
+
+test('separately confirmed replies keep honest gaps and join canonical order without remounting', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const originalRevisions = new Map<string, string>();
+  const externalReply = async (body: string) => {
+    const response = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: discussion.resource,
+      content: text(body),
+    });
+    expect(response.status).toBe(201);
+    originalRevisions.set(response.body.resource_id as string, response.body.revision_id as string);
+    return response.body.resource_id as string;
+  };
+  const ordered: string[] = [];
+  for (let index = 1; index <= 20; index++)
+    ordered.push(await externalReply(`Gap comment ${index}`));
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const opening = page.locator('.conversation-content > article.post');
+  const comments = page.locator('.conversation-content > .comment-tree');
+  const rows = comments.locator(':scope > .comment-branch');
+  await expect(rows).toHaveCount(6);
+  await comments.getByRole('button', { name: 'Load more comments' }).click();
+  await expect(rows).toHaveCount(12);
+  const firstArticle = rows.first().locator('article');
+  const firstHandle = await firstArticle.elementHandle();
+  await firstArticle.getByRole('button', { name: 'Reply', exact: true }).click();
+  const dirty = firstArticle.getByLabel('Your reply', { exact: true });
+  await dirty.fill('Unrelated draft stays here');
+  await dirty.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(2, 9));
+  const dirtyHandle = await dirty.elementHandle();
+  let childReads = 0;
+  await page.route(`**/api/v1/contributions/${discussion.resource}/children?*`, async (route) => {
+    childReads++;
+    await route.continue();
+  });
+  ordered.push(await externalReply('Gap comment 21 after the last complete read'));
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening.getByLabel('Your reply', { exact: true }).fill('First own gap comment');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(comments.getByText('First own gap comment', { exact: true })).toBeVisible();
+  const firstOwn = (await opening
+    .getByRole('link', { name: 'View reply' })
+    .getAttribute('href'))!.split('focus=')[1]!;
+  ordered.push(firstOwn);
+  await expect(comments.getByText('13 comments loaded', { exact: true })).toBeVisible();
+  await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toHaveCount(1);
+  expect(childReads).toBe(0);
+  await expect(dirty).toHaveValue('Unrelated draft stays here');
+  await captureConfirmedReply(page, 'dirty-draft-with-known-reply', dirty);
+  expect(
+    await dirty.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd]),
+  ).toEqual([2, 9]);
+  expect(
+    await firstHandle!.evaluate(
+      (original, current) => original === current,
+      await firstArticle.elementHandle(),
+    ),
+  ).toBe(true);
+  ordered.push(await externalReply('Gap comment between own posts'));
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening.getByLabel('Your reply', { exact: true }).fill('Second own gap comment');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(comments.getByText('Second own gap comment', { exact: true })).toBeVisible();
+  const secondOwn = (await opening
+    .getByRole('link', { name: 'View reply' })
+    .getAttribute('href'))!.split('focus=')[1]!;
+  ordered.push(secondOwn);
+  await expect(comments.getByText('14 comments loaded', { exact: true })).toBeVisible();
+  await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toHaveCount(2);
+  await captureConfirmedReply(
+    page,
+    'confirmed-beyond-gap',
+    comments.getByText('Second own gap comment', { exact: true }),
+  );
+  expect(childReads).toBe(0);
+  const firstOwnRow = comments.locator(
+    `:scope > .comment-branch:has(article[data-resource-id="${firstOwn}"])`,
+  );
+  await firstOwnRow.getByRole('button', { name: 'Reply', exact: true }).click();
+  const ownDraft = firstOwnRow.getByLabel('Your reply', { exact: true });
+  await ownDraft.fill('Draft on a provisional row');
+  await ownDraft.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(3, 8));
+  const ownHandle = await ownDraft.elementHandle();
+  await comments.getByRole('button', { name: 'Load more comments' }).click();
+  await expect(comments.getByText('20 comments loaded', { exact: true })).toBeVisible();
+  await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toHaveCount(2);
+  await comments.getByRole('button', { name: 'Load more comments' }).click();
+  await expect(comments.getByText('24 comments loaded', { exact: true })).toBeVisible();
+  await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toHaveCount(0);
+  await captureConfirmedReply(
+    page,
+    'gap-filled-deduplicated',
+    comments.getByText('Second own gap comment', { exact: true }),
+  );
+  await expect(rows.locator(':scope > article.comment')).toHaveCount(24);
+  expect(
+    await rows.evaluateAll((nodes) =>
+      nodes.map((node) => node.querySelector('article')?.getAttribute('data-resource-id')),
+    ),
+  ).toEqual(ordered);
+  expect(
+    await ownHandle!.evaluate(
+      (original, current) => original === current,
+      await ownDraft.elementHandle(),
+    ),
+  ).toBe(true);
+  await expect(ownDraft).toHaveValue('Draft on a provisional row');
+  expect(
+    await ownDraft.evaluate((node: HTMLTextAreaElement) => [
+      node.selectionStart,
+      node.selectionEnd,
+    ]),
+  ).toEqual([3, 8]);
+  expect(
+    await dirtyHandle!.evaluate(
+      (original, current) => original === current,
+      await dirty.elementHandle(),
+    ),
+  ).toBe(true);
+  await expect(dirty).toHaveValue('Unrelated draft stays here');
+  const revisedOlder = await external.client.call('/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: ordered[0]!,
+    expected_revision_id: originalRevisions.get(ordered[0]!),
+    title: null,
+    content: text('Gap comment 1 edited after later posts'),
+  });
+  expect(revisedOlder.status).toBe(201);
+  await page.reload();
+  for (let pageIndex = 1; pageIndex < 4; pageIndex++) {
+    await comments.getByRole('button', { name: 'Load more comments' }).click();
+    await expect(rows).toHaveCount(Math.min(6 * (pageIndex + 1), 24));
+  }
+  await expect(
+    comments.getByText('Gap comment 1 edited after later posts', { exact: true }),
+  ).toBeVisible();
+  await expect(rows.locator(':scope > article.comment')).toHaveCount(24);
+  expect(
+    await rows.evaluateAll((nodes) =>
+      nodes.map((node) => node.querySelector('article')?.getAttribute('data-resource-id')),
+    ),
+  ).toEqual(ordered);
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
+test('a confirmed reply with a failed content read retries display without another publication', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const opening = page.locator('.conversation-content > article.post');
+  const comments = page.locator('.conversation-content > .comment-tree');
+  await expect(comments.getByText('No comments yet.')).toBeVisible();
+  let postedId = '';
+  let posts = 0;
+  let displayReads = 0;
+  await page.route('**/api/v1/replies', async (route) => {
+    posts++;
+    const response = await route.fetch();
+    postedId = (await response.json()).resource_id;
+    await route.fulfill({ response });
+  });
+  await page.route('**/api/v1/contributions/*/context', async (route) => {
+    if (!postedId || !route.request().url().includes(`/contributions/${postedId}/context`))
+      return route.continue();
+    displayReads++;
+    if (displayReads === 1) return route.abort('connectionfailed');
+    return route.continue();
+  });
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening
+    .getByLabel('Your reply', { exact: true })
+    .fill('Confirmed but initially unavailable');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(opening.getByText('Reply posted', { exact: true })).toBeVisible();
+  await expect(comments.getByText('Reply posted, but it could not be displayed.')).toBeVisible();
+  await expect(comments.getByRole('button', { name: 'Show replies' })).toHaveCount(0);
+  await captureConfirmedReply(
+    page,
+    'confirmed-display-failed',
+    comments.getByText('Reply posted, but it could not be displayed.'),
+    ['The first authorized contribution-context read was deliberately aborted.'],
+  );
+  await expect(
+    comments.getByText('Confirmed but initially unavailable', { exact: true }),
+  ).toHaveCount(0);
+  await comments.getByRole('button', { name: 'Retry loading reply' }).click();
+  await expect(
+    comments.getByText('Confirmed but initially unavailable', { exact: true }),
+  ).toBeVisible();
+  expect(posts).toBe(1);
+  expect(displayReads).toBe(2);
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
+test('a depth-limit reply confirms under its actual parent and opens its focused destination', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const create = async (parentId: string, body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: parentId,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+    return result.body.resource_id as string;
+  };
+  const parent = await create(discussion.resource, 'Depth parent');
+  const nested = await create(parent, 'Depth nested parent');
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const parentBranch = page
+    .locator('.conversation-content > .comment-tree > .comment-branch')
+    .first();
+  await parentBranch.getByRole('button', { name: 'Show replies' }).click();
+  const nestedBranch = parentBranch
+    .locator(':scope > .comment-children > .comment-tree > .comment-branch')
+    .first();
+  const nestedPost = nestedBranch.locator(`article[data-resource-id="${nested}"]`);
+  await expect(nestedPost.getByText('Depth nested parent', { exact: true })).toBeVisible();
+  await nestedPost.getByRole('button', { name: 'Reply', exact: true }).click();
+  await nestedPost.getByLabel('Your reply', { exact: true }).fill('Beyond inline depth');
+  await nestedPost.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(nestedPost.getByText('Reply posted', { exact: true })).toBeVisible();
+  await captureConfirmedReply(
+    page,
+    'depth-limit-confirmed',
+    nestedPost.getByText('Reply posted', { exact: true }),
+  );
+  await expect(nestedPost.getByLabel('Your reply', { exact: true })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/loom/discussion/${discussion.discussion}$`));
+  const link = nestedPost.getByRole('link', { name: 'View reply' });
+  await expect(link).toHaveAttribute(
+    'href',
+    new RegExp(`^/loom/discussion/${discussion.discussion}\\?focus=`),
+  );
+  await expect(nestedBranch.locator(':scope > .comment-children')).toHaveCount(0);
+  await link.click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await expect(
+    page
+      .locator('.reading-grid > div > article.comment')
+      .getByText('Beyond inline depth', { exact: true }),
+  ).toBeVisible();
+  await captureConfirmedReply(
+    page,
+    'depth-limit-focused',
+    page.locator('.reading-grid > div > article.comment'),
+  );
+});
+
+test('late confirmation keeps a deliberately hidden branch and moved keyboard focus', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const seed = await external.client.call('/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: discussion.discussion,
+    parent_id: discussion.resource,
+    content: text('Pending parent'),
+  });
+  expect(seed.status).toBe(201);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const parent = page.locator('.conversation-content > .comment-tree > .comment-branch').first();
+  await parent.getByRole('button', { name: 'Reply', exact: true }).click();
+  await expect(parent.getByRole('button', { name: 'Hide replies' })).toBeVisible();
+  await parent.getByLabel('Your reply', { exact: true }).fill('Late confirmed child');
+  let release!: () => void, started!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  await page.route('**/api/v1/replies', async (route) => {
+    const response = await route.fetch();
+    started();
+    await held;
+    await route.fulfill({ response });
+  });
+  await parent.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await ready;
+  await parent.getByRole('button', { name: 'Hide replies' }).click();
+  const details = page.locator('.discussion-details > summary');
+  await details.focus();
+  release();
+  await expect(parent.getByText('Reply posted', { exact: true })).toBeVisible();
+  await expect(parent.locator(':scope > .comment-children')).toBeHidden();
+  await expect(details).toBeFocused();
+  await parent.getByRole('button', { name: 'Show replies' }).click();
+  await expect(parent.getByText('Late confirmed child', { exact: true })).toBeVisible();
+  await page.unrouteAll({ behavior: 'wait' });
 });
 
 test('continuous comments and replies retain earlier rows, editors, focus and recovery', async ({
@@ -1487,14 +2272,12 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     .click();
   await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
   const focusedReplies = page.locator('.reading-grid > div > .comment-tree');
-  await expect(focusedReplies.getByText('6 replies loaded', { exact: true })).toBeVisible();
+  await expect(focusedReplies.getByText('7 replies loaded', { exact: true })).toBeVisible();
   await focusedReplies.getByRole('button', { name: 'Load more replies' }).click();
   await expect(focusedReplies.getByText('9 replies loaded', { exact: true })).toBeVisible();
   const focusedParent = page.locator('.reading-grid > div > article.comment');
-  const anotherReply = focusedParent.getByRole('button', { name: 'Write another', exact: true });
-  if (!(await anotherReply.isVisible()))
-    await focusedParent.getByRole('button', { name: 'Reply', exact: true }).click();
-  await anotherReply.click();
+  await focusedParent.getByRole('button', { name: 'Reply', exact: true }).click();
+  await expect(focusedParent.getByLabel('Your reply', { exact: true })).toHaveValue('');
   await focusedParent.getByLabel('Your reply', { exact: true }).fill('Focused reply after loading');
   await focusedParent.getByRole('button', { name: 'Post reply', exact: true }).click();
   await expect(focusedReplies.getByText('10 replies loaded', { exact: true })).toBeVisible();
@@ -1722,6 +2505,31 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toHaveCount(0);
   await expect(tailEditor).toHaveValue('A draft on the ninth page');
   expect(await page.evaluate((node) => node?.isConnected, tailHandle)).toBe(true);
+  await page.unrouteAll({ behavior: 'wait' });
+
+  // A separately known publication must not turn the saved 54-row tail into a
+  // 55-row automatic restoration goal after a focused round trip.
+  const longOpening = page.locator('.conversation-content > article.post');
+  await longOpening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await longOpening.getByLabel('Your reply', { exact: true }).fill('Known beyond the long window');
+  await longOpening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  await expect(root.getByText('Known beyond the long window', { exact: true })).toBeVisible();
+  await expect(root.getByText('55 comments loaded', { exact: true })).toBeVisible();
+  await expect(root.getByText('Some comments are not loaded.', { exact: true })).toBeVisible();
+  let knownReturnReads = 0;
+  await page.route(`**/api/v1/contributions/${discussion.resource}/children?*`, async (route) => {
+    knownReturnReads++;
+    await route.continue();
+  });
+  await laterBranchThread.click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(rootRows).toHaveCount(49);
+  await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
+  expect(knownReturnReads).toBeLessThanOrEqual(8);
+  await root.getByRole('button', { name: 'Continue restoring comments' }).click();
+  await expect(rootRows).toHaveCount(55);
+  await expect(root.getByText('Known beyond the long window', { exact: true })).toBeVisible();
   await page.unrouteAll({ behavior: 'wait' });
 
   // A partial negative projection on page two withdraws older leases, while
@@ -3177,7 +3985,7 @@ test('review regression: a stale tab preserves separate edits without overwritin
 });
 
 for (const kind of ['artifacts', 'discussions', 'replies'] as const)
-  test(`review regression: Write another selects the replacement ${kind} draft across browser restart`, async ({
+  test(`review regression: the next ${kind} draft survives browser restart`, async ({
     server,
     diagnostics,
   }) => {
@@ -3210,7 +4018,8 @@ for (const kind of ['artifacts', 'discussions', 'replies'] as const)
       await expect
         .poll(
           async () =>
-            (await savedIntents(page)).find((r) => r.kind === operation)?.body.content.text,
+            (await savedIntents(page)).find((r) => r.kind === operation && r.state === 'draft')
+              ?.body.content.text,
         )
         .toBe('First body');
       const first = (await savedIntents(page)).find((r) => r.kind === operation);
@@ -3221,13 +4030,21 @@ for (const kind of ['artifacts', 'discussions', 'replies'] as const)
           exact: true,
         })
         .click();
-      await page.getByRole('button', { name: 'Write another', exact: true }).click();
+      if (discussion) await expect(page.getByText('Reply posted', { exact: true })).toBeVisible();
+      await (
+        discussion
+          ? page
+              .locator('.reading-grid > div > article.comment')
+              .getByRole('button', { name: 'Reply', exact: true })
+          : page.getByRole('button', { name: 'Write another', exact: true })
+      ).click();
       if (!discussion) await page.getByLabel('Title', { exact: true }).fill('Second publication');
       await page.getByLabel(label, { exact: true }).fill('Second body survives restart');
       await expect
         .poll(
           async () =>
-            (await savedIntents(page)).find((r) => r.kind === operation)?.body.content.text,
+            (await savedIntents(page)).find((r) => r.kind === operation && r.state === 'draft')
+              ?.body.content.text,
         )
         .toBe('Second body survives restart');
       const nextUrl = page.url();
@@ -3244,7 +4061,12 @@ for (const kind of ['artifacts', 'discussions', 'replies'] as const)
       );
       if (!discussion)
         await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Second publication');
-      expect((await savedIntents(page)).filter((r) => r.kind === operation)).toHaveLength(1);
+      const retained = (await savedIntents(page)).filter((r) => r.kind === operation);
+      expect(retained).toHaveLength(discussion ? 2 : 1);
+      if (discussion) {
+        expect(retained.find((r) => r.key === first.key)?.state).toBe('committed');
+        expect(retained.find((r) => r.state === 'draft')?.key).not.toBe(first.key);
+      }
     } finally {
       await context.close();
       await rm(directory, { recursive: true, force: true });

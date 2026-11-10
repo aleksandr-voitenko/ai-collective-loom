@@ -91,7 +91,7 @@ test('revision notes and ordinary accounts have distinct authors, immutable exac
   await accountTarget(page, f.target);
   await expect(page.getByLabel('Described resource ID or exact Loom link')).toBeFocused();
   await page.getByRole('button', { name: 'Post reply', exact: true }).click();
-  await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Reply posted', { exact: true })).toBeVisible();
   const account = (await journal(page, 'reply.create')).result;
   expect((await f.admin.call(coveragePath(account))).body.source.author.id).toBe(f.person);
   await page.goto(server.origin + `/loom/resource/${r2.resource_id}/${r2.revision_id}`);

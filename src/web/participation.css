@@ -672,6 +672,17 @@
   font-size: 15px;
   margin-bottom: 9px;
 }
+.loom-app .reply-confirmation {
+  margin: 9px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.loom-app .reply-confirmation strong {
+  color: var(--accent);
+}
+.loom-app .reply-confirmation a {
+  margin-left: 8px;
+}
 .loom-app .comment-tree > .continuation-action[aria-disabled='true'] {
   opacity: 0.65;
   cursor: wait;
@@ -696,6 +707,14 @@
 }
 .loom-app .continuation-notice.notice {
   padding: 12px 14px;
+}
+.loom-app .reply-gap {
+  color: var(--muted);
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+}
+.loom-app .reply-gap button {
+  margin-left: 8px;
 }
 .loom-app .focus-banner {
   display: flex;

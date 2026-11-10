@@ -419,7 +419,7 @@ test('browser opening and reply attachments download exact bytes and another par
   await page.getByRole('button', { name: 'Upload and prepare reply.txt', exact: true }).click();
   await expect(page.getByText('File set ready for publication.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Post reply', exact: true }).click();
-  await expect(page.getByText('Your reply was posted.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Reply posted', { exact: true })).toBeVisible();
   const reply = (await journal(page, 'reply.create')).result;
   expect((await api(page, '/api/v1/resources/' + reply.resource_id)).parent_id).toBe(
     opening.resource_id,

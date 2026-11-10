@@ -1,5 +1,7 @@
 /** Ephemeral controls only. These identities and cursors never authorize cached content. */
 export interface DiscussionNavigationState {
+  /** Bounded per-parent identities, independent of branch depth and page extent. */
+  knownReplies?: Map<string, string[]>;
   branches: Map<
     string,
     {

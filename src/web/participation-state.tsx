@@ -136,7 +136,7 @@ export function intentUrl(record: Intent) {
 // Queue saves from rapid input in one view, while IntentStore serializes and
 // compares versions across tabs. Navigation may finish saving the old draft;
 // identity changes and unmounted views cannot receive its UI result.
-export function useIntent(initial: () => Intent | undefined) {
+export function useIntent(initial: () => Intent | undefined, replaceOldReplyIntent = false) {
   const location = useLocation(),
     navigate = useNavigate();
   const [record, setRecord] = useState(initial);
@@ -159,12 +159,29 @@ export function useIntent(initial: () => Intent | undefined) {
       current.current = next;
       if (live.current && owner.current === identityGeneration()) {
         setRecord(next);
+        const inlineReply = replaceOldReplyIntent && next?.kind === 'reply.create';
         if (
           next &&
-          (next.blocked_by || (previous && next.key !== previous.key)) &&
-          new URLSearchParams(location.search).get('intent') !== next.key
+          (next.blocked_by ||
+            (previous && next.key !== previous.key) ||
+            (replaceOldReplyIntent && new URLSearchParams(location.search).has('intent'))) &&
+          // Native replacement does not update Router's location. Compare the
+          // live URL so later saves of this draft do not replace history again.
+          new URLSearchParams(inlineReply ? window.location.search : location.search).get(
+            'intent',
+          ) !== next.key
         ) {
-          void navigate(intentUrl(next), { replace: true });
+          if (inlineReply) {
+            const search = new URLSearchParams(window.location.search);
+            search.set('intent', next.key);
+            // An inline draft changes only its recovery URL; routing would remount
+            // the discussion and discard live editor focus and selection.
+            window.history.replaceState(
+              window.history.state,
+              '',
+              `${window.location.pathname}?${search}${window.location.hash}`,
+            );
+          } else void navigate(intentUrl(next), { replace: true });
         }
       }
       return next;

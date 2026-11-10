@@ -131,7 +131,8 @@ shows an excerpt capped at360 UTF-16 units and never registers ReadingText. Expl
 preview opening reveals/focuses its panel; closing restores a surviving trigger. Its host
 survives an unavailable-parent response so fresh negative evidence stays visible;
 older projections still withdraw. App-scoped discussion navigation stores only up to64
-branch control snapshots, bounded focused-comment collapse IDs and a return anchor,
+branch control snapshots, up to64 separately known parent identities with at most16
+confirmed reply IDs each, bounded focused-comment collapse IDs and a return anchor,
 scoped to account/instance/path. These entries contain IDs and flags, never prose or
 authoritative totals. It
 survives query remounts while preserving their authorization and composer isolation;
@@ -141,13 +142,32 @@ restoration goal has an explicit Continue control; leaving the path or identity
 discards it. An empty Children remount must keep the saved count/tail until fresh
 reads establish another extent; a partially staged return keeps that goal across
 another focus-query remount. This metadata never authorizes source content.
+Known reply IDs are shared across normal and focused depths for the same parent,
+but do not change the canonical cursor, loaded tail or return goal. New identities
+evict the oldest beyond each bound; the retained journal and focused links still
+provide exact recovery. Each known row reads current authorized contribution context
+and checks actual discussion/parent before display. Its receipt revision remains in
+the journal and exact link; prose and author metadata never enter navigation state.
+Separately read rows use one keyed branch owner with canonical rows, with an explicit
+gap before each unplaced reply. Accepted traversal pages alone establish placement
+and remove gaps, preserving mounted row drafts and disclosures. Publication does
+not fetch missing siblings or mark text read; normal visible-prose policy applies.
+Known replies can collapse before pagination reaches them; their collapse state
+survives branch refresh, focused return and canonical reconciliation. A restored
+inline reply editor opens its parent branch once on mount when no remembered
+opened-but-hidden branch exists; a focused return retains that deliberate hide.
+Replacing an older recovery intent in the inline URL preserves the mounted
+discussion, editor focus and selection. Compare the live browser URL before native
+history replacement because Router's query does not update until routed navigation;
+later saves of the same intent must not replace history again.
 Children remain on-demand and six-item bounded: counts describe unique
 loaded direct entries, never an inferred thread total. Each accepted page retains
 its own authorization lease and continuation; append leaves existing rows mounted.
 Opened branches and whole-comment bodies stay mounted while hidden, preserving nested
 drafts, selection, cursors and viewport-reading occurrences. A measured full hide
 and re-entry can rearm automatic reading; no collapse handler marks text read.
-Unavailable comments ignore stale collapse flags so eligible descendants stay reachable.
+Unavailable comments ignore stale collapse flags so eligible descendants stay reachable,
+including separately known rows whose fresh context withdraws their body.
 Refresh stages a fresh traversal through the prior tail at page granularity, then
 reconciles surviving branch IDs. A bounded partial stage leaves a fully authorized
 old window mounted until the tail is reached; scrolling, wheel, touch, pointer or
@@ -187,6 +207,11 @@ panels without owning state or adding DOM wrappers. The composer coordinator ret
 panel visibility, journal actions, comparison loading and recovery focus ref/effects;
 confirmation is shown only after durable settlement. Keep editors and disclosures
 mounted through busy/uncertain feedback changes.
+Inline reply completion closes that editor and shows compact parent-local confirmation.
+The next Reply excludes committed records from implicit slot lookup while explicit
+intent recovery still selects its exact record. Starting a new reply under an older
+explicit intent replaces the URL intent with the fresh saved draft, retaining the
+committed journal entry. Other composer kinds retain Write another replacement.
 `composer-draft.ts` derives routes/targets/capabilities from its six-kind caller
 operation union and owns draft construction/comparison/correction transitions.
 Named draft patches preserve undefined-as-unchanged and explicit null/empty values;

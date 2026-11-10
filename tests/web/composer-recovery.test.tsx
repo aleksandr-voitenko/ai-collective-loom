@@ -1050,7 +1050,7 @@ for (const reply of [false, true])
       assert.deepEqual(f.record().body, { ...body, idempotency_key: f.original.key });
       assert.equal(screen.queryByRole('group', { name: 'Submission recovery' }), null);
       assert.equal(screen.queryByLabelText(reply ? 'Your reply' : 'Text'), null);
-      assert.ok(screen.getByRole('button', { name: 'Write another' }));
+      assert.equal(!!screen.queryByRole('button', { name: 'Write another' }), !reply);
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Close composer' }));
       });
