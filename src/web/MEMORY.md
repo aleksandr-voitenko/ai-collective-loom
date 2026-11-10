@@ -154,16 +154,20 @@ and remove gaps, preserving mounted row drafts and disclosures. Publication does
 not fetch missing siblings or mark text read; normal visible-prose policy applies.
 Known replies can collapse before pagination reaches them; their collapse state
 survives branch refresh, focused return and canonical reconciliation. A restored
-inline reply editor opens its parent branch once on mount, while a later deliberate
-hide remains authoritative. Replacing an older recovery intent in the inline URL
-preserves the mounted discussion, editor focus and selection.
+inline reply editor opens its parent branch once on mount when no remembered
+opened-but-hidden branch exists; a focused return retains that deliberate hide.
+Replacing an older recovery intent in the inline URL preserves the mounted
+discussion, editor focus and selection. Compare the live browser URL before native
+history replacement because Router's query does not update until routed navigation;
+later saves of the same intent must not replace history again.
 Children remain on-demand and six-item bounded: counts describe unique
 loaded direct entries, never an inferred thread total. Each accepted page retains
 its own authorization lease and continuation; append leaves existing rows mounted.
 Opened branches and whole-comment bodies stay mounted while hidden, preserving nested
 drafts, selection, cursors and viewport-reading occurrences. A measured full hide
 and re-entry can rearm automatic reading; no collapse handler marks text read.
-Unavailable comments ignore stale collapse flags so eligible descendants stay reachable.
+Unavailable comments ignore stale collapse flags so eligible descendants stay reachable,
+including separately known rows whose fresh context withdraws their body.
 Refresh stages a fresh traversal through the prior tail at page granularity, then
 reconciles surviving branch IDs. A bounded partial stage leaves a fully authorized
 old window mounted until the tail is reached; scrolling, wheel, touch, pointer or

@@ -1277,6 +1277,16 @@ test('an older uncertain reply confirms after a newer reply in canonical order',
   await unrelated.click();
   const unrelatedEditor = rows.first().getByLabel('Your reply', { exact: true });
   const unrelatedHandle = await unrelatedEditor.elementHandle();
+  await page.evaluate(() => {
+    const tracked = window as Window & { replyHistoryReplacements?: number };
+    tracked.replyHistoryReplacements = 0;
+    const replace = history.replaceState.bind(history);
+    history.replaceState = (data, unused, url) => {
+      if (url && new URL(url, location.href).searchParams.has('intent'))
+        tracked.replyHistoryReplacements!++;
+      replace(data, unused, url);
+    };
+  });
   await opening.getByRole('button', { name: 'Reply', exact: true }).click();
   const freshEditor = opening.getByLabel('Your reply', { exact: true });
   const freshHandle = await freshEditor.elementHandle();
@@ -1299,6 +1309,11 @@ test('an older uncertain reply confirms after a newer reply in canonical order',
       record.body.content.text === 'F',
   )!;
   await expect.poll(() => new URL(page.url()).searchParams.get('intent')).toBe(firstDraft.key);
+  expect(
+    await page.evaluate(
+      () => (window as Window & { replyHistoryReplacements?: number }).replyHistoryReplacements,
+    ),
+  ).toBe(1);
   expect(await freshHandle!.evaluate((node) => node.isConnected)).toBe(true);
   expect(await unrelatedHandle!.evaluate((node) => node.isConnected)).toBe(true);
   expect(
@@ -1335,6 +1350,11 @@ test('an older uncertain reply confirms after a newer reply in canonical order',
   const fresh = (await savedIntents(page)).find(
     (record) => record.slot === 'reply:' + discussion.resource && record.state === 'draft',
   )!;
+  expect(
+    await page.evaluate(
+      () => (window as Window & { replyHistoryReplacements?: number }).replyHistoryReplacements,
+    ),
+  ).toBe(1);
   expect(fresh.key).not.toBe(older.key);
   await expect
     .poll(() => {
@@ -1462,6 +1482,127 @@ test('a restored inline reply draft displays its confirmed child without another
     'restored-draft-confirmed',
     parent.getByText('Posted after draft restoration', { exact: true }),
   );
+});
+
+test('a retained reply draft does not reopen replies hidden before a focused return', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const create = async (body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: discussion.resource,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+    return result.body.resource_id as string;
+  };
+  const parentId = await create('Parent with retained draft');
+  const otherId = await create('Other focused branch');
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const parent = page.locator(
+    `.conversation-content > .comment-tree > .comment-branch:has(article[data-resource-id="${parentId}"])`,
+  );
+  await parent.getByRole('button', { name: 'Reply', exact: true }).click();
+  await parent
+    .getByLabel('Your reply', { exact: true })
+    .fill('Keep this draft while replies stay hidden');
+  await expect
+    .poll(
+      async () =>
+        (await savedIntents(page)).find(
+          (record) =>
+            record.slot === `reply:${parentId}` &&
+            record.body.content.text === 'Keep this draft while replies stay hidden',
+        )?.state,
+    )
+    .toBe('draft');
+  await parent.getByRole('button', { name: 'Hide replies' }).click();
+  await expect(parent.getByRole('button', { name: 'Show replies' })).toBeVisible();
+  const other = page.locator(`article[data-resource-id="${otherId}"]`);
+  await other.locator('.message-details > summary').click();
+  await other.getByRole('link', { name: 'View parent thread' }).click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(parent.getByRole('button', { name: 'Show replies' })).toBeVisible();
+  await expect(parent.locator(':scope > .comment-children')).toBeHidden();
+  await expect(parent.getByLabel('Your reply', { exact: true })).toHaveValue(
+    'Keep this draft while replies stay hidden',
+  );
+  await captureConfirmedReply(page, 'retained-draft-hidden-after-return', parent);
+});
+
+test('an unavailable separately displayed parent leaves its eligible child reachable', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page);
+  const external = await agent(page, server);
+  const create = async (parentId: string, body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: parentId,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+    return result.body.resource_id as string;
+  };
+  for (let index = 1; index <= 7; index++)
+    await create(discussion.resource, `Earlier parent ${index}`);
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const opening = page.locator('.conversation-content > article.post');
+  const comments = page.locator('.conversation-content > .comment-tree');
+  await expect(comments.locator(':scope > .comment-branch')).toHaveCount(6);
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  await opening.getByLabel('Your reply', { exact: true }).fill('Parent beyond loaded comments');
+  await opening.getByRole('button', { name: 'Post reply', exact: true }).click();
+  const parentId = (await opening
+    .getByRole('link', { name: 'View reply' })
+    .getAttribute('href'))!.split('focus=')[1]!;
+  const parent = comments.locator(`:scope > .comment-branch:has([data-resource-id="${parentId}"])`);
+  await expect(parent.getByText('Parent beyond loaded comments', { exact: true })).toBeVisible();
+  await create(parentId, 'Eligible child of unavailable parent');
+  await parent.getByRole('button', { name: 'Show replies' }).click();
+  await expect(
+    parent.getByText('Eligible child of unavailable parent', { exact: true }),
+  ).toBeVisible();
+  await parent
+    .locator(':scope > article.comment')
+    .getByRole('button', { name: /Collapse comment by/ })
+    .click();
+  await expect(parent).toHaveAttribute('data-collapsed', 'true');
+  await opening.getByRole('link', { name: 'View reply' }).click();
+  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
+    parentId,
+  ]);
+  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  await expect(parent.getByText('Contribution unavailable', { exact: true })).toBeVisible();
+  await expect(parent).toHaveAttribute('data-collapsed', 'false');
+  await expect(parent.getByRole('button', { name: 'Hide replies' })).toBeVisible();
+  await expect(
+    parent.getByText('Eligible child of unavailable parent', { exact: true }),
+  ).toBeVisible();
+  await captureConfirmedReply(page, 'unavailable-known-parent-with-child', parent, [
+    'The separately known parent was externally suppressed after collapse; its child remains eligible.',
+  ]);
+  await parent.getByRole('button', { name: 'Hide replies' }).click();
+  await expect(parent.getByRole('button', { name: 'Show replies' })).toBeVisible();
+  await parent.getByRole('button', { name: 'Show replies' }).click();
+  await expect(
+    parent.getByText('Eligible child of unavailable parent', { exact: true }),
+  ).toBeVisible();
+  await expect(parent.getByText('Parent beyond loaded comments', { exact: true })).toHaveCount(0);
 });
 
 test('separately confirmed replies keep honest gaps and join canonical order without remounting', async ({

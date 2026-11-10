@@ -159,14 +159,19 @@ export function useIntent(initial: () => Intent | undefined, replaceOldReplyInte
       current.current = next;
       if (live.current && owner.current === identityGeneration()) {
         setRecord(next);
+        const inlineReply = replaceOldReplyIntent && next?.kind === 'reply.create';
         if (
           next &&
           (next.blocked_by ||
             (previous && next.key !== previous.key) ||
             (replaceOldReplyIntent && new URLSearchParams(location.search).has('intent'))) &&
-          new URLSearchParams(location.search).get('intent') !== next.key
+          // Native replacement does not update Router's location. Compare the
+          // live URL so later saves of this draft do not replace history again.
+          new URLSearchParams(inlineReply ? window.location.search : location.search).get(
+            'intent',
+          ) !== next.key
         ) {
-          if (replaceOldReplyIntent && next.kind === 'reply.create') {
+          if (inlineReply) {
             const search = new URLSearchParams(window.location.search);
             search.set('intent', next.key);
             // An inline draft changes only its recovery URL; routing would remount

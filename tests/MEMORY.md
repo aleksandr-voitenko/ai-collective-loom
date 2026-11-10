@@ -1066,8 +1066,11 @@ draft, an edited older sibling that stays in creation order, failed context-read
 retry without another POST, and depth-limit focused links. Regressions additionally
 check known-row collapse through refresh, focused return and reconciliation, typing
 across recovery-intent autosave without remounting either editor, and direct posting
-from a reloaded inline draft. The late-confirmation hide test keeps deliberate hiding
-authoritative. The long-window journey
+from a reloaded inline draft. A retained draft plus hidden reply list stays hidden
+after focused return; an unavailable separately known collapsed parent reveals its
+eligible child and reply controls. Repeated autosaves of one replacement intent
+perform no further history replacements. The late-confirmation hide test keeps
+deliberate hiding authoritative. The long-window journey
 also places a separately known reply beyond 54 canonical rows and verifies that
 focused return still restores only the saved canonical extent.
 `LOOM_CONFIRMED_REPLY_REVIEW=1` captures the actual compiled app at 1440x1000 and

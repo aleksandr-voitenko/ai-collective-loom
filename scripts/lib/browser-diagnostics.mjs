@@ -22,7 +22,7 @@ export const limits = Object.freeze({
   contexts: 8,
   pending: 64,
   steps: 16,
-  tests: 187,
+  tests: 189,
   bytes: 131072,
   runBytes: 17 * 1024 * 1024,
 });

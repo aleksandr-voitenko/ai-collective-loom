@@ -431,9 +431,10 @@ type ContributionProps = {
   parent?: ResourceView | undefined;
   onPosted?: (value: CommittedView) => void;
   onReplyOpened?: () => void;
+  onRestoredReply?: () => void;
   expectedParentId?: string | undefined;
   discussionId?: string;
-  onKnownLoaded?: (id: string, loaded: boolean) => void;
+  onKnownLoaded?: (id: string, status: 'pending' | 'available' | 'unavailable') => void;
   collapsed?: boolean;
   onToggleCollapse?: (control: HTMLButtonElement) => void;
 };
@@ -448,9 +449,10 @@ function Contribution(props: ContributionProps) {
     !!data &&
     (!props.expectedParentId ||
       (data.parent_id === props.expectedParentId && data.discussion_id === props.discussionId));
+  const knownStatus = !matches ? 'pending' : 'state' in data ? 'unavailable' : 'available';
   useEffect(() => {
-    if (props.expectedParentId) props.onKnownLoaded?.(props.id, matches);
-  }, [props.id, props.expectedParentId, props.onKnownLoaded, matches]);
+    if (props.expectedParentId) props.onKnownLoaded?.(props.id, knownStatus);
+  }, [props.id, props.expectedParentId, props.onKnownLoaded, knownStatus]);
   if (error)
     return (
       <div className="notice">
@@ -500,6 +502,7 @@ function ContributionBody({
   parent,
   onPosted,
   onReplyOpened,
+  onRestoredReply,
   collapsed = false,
   onToggleCollapse,
 }: ContributionProps & { data: ContributionContextView }) {
@@ -519,8 +522,8 @@ function ContributionBody({
   useEffect(() => {
     if (!restoredReply.current) return;
     restoredReply.current = false;
-    onReplyOpened?.();
-  }, [onReplyOpened]);
+    onRestoredReply?.();
+  }, [onRestoredReply]);
   const [confirmed, setConfirmed] = useState<CommittedView>();
   const seenOperations = useRef(new Set<string>());
   const [preferUnfinishedReply, setPreferUnfinishedReply] = useState(false);
@@ -810,17 +813,24 @@ function Children({
     known.set(id, knownReplyIds);
     if (known.size > 64) known.delete(known.keys().next().value!);
   }, [id, knownReplyIds, navigationState]);
-  const onKnownLoaded = useCallback((resourceId: string, loaded: boolean) => {
-    setKnownLoaded((value) =>
-      loaded
-        ? value.includes(resourceId)
-          ? value
-          : [...value, resourceId]
-        : value.includes(resourceId)
-          ? value.filter((id) => id !== resourceId)
-          : value,
-    );
-  }, []);
+  const onKnownLoaded = useCallback(
+    (resourceId: string, status: 'pending' | 'available' | 'unavailable') => {
+      setKnownLoaded((value) =>
+        status !== 'pending'
+          ? value.includes(resourceId)
+            ? value
+            : [...value, resourceId]
+          : value.includes(resourceId)
+            ? value.filter((id) => id !== resourceId)
+            : value,
+      );
+      if (status === 'unavailable')
+        setCollapsed((value) =>
+          value.includes(resourceId) ? value.filter((id) => id !== resourceId) : value,
+        );
+    },
+    [],
+  );
   const publish = (next: ChildrenWindow) => {
     state.current = next;
     setWindowState(next);
@@ -855,6 +865,11 @@ function Children({
       { kind: 'known' as const, id: resourceId },
     ]),
   ];
+  const openReplyBranch = (resourceId: string) => {
+    if (depth >= 1) return;
+    setOpened((value) => (value.includes(resourceId) ? value : [...value, resourceId]));
+    setExpanded((value) => (value.includes(resourceId) ? value : [...value, resourceId]));
+  };
   useEffect(() => {
     if (!navigation) return;
     const rows = uniqueChildren(state.current.pages);
@@ -1228,14 +1243,15 @@ function Children({
                       : [...value, resourceId],
                   );
                 }}
-                onReplyOpened={() => {
-                  if (depth >= 1) return;
-                  setOpened((value) =>
-                    value.includes(resourceId) ? value : [...value, resourceId],
-                  );
-                  setExpanded((value) =>
-                    value.includes(resourceId) ? value : [...value, resourceId],
-                  );
+                onReplyOpened={() => openReplyBranch(resourceId)}
+                onRestoredReply={() => {
+                  const remembered = initial.current;
+                  if (
+                    remembered?.opened.includes(resourceId) &&
+                    !remembered.expanded.includes(resourceId)
+                  )
+                    return;
+                  openReplyBranch(resourceId);
                 }}
                 onPosted={(value) => {
                   setConfirmedByParent((current) =>
