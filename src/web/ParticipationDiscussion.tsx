@@ -241,8 +241,11 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                     View branch
                   </Link>
                 </span>
-              ) : freshness?.broad ||
-                freshness?.events.some((event) => event.kind === 'discussion') ? (
+              ) : freshness?.broad ? (
+                <span className="discussion-freshness-status">
+                  Discussion updated · Some activity still needs list recovery.
+                </span>
+              ) : freshness?.events.some((event) => event.kind === 'discussion') ? (
                 <span className="discussion-freshness-status">
                   Discussion updated{' '}
                   <button
@@ -421,6 +424,7 @@ function FocusedBranch({
         id={id}
         data={data}
         context={context}
+        focused
         collapsed={effectiveCollapsed}
         onShowLatest={refresh}
         updating={loading}
@@ -534,6 +538,7 @@ type ContributionProps = {
   id: string;
   context: Context;
   opening?: boolean;
+  focused?: boolean;
   parent?: ResourceView | undefined;
   onPosted?: (value: CommittedView) => void;
   onReplyOpened?: () => void;
@@ -659,6 +664,7 @@ function ContributionBody({
   data,
   context,
   opening = false,
+  focused = false,
   parent,
   onPosted,
   onReplyOpened,
@@ -679,8 +685,11 @@ function ContributionBody({
   const freshness = useDiscussionFreshness();
   const revision = 'state' in data ? undefined : data.revision_id;
   useEffect(
-    () => (revision ? freshness?.watch('body', { id, revision, visible: !hidden }) : undefined),
-    [freshness?.watch, id, revision, hidden],
+    () =>
+      revision
+        ? freshness?.watch('body', { id, revision, visible: !hidden, priority: opening || focused })
+        : undefined,
+    [freshness?.watch, id, revision, hidden, opening, focused],
   );
   useEffect(() => {
     if (revision) freshness?.representedRevision(id, revision);
@@ -971,8 +980,8 @@ function Children({
   const authority = useAuthorization();
   const freshness = useDiscussionFreshness();
   useEffect(
-    () => freshness?.watch('parent', { id, visible: !hidden }),
-    [freshness?.watch, id, hidden],
+    () => freshness?.watch('parent', { id, visible: !hidden, priority: depth === 0 }),
+    [freshness?.watch, id, hidden, depth],
   );
   const treeId = useId();
   const tree = useRef<HTMLDivElement>(null);

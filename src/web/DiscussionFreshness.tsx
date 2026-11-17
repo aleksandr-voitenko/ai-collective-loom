@@ -18,10 +18,11 @@ export const freshnessPolicy = Object.freeze({
   maxBackoffMs: 120000,
   maxPending: 128,
 });
-type Watch = { id: string; revision?: string; visible: boolean };
+type Watch = { id: string; revision?: string; visible: boolean; priority?: boolean };
 export function selectFreshnessWatches(matches: Watch[], limit: number, round: number) {
-  const visible = matches.filter((value) => value.visible);
-  const hidden = matches.filter((value) => !value.visible);
+  const priority = matches.filter((value) => value.priority);
+  const visible = matches.filter((value) => value.visible && !value.priority);
+  const hidden = matches.filter((value) => !value.visible && !value.priority);
   const rotate = (items: Watch[], count: number) => {
     if (!items.length || !count) return [];
     const start = round % items.length;
@@ -32,10 +33,13 @@ export function selectFreshnessWatches(matches: Watch[], limit: number, round: n
   };
   // A mounted collapsed subtree is lower priority, but it must eventually
   // receive a watch slot even when the visible set exceeds one batch.
-  const hiddenSlots = hidden.length && visible.length >= limit ? 2 : 0;
+  const chosenPriority = rotate(priority, limit);
+  const remaining = limit - chosenPriority.length;
+  const hiddenSlots = hidden.length && visible.length >= remaining ? Math.min(2, remaining) : 0;
   return [
-    ...rotate(visible, limit - hiddenSlots),
-    ...rotate(hidden, Math.max(hiddenSlots, limit - visible.length)),
+    ...chosenPriority,
+    ...rotate(visible, remaining - hiddenSlots),
+    ...rotate(hidden, Math.max(hiddenSlots, remaining - visible.length)),
   ].slice(0, limit);
 }
 type Context = {
@@ -343,13 +347,14 @@ export function DiscussionFreshnessProvider({
   );
   const reconciledDiscussion = useCallback(
     (through: string) => {
-      let changed = broad.current;
-      broad.current = false;
+      let changed = false;
       for (const [position, event] of pending.current)
         if (event.kind === 'discussion' && BigInt(position) <= BigInt(through)) {
           pending.current.delete(position);
           changed = true;
         }
+      // The overflow flag covers events whose IDs were discarded. A metadata read
+      // cannot prove that those older comments or revisions were reconciled.
       if (changed) emit();
     },
     [emit],

@@ -69,7 +69,10 @@ embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundar
 independent whole-comment collapse together. Task6 adds one
 `DiscussionFreshnessProvider` per active discussion, with a baseline before initial
 content, a 15-second visible/online poll, one in-flight check, coalesced resume,
-bounded backoff that respects validated Retry-After, and fair watched-branch batches.
+bounded backoff that respects validated Retry-After, and fair watched-branch batches
+that retain a slot for the opening or focused branch. Overflow leaves an explicit
+broader notice for this view lifetime because discarded event IDs cannot be proven
+reconciled by a metadata refresh.
 Initial baseline retries also pause hidden/offline. Bounded navigation state retains
 only cursor and pending event IDs/flags for the current account/instance/discussion;
 detection progress is distinct from applied display. Root, branch, collapsed-header
