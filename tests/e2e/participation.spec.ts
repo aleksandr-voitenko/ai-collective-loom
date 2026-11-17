@@ -437,7 +437,7 @@ test('automatic discussion freshness keeps reading and editing stable', async ({
   await captureDiscussionFreshness(
     page,
     'revision-pending',
-    branch.locator('.revision-freshness-slot'),
+    branch.locator(':scope > article .revision-freshness-slot'),
   );
   await branch.getByRole('button', { name: 'Show latest' }).click();
   await expect(branch.getByText('Edited first comment', { exact: true })).toBeVisible();

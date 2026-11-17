@@ -24,6 +24,12 @@ export async function captureDiscussionFreshness(
     await page.setViewportSize(viewport);
     await target.scrollIntoViewIfNeeded();
     await target.waitFor({ state: 'visible' });
+    if (state === 'revision-pending')
+      await target.evaluate(
+        (node, width) =>
+          window.scrollBy(0, node.getBoundingClientRect().top - (width === 390 ? 170 : 220)),
+        viewport.width,
+      );
     if (state === 'dirty-editor-pending' && viewport.width === 390)
       await page.evaluate(() => window.scrollBy(0, 250));
     await page.evaluate(async () => {
