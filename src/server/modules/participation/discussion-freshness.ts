@@ -163,10 +163,10 @@ export class DiscussionFreshness {
         const scanned = rows.slice(0, C.freshnessLimits.events);
         const visibilityRows = (
           await tx.query<VisibilityRow>(
-            `SELECT visibility_version::text,resource_id,discussion_id
-             FROM loom.discussion_freshness_visibility
-             WHERE visibility_version>$1::bigint AND visibility_version<=$2::bigint
-             ORDER BY visibility_version LIMIT $3`,
+            `SELECT v.visibility_version::text,v.resource_id,v.discussion_id
+             FROM loom.discussion_freshness_visibility v
+             WHERE v.visibility_version>$1::bigint AND v.visibility_version<=$2::bigint
+             ORDER BY v.visibility_version LIMIT $3`,
             [after.visibility_after, state.visibility_version, C.freshnessLimits.visibility + 1],
           )
         ).rows;

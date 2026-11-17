@@ -7,6 +7,7 @@ import {
   useEffect,
   useLayoutEffect,
   useId,
+  useMemo,
   useCallback,
   createContext,
   useContext,
@@ -42,7 +43,22 @@ import { DiscussionFreshnessProvider, useDiscussionFreshness } from './Discussio
 import { identityGeneration } from './participation-client.js';
 
 const ParentPreviewContext = createContext<((id: string) => void) | null>(null);
-const DiscussionNavigation = createContext<DiscussionNavigationState | null>(null);
+const DiscussionNavigation = createContext<{
+  navigation: DiscussionNavigationState;
+  present: (owner: string, ids: string[]) => void;
+} | null>(null);
+
+function usePresentedBranches(visibleIds: string) {
+  const present = useContext(DiscussionNavigation)?.present;
+  const owner = useId();
+  useLayoutEffect(() => {
+    if (!present || !visibleIds) return;
+    // Hidden descendants stay mounted. Only the surfaces that can show a
+    // notice should suppress the discussion fallback.
+    present(owner, visibleIds.split(' '));
+    return () => present(owner, []);
+  }, [present, owner, visibleIds]);
+}
 
 export function DiscussionPage({ id, context }: { id: string; context: Context }) {
   const navigation = useRef<DiscussionNavigationState>(
@@ -76,11 +92,26 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     () => context.discussionNavigation ?? { branches: new Map() },
   );
   const [preview, setPreview] = useState<string>();
-  const unpresentedReply = freshness?.events.find((event) => {
-    if (event.kind !== 'new_reply' && event.kind !== 'availability') return false;
-    const parent = document.querySelector(`[data-resource-id="${event.parent_id}"]`);
-    return !parent?.getClientRects().length;
-  });
+  const [presentedBranches, setPresentedBranches] = useState(() => new Map<string, string[]>());
+  const reportPresentedBranches = useCallback((owner: string, ids: string[]) => {
+    setPresentedBranches((previous) => {
+      const next = new Map(previous);
+      if (ids.length) next.set(owner, ids);
+      else next.delete(owner);
+      return next;
+    });
+  }, []);
+  const navigationContext = useMemo(
+    () => ({ navigation: navigationState, present: reportPresentedBranches }),
+    [navigationState, reportPresentedBranches],
+  );
+  const presentedIds = new Set([...presentedBranches.values()].flat());
+  const unpresentedReply = freshness?.events.find(
+    (event) =>
+      (event.kind === 'new_reply' || event.kind === 'availability') &&
+      event.parent_id &&
+      !presentedIds.has(event.parent_id),
+  );
   const [returnUnavailable, setReturnUnavailable] = useState(false);
   const previewTrigger = useRef<HTMLElement | null>(null);
   const shouldRestore = useRef(!!navigationState.focus && !focus);
@@ -174,7 +205,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     .slice(0, 160)
     .replace(/[\uD800-\uDBFF]$/, '');
   return (
-    <DiscussionNavigation.Provider value={navigationState}>
+    <DiscussionNavigation.Provider value={navigationContext}>
       <ParentPreviewContext.Provider
         value={(id) => {
           previewTrigger.current = document.activeElement as HTMLElement;
@@ -389,12 +420,15 @@ function FocusedBranch({
   context: Context;
 }) {
   const freshness = useDiscussionFreshness();
-  const { data, generation, error, refresh, loading } = useRetainedContribution(id);
+  const { data, generation, error, refresh, loading, restoredThrough } =
+    useRetainedContribution(id);
   const [confirmed, setConfirmed] = useState<CommittedView>();
   const [collapsed, setCollapsed] = useState(
     () => context.discussionNavigation?.focusedCollapsed?.includes(id) ?? false,
   );
   const authority = useAuthorization();
+  const effectiveCollapsed = !!data && collapsed && !('state' in data);
+  usePresentedBranches(effectiveCollapsed && data.discussion_id === discussionId ? id : '');
   const verifiedDiscussion = useRef<string | undefined>(undefined);
   if (data?.discussion_id === discussionId) verifiedDiscussion.current = discussionId;
   if ((error && !data) || (data && data.discussion_id !== discussionId))
@@ -413,7 +447,6 @@ function FocusedBranch({
         <button onClick={refresh}>Refresh branch</button>
       </>
     );
-  const effectiveCollapsed = collapsed && !('state' in data);
   return (
     <>
       <div className="focus-banner">
@@ -437,6 +470,7 @@ function FocusedBranch({
         }
         collapsed={effectiveCollapsed}
         onShowLatest={refresh}
+        restoredThrough={restoredThrough}
         updating={loading}
         updateError={error}
         onToggleCollapse={(control) => {
@@ -562,20 +596,28 @@ type ContributionProps = {
   hidden?: boolean;
   newReplies?: boolean;
   branchUpdated?: boolean;
+  availablePage?: ChildPage | undefined;
 };
 
 function useRetainedContribution(id: string, onLatest?: ContributionProps['onLatest']) {
   const authority = useAuthorization();
+  const restorationThrough = useDiscussionFreshness()?.restorationThrough;
   const callback = useRef(onLatest);
   callback.current = onLatest;
-  const [result, setResult] = useState<AuthorizedValue<ContributionContextView>>();
+  const [result, setResult] = useState<
+    AuthorizedValue<ContributionContextView> & { restoredThrough: bigint | undefined }
+  >();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
+  const refresh = useCallback(() => setReload((n) => n + 1), []);
   useEffect(() => {
     let live = true;
     const controller = new AbortController();
     const owner = identityGeneration();
+    // A positive read may return a later revision. It can still reconcile
+    // restorations already observed when the request started.
+    const restoredThrough = restorationThrough?.(id);
     setLoading(true);
     setError('');
     void authority
@@ -588,7 +630,7 @@ function useRetainedContribution(id: string, onLatest?: ContributionProps['onLat
           if (!live || owner !== identityGeneration() || !authority.current(value.generation))
             return;
           if (!('state' in value.value)) callback.current?.(value.value);
-          setResult(value);
+          setResult({ ...value, restoredThrough });
           setLoading(false);
         },
         (failure) => {
@@ -602,21 +644,30 @@ function useRetainedContribution(id: string, onLatest?: ContributionProps['onLat
       live = false;
       controller.abort();
     };
-  }, [authority, id, reload]);
+  }, [authority, id, reload, restorationThrough]);
   return {
     data: result && authority.current(result.generation) ? result.value : undefined,
     generation: result?.generation,
+    restoredThrough: result?.restoredThrough,
     error,
     loading,
-    refresh: () => setReload((n) => n + 1),
+    refresh,
   };
 }
 
 function Contribution(props: ContributionProps) {
-  const { data, generation, error, loading, refresh } = useRetainedContribution(
+  const { data, generation, error, loading, refresh, restoredThrough } = useRetainedContribution(
     props.id,
     props.onLatest,
   );
+  const previousPage = useRef(props.availablePage);
+  useEffect(() => {
+    const newPage = props.availablePage && props.availablePage !== previousPage.current;
+    previousPage.current = props.availablePage;
+    // A newly accepted list page proves current availability, but cannot
+    // replace a retained context. Read only the stale/unavailable body here.
+    if (newPage && (!data || 'state' in data)) refresh();
+  }, [props.availablePage, data, refresh]);
   const authority = useAuthorization();
   const matches =
     !!data &&
@@ -663,6 +714,7 @@ function Contribution(props: ContributionProps) {
       updating={loading}
       updateError={error}
       onShowLatest={refresh}
+      restoredThrough={restoredThrough}
       onPosted={(value) => {
         if (authority.current(generation)) props.onPosted?.(value);
       }}
@@ -686,11 +738,13 @@ function ContributionBody({
   newReplies = false,
   branchUpdated = false,
   onShowLatest,
+  restoredThrough,
   updating = false,
   updateError = '',
 }: ContributionProps & {
   data: ContributionContextView;
   onShowLatest?: () => void;
+  restoredThrough?: bigint | undefined;
   updating?: boolean;
   updateError?: string;
 }) {
@@ -704,8 +758,8 @@ function ContributionBody({
     [freshness?.watch, id, revision, hidden, opening, focused],
   );
   useEffect(() => {
-    if (revision) freshness?.representedRevision(id, revision);
-  }, [freshness?.representedRevision, id, revision, freshness?.events]);
+    if (revision) freshness?.representedRevision(id, revision, restoredThrough);
+  }, [freshness?.representedRevision, id, revision, restoredThrough, freshness?.events]);
   const updated =
     !!revision && !!freshness?.latest.get(id) && freshness.latest.get(id) !== revision;
   const onPreview = useContext(ParentPreviewContext);
@@ -746,6 +800,14 @@ function ContributionBody({
     return (
       <div className="comment unavailable-summary" data-resource-id={id}>
         <p>Contribution unavailable</p>
+        {updateError && (
+          <>
+            <ErrorText error={updateError} />
+            <button className="text-button" onClick={onShowLatest}>
+              Retry contribution
+            </button>
+          </>
+        )}
       </div>
     );
   return (
@@ -1005,7 +1067,7 @@ function Children({
   const readingAnchor = useRef<{ resource: string; top: number; scroll: number } | undefined>(
     undefined,
   );
-  const navigationState = useContext(DiscussionNavigation),
+  const navigationState = useContext(DiscussionNavigation)?.navigation,
     navigation = navigationState?.branches,
     navigationKey = id + ':' + depth;
   const initial = useRef(navigation?.get(navigationKey));
@@ -1077,6 +1139,11 @@ function Children({
     displayed.pages.length > accepted.length ||
     (windowState.pages.length > 0 && displayed !== windowState);
   const items = uniqueChildren(accepted);
+  const availablePages = new Map<string, ChildPage>();
+  for (const page of accepted)
+    for (const item of page.value.items)
+      if ('resource_id' in item && !('state' in item) && !availablePages.has(item.resource_id))
+        availablePages.set(item.resource_id, page);
   const pendingHere =
     freshness?.events.some((event) =>
       role === 'comments'
@@ -1095,6 +1162,15 @@ function Children({
   }, [freshness?.represented, freshness?.events, items, knownReplyIds, knownLoaded, confirmed]);
   const canonicalIds = new Set(items.map((item) => item.resource_id));
   const separateIds = knownReplyIds.filter((resourceId) => !canonicalIds.has(resourceId));
+  usePresentedBranches(
+    hidden
+      ? ''
+      : [
+          id,
+          ...canonicalIds,
+          ...separateIds.filter((resourceId) => knownLoaded.includes(resourceId)),
+        ].join(' '),
+  );
   const loadedCount =
     items.length + separateIds.filter((resourceId) => knownLoaded.includes(resourceId)).length;
   // One keyed array owns both canonical and separately read rows. Moving a row
@@ -1452,7 +1528,7 @@ function Children({
         </div>
       )}
       <div className="freshness-action-slot">
-        {(pendingHere || availabilityHere) && !windowState.goal && !windowState.error && (
+        {(pendingHere || availabilityHere) && (
           <>
             <span>
               {pendingHere
@@ -1461,7 +1537,7 @@ function Children({
                   : 'New replies available'
                 : 'Discussion updated'}
             </span>{' '}
-            {windowState.complete ? (
+            {windowState.goal || windowState.error || withheld ? null : windowState.complete ? (
               <button
                 className="text-button"
                 disabled={windowState.busy}
@@ -1523,6 +1599,7 @@ function Children({
                   ) ?? false
                 }
                 expectedParentId={knownReplyIds.includes(resourceId) ? id : undefined}
+                availablePage={availablePages.get(resourceId)}
                 discussionId={discussionId}
                 onKnownLoaded={onKnownLoaded}
                 onToggleCollapse={(control) => {

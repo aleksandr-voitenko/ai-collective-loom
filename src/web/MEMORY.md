@@ -75,8 +75,12 @@ broader notice for this view lifetime because discarded event IDs cannot be prov
 reconciled by a metadata refresh.
 Initial baseline retries also pause hidden/offline. Bounded navigation state retains
 only cursor and pending event IDs/flags for the current account/instance/discussion;
-detection progress is distinct from applied display. Root, branch, collapsed-header
-and revision notices reserve space and do not change private unread state. Explicit
+detection progress is distinct from applied display. A branch registers its visible
+notice surfaces so hiding an ancestor immediately restores the discussion fallback.
+Publication receipts and list rows deduplicate publications, but restoration needs
+an authorized body; a newly accepted canonical page can refresh an unavailable
+retained context in its existing row. Root, branch, collapsed-header and revision
+notices reserve space and do not change private unread state. Explicit
 application uses retained reads and six-item, eight-page staged restoration; a
 formerly complete tail extends by one bounded page, while incomplete lists preserve
 older unloaded siblings. Focused return keeps the observation baseline. Temporary

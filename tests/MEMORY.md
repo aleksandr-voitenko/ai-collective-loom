@@ -1,11 +1,12 @@
 # Browser test diagnostics
 
 Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
-scope/token refusal, bounded shared/visibility continuation, restoration after
+scope/token refusal, bounded shared/visibility continuation across decimal widths, restoration after
 suppressed-event consumption, no private reading writes and default ordinary
 request accounting. The compiled `participation.spec.ts` freshness journeys
 exercise load-before-detect races, same-account second-view publications, focused
-refresh failure, depth and collapsed indicators, and stable draft/scroll/disclosure
+refresh failure, depth and collapsed indicators (including hiding after detection),
+retained unavailable replies through restoration and retry, and stable draft/scroll/disclosure
 behavior, request counts, Retry-After, hidden and offline scheduling, and capture
 opt-in actual desktop/mobile PNGs via
 `helpers/discussion-freshness-review.ts` under `/tmp/loom-review-evidence/discussion-freshness`.

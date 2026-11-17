@@ -50,7 +50,8 @@ type Context = {
   latest: ReadonlyMap<string, string>;
   watch: (kind: 'parent' | 'body', value: Watch) => () => void;
   represented: (ids: string[]) => void;
-  representedRevision: (id: string, revision: string) => void;
+  restorationThrough: (id: string) => bigint | undefined;
+  representedRevision: (id: string, revision: string, restorationThrough?: bigint) => void;
   reconciledDiscussion: (through: string) => void;
   checkNow: () => void;
 };
@@ -119,9 +120,15 @@ export function DiscussionFreshnessProvider({
       return retryNotBefore.current - performance.now();
     inFlight.current = true;
     const parents = select('parent', F.freshnessLimits.parents).map((value) => value.id);
-    const displayed = select('body', F.freshnessLimits.displayed)
-      .filter((value): value is Watch & { revision: string } => !!value.revision)
-      .map((value) => ({ resource_id: value.id, revision_id: value.revision }));
+    const displayedWatches = new Map(
+      select('body', F.freshnessLimits.displayed)
+        .filter((value): value is Watch & { revision: string } => !!value.revision)
+        .map((value) => [value.id, value]),
+    );
+    const displayed = [...displayedWatches.values()].map(({ id, revision }) => ({
+      resource_id: id,
+      revision_id: revision,
+    }));
     // Step by one so sets whose size divides the batch limit still rotate.
     round.current++;
     try {
@@ -155,6 +162,29 @@ export function DiscussionFreshnessProvider({
           changed = true;
         }
       }
+      // An exact body that was already displayed and remains authorized across
+      // this observation can account for a restoration without another read.
+      const currentBodies = new Map(
+        response.displayed
+          .filter(
+            (item) =>
+              item.state === 'available' &&
+              item.revision_id === item.current_revision_id &&
+              watched.current.get(`body:${item.resource_id}`) ===
+                displayedWatches.get(item.resource_id),
+          )
+          .map((item) => [item.resource_id, item.revision_id]),
+      );
+      for (const [key, event] of pending.current)
+        if (
+          event.kind === 'availability' &&
+          event.resource_id &&
+          event.revision_id &&
+          currentBodies.get(event.resource_id) === event.revision_id
+        ) {
+          pending.current.delete(key);
+          changed = true;
+        }
       while (pending.current.size > freshnessPolicy.maxPending) {
         pending.current.delete(pending.current.keys().next().value!);
         broad.current = true;
@@ -320,9 +350,7 @@ export function DiscussionFreshnessProvider({
       let changed = false;
       for (const [position, event] of pending.current)
         if (
-          (event.kind === 'new_root' ||
-            event.kind === 'new_reply' ||
-            event.kind === 'availability') &&
+          (event.kind === 'new_root' || event.kind === 'new_reply') &&
           event.resource_id &&
           known.has(event.resource_id)
         ) {
@@ -333,14 +361,25 @@ export function DiscussionFreshnessProvider({
     },
     [emit],
   );
+  const restorationThrough = useCallback((id: string) => {
+    let through: bigint | undefined;
+    for (const event of pending.current.values()) {
+      if (event.kind !== 'availability' || event.resource_id !== id) continue;
+      const position = BigInt(event.position);
+      if (through === undefined || position > through) through = position;
+    }
+    return through;
+  }, []);
   const representedRevision = useCallback(
-    (id: string, revision: string) => {
+    (id: string, revision: string, restoredThrough?: bigint) => {
       let changed = false;
       for (const [position, event] of pending.current)
         if (
-          (event.kind === 'revision' || event.kind === 'availability') &&
           event.resource_id === id &&
-          event.revision_id === revision
+          ((event.kind === 'revision' && event.revision_id === revision) ||
+            (event.kind === 'availability' &&
+              restoredThrough !== undefined &&
+              BigInt(event.position) <= restoredThrough))
         ) {
           pending.current.delete(position);
           changed = true;
@@ -372,11 +411,21 @@ export function DiscussionFreshnessProvider({
       latest: new Map(latest.current),
       watch,
       represented,
+      restorationThrough,
       representedRevision,
       reconciledDiscussion,
       checkNow: () => void checkRef.current(),
     }),
-    [version, catchingUp, error, watch, represented, representedRevision, reconciledDiscussion],
+    [
+      version,
+      catchingUp,
+      error,
+      watch,
+      represented,
+      restorationThrough,
+      representedRevision,
+      reconciledDiscussion,
+    ],
   );
   return (
     <FreshnessContext.Provider value={value}>

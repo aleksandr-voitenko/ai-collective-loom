@@ -340,3 +340,41 @@ test(
     assert.ok(JSON.stringify(second.body).length < 4096);
   },
 );
+
+test(
+  'visibility continuation delivers all restorations across a decimal boundary',
+  { timeout: 120000 },
+  async (t) => {
+    const f = await moderationFixture(t);
+    const discussion = await f.discussion();
+    const reader = await f.participant('fresh_visibility_order_reader');
+    const ids = [];
+    for (let i = 0; i < 20; i++)
+      ids.push((await f.reply(discussion, `Restored comment ${i}`)).resource_id);
+    // Start at a known decimal boundary in the isolated fixture. Each pair
+    // advances the generation twice and records only the restoration.
+    await f.observer.query('UPDATE loom.shared_retrieval_state SET visibility_version=80');
+    const baseline = await reader.client.call(path(discussion.id), { action: 'baseline' });
+    assert.equal(baseline.status, 200);
+    for (const id of ids) {
+      await f.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [id]);
+      await f.observer.query("UPDATE loom.resources SET state='active' WHERE id=$1", [id]);
+    }
+    const first = await reader.client.call(path(discussion.id), check(baseline.body.cursor));
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    assert.equal(first.body.complete, false);
+    assert.equal(first.body.visibility_scanned, 16);
+    const second = await reader.client.call(path(discussion.id), check(first.body.cursor));
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+    assert.equal(second.body.complete, true);
+    assert.equal(second.body.visibility_scanned, 4);
+    assert.deepEqual(
+      [...first.body.events, ...second.body.events].map((event: any) => [
+        event.kind,
+        event.position,
+        event.resource_id,
+      ]),
+      ids.map((id, i) => ['availability', String(82 + 2 * i), id]),
+    );
+  },
+);

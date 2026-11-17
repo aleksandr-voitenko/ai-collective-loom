@@ -4,7 +4,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { Locator, Page } from '@playwright/test';
 import { applicationInputs } from '../../scripts/lib/release-identity.mjs';
 
-const directory = '/tmp/loom-review-evidence/discussion-freshness';
+const directory =
+  process.env.LOOM_DISCUSSION_FRESHNESS_REVIEW_DIR ??
+  '/tmp/loom-review-evidence/discussion-freshness';
 const screenshots: unknown[] = [];
 export async function captureDiscussionFreshness(
   page: Page,
@@ -24,7 +26,7 @@ export async function captureDiscussionFreshness(
     await page.setViewportSize(viewport);
     await target.scrollIntoViewIfNeeded();
     await target.waitFor({ state: 'visible' });
-    if (state === 'revision-pending')
+    if (state === 'revision-pending' || state === 'revision-applied')
       await target.evaluate(
         (node, width) =>
           window.scrollBy(0, node.getBoundingClientRect().top - (width === 390 ? 170 : 220)),
@@ -69,7 +71,7 @@ export async function captureDiscussionFreshness(
       {
         screenshots,
         reproduction:
-          'npm run app:build && LOOM_DISCUSSION_FRESHNESS_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "automatic discussion freshness"',
+          'npm run app:build && LOOM_DISCUSSION_FRESHNESS_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "automatic discussion freshness keeps|an unavailable separately displayed"',
         isolation:
           'Compiled React app, disposable PostgreSQL/HTTPS, ordinary WebAuthn and independent authenticated agent client. No credential exports.',
       },

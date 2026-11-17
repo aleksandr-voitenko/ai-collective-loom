@@ -406,17 +406,25 @@ test('automatic discussion freshness keeps reading and editing stable', async ({
   await expect(
     replies.locator(':scope > .comment-branch').first().locator('.branch-control-slot'),
   ).toContainText('New replies available');
+  const fallback = page
+    .locator('.discussion-freshness-slot')
+    .getByRole('link', { name: 'View branch' });
+  await expect(fallback).toHaveCount(0);
+  await branch.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  await expect(fallback).toHaveAttribute('href', new RegExp(`focus=${children[0]!.resource_id}$`));
+  await branch.getByRole('button', { name: 'Show replies', exact: true }).click();
+  await expect(fallback).toHaveCount(0);
   await branch
     .locator(':scope > article')
     .getByRole('button', { name: /Collapse comment by/ })
     .click();
-  await publish(children[0]!.resource_id, 'Activity beneath a hidden descendant');
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.locator('.discussion-freshness-slot')).toContainText('Discussion updated');
+  await expect(fallback).toHaveAttribute('href', new RegExp(`focus=${children[0]!.resource_id}$`));
+  await captureDiscussionFreshness(page, 'descendant-activity-after-collapse', fallback);
   await branch
     .locator(':scope > article')
     .getByRole('button', { name: /Expand comment by/ })
     .click();
+  await expect(fallback).toHaveCount(0);
   const revised = await external.client.call('/api/v1/revisions', {
     idempotency_key: randomUUID(),
     resource_id: roots[0]!.resource_id,
@@ -442,7 +450,11 @@ test('automatic discussion freshness keeps reading and editing stable', async ({
   await branch.getByRole('button', { name: 'Show latest' }).click();
   await expect(branch.getByText('Edited first comment', { exact: true })).toBeVisible();
   await expect(editor).toHaveValue('A dirty draft stays in this editor.');
-  await captureDiscussionFreshness(page, 'revision-applied', branch);
+  await captureDiscussionFreshness(
+    page,
+    'revision-applied',
+    branch.getByText('Edited first comment', { exact: true }),
+  );
   const secondView = await context.newPage();
   await secondView.goto(server.origin + '/loom');
   const fromSecondView = await api(secondView, '/api/v1/replies', {
@@ -1967,6 +1979,47 @@ test('an unavailable separately displayed parent leaves its eligible child reach
     parent.getByText('Eligible child of unavailable parent', { exact: true }),
   ).toBeVisible();
   await expect(parent.getByText('Parent beyond loaded comments', { exact: true })).toHaveCount(0);
+
+  // The unavailable reply is still displayed separately behind seven older
+  // siblings. A freshness observation must not mistake its placeholder for a body.
+  await server.observer.query("UPDATE loom.resources SET state='active' WHERE id=$1", [parentId]);
+  const checkedRestoration = page.waitForResponse((response) =>
+    response.url().endsWith(`/discussions/${discussion.discussion}/freshness`),
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  expect((await (await checkedRestoration).json()).events).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ kind: 'availability', resource_id: parentId }),
+    ]),
+  );
+  const restoration = comments.locator(':scope > .freshness-action-slot');
+  await expect(restoration).toContainText('Discussion updated');
+  await expect(parent.getByText('Contribution unavailable', { exact: true })).toBeVisible();
+  await captureDiscussionFreshness(page, 'restored-reply-pending', restoration);
+  const knownRow = await parent.elementHandle();
+  const retry = comments.getByRole('button', { name: 'Retry comments', exact: true });
+  const withdrawn = comments.getByText(
+    'Earlier comments are unavailable until this list is checked again.',
+  );
+  if (await retry.isVisible()) await retry.click();
+  else if (await withdrawn.isVisible()) await refreshList(comments, 'comments');
+  const parentContext = `**/api/v1/contributions/${parentId}/context`;
+  await page.route(parentContext, (route) => route.abort('connectionfailed'), { times: 1 });
+  await comments.getByRole('button', { name: 'Load more comments', exact: true }).click();
+  const retryContribution = parent.getByRole('button', { name: 'Retry contribution' });
+  await expect(retryContribution).toBeVisible();
+  await expect(restoration).toContainText('Discussion updated');
+  await expect(parent.getByText('Contribution unavailable', { exact: true })).toBeVisible();
+  await retryContribution.click();
+  await expect(parent.getByText('Parent beyond loaded comments', { exact: true })).toBeVisible();
+  await expect(restoration).toBeEmpty();
+  expect(await parent.evaluate((node, handle) => node === handle, knownRow)).toBe(true);
+  await expect(
+    parent.getByText('Eligible child of unavailable parent', { exact: true }),
+  ).toBeVisible();
+  await captureDiscussionFreshness(page, 'restored-reply-applied', parent, [
+    'The first explicit restoration context read was deliberately aborted; this frame follows retry.',
+  ]);
 });
 
 test('separately confirmed replies keep honest gaps and join canonical order without remounting', async ({

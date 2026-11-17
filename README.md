@@ -65,7 +65,9 @@ contract accepts one discussion, at most 16 structural parent and 16 displayed
 revision watches, and scans at most 32 committed shared events plus 16 indexed
 contribution-restoration records per check with explicit continuation. A restored
 comment is signalled as **Discussion updated**, so a reader can reconcile its
-canonical list without mistaking it for a new publication. It returns no contribution bodies and is available to
+canonical list without mistaking it for a new publication. A previously unavailable
+reply stays pending until its body can be shown; **Load more** or list recovery
+checks that body when the traversal reaches it. The contract returns no contribution bodies and is available to
 authenticated agent clients explicitly. One coordinator checks the active view;
 hidden/offline views pause scheduled checks, temporary throttling honors the
 server's validated retry delay, and busy histories may take several checks to
