@@ -272,3 +272,71 @@ test(
     assert.equal(unchanged.body.displayed[0].state, 'available');
   },
 );
+
+test(
+  'a comment suppressed before its publication is observed becomes discoverable on restoration',
+  { timeout: 120000 },
+  async (t) => {
+    const f = await moderationFixture(t);
+    const discussion = await f.discussion();
+    const reader = await f.participant('fresh_restored_reader');
+    const baseline = (await reader.client.call(path(discussion.id), { action: 'baseline' })).body;
+    const comment = await f.reply(discussion, 'Suppressed before observation');
+    await f.suppress(comment.resource_id);
+    const withheld = await reader.client.call(path(discussion.id), check(baseline.cursor));
+    assert.equal(withheld.status, 200);
+    assert.deepEqual(withheld.body.events, []);
+    await f.suppress(comment.resource_id, false);
+    const restored = await reader.client.call(path(discussion.id), check(withheld.body.cursor));
+    assert.equal(restored.status, 200, JSON.stringify(restored.body));
+    assert.deepEqual(
+      restored.body.events.map((event: any) => [event.kind, event.resource_id, event.parent_id]),
+      [['availability', comment.resource_id, discussion.opening.resource_id]],
+    );
+    assert.equal(restored.body.complete, true);
+    assert.ok(restored.body.visibility_scanned <= 16);
+    const settled = await reader.client.call(path(discussion.id), check(restored.body.cursor));
+    assert.equal(settled.status, 200);
+    assert.deepEqual(settled.body.events, []);
+  },
+);
+
+test(
+  'visibility observation stays bounded across unrelated restorations',
+  { timeout: 120000 },
+  async (t) => {
+    const f = await moderationFixture(t);
+    const discussion = await f.discussion();
+    const unrelated = await f.discussion();
+    const reader = await f.participant('fresh_visibility_budget_reader');
+    const others = [];
+    for (let i = 0; i < 18; i++) others.push(await f.reply(unrelated, `Other ${i}`));
+    const local = await f.reply(discussion, 'Local restored record');
+    const baseline = (await reader.client.call(path(discussion.id), { action: 'baseline' })).body;
+    const ids = [...others, local].map((value) => value.resource_id);
+    await f.observer.query(
+      "UPDATE loom.resources SET state='suppressed' WHERE id = ANY($1::uuid[])",
+      [ids],
+    );
+    await f.observer.query("UPDATE loom.resources SET state='active' WHERE id = ANY($1::uuid[])", [
+      others.map((value) => value.resource_id),
+    ]);
+    await f.observer.query("UPDATE loom.resources SET state='active' WHERE id=$1", [
+      local.resource_id,
+    ]);
+    const first = await reader.client.call(path(discussion.id), check(baseline.cursor));
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    assert.equal(first.body.visibility_scanned, 16);
+    assert.equal(first.body.complete, false);
+    assert.deepEqual(first.body.events, []);
+    const second = await reader.client.call(path(discussion.id), check(first.body.cursor));
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+    assert.equal(second.body.complete, true);
+    assert.equal(second.body.visibility_scanned, 3);
+    assert.deepEqual(
+      second.body.events.map((event: any) => [event.kind, event.resource_id]),
+      [['availability', local.resource_id]],
+    );
+    assert.ok(JSON.stringify(second.body).length < 4096);
+  },
+);

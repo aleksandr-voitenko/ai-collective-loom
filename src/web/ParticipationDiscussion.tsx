@@ -76,11 +76,11 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     () => context.discussionNavigation ?? { branches: new Map() },
   );
   const [preview, setPreview] = useState<string>();
-  const unpresentedReply = freshness?.events.find(
-    (event) =>
-      event.kind === 'new_reply' &&
-      !document.querySelector(`[data-resource-id="${event.parent_id}"]`),
-  );
+  const unpresentedReply = freshness?.events.find((event) => {
+    if (event.kind !== 'new_reply' && event.kind !== 'availability') return false;
+    const parent = document.querySelector(`[data-resource-id="${event.parent_id}"]`);
+    return !parent?.getClientRects().length;
+  });
   const [returnUnavailable, setReturnUnavailable] = useState(false);
   const previewTrigger = useRef<HTMLElement | null>(null);
   const shouldRestore = useRef(!!navigationState.focus && !focus);
@@ -388,6 +388,7 @@ function FocusedBranch({
   discussionId: string;
   context: Context;
 }) {
+  const freshness = useDiscussionFreshness();
   const { data, generation, error, refresh, loading } = useRetainedContribution(id);
   const [confirmed, setConfirmed] = useState<CommittedView>();
   const [collapsed, setCollapsed] = useState(
@@ -396,7 +397,7 @@ function FocusedBranch({
   const authority = useAuthorization();
   const verifiedDiscussion = useRef<string | undefined>(undefined);
   if (data?.discussion_id === discussionId) verifiedDiscussion.current = discussionId;
-  if (error || (data && data.discussion_id !== discussionId))
+  if ((error && !data) || (data && data.discussion_id !== discussionId))
     return (
       <div className="notice">
         <p>This branch is unavailable in this discussion.</p>
@@ -425,6 +426,15 @@ function FocusedBranch({
         data={data}
         context={context}
         focused
+        newReplies={
+          freshness?.events.some((event) => event.kind === 'new_reply' && event.parent_id === id) ??
+          false
+        }
+        branchUpdated={
+          freshness?.events.some(
+            (event) => event.kind === 'availability' && event.parent_id === id,
+          ) ?? false
+        }
         collapsed={effectiveCollapsed}
         onShowLatest={refresh}
         updating={loading}
@@ -551,6 +561,7 @@ type ContributionProps = {
   onLatest?: (value: Exclude<ContributionContextView, { state: 'unavailable' }>) => void;
   hidden?: boolean;
   newReplies?: boolean;
+  branchUpdated?: boolean;
 };
 
 function useRetainedContribution(id: string, onLatest?: ContributionProps['onLatest']) {
@@ -673,6 +684,7 @@ function ContributionBody({
   onToggleCollapse,
   hidden = false,
   newReplies = false,
+  branchUpdated = false,
   onShowLatest,
   updating = false,
   updateError = '',
@@ -693,7 +705,7 @@ function ContributionBody({
   );
   useEffect(() => {
     if (revision) freshness?.representedRevision(id, revision);
-  }, [freshness?.representedRevision, id, revision]);
+  }, [freshness?.representedRevision, id, revision, freshness?.events]);
   const updated =
     !!revision && !!freshness?.latest.get(id) && freshness.latest.get(id) !== revision;
   const onPreview = useContext(ParentPreviewContext);
@@ -772,7 +784,8 @@ function ContributionBody({
         {!opening && (
           <span className="collapsed-freshness-slot">
             {collapsed && newReplies && 'New replies available'}
-            {collapsed && updated && `${newReplies ? ' · ' : ''}Updated`}
+            {collapsed && branchUpdated && `${newReplies ? ' · ' : ''}Discussion updated`}
+            {collapsed && updated && `${newReplies || branchUpdated ? ' · ' : ''}Updated`}
           </span>
         )}
       </div>
@@ -1070,9 +1083,16 @@ function Children({
         ? event.kind === 'new_root' && event.parent_id === id
         : event.kind === 'new_reply' && event.parent_id === id,
     ) ?? false;
+  const availabilityHere =
+    freshness?.events.some((event) => event.kind === 'availability' && event.parent_id === id) ??
+    false;
   useEffect(() => {
-    freshness?.represented(items.map((item) => item.resource_id));
-  }, [freshness?.represented, items.map((item) => item.resource_id).join(',')]);
+    freshness?.represented([
+      ...items.filter((item) => !('state' in item)).map((item) => item.resource_id),
+      ...knownReplyIds.filter((resourceId) => knownLoaded.includes(resourceId)),
+      ...(confirmed ? [confirmed.resource_id] : []),
+    ]);
+  }, [freshness?.represented, freshness?.events, items, knownReplyIds, knownLoaded, confirmed]);
   const canonicalIds = new Set(items.map((item) => item.resource_id));
   const separateIds = knownReplyIds.filter((resourceId) => !canonicalIds.has(resourceId));
   const loadedCount =
@@ -1432,19 +1452,28 @@ function Children({
         </div>
       )}
       <div className="freshness-action-slot">
-        {pendingHere && !windowState.goal && !windowState.error && (
+        {(pendingHere || availabilityHere) && !windowState.goal && !windowState.error && (
           <>
-            <span>{role === 'comments' ? 'New comments available' : 'New replies available'}</span>{' '}
+            <span>
+              {pendingHere
+                ? role === 'comments'
+                  ? 'New comments available'
+                  : 'New replies available'
+                : 'Discussion updated'}
+            </span>{' '}
             {windowState.complete ? (
               <button
                 className="text-button"
                 disabled={windowState.busy}
                 onClick={() => void rebuild({ ...goalFrom(state.current), extend: true })}
               >
-                Show new {noun}
+                {pendingHere ? `Show new ${noun}` : `Check ${noun}`}
               </button>
             ) : (
-              <span>They may be after older unloaded {noun}. Load the next page to continue.</span>
+              <span>
+                {pendingHere ? 'They' : 'Changes'} may be after older unloaded {noun}. Load the next
+                page to continue.
+              </span>
             )}
           </>
         )}
@@ -1488,6 +1517,11 @@ function Children({
                     (event) => event.kind === 'new_reply' && event.parent_id === resourceId,
                   ) ?? false
                 }
+                branchUpdated={
+                  freshness?.events.some(
+                    (event) => event.kind === 'availability' && event.parent_id === resourceId,
+                  ) ?? false
+                }
                 expectedParentId={knownReplyIds.includes(resourceId) ? id : undefined}
                 discussionId={discussionId}
                 onKnownLoaded={onKnownLoaded}
@@ -1525,13 +1559,23 @@ function Children({
             )}
             {branchReady &&
               (depth >= 1 ? (
-                <Link
-                  className="branch-link"
-                  hidden={isCollapsed}
-                  to={`/loom/discussion/${discussionId}?focus=${resourceId}`}
-                >
-                  Continue this thread →
-                </Link>
+                <div className="branch-control-slot" hidden={isCollapsed}>
+                  <Link
+                    className="branch-link"
+                    to={`/loom/discussion/${discussionId}?focus=${resourceId}`}
+                  >
+                    Continue this thread →
+                  </Link>
+                  {freshness?.events.some(
+                    (event) => event.kind === 'new_reply' && event.parent_id === resourceId,
+                  ) ? (
+                    <span className="branch-new-replies">New replies available</span>
+                  ) : freshness?.events.some(
+                      (event) => event.kind === 'availability' && event.parent_id === resourceId,
+                    ) ? (
+                    <span className="branch-new-replies">Discussion updated</span>
+                  ) : null}
+                </div>
               ) : (
                 <>
                   <div className="branch-control-slot" hidden={isCollapsed}>
@@ -1553,7 +1597,13 @@ function Children({
                     </button>
                     {freshness?.events.some(
                       (event) => event.kind === 'new_reply' && event.parent_id === resourceId,
-                    ) && <span className="branch-new-replies">New replies available</span>}
+                    ) ? (
+                      <span className="branch-new-replies">New replies available</span>
+                    ) : freshness?.events.some(
+                        (event) => event.kind === 'availability' && event.parent_id === resourceId,
+                      ) ? (
+                      <span className="branch-new-replies">Discussion updated</span>
+                    ) : null}
                   </div>
                   {/* Hiding retains mounted drafts/cursors; reads still use the current lease. */}
                   <div
@@ -1643,6 +1693,7 @@ function Children({
         !withheld &&
         windowState.complete &&
         !pendingHere &&
+        !availabilityHere &&
         !separateIds.length &&
         items.length > 0 && (
           <div className="continuation-complete">

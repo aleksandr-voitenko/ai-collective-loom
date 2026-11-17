@@ -369,13 +369,19 @@ test('automatic discussion freshness keeps reading and editing stable', async ({
     children.push(await publish(roots[0]!.resource_id, `Older direct reply ${i + 1}`));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(branch.locator('.branch-new-replies')).toHaveText('New replies available');
-  await branch.getByRole('button', { name: /Collapse comment by/ }).click();
+  await branch
+    .locator(':scope > article')
+    .getByRole('button', { name: /Collapse comment by/ })
+    .click();
   await expect(branch.locator(':scope > article .collapsed-freshness-slot')).toHaveText(
     'New replies available',
   );
   await expect(branch.getByRole('button', { name: 'Show replies' })).toBeHidden();
   await captureDiscussionFreshness(page, 'collapsed-new-replies', branch);
-  await branch.getByRole('button', { name: /Expand comment by/ }).click();
+  await branch
+    .locator(':scope > article')
+    .getByRole('button', { name: /Expand comment by/ })
+    .click();
   const showReplies = branch.getByRole('button', { name: 'Show replies' });
   if (await showReplies.isVisible()) await showReplies.click();
   const replies = branch.locator(':scope > .comment-children > .comment-tree');
@@ -395,6 +401,22 @@ test('automatic discussion freshness keeps reading and editing stable', async ({
     'incomplete-branch-pending',
     replies.getByText('New replies available', { exact: true }),
   );
+  const nested = await publish(children[0]!.resource_id, 'New activity below inline depth');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(
+    replies.locator(':scope > .comment-branch').first().locator('.branch-control-slot'),
+  ).toContainText('New replies available');
+  await branch
+    .locator(':scope > article')
+    .getByRole('button', { name: /Collapse comment by/ })
+    .click();
+  await publish(children[0]!.resource_id, 'Activity beneath a hidden descendant');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('.discussion-freshness-slot')).toContainText('Discussion updated');
+  await branch
+    .locator(':scope > article')
+    .getByRole('button', { name: /Expand comment by/ })
+    .click();
   const revised = await external.client.call('/api/v1/revisions', {
     idempotency_key: randomUUID(),
     resource_id: roots[0]!.resource_id,
@@ -412,11 +434,29 @@ test('automatic discussion freshness keeps reading and editing stable', async ({
   expect(revised.status).toBe(201);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(branch.getByText('Updated ·')).toBeVisible();
-  await captureDiscussionFreshness(page, 'revision-pending', branch);
+  await captureDiscussionFreshness(
+    page,
+    'revision-pending',
+    branch.locator('.revision-freshness-slot'),
+  );
   await branch.getByRole('button', { name: 'Show latest' }).click();
   await expect(branch.getByText('Edited first comment', { exact: true })).toBeVisible();
   await expect(editor).toHaveValue('A dirty draft stays in this editor.');
   await captureDiscussionFreshness(page, 'revision-applied', branch);
+  const secondView = await context.newPage();
+  await secondView.goto(server.origin + '/loom');
+  const fromSecondView = await api(secondView, '/api/v1/replies', {
+    idempotency_key: randomUUID(),
+    discussion_id: discussion.discussion,
+    parent_id: discussion.resource,
+    content: text('Same-account publication from another view'),
+  });
+  expect(fromSecondView.status()).toBe(201);
+  await secondView.close();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(root.getByText('New comments available', { exact: true })).toBeVisible();
+  await root.getByRole('button', { name: 'Show new comments' }).click();
+  await expect(root.getByText('Same-account publication from another view')).toBeVisible();
   const freshnessPath = '**/api/v1/discussions/*/freshness';
   await page.route(freshnessPath, async (route) => {
     await route.fulfill({
@@ -482,7 +522,122 @@ test('automatic discussion freshness keeps reading and editing stable', async ({
   await captureDiscussionFreshness(page, 'retrying-check', retrying, [
     'One freshness POST is deliberately aborted with connectionfailed.',
   ]);
+  await page.goto(
+    server.origin + `/loom/discussion/${discussion.discussion}?focus=${children[0]!.resource_id}`,
+  );
+  const focused = page.locator(`article[data-resource-id="${children[0]!.resource_id}"]`);
+  await expect(focused).toBeVisible();
+  await focused.getByRole('button', { name: /Collapse comment by/ }).click();
+  const focusedArrival = await publish(
+    children[0]!.resource_id,
+    'Focused collapsed branch arrival',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(focused.locator('.collapsed-freshness-slot')).toHaveText('New replies available');
+  await focused.getByRole('button', { name: /Expand comment by/ }).click();
+  await focused.getByRole('button', { name: 'Reply', exact: true }).click();
+  const focusedEditor = focused.getByLabel('Your reply', { exact: true });
+  await focusedEditor.fill('Retained focused draft');
+  await focusedEditor.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(3, 10));
+  const focusedEditorHandle = await focusedEditor.elementHandle();
+  const focusedRevision = await external.client.call('/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: children[0]!.resource_id,
+    expected_revision_id: children[0]!.revision_id,
+    title: null,
+    content: {
+      format: 'loom-markdown-v3',
+      text: 'Focused comment revised externally',
+      mentions: [],
+      references: [],
+    },
+    change_note: null,
+    change_account: null,
+  });
+  expect(focusedRevision.status, JSON.stringify(focusedRevision.body)).toBe(201);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(focused.getByRole('button', { name: 'Show latest' })).toBeVisible();
+  const focusedContext = `**/api/v1/contributions/${children[0]!.resource_id}/context`;
+  await page.route(focusedContext, async (route) => {
+    await route.abort('connectionfailed');
+    await page.unroute(focusedContext);
+  });
+  await focused.getByRole('button', { name: 'Show latest' }).click();
+  await expect(focused.getByRole('button', { name: 'Retry' })).toBeVisible();
+  await expect(focusedEditor).toHaveValue('Retained focused draft');
+  expect(
+    await focusedEditor.evaluate((node: HTMLTextAreaElement) => [
+      node.selectionStart,
+      node.selectionEnd,
+    ]),
+  ).toEqual([3, 10]);
+  expect(await focusedEditor.evaluate((node, handle) => node === handle, focusedEditorHandle)).toBe(
+    true,
+  );
+  await focused.getByRole('button', { name: 'Retry' }).click();
+  await expect(focused.getByText('Focused comment revised externally')).toBeVisible();
+  await expect(focusedEditor).toHaveValue('Retained focused draft');
+  expect(focusedArrival.resource_id).not.toBe(nested.resource_id);
   expect(ninth.resource_id).not.toBe(seventh.resource_id);
+});
+
+test('comments loaded before detection do not leave a pending arrival notice', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page, 'Load before freshness detection');
+  const external = await agent(page, server, 'load_before_detect_agent');
+  const publish = async (body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: discussion.resource,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+  };
+  for (let i = 0; i < 5; i++) await publish(`Older comment ${i + 1}`);
+  const firstChildren = `**/api/v1/contributions/${discussion.resource}/children?*`;
+  let held = false;
+  await page.route(firstChildren, async (route) => {
+    if (!held) {
+      held = true;
+      await publish('Arrived during first children read');
+    }
+    await route.continue();
+  });
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const root = page.locator('.conversation-content > .comment-tree');
+  const rows = root.locator(':scope > .comment-branch');
+  await expect(rows).toHaveCount(6);
+  await page.unroute(firstChildren);
+  const firstCheck = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname.endsWith('/freshness') &&
+      response.request().postDataJSON()?.action === 'check',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  expect((await firstCheck).status()).toBe(200);
+  await expect(root.getByText('New comments available', { exact: true })).toHaveCount(0);
+
+  await publish('Seventh before list recovery');
+  await refreshList(root, 'comments');
+  await expect(rows).toHaveCount(6);
+  await publish('Eighth before ordinary pagination');
+  await root.getByRole('button', { name: 'Load more comments' }).click();
+  await expect(rows).toHaveCount(8);
+  const laterCheck = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname.endsWith('/freshness') &&
+      response.request().postDataJSON()?.action === 'check',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  expect((await laterCheck).status()).toBe(200);
+  await expect(root.getByText('New comments available', { exact: true })).toHaveCount(0);
+  await expect(rows.last().getByText('Eighth before ordinary pagination')).toBeVisible();
 });
 
 test('browser-owned TLS preconnection closes before server teardown', async ({

@@ -154,3 +154,10 @@ from authored references. It changes no existing table values, digest or outcome
 and performs no backfill. Current source pointers select current incoming links;
 exact destinations and historical memberships remain retained. Apply migrations
 before running the matching release. See [ADR-043](../docs/adr/043-automatic-discussion-backlinks.md).
+
+Migration `0031_discussion_freshness_visibility.sql` records immutable,
+version-ordered contribution restorations for bounded discussion freshness
+checks. It extends the existing visibility invalidation trigger without changing
+old visibility values, shared publication positions, authored content, digests,
+or retained outcomes. Existing rows are not backfilled; an old comment restored
+after upgrade gets a new availability record when it becomes eligible.

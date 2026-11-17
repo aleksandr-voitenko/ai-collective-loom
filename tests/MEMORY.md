@@ -1,10 +1,12 @@
 # Browser test diagnostics
 
 Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
-scope/token refusal, bounded continuation, no private reading writes and default
-ordinary request accounting. The compiled `participation.spec.ts` freshness journey
-uses an independent authenticated publisher, checks stable draft/scroll/disclosure
-behavior, request counts, Retry-After, hidden and offline scheduling, and captures
+scope/token refusal, bounded shared/visibility continuation, restoration after
+suppressed-event consumption, no private reading writes and default ordinary
+request accounting. The compiled `participation.spec.ts` freshness journeys
+exercise load-before-detect races, same-account second-view publications, focused
+refresh failure, depth and collapsed indicators, and stable draft/scroll/disclosure
+behavior, request counts, Retry-After, hidden and offline scheduling, and capture
 opt-in actual desktop/mobile PNGs via
 `helpers/discussion-freshness-review.ts` under `/tmp/loom-review-evidence/discussion-freshness`.
 Its failure frame is deliberately injected; normal polls remain enabled.

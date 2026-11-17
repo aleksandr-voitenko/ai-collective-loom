@@ -54,6 +54,8 @@ type Context = {
   reconciledDiscussion: (through: string) => void;
   checkNow: () => void;
 };
+const eventKey = (event: F.FreshnessView['events'][number]) =>
+  `${event.kind === 'availability' ? 'visibility' : 'shared'}:${event.position}`;
 const FreshnessContext = createContext<Context | null>(null);
 export function useDiscussionFreshness() {
   return useContext(FreshnessContext);
@@ -74,7 +76,7 @@ export function DiscussionFreshnessProvider({
   const owner = useRef(identityGeneration());
   const saved = navigation.freshness;
   const cursor = useRef(saved?.cursor);
-  const pending = useRef(new Map((saved?.events ?? []).map((event) => [event.position, event])));
+  const pending = useRef(new Map((saved?.events ?? []).map((event) => [eventKey(event), event])));
   const broad = useRef(saved?.broad ?? false);
   const watched = useRef(new Map<string, Watch>());
   const latest = useRef(new Map<string, string>());
@@ -147,9 +149,9 @@ export function DiscussionFreshnessProvider({
         } else if (latest.current.delete(item.resource_id)) changed = true;
       }
       for (const event of response.events) {
-        if (event.own && event.kind !== 'revision') continue;
-        if (!pending.current.has(event.position)) {
-          pending.current.set(event.position, event);
+        const key = eventKey(event);
+        if (!pending.current.has(key)) {
+          pending.current.set(key, event);
           changed = true;
         }
       }
@@ -318,7 +320,9 @@ export function DiscussionFreshnessProvider({
       let changed = false;
       for (const [position, event] of pending.current)
         if (
-          (event.kind === 'new_root' || event.kind === 'new_reply') &&
+          (event.kind === 'new_root' ||
+            event.kind === 'new_reply' ||
+            event.kind === 'availability') &&
           event.resource_id &&
           known.has(event.resource_id)
         ) {
@@ -334,7 +338,7 @@ export function DiscussionFreshnessProvider({
       let changed = false;
       for (const [position, event] of pending.current)
         if (
-          event.kind === 'revision' &&
+          (event.kind === 'revision' || event.kind === 'availability') &&
           event.resource_id === id &&
           event.revision_id === revision
         ) {
@@ -349,7 +353,7 @@ export function DiscussionFreshnessProvider({
     (through: string) => {
       let changed = false;
       for (const [position, event] of pending.current)
-        if (event.kind === 'discussion' && BigInt(position) <= BigInt(through)) {
+        if (event.kind === 'discussion' && BigInt(event.position) <= BigInt(through)) {
           pending.current.delete(position);
           changed = true;
         }

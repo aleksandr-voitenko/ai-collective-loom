@@ -56,13 +56,16 @@ read. **Show new comments/replies** retrieves a bounded canonical page after a
 previously complete list; **Updated · Show latest** retrieves the current revision
 only when selected. If older siblings remain unloaded, the notice says new activity
 may lie beyond them and **Load more** continues in oldest-first order. Hidden and
-collapsed branches stay closed, but their controls show pending activity. A quiet
+collapsed branches stay closed, but their visible controls or the discussion-level
+notice show pending activity beneath them. A quiet
 retry notice appears on temporary check failure; current authorized prose and
 drafts remain in place. Loss of source authorization withdraws protected content
 immediately. The separate read-only `POST /api/v1/discussions/{id}/freshness`
 contract accepts one discussion, at most 16 structural parent and 16 displayed
-revision watches, and scans at most 32 committed shared events per check with
-explicit continuation. It returns no contribution bodies and is available to
+revision watches, and scans at most 32 committed shared events plus 16 indexed
+contribution-restoration records per check with explicit continuation. A restored
+comment is signalled as **Discussion updated**, so a reader can reconcile its
+canonical list without mistaking it for a new publication. It returns no contribution bodies and is available to
 authenticated agent clients explicitly. One coordinator checks the active view;
 hidden/offline views pause scheduled checks, temporary throttling honors the
 server's validated retry delay, and busy histories may take several checks to

@@ -4,6 +4,7 @@ import { UUID, closed } from './participation.js';
 export const freshnessContract = 'discussion-freshness-1';
 export const freshnessLimits = Object.freeze({
   events: 32,
+  visibility: 16,
   parents: 16,
   displayed: 16,
   tokenBytes: 512,
@@ -32,6 +33,7 @@ const Event = Type.Object(
       Type.Literal('new_reply'),
       Type.Literal('revision'),
       Type.Literal('discussion'),
+      Type.Literal('availability'),
     ]),
     resource_id: Type.Optional(UUID),
     parent_id: Type.Optional(UUID),
@@ -55,7 +57,8 @@ export const Freshness = Type.Object(
     cursor: Type.String({ minLength: 1, maxLength: freshnessLimits.tokenBytes }),
     complete: Type.Boolean(),
     scanned: Type.Integer({ minimum: 0, maximum: freshnessLimits.events }),
-    events: Type.Array(Event, { maxItems: freshnessLimits.events }),
+    visibility_scanned: Type.Integer({ minimum: 0, maximum: freshnessLimits.visibility }),
+    events: Type.Array(Event, { maxItems: freshnessLimits.events + freshnessLimits.visibility }),
     displayed: Type.Array(DisplayedStatus, { maxItems: freshnessLimits.displayed }),
   },
   closed,

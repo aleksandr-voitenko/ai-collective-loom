@@ -3,7 +3,11 @@
 Guide26 adds `discussion-freshness-1`, a separate authenticated read-only POST
 contract. Baseline captures the committed shared clock before initial discussion
 reads; owner/instance/epoch/discussion-bound encrypted cursors scan at most32
-position-indexed shared events per check, with explicit incomplete continuation.
+position-indexed shared events and16 version-indexed contribution restorations
+per check, with explicit incomplete continuation. Migration0031 records immutable
+contribution availability transitions against the existing visibility generation;
+publication events, order and values stay intact. A suppressed publication consumed
+before restoration remains discoverable as availability, not new publication.
 The same transaction validates at most16 structural parent and16 displayed
 resource/revision watches against the discussion using existing actor/context
 guards. Structural unavailable parents can scope eligible children without prose.
