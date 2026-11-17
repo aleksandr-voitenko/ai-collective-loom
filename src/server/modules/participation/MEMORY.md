@@ -1,5 +1,22 @@
 # Participation boundary
 
+Guide26 adds `discussion-freshness-1`, a separate authenticated read-only POST
+contract. Baseline captures the committed shared clock before initial discussion
+reads; owner/instance/epoch/discussion-bound encrypted cursors scan at most32
+position-indexed shared events and16 version-indexed contribution restorations
+per check, with explicit incomplete continuation. Restoration scans order by the
+indexed bigint generation; its text projection is only for the response and cursor.
+Migration0031 records immutable
+contribution availability transitions against the existing visibility generation;
+publication events, order and values stay intact. A suppressed publication consumed
+before restoration remains discoverable as availability, not new publication.
+The same transaction validates at most16 structural parent and16 displayed
+resource/revision watches against the discussion using existing actor/context
+guards. Structural unavailable parents can scope eligible children without prose.
+The response has IDs, revision/availability state and event indicators, never bodies,
+private reading state or user checkpoints. Publication order and existing event
+values are unchanged; the client can explicitly repeat the contract like an agent.
+
 Guide17 adds independent advisory editing intent in sibling `reservations/`,
 using the existing actor/resource/revision guards. `authorizeEditor` now owns the
 unchanged editor check; `authorizePublication` adds its existing closure refusal.

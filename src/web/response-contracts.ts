@@ -2,6 +2,7 @@ import { OperationalHealth } from '../contracts/operations.js';
 import type { TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../contracts/participation.js';
+import * as Fresh from '../contracts/discussion-freshness.js';
 import * as A from '../contracts/attention.js';
 import * as F from '../contracts/following.js';
 import * as P from '../contracts/private-controls.js';
@@ -572,6 +573,12 @@ add(
 
 const currentRevision =
   'The exact source and containment were authorized; this field only describes its distinct current revision (PersonalNotifications.item).';
+add(
+  ['POST /api/v1/discussions/{id}/freshness'],
+  'read',
+  sourceErrors,
+  classified(Fresh.Freshness, ['displayed[].state']),
+);
 add(
   ['POST /api/v1/me/notifications/query'],
   'read',

@@ -24,7 +24,10 @@ Version10001 caps new edits (10000 retained decisions); recovery/inspection cont
 Audit is descending immutable-version keyset, default12/max25, no usage API.
 
 HTTP rate-policy.ts is exhaustive and tested against route inventory, including POST
-reads and automatic HEAD. Publication routes use ordinary request admission plus
+reads and automatic HEAD. The read-only discussion freshness baseline/check POST
+belongs to ordinary request admission, including explicit agent calls. Browser
+checks use one active coordinator at a 15-second normal interval; temporary 429
+guidance is validated before backoff. Publication routes use ordinary request admission plus
 conditional publication allowance. Recovery/control is separately bounded; it can
 also return temporary refusal. No authenticated operation is inferred from method.
 Temporary throttling has Retry-After1–60, caller category, no operation_outcome.

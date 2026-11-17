@@ -6,6 +6,7 @@ export class ApiError extends Error {
     readonly operationOutcome?: 'unknown' | 'rejected',
     readonly unavailableScope?: 'revision',
     readonly forbiddenReason?: 'publication_closed',
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }

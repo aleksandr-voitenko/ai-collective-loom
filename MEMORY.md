@@ -15,7 +15,7 @@ non-sensitive VPS staging (ADR-042), on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`25`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`26`.
 Operational health (ADR-040/migration0029) composes existing administrator sources
 with bounded content-free request samples. Read-only HTTPS/browser inspection keeps
 readiness, worker observations, discovery, processing, capacity and request outcomes
