@@ -545,6 +545,75 @@
   grid-template-columns: 30px minmax(0, 1fr);
   align-items: start;
 }
+.loom-app .collapsed-freshness-slot {
+  grid-column: 2;
+  min-height: 16px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+}
+.loom-app .discussion-freshness-slot,
+.loom-app .freshness-action-slot,
+.loom-app .revision-freshness-slot {
+  min-height: 24px;
+  box-sizing: border-box;
+  color: var(--accent);
+  font-size: 12px;
+}
+.loom-app .discussion-freshness-slot {
+  margin: 0 0 4px;
+}
+.loom-app .freshness-action-slot {
+  margin-left: 36px;
+}
+.loom-app .comment-tree[data-role='replies'] > .freshness-action-slot {
+  min-height: 48px;
+}
+.loom-app .freshness-action-slot button {
+  margin-left: 7px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.loom-app .revision-freshness-slot {
+  min-height: 30px;
+  margin-top: 3px;
+}
+.loom-app .discussion-freshness-status {
+  color: var(--accent);
+  font-size: 12px;
+}
+.loom-app .branch-control-slot {
+  display: grid;
+  grid-template-rows: 34px 18px;
+  min-height: 52px;
+}
+.loom-app .branch-control-slot[hidden] {
+  display: none;
+}
+.loom-app .branch-control-slot .branch-link {
+  grid-row: 1;
+}
+.loom-app .branch-control-slot .branch-new-replies {
+  grid-row: 2;
+  margin-left: 36px;
+}
+.loom-app .branch-new-replies {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+}
+.loom-app .list-recovery {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.loom-app .list-recovery summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.loom-app .list-recovery button {
+  display: block;
+}
 .loom-app .comment .author-metadata {
   gap: 4px;
   min-height: 30px;

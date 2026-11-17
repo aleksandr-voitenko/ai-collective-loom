@@ -1,5 +1,14 @@
 # Browser test diagnostics
 
+Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
+scope/token refusal, bounded continuation, no private reading writes and default
+ordinary request accounting. The compiled `participation.spec.ts` freshness journey
+uses an independent authenticated publisher, checks stable draft/scroll/disclosure
+behavior, request counts, Retry-After, hidden and offline scheduling, and captures
+opt-in actual desktop/mobile PNGs via
+`helpers/discussion-freshness-review.ts` under `/tmp/loom-review-evidence/discussion-freshness`.
+Its failure frame is deliberately injected; normal polls remain enabled.
+
 `unit/encrypted-cursor.test.ts` checks a retained pre-extraction cursor fixture,
 legacy-reader compatibility, independent nonces, tampering and wrong-key refusal.
 A deterministic moderation regression retains nonce/cipher creation before expiry

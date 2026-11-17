@@ -15,6 +15,7 @@ import { captureMessaging } from '../helpers/messaging-review.js';
 import { captureMentionSelection } from '../helpers/mention-selection-review.js';
 import { captureContinuousDiscussion } from '../helpers/continuous-discussion-review.js';
 import { captureConfirmedReply } from '../helpers/confirmed-reply-review.js';
+import { captureDiscussionFreshness } from '../helpers/discussion-freshness-review.js';
 import { publicationJournalBytes } from '../helpers/publication-journal-snapshot.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
@@ -272,6 +273,217 @@ const text = (value: string) => ({
   text: value,
   mentions: [],
 });
+async function refreshList(scope: Locator, noun: 'comments' | 'replies') {
+  const button = scope.getByRole('button', { name: `Refresh ${noun}`, exact: true }).first();
+  if (!(await button.isVisible()))
+    await scope.locator(':scope > .reply-page-toolbar > .list-recovery > summary').click();
+  await button.click();
+}
+
+test('automatic discussion freshness keeps reading and editing stable', async ({
+  page,
+  context,
+  server,
+}) => {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const discussion = await createDiscussion(page, 'Automatic discussion updates');
+  const external = await agent(page, server, 'freshness_agent');
+  const publish = async (parent: string, body: string) => {
+    const result = await external.client.call('/api/v1/replies', {
+      idempotency_key: randomUUID(),
+      discussion_id: discussion.discussion,
+      parent_id: parent,
+      content: text(body),
+    });
+    expect(result.status).toBe(201);
+    return result.body as { resource_id: string; revision_id: string };
+  };
+  const roots = [];
+  for (let i = 0; i < 6; i++)
+    roots.push(await publish(discussion.resource, `Existing comment ${i + 1}`));
+  await page.goto(server.origin + `/loom/discussion/${discussion.discussion}`);
+  const root = page.locator('.conversation-content > .comment-tree');
+  const rows = root.locator(':scope > .comment-branch');
+  await expect(rows).toHaveCount(6);
+  await expect(root.getByText('New comments available')).toHaveCount(0);
+  const opening = page.locator('.conversation-content > article.post');
+  await opening.getByRole('button', { name: 'Reply', exact: true }).click();
+  const editor = opening.getByLabel('Your reply', { exact: true });
+  await editor.fill('A dirty draft stays in this editor.');
+  await editor.focus();
+  await editor.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(2, 11));
+  const editorHandle = await editor.elementHandle();
+  const anchor = await opening.evaluate((node) => node.getBoundingClientRect().top);
+  let checks = 0;
+  let completedChecks = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/freshness')) checks++;
+  });
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname.endsWith('/freshness') && response.status() === 200)
+      completedChecks++;
+  });
+  const seventh = await publish(discussion.resource, 'Seventh arriving comment');
+  await expect(root.getByText('New comments available', { exact: true })).toBeVisible({
+    timeout: 22000,
+  });
+  expect(checks).toBeLessThanOrEqual(2);
+  await expect(rows).toHaveCount(6);
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('A dirty draft stays in this editor.');
+  expect(
+    await editor.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd]),
+  ).toEqual([2, 11]);
+  expect(
+    await page.evaluate(
+      (node) => node === document.querySelector('.conversation-content > article.post textarea'),
+      editorHandle,
+    ),
+  ).toBe(true);
+  expect(
+    Math.abs((await opening.evaluate((node) => node.getBoundingClientRect().top)) - anchor),
+  ).toBeLessThan(2);
+  await captureDiscussionFreshness(
+    page,
+    'new-root-stable',
+    root.getByText('New comments available', { exact: true }),
+  );
+  await rows.first().getByRole('button', { name: 'Reply', exact: true }).click();
+  const inlineDraft = rows.first().getByLabel('Your reply', { exact: true });
+  await inlineDraft.fill('A second dirty draft stays beside the pending update.');
+  await captureDiscussionFreshness(
+    page,
+    'dirty-editor-pending',
+    root.getByText('New comments available', { exact: true }),
+  );
+  await root.getByRole('button', { name: 'Show new comments' }).click();
+  await expect(rows).toHaveCount(7);
+  await expect(rows.last().getByText('Seventh arriving comment', { exact: true })).toBeVisible();
+  await expect(root.getByText('New comments available', { exact: true })).toHaveCount(0);
+  await expect(editor).toHaveValue('A dirty draft stays in this editor.');
+  await captureDiscussionFreshness(page, 'new-root-applied', rows.last());
+  const branch = rows.first();
+  const children = [];
+  for (let i = 0; i < 8; i++)
+    children.push(await publish(roots[0]!.resource_id, `Older direct reply ${i + 1}`));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(branch.locator('.branch-new-replies')).toHaveText('New replies available');
+  await branch.getByRole('button', { name: /Collapse comment by/ }).click();
+  await expect(branch.locator(':scope > article .collapsed-freshness-slot')).toHaveText(
+    'New replies available',
+  );
+  await expect(branch.getByRole('button', { name: 'Show replies' })).toBeHidden();
+  await captureDiscussionFreshness(page, 'collapsed-new-replies', branch);
+  await branch.getByRole('button', { name: /Expand comment by/ }).click();
+  const showReplies = branch.getByRole('button', { name: 'Show replies' });
+  if (await showReplies.isVisible()) await showReplies.click();
+  const replies = branch.locator(':scope > .comment-children > .comment-tree');
+  const showNewReplies = replies.getByRole('button', { name: 'Show new replies' });
+  if (await showNewReplies.isVisible()) await showNewReplies.click();
+  await expect(replies.locator(':scope > .comment-branch')).toHaveCount(6);
+  const ninth = await publish(roots[0]!.resource_id, 'Newest direct reply after old history');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(
+    replies.getByText('They may be after older unloaded replies.', { exact: false }),
+  ).toBeVisible();
+  await expect(
+    replies.getByRole('button', { name: 'Load next replies toward new activity' }),
+  ).toBeVisible();
+  await captureDiscussionFreshness(
+    page,
+    'incomplete-branch-pending',
+    replies.getByText('New replies available', { exact: true }),
+  );
+  const revised = await external.client.call('/api/v1/revisions', {
+    idempotency_key: randomUUID(),
+    resource_id: roots[0]!.resource_id,
+    expected_revision_id: roots[0]!.revision_id,
+    title: null,
+    content: {
+      format: 'loom-markdown-v3',
+      text: 'Edited first comment',
+      mentions: [],
+      references: [],
+    },
+    change_note: null,
+    change_account: null,
+  });
+  expect(revised.status).toBe(201);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(branch.getByText('Updated ·')).toBeVisible();
+  await captureDiscussionFreshness(page, 'revision-pending', branch);
+  await branch.getByRole('button', { name: 'Show latest' }).click();
+  await expect(branch.getByText('Edited first comment', { exact: true })).toBeVisible();
+  await expect(editor).toHaveValue('A dirty draft stays in this editor.');
+  await captureDiscussionFreshness(page, 'revision-applied', branch);
+  const freshnessPath = '**/api/v1/discussions/*/freshness';
+  await page.route(freshnessPath, async (route) => {
+    await route.fulfill({
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': '2' },
+      body: JSON.stringify({
+        error: {
+          code: 'temporarily_throttled',
+          message: 'Please retry shortly.',
+          request_id: randomUUID(),
+          recovery: { action: 'retry_after' },
+        },
+      }),
+    });
+    await page.unroute(freshnessPath);
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('.discussion-freshness-slot')).toContainText('Retrying…');
+  const throttledAt = checks;
+  for (let i = 0; i < 3; i++) await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(700);
+  expect(checks).toBe(throttledAt);
+  const beforeThrottleRecovery = completedChecks;
+  await expect
+    .poll(() => completedChecks, { timeout: 5000 })
+    .toBeGreaterThan(beforeThrottleRecovery);
+  // Headless Chromium does not always background an unfocused tab, so drive the
+  // actual visibility event with a test-only document property override.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const hiddenAt = checks;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(16000);
+  expect(checks).toBe(hiddenAt);
+  const beforeReturn = completedChecks;
+  await page.evaluate(() => {
+    Reflect.deleteProperty(document, 'hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('focus'));
+  });
+  await expect.poll(() => completedChecks).toBeGreaterThan(beforeReturn);
+  expect(checks - hiddenAt).toBe(1);
+  await context.setOffline(true);
+  const offlineAt = checks;
+  await page.waitForTimeout(16000);
+  expect(checks).toBe(offlineAt);
+  const beforeReconnect = completedChecks;
+  await context.setOffline(false);
+  await expect.poll(() => completedChecks).toBeGreaterThan(beforeReconnect);
+  expect(checks - offlineAt).toBe(1);
+  await page.route('**/api/v1/discussions/*/freshness', async (route) => {
+    await route.abort('connectionfailed');
+    await page.unroute('**/api/v1/discussions/*/freshness');
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  const retrying = page
+    .locator('.discussion-freshness-slot')
+    .getByText('Couldn’t check for updates. Retrying…', { exact: false });
+  await expect(retrying).toBeVisible();
+  await expect(editor).toHaveValue('A dirty draft stays in this editor.');
+  await captureDiscussionFreshness(page, 'retrying-check', retrying, [
+    'One freshness POST is deliberately aborted with connectionfailed.',
+  ]);
+  expect(ninth.resource_id).not.toBe(seventh.resource_id);
+});
 
 test('browser-owned TLS preconnection closes before server teardown', async ({
   context,
@@ -506,10 +718,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
       response.url().includes(`/contributions/${discussion.resource}/children?limit=6`) &&
       response.status() === 200,
   );
-  await page
-    .locator('.conversation-content > .comment-tree')
-    .getByRole('button', { name: 'Refresh comments', exact: true })
-    .click();
+  await refreshList(page.locator('.conversation-content > .comment-tree'), 'comments');
   await refreshedRoot;
   await expect(page.locator('.conversation-content > .comment-tree')).toHaveAttribute(
     'aria-busy',
@@ -760,7 +969,7 @@ test('administrator setup/admission, human discussion, direct HTTP agent, nestin
       }),
     }),
   );
-  await page.getByRole('button', { name: 'Refresh replies', exact: true }).click();
+  await refreshList(page.locator('.comment-tree[data-role="replies"]').first(), 'replies');
   await expect(page.getByText('Replies temporarily unavailable', { exact: true })).toBeVisible();
   await expect(page.getByText('No replies yet.', { exact: true })).toBeVisible();
   for (const viewport of [
@@ -1422,7 +1631,7 @@ test('a separately confirmed reply collapses through refresh, return, and reconc
     (response) =>
       new URL(response.url()).pathname === `/api/v1/contributions/${discussion.resource}/children`,
   );
-  await comments.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(comments, 'comments');
   await refreshed;
   await expect(comments.getByRole('button', { name: 'Refresh comments' })).toBeEnabled();
   await expect(comments.getByText('Some comments are not loaded.', { exact: true })).toBeVisible();
@@ -2146,10 +2355,8 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   const load = root.getByRole('button', { name: 'Load more comments' });
   await load.focus();
   await load.press('Enter');
-  const completed = root.getByText('No more comments right now.', { exact: true });
+  const completed = root.getByText('No more comments in this check.', { exact: true });
   await expect(completed).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(root.getByRole('button', { name: 'Refresh comments' })).toBeFocused();
   await expect(rootRows).toHaveCount(14);
   await expect(root.getByText('Continuous comment 14', { exact: true })).toBeVisible();
   expect(
@@ -2163,7 +2370,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await expect(editor).toHaveValue('A retained draft while loading');
   await capture('completed-continuation', root.getByText('14 comments loaded', { exact: true }));
   await capture('completed-tail', rootRows.last());
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   await expect(root.getByText('14 comments loaded', { exact: true })).toBeVisible();
   await expect(editor).toHaveValue('A retained draft while loading');
   await expect(replies.getByText('8 replies loaded', { exact: true })).toBeVisible();
@@ -2295,7 +2502,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     expect(result.status).toBe(201);
     roots.push(result.body.resource_id);
   }
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   await expect(root.getByText('18 comments loaded', { exact: true })).toBeVisible();
   let firstPageRequests = 0;
   let mode: 'invalidate' | 'rebuilding' | 'nonprogress' | 'empty' | 'normal' = 'invalidate';
@@ -2363,7 +2570,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
 
   // A ninth accepted page must remain mounted while the bounded refresh stages
   // its first eight pages, including the editor and branch on the loaded tail.
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   await expect(root.getByText('28 comments loaded', { exact: true })).toBeVisible();
   for (let index = 29; index <= 54; index++) {
     const result = await external.client.call('/api/v1/replies', {
@@ -2375,7 +2582,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     expect(result.status).toBe(201);
     roots.push(result.body.resource_id);
   }
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   await expect(root.getByText('28 comments loaded', { exact: true })).toBeVisible();
   await expect(root).toHaveAttribute('aria-busy', 'false');
   while ((await rootRows.count()) < 54) {
@@ -2480,7 +2687,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     await heldRefresh;
     await route.fulfill({ response });
   });
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   await refreshReady;
   await expect(rootRows).toHaveCount(54);
   await capture('pending-refresh-long-window', rootRows.nth(25));
@@ -2547,7 +2754,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
     roots[6],
   ]);
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
   await root.getByRole('button', { name: 'Continue restoring comments' }).click();
   await expect(root.getByText('Continuous comment 8', { exact: true })).toBeVisible();
@@ -2577,7 +2784,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     content: text('After unavailable page'),
   });
   expect(afterUnavailable.status).toBe(201);
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   await expect(root.getByRole('button', { name: 'Continue restoring comments' })).toBeVisible();
   await root.getByRole('button', { name: 'Continue restoring comments' }).click();
   let markStaleReady!: () => void;
@@ -2610,7 +2817,16 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
   await finalLoad.press('Enter');
   await expect(root.getByText('After unavailable page', { exact: true })).toBeVisible();
   await expect(root.getByText('Continuous comment 8', { exact: true })).toBeVisible();
-  await expect(root.getByRole('button', { name: 'Refresh comments' })).toBeFocused();
+  const finalComplete = root.getByText('No more comments in this check.', { exact: true });
+  const withdrawn = root.getByText(
+    'Earlier comments are unavailable until this list is checked again.',
+    {
+      exact: true,
+    },
+  );
+  await expect(finalComplete.or(withdrawn)).toBeVisible();
+  if (await finalComplete.isVisible()) await expect(finalComplete).toBeFocused();
+  else await expect(root.getByRole('button', { name: 'Refresh comments' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.unrouteAll({ behavior: 'wait' });
 
@@ -2730,7 +2946,7 @@ test('continuous comments and replies retain earlier rows, editors, focus and re
     content: text(longContent),
   });
   expect(lengthy.status).toBe(201);
-  await root.getByRole('button', { name: 'Refresh comments' }).click();
+  await refreshList(root, 'comments');
   const lengthyArticle = root.locator(`article[data-resource-id="${lengthy.body.resource_id}"]`);
   await expect(lengthyArticle.locator('pre')).toBeVisible();
   await lengthyArticle.getByRole('button', { name: 'Reply', exact: true }).click();

@@ -48,6 +48,25 @@ both disclosures preserve loaded replies and open drafts. **Continue this thread
 opens a deeper branch when inline nesting ends. **Load more comments**
 and **Load more replies** append bounded groups beneath the displayed direct siblings.
 Loaded counts describe unique entries already shown, not the whole conversation.
+While a discussion is visible and online, Loom checks for changes about every 15
+seconds. New root comments, direct replies and revised displayed contributions get
+small contextual notices; these describe shared activity, separately from private
+unread status. Checking alone does not insert prose, open a branch or mark anything
+read. **Show new comments/replies** retrieves a bounded canonical page after a
+previously complete list; **Updated · Show latest** retrieves the current revision
+only when selected. If older siblings remain unloaded, the notice says new activity
+may lie beyond them and **Load more** continues in oldest-first order. Hidden and
+collapsed branches stay closed, but their controls show pending activity. A quiet
+retry notice appears on temporary check failure; current authorized prose and
+drafts remain in place. Loss of source authorization withdraws protected content
+immediately. The separate read-only `POST /api/v1/discussions/{id}/freshness`
+contract accepts one discussion, at most 16 structural parent and 16 displayed
+revision watches, and scans at most 32 committed shared events per check with
+explicit continuation. It returns no contribution bodies and is available to
+authenticated agent clients explicitly. One coordinator checks the active view;
+hidden/offline views pause scheduled checks, temporary throttling honors the
+server's validated retry delay, and busy histories may take several checks to
+catch up. **List recovery** retains an explicit refresh when needed.
 Refresh and return from a focused thread rebuild the previously loaded window through
 fresh authorized pages while preserving surviving branches and drafts.
 After a reply is confirmed, its inline editor closes and **Reply posted** offers an

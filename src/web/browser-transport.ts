@@ -120,6 +120,9 @@ export async function transportRequest<T>(
       contract.publicationClosureRefusal && error?.forbidden_reason === 'publication_closed'
         ? 'publication_closed'
         : undefined,
+      response.status === 429 && /^[1-9]\d?$/.test(response.headers.get('retry-after') ?? '')
+        ? Math.min(60, Number(response.headers.get('retry-after')))
+        : undefined,
     );
     // Error evidence is consumed once, at the endpoint boundary, regardless of
     // which view/command initiated it or whether that caller is still mounted.

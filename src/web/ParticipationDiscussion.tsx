@@ -16,6 +16,7 @@ import {
   type ResourceView,
   type ContributionContextView,
   ContributionContext,
+  Discussion,
   type PageView,
   type CommittedView,
   Page,
@@ -36,32 +37,50 @@ import { SummarySection } from './Summaries.js';
 import { Avatar, Collection, ErrorText, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { EditingIntent } from './EditingIntent.js';
+import type { Static } from '@sinclair/typebox';
+import { DiscussionFreshnessProvider, useDiscussionFreshness } from './DiscussionFreshness.js';
+import { identityGeneration } from './participation-client.js';
 
 const ParentPreviewContext = createContext<((id: string) => void) | null>(null);
 const DiscussionNavigation = createContext<DiscussionNavigationState | null>(null);
 
 export function DiscussionPage({ id, context }: { id: string; context: Context }) {
+  const navigation = useRef<DiscussionNavigationState>(
+    context.discussionNavigation ?? { branches: new Map() },
+  );
   return (
     <AuthorizationBoundary scope={'discussion:' + id} sourcePolicy="projections">
-      <DiscussionContent key={id} id={id} context={context} />
+      <DiscussionFreshnessProvider
+        discussion={id}
+        self={context.self}
+        navigation={navigation.current}
+      >
+        <DiscussionContent key={id} id={id} context={context} />
+      </DiscussionFreshnessProvider>
     </AuthorizationBoundary>
   );
 }
 
 function DiscussionContent({ id, context }: { id: string; context: Context }) {
+  const freshness = useDiscussionFreshness();
+  const [openingTitle, setOpeningTitle] = useState<{ revision: string; title: string | null }>();
   const location = useLocation(),
     focus = new URLSearchParams(location.search).get('focus');
-  const { data, error, refresh } = useQuery<{
-    id: string;
-    area: { id: string; title: string; description: string };
-    opening: ResourceView;
-    local_open: boolean;
-    publication_open: boolean;
-  }>('/api/v1/discussions/' + id);
+  const pendingDiscussionThrough = useRef<string | undefined>(undefined);
+  const { data, error, refresh } = useRetainedDiscussion(id, () => {
+    if (pendingDiscussionThrough.current)
+      freshness?.reconciledDiscussion(pendingDiscussionThrough.current);
+    pendingDiscussionThrough.current = undefined;
+  });
   const [navigationState] = useState<DiscussionNavigationState>(
     () => context.discussionNavigation ?? { branches: new Map() },
   );
   const [preview, setPreview] = useState<string>();
+  const unpresentedReply = freshness?.events.find(
+    (event) =>
+      event.kind === 'new_reply' &&
+      !document.querySelector(`[data-resource-id="${event.parent_id}"]`),
+  );
   const [returnUnavailable, setReturnUnavailable] = useState(false);
   const previewTrigger = useRef<HTMLElement | null>(null);
   const shouldRestore = useRef(!!navigationState.focus && !focus);
@@ -142,7 +161,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
   // header, body and traversal response has its own current content lease.
   const opening = useRef<string>(undefined);
   if (data) opening.current = data.opening.resource_id;
-  if (error)
+  if (error && !data)
     return (
       <>
         <ErrorText error={error} />
@@ -151,7 +170,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
     );
   if (!data && !opening.current) return <p role="status">Opening discussion…</p>;
   // Keep the input's UTF-16 length limit without splitting a supplementary character.
-  const summaryTitle = ('Summary: ' + data?.opening.title)
+  const summaryTitle = ('Summary: ' + (openingTitle?.title ?? data?.opening.title))
     .slice(0, 160)
     .replace(/[\uD800-\uDBFF]$/, '');
   return (
@@ -170,7 +189,7 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
               <Link to={'/loom/area/' + data.area.id}>{data.area.title}</Link>
             </div>
             <div className="discussion-heading">
-              <h1>{data.opening.title}</h1>
+              <h1>{openingTitle?.title ?? data.opening.title}</h1>
               <div className="discussion-actions">
                 <SaveControl
                   context={context}
@@ -197,6 +216,48 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                   </div>
                 </details>
               </div>
+            </div>
+            <div className="discussion-freshness-slot">
+              {freshness?.error ? (
+                <span>{freshness.error}</span>
+              ) : error ? (
+                <span>
+                  {error}{' '}
+                  <button className="text-button" onClick={refresh}>
+                    Retry
+                  </button>
+                </span>
+              ) : freshness?.catchingUp ? (
+                <span>Checking more discussion activity…</span>
+              ) : focus && freshness?.events.some((event) => event.kind === 'new_root') ? (
+                <span className="discussion-freshness-status">
+                  New comments available{' '}
+                  <Link to={`/loom/discussion/${id}`}>Back to conversation</Link>
+                </span>
+              ) : unpresentedReply ? (
+                <span className="discussion-freshness-status">
+                  Discussion updated{' '}
+                  <Link to={`/loom/discussion/${id}?focus=${unpresentedReply.parent_id}`}>
+                    View branch
+                  </Link>
+                </span>
+              ) : freshness?.broad ||
+                freshness?.events.some((event) => event.kind === 'discussion') ? (
+                <span className="discussion-freshness-status">
+                  Discussion updated{' '}
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      pendingDiscussionThrough.current = freshness?.events
+                        .filter((event) => event.kind === 'discussion')
+                        .at(-1)?.position;
+                      refresh();
+                    }}
+                  >
+                    Show latest
+                  </button>
+                </span>
+              ) : null}
             </div>
             {!data.publication_open && (
               <p className="notice" role="status">
@@ -276,6 +337,9 @@ function DiscussionContent({ id, context }: { id: string; context: Context }) {
                     id={opening.current!}
                     context={context}
                     opening
+                    onLatest={(value) =>
+                      setOpeningTitle({ revision: value.revision_id, title: value.title })
+                    }
                     onPosted={setOpeningReply}
                   />
                   <div className="discussion-controls">
@@ -321,10 +385,7 @@ function FocusedBranch({
   discussionId: string;
   context: Context;
 }) {
-  const { data, generation, error, refresh } = useQuery<ContributionContextView>(
-    `/api/v1/contributions/${id}/context`,
-    ContributionContext,
-  );
+  const { data, generation, error, refresh, loading } = useRetainedContribution(id);
   const [confirmed, setConfirmed] = useState<CommittedView>();
   const [collapsed, setCollapsed] = useState(
     () => context.discussionNavigation?.focusedCollapsed?.includes(id) ?? false,
@@ -361,6 +422,9 @@ function FocusedBranch({
         data={data}
         context={context}
         collapsed={effectiveCollapsed}
+        onShowLatest={refresh}
+        updating={loading}
+        updateError={error}
         onToggleCollapse={(control) => {
           control.focus({ preventScroll: true });
           const next = !collapsed;
@@ -424,6 +488,48 @@ function AncestorContext({ id }: { id: string }) {
   );
 }
 
+type DiscussionDetails = Static<typeof Discussion>;
+function useRetainedDiscussion(id: string, onAccepted: () => void) {
+  const authority = useAuthorization();
+  const callback = useRef(onAccepted);
+  callback.current = onAccepted;
+  const [result, setResult] = useState<AuthorizedValue<DiscussionDetails>>();
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    let live = true;
+    const owner = identityGeneration();
+    setError('');
+    void authority
+      .readProjection<DiscussionDetails>(`/api/v1/discussions/${id}`, {
+        signal: controller.signal,
+        schema: Discussion,
+      })
+      .then(
+        (value) => {
+          if (!live || owner !== identityGeneration() || !authority.current(value.generation))
+            return;
+          setResult(value);
+          callback.current();
+        },
+        (failure) => {
+          if (live && owner === identityGeneration() && (failure as Error).name !== 'AbortError')
+            setError((failure as Error).message);
+        },
+      );
+    return () => {
+      live = false;
+      controller.abort();
+    };
+  }, [authority, id, reload]);
+  return {
+    data: result && authority.current(result.generation) ? result.value : undefined,
+    error,
+    refresh: () => setReload((n) => n + 1),
+  };
+}
+
 type ContributionProps = {
   id: string;
   context: Context;
@@ -437,12 +543,63 @@ type ContributionProps = {
   onKnownLoaded?: (id: string, status: 'pending' | 'available' | 'unavailable') => void;
   collapsed?: boolean;
   onToggleCollapse?: (control: HTMLButtonElement) => void;
+  onLatest?: (value: Exclude<ContributionContextView, { state: 'unavailable' }>) => void;
+  hidden?: boolean;
+  newReplies?: boolean;
 };
 
+function useRetainedContribution(id: string, onLatest?: ContributionProps['onLatest']) {
+  const authority = useAuthorization();
+  const callback = useRef(onLatest);
+  callback.current = onLatest;
+  const [result, setResult] = useState<AuthorizedValue<ContributionContextView>>();
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const controller = new AbortController();
+    const owner = identityGeneration();
+    setLoading(true);
+    setError('');
+    void authority
+      .readProjection<ContributionContextView>(`/api/v1/contributions/${id}/context`, {
+        signal: controller.signal,
+        schema: ContributionContext,
+      })
+      .then(
+        (value) => {
+          if (!live || owner !== identityGeneration() || !authority.current(value.generation))
+            return;
+          if (!('state' in value.value)) callback.current?.(value.value);
+          setResult(value);
+          setLoading(false);
+        },
+        (failure) => {
+          if (!live || owner !== identityGeneration() || (failure as Error).name === 'AbortError')
+            return;
+          setError((failure as Error).message);
+          setLoading(false);
+        },
+      );
+    return () => {
+      live = false;
+      controller.abort();
+    };
+  }, [authority, id, reload]);
+  return {
+    data: result && authority.current(result.generation) ? result.value : undefined,
+    generation: result?.generation,
+    error,
+    loading,
+    refresh: () => setReload((n) => n + 1),
+  };
+}
+
 function Contribution(props: ContributionProps) {
-  const { data, generation, error, refresh } = useQuery<ContributionContextView>(
-    `/api/v1/contributions/${props.id}/context`,
-    ContributionContext,
+  const { data, generation, error, loading, refresh } = useRetainedContribution(
+    props.id,
+    props.onLatest,
   );
   const authority = useAuthorization();
   const matches =
@@ -453,7 +610,7 @@ function Contribution(props: ContributionProps) {
   useEffect(() => {
     if (props.expectedParentId) props.onKnownLoaded?.(props.id, knownStatus);
   }, [props.id, props.expectedParentId, props.onKnownLoaded, knownStatus]);
-  if (error)
+  if (error && !data)
     return (
       <div className="notice">
         {props.expectedParentId ? (
@@ -487,6 +644,9 @@ function Contribution(props: ContributionProps) {
     <ContributionBody
       {...props}
       data={data}
+      updating={loading}
+      updateError={error}
+      onShowLatest={refresh}
       onPosted={(value) => {
         if (authority.current(generation)) props.onPosted?.(value);
       }}
@@ -505,7 +665,28 @@ function ContributionBody({
   onRestoredReply,
   collapsed = false,
   onToggleCollapse,
-}: ContributionProps & { data: ContributionContextView }) {
+  hidden = false,
+  newReplies = false,
+  onShowLatest,
+  updating = false,
+  updateError = '',
+}: ContributionProps & {
+  data: ContributionContextView;
+  onShowLatest?: () => void;
+  updating?: boolean;
+  updateError?: string;
+}) {
+  const freshness = useDiscussionFreshness();
+  const revision = 'state' in data ? undefined : data.revision_id;
+  useEffect(
+    () => (revision ? freshness?.watch('body', { id, revision, visible: !hidden }) : undefined),
+    [freshness?.watch, id, revision, hidden],
+  );
+  useEffect(() => {
+    if (revision) freshness?.representedRevision(id, revision);
+  }, [freshness?.representedRevision, id, revision]);
+  const updated =
+    !!revision && !!freshness?.latest.get(id) && freshness.latest.get(id) !== revision;
   const onPreview = useContext(ParentPreviewContext);
   const bodyId = useId();
   const [reply, setReply] = useState(() =>
@@ -579,6 +760,12 @@ function ContributionBody({
           </time>
           <ReadingIndicator target={{ resource_id: id, revision_id: data.revision_id }} />
         </div>
+        {!opening && (
+          <span className="collapsed-freshness-slot">
+            {collapsed && newReplies && 'New replies available'}
+            {collapsed && updated && `${newReplies ? ' · ' : ''}Updated`}
+          </span>
+        )}
       </div>
       <div id={bodyId} className="comment-body" hidden={collapsed}>
         {data.parent_id && (!parent || parent.resource_id !== data.parent_id) && (
@@ -598,6 +785,21 @@ function ContributionBody({
           content={data.content}
           participants={data.mentioned_participants}
         />
+        <div className="revision-freshness-slot">
+          {updated && (
+            <span className="revision-freshness">
+              Updated ·{' '}
+              <button className="text-button" onClick={onShowLatest} disabled={updating}>
+                Show latest
+              </button>
+              {updateError && (
+                <button className="text-button" onClick={onShowLatest}>
+                  Retry
+                </button>
+              )}
+            </span>
+          )}
+        </div>
         {!!data.attachment_set?.files.length && (
           <FileBrowser
             participant={context.self.participant_id}
@@ -714,7 +916,7 @@ function ContributionBody({
 
 type ChildPage = AuthorizedValue<PageView>;
 type ChildItem = Extract<PageView['items'][number], { resource_id: string }>;
-type RestorationGoal = { loadedCount: number; tailId?: string };
+type RestorationGoal = { loadedCount: number; tailId?: string; extend?: boolean };
 type ChildTraversal = {
   pages: ChildPage[];
   requestedCursors: string[];
@@ -767,6 +969,11 @@ function Children({
   hidden?: boolean;
 }) {
   const authority = useAuthorization();
+  const freshness = useDiscussionFreshness();
+  useEffect(
+    () => freshness?.watch('parent', { id, visible: !hidden }),
+    [freshness?.watch, id, hidden],
+  );
   const treeId = useId();
   const tree = useRef<HTMLDivElement>(null);
   const completion = useRef<HTMLParagraphElement>(null);
@@ -848,6 +1055,15 @@ function Children({
     displayed.pages.length > accepted.length ||
     (windowState.pages.length > 0 && displayed !== windowState);
   const items = uniqueChildren(accepted);
+  const pendingHere =
+    freshness?.events.some((event) =>
+      role === 'comments'
+        ? event.kind === 'new_root' && event.parent_id === id
+        : event.kind === 'new_reply' && event.parent_id === id,
+    ) ?? false;
+  useEffect(() => {
+    freshness?.represented(items.map((item) => item.resource_id));
+  }, [freshness?.represented, items.map((item) => item.resource_id).join(',')]);
   const canonicalIds = new Set(items.map((item) => item.resource_id));
   const separateIds = knownReplyIds.filter((resourceId) => !canonicalIds.has(resourceId));
   const loadedCount =
@@ -977,6 +1193,8 @@ function Children({
     const pages = [...starting.pages];
     const history = [...starting.requestedCursors];
     let cursor = starting.continuation;
+    let passedTail = false;
+    let extended = false;
     try {
       for (let step = 0; step < restorationPageBudget && cursor !== null; step++) {
         const response = await read(cursor, controller.signal);
@@ -988,8 +1206,16 @@ function Children({
         history.push(cursor);
         cursor = next;
         const rows = uniqueChildren(pages);
-        if (!goal.tailId || rows.some((row) => row.resource_id === goal.tailId) || cursor === null)
-          break;
+        const atTail = !goal.tailId || rows.some((row) => row.resource_id === goal.tailId);
+        if (atTail) {
+          if (!goal.extend || !goal.tailId || cursor === null) break;
+          if (passedTail) {
+            extended = true;
+            break;
+          }
+          passedTail = true;
+        }
+        if (cursor === null) break;
       }
       if (turn !== sequence.current) return;
       const rows = uniqueChildren(pages);
@@ -1000,7 +1226,10 @@ function Children({
         continuation: cursor,
         complete: cursor === null,
       };
-      if (reached || cursor === null) {
+      if (
+        (reached && (!goal.extend || !goal.tailId || extended || cursor === null)) ||
+        cursor === null
+      ) {
         publish({
           ...traversal,
           busy: false,
@@ -1156,23 +1385,11 @@ function Children({
     };
   }, [id, refreshVersion]);
   const noun = role === 'comments' ? 'comments' : 'replies';
-  const refreshControl = accepted.length > 0 &&
-    !separateIds.length &&
-    !withheld &&
-    !windowState.error &&
-    (!windowState.complete || !items.length) && (
-      <button
-        className="text-button"
-        disabled={windowState.busy}
-        onClick={() => void rebuild(goalFrom(state.current))}
-      >
-        Refresh {noun}
-      </button>
-    );
   return (
     <div
       ref={tree}
       className="comment-tree"
+      data-role={role}
       hidden={hidden}
       aria-busy={windowState.busy}
       data-ready={accepted.length > 0 || !!windowState.error}
@@ -1191,9 +1408,38 @@ function Children({
                 : 'replies'}{' '}
             loaded
           </p>
-          {refreshControl}
+          {!windowState.error && !withheld && (
+            <details className="list-recovery">
+              <summary>List recovery</summary>
+              <button
+                className="text-button"
+                disabled={windowState.busy}
+                onClick={() => void rebuild(goalFrom(state.current))}
+              >
+                Refresh {noun}
+              </button>
+            </details>
+          )}
         </div>
       )}
+      <div className="freshness-action-slot">
+        {pendingHere && !windowState.goal && !windowState.error && (
+          <>
+            <span>{role === 'comments' ? 'New comments available' : 'New replies available'}</span>{' '}
+            {windowState.complete ? (
+              <button
+                className="text-button"
+                disabled={windowState.busy}
+                onClick={() => void rebuild({ ...goalFrom(state.current), extend: true })}
+              >
+                Show new {noun}
+              </button>
+            ) : (
+              <span>They may be after older unloaded {noun}. Load the next page to continue.</span>
+            )}
+          </>
+        )}
+      </div>
       {entries.map((entry) => {
         if (entry.kind === 'gap')
           return (
@@ -1227,6 +1473,12 @@ function Children({
                 parent={parent}
                 context={context}
                 collapsed={isCollapsed}
+                hidden={hidden || isCollapsed}
+                newReplies={
+                  freshness?.events.some(
+                    (event) => event.kind === 'new_reply' && event.parent_id === resourceId,
+                  ) ?? false
+                }
                 expectedParentId={knownReplyIds.includes(resourceId) ? id : undefined}
                 discussionId={discussionId}
                 onKnownLoaded={onKnownLoaded}
@@ -1273,22 +1525,27 @@ function Children({
                 </Link>
               ) : (
                 <>
-                  <button
-                    className="text-button branch-link"
-                    hidden={isCollapsed}
-                    aria-expanded={expanded.includes(resourceId)}
-                    aria-controls={`${treeId}-${resourceId}`}
-                    onClick={() => {
-                      setOpened((value) => [...new Set([...value, resourceId])]);
-                      setExpanded((value) =>
-                        value.includes(resourceId)
-                          ? value.filter((key) => key !== resourceId)
-                          : [...value, resourceId],
-                      );
-                    }}
-                  >
-                    {expanded.includes(resourceId) ? 'Hide replies' : 'Show replies'}
-                  </button>
+                  <div className="branch-control-slot" hidden={isCollapsed}>
+                    <button
+                      className="text-button branch-link"
+                      hidden={isCollapsed}
+                      aria-expanded={expanded.includes(resourceId)}
+                      aria-controls={`${treeId}-${resourceId}`}
+                      onClick={() => {
+                        setOpened((value) => [...new Set([...value, resourceId])]);
+                        setExpanded((value) =>
+                          value.includes(resourceId)
+                            ? value.filter((key) => key !== resourceId)
+                            : [...value, resourceId],
+                        );
+                      }}
+                    >
+                      {expanded.includes(resourceId) ? 'Hide replies' : 'Show replies'}
+                    </button>
+                    {freshness?.events.some(
+                      (event) => event.kind === 'new_reply' && event.parent_id === resourceId,
+                    ) && <span className="branch-new-replies">New replies available</span>}
+                  </div>
                   {/* Hiding retains mounted drafts/cursors; reads still use the current lease. */}
                   <div
                     className="comment-children"
@@ -1303,6 +1560,7 @@ function Children({
                         context={context}
                         depth={depth + 1}
                         role="replies"
+                        hidden={hidden || isCollapsed || !expanded.includes(resourceId)}
                         confirmed={confirmedByParent[resourceId]}
                       />
                     )}
@@ -1368,28 +1626,20 @@ function Children({
             aria-disabled={windowState.busy}
             onClick={() => void append()}
           >
-            Load more {noun}
+            {pendingHere ? `Load next ${noun} toward new activity` : `Load more ${noun}`}
           </button>
         )}
       {!windowState.goal &&
         !windowState.error &&
         !withheld &&
         windowState.complete &&
+        !pendingHere &&
         !separateIds.length &&
         items.length > 0 && (
           <div className="continuation-complete">
             <p ref={completion} tabIndex={-1} className="continuation-status" role="status">
-              No more {noun} right now.
+              No more {noun} in this check.
             </p>
-            <button
-              className="text-button"
-              aria-disabled={windowState.busy}
-              onClick={() => {
-                if (!windowState.busy) void rebuild(goalFrom(state.current));
-              }}
-            >
-              Refresh {noun}
-            </button>
           </div>
         )}
     </div>

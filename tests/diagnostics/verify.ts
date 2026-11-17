@@ -235,6 +235,7 @@ for (const path of [
   '/api/v1/references/target',
   '/api/v1/references/incoming',
   '/api/v1/discussions/:id/mentioned-in',
+  '/api/v1/discussions/:id/freshness',
   '/api/v1/resources/:id/revisions/:id/references',
 ])
   assert.equal(

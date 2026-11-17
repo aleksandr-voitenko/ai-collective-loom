@@ -66,7 +66,19 @@ query edits from its provider key so persistent controls keep their lifetime.
 `ParticipationTopics.tsx` owns topics, proposals and overview composition. Overview
 embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundary.
 `ParticipationDiscussion.tsx` keeps discussion traversal, reply expansion and
-independent whole-comment collapse together. Comment body and descendant regions
+independent whole-comment collapse together. Task6 adds one
+`DiscussionFreshnessProvider` per active discussion, with a baseline before initial
+content, a 15-second visible/online poll, one in-flight check, coalesced resume,
+bounded backoff that respects validated Retry-After, and fair watched-branch batches.
+Initial baseline retries also pause hidden/offline. Bounded navigation state retains
+only cursor and pending event IDs/flags for the current account/instance/discussion;
+detection progress is distinct from applied display. Root, branch, collapsed-header
+and revision notices reserve space and do not change private unread state. Explicit
+application uses retained reads and six-item, eight-page staged restoration; a
+formerly complete tail extends by one bounded page, while incomplete lists preserve
+older unloaded siblings. Focused return keeps the observation baseline. Temporary
+failure retains leased content/drafts; availability denial follows the shared
+boundary immediately. Comment body and descendant regions
 remain mounted under `hidden` while collapsed; the disclosure stays in the author
 row and retains focus when it hides an active descendant. Reply-list hiding does
 not collapse the parent, and unopened replies never collapse its prose. Thread
