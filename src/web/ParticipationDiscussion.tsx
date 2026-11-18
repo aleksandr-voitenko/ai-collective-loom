@@ -64,8 +64,14 @@ export function DiscussionPage({ id, context }: { id: string; context: Context }
   const navigation = useRef<DiscussionNavigationState>(
     context.discussionNavigation ?? { branches: new Map() },
   );
+  const focus = new URLSearchParams(useLocation().search).get('focus');
+  // Focused and full routes mount independently; the next view starts a fresh
+  // lease even while a previous route still owns pending reads for this discussion.
   return (
-    <AuthorizationBoundary scope={'discussion:' + id} sourcePolicy="projections">
+    <AuthorizationBoundary
+      sourcePolicy="projections"
+      withdrawnNavigation={focus && <Link to={'/loom/discussion/' + id}>Back to conversation</Link>}
+    >
       <DiscussionFreshnessProvider
         discussion={id}
         self={context.self}
@@ -445,6 +451,7 @@ function FocusedBranch({
         <p role="status">Opening branch…</p>
         {verifiedDiscussion.current === discussionId && <AncestorContext id={id} />}
         <button onClick={refresh}>Refresh branch</button>
+        <Link to={'/loom/discussion/' + discussionId}>Back to conversation</Link>
       </>
     );
   return (

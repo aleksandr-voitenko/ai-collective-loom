@@ -1,4 +1,11 @@
-import { type Page, type BrowserContext, type CDPSession, type Locator } from '@playwright/test';
+import {
+  type Page,
+  type BrowserContext,
+  type CDPSession,
+  type Locator,
+  type Request,
+  type Route,
+} from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -1957,12 +1964,58 @@ test('an unavailable separately displayed parent leaves its eligible child reach
     .getByRole('button', { name: /Collapse comment by/ })
     .click();
   await expect(parent).toHaveAttribute('data-collapsed', 'true');
-  await opening.getByRole('link', { name: 'View reply' }).click();
-  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
-  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
-    parentId,
-  ]);
-  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  const focusedLookups = '**/api/v1/me/{reading,saved-items}/lookup';
+  let sendLookup!: () => void, recordLookup!: (request: Request) => void;
+  const afterSuppression = new Promise<void>((resolve) => (sendLookup = resolve));
+  const firstLookup = new Promise<Request>((resolve) => (recordLookup = resolve));
+  let selected = false;
+  // Either lookup can withdraw the focused view before the other is sent.
+  // Let just the first reach the real server after suppression, so a second
+  // denial cannot race the return to the conversation.
+  const holdFocusedLookups = async (route: Route) => {
+    const request = route.request();
+    const body = request.postDataJSON() as {
+      resource_id?: string;
+      targets?: { resource_id: string }[];
+    };
+    if (
+      new URL(page.url()).searchParams.get('focus') !== parentId ||
+      (body.resource_id !== parentId &&
+        !body.targets?.some((target) => target.resource_id === parentId))
+    )
+      return route.fallback();
+    if (selected) return route.abort('aborted');
+    selected = true;
+    recordLookup(request);
+    await afterSuppression;
+    await route.fallback();
+  };
+  await page.route(focusedLookups, holdFocusedLookups);
+  const back = page.getByRole('link', { name: 'Back to conversation', exact: true });
+  try {
+    await opening.getByRole('link', { name: 'View reply' }).click();
+    await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+    await expect(page.getByText('Parent beyond loaded comments', { exact: true })).toBeVisible();
+    const request = await firstLookup;
+    const denied = page.waitForResponse((response) => response.request() === request);
+    await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
+      parentId,
+    ]);
+    sendLookup();
+    const response = await denied;
+    expect(response.status()).toBe(404);
+    expect((await response.json()).error.code).toBe('unavailable');
+    await expect(page.getByText(/The protected view was withdrawn/)).toBeVisible();
+    await expect(page.getByText('Parent beyond loaded comments', { exact: true })).toHaveCount(0);
+    await expect(back).toBeVisible();
+    await captureDiscussionFreshness(page, 'focused-return-after-withdrawal', back, [
+      'The first focused reading or Saved Items lookup was held until suppression, then sent to the real server. Competing lookups for that parent were cancelled by the fixture.',
+    ]);
+  } finally {
+    sendLookup();
+    await page.unroute(focusedLookups, holdFocusedLookups);
+  }
+  await back.click();
   await expect(parent.getByText('Contribution unavailable', { exact: true })).toBeVisible();
   await expect(parent).toHaveAttribute('data-collapsed', 'false');
   await expect(parent.getByRole('button', { name: 'Hide replies' })).toBeVisible();

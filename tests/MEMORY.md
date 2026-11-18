@@ -1080,7 +1080,10 @@ check known-row collapse through refresh, focused return and reconciliation, typ
 across recovery-intent autosave without remounting either editor, and direct posting
 from a reloaded inline draft. A retained draft plus hidden reply list stays hidden
 after focused return; an unavailable separately known collapsed parent reveals its
-eligible child and reply controls. Repeated autosaves of one replacement intent
+eligible child and reply controls. The journey sends the first real focused reading
+or Saved Items lookup after suppression, then follows Back to conversation from
+the withdrawal alert. The fixture cancels competing lookups for that parent.
+Repeated autosaves of one replacement intent
 perform no further history replacements. The late-confirmation hide test keeps
 deliberate hiding authoritative. The long-window journey
 also places a separately known reply beyond 54 canonical rows and verifies that

@@ -73,7 +73,8 @@ hidden/offline views pause scheduled checks, temporary throttling honors the
 server's validated retry delay, and busy histories may take several checks to
 catch up. **List recovery** retains an explicit refresh when needed.
 Refresh and return from a focused thread rebuild the previously loaded window through
-fresh authorized pages while preserving surviving branches and drafts.
+fresh authorized pages while preserving surviving branches and drafts. **Back to
+conversation** remains available if access to a focused branch is withdrawn.
 After a reply is confirmed, its inline editor closes and **Reply posted** offers an
 exact **View reply** link. The current authorized comment appears in its parent branch
 without a manual refresh. When intervening replies have not been loaded, an explicit
