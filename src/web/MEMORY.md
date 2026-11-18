@@ -198,7 +198,10 @@ Projection withdrawal removes old labels, counts and bodies before fresh structu
 responses; navigation metadata never authorizes cached source content. After the
 focused branch's discussion identity is verified, ancestor context remains mounted
 while its branch is loading, so an unavailable ancestor does not repeatedly restart
-the same negative read during branch recovery.
+the same negative read during branch recovery. A focused route exposes Back to
+conversation even when its authorization boundary withdraws the branch. Each mounted
+discussion route starts its own lease; old requests still publish same-owner denials
+through the shared coordinator.
 
 Discussion headers distinguish local closure from inherited topic closure; only
 administrators receive the contextual close/reopen organization links. The existing

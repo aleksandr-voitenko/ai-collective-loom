@@ -498,11 +498,13 @@ export function AuthorizationBoundary({
   children,
   sourcePolicy = 'withdraw',
   retryLabel = 'Retry protected view',
+  withdrawnNavigation,
   scope,
 }: {
   children: ReactNode;
   sourcePolicy?: 'withdraw' | 'settings' | 'projections';
   retryLabel?: string;
+  withdrawnNavigation?: ReactNode;
   scope?: string;
 }) {
   const id = useId(),
@@ -547,6 +549,7 @@ export function AuthorizationBoundary({
           >
             {retryLabel}
           </button>
+          {snapshot.state === 'withdrawn' && withdrawnNavigation}
         </div>
       ) : (
         <ContentAttempt key={attempt}>{children}</ContentAttempt>

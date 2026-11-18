@@ -1957,12 +1957,51 @@ test('an unavailable separately displayed parent leaves its eligible child reach
     .getByRole('button', { name: /Collapse comment by/ })
     .click();
   await expect(parent).toHaveAttribute('data-collapsed', 'true');
-  await opening.getByRole('link', { name: 'View reply' }).click();
-  await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
-  await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
-    parentId,
-  ]);
-  await page.getByRole('link', { name: 'Back to conversation' }).click();
+  const readingLookup = '**/api/v1/me/reading/lookup';
+  let sendLookup!: () => void;
+  const afterSuppression = new Promise<void>((resolve) => (sendLookup = resolve));
+  const lookupForParent = (request: import('@playwright/test').Request) =>
+    (request.postDataJSON() as { targets: { resource_id: string }[] }).targets.some(
+      (target) => target.resource_id === parentId,
+    );
+  // Make the first reading lookup for the focused parent reach the server only
+  // after suppression, as in the post-merge failure.
+  const holdReadingLookup = async (route: import('@playwright/test').Route) => {
+    if (
+      new URL(page.url()).searchParams.get('focus') === parentId &&
+      lookupForParent(route.request())
+    )
+      await afterSuppression;
+    await route.fallback();
+  };
+  await page.route(readingLookup, holdReadingLookup);
+  const back = page.getByRole('link', { name: 'Back to conversation', exact: true });
+  try {
+    await opening.getByRole('link', { name: 'View reply' }).click();
+    await expect(page.getByText('Focused branch', { exact: true })).toBeVisible();
+    await expect(page.getByText('Parent beyond loaded comments', { exact: true })).toBeVisible();
+    const denied = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/v1/me/reading/lookup') &&
+        response.status() === 404 &&
+        lookupForParent(response.request()),
+    );
+    await server.observer.query("UPDATE loom.resources SET state='suppressed' WHERE id=$1", [
+      parentId,
+    ]);
+    sendLookup();
+    expect((await (await denied).json()).error.code).toBe('unavailable');
+    await expect(page.getByText(/The protected view was withdrawn/)).toBeVisible();
+    await expect(page.getByText('Parent beyond loaded comments', { exact: true })).toHaveCount(0);
+    await expect(back).toBeVisible();
+    await captureDiscussionFreshness(page, 'focused-return-after-withdrawal', back, [
+      'The reading lookup was held until the parent was suppressed, then sent to the real server.',
+    ]);
+    await page.unroute(readingLookup, holdReadingLookup);
+    await back.click();
+  } finally {
+    sendLookup();
+  }
   await expect(parent.getByText('Contribution unavailable', { exact: true })).toBeVisible();
   await expect(parent).toHaveAttribute('data-collapsed', 'false');
   await expect(parent.getByRole('button', { name: 'Hide replies' })).toBeVisible();
