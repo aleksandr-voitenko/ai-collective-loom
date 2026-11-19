@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { afterEach, test, type TestContext } from 'node:test';
 import { JSDOM } from 'jsdom';
-import { StrictMode } from 'react';
+import { createRef, StrictMode, type Ref } from 'react';
 import { MemoryRouter, useLocation } from 'react-router';
 import type { PageView, ResourceView } from '../../src/contracts/participation.js';
 import { AuthorizationBoundary, useAuthorization } from '../../src/web/AuthorizationBoundary.js';
@@ -10,6 +10,7 @@ import { invalidateIdentity } from '../../src/web/participation-client.js';
 import {
   TopicDiscussionBrowser,
   watchTopicDiscussionInteraction,
+  type TopicDiscussionBrowserHandle,
 } from '../../src/web/TopicDiscussionBrowser.js';
 import type { TopicDiscussionPosition } from '../../src/web/topic-discussion-navigation.js';
 
@@ -116,17 +117,24 @@ function Viewer({
   instance = 'first',
   position,
   remember,
+  positionRef,
 }: {
   area?: string;
   instance?: string;
   position?: TopicDiscussionPosition;
   remember?: (position: TopicDiscussionPosition) => void;
+  positionRef?: Ref<TopicDiscussionBrowserHandle> | undefined;
 }) {
   return (
     <MemoryRouter>
       <textarea aria-label="Draft" defaultValue="Unfinished original thought" />
       <AuthorizationBoundary key={instance} scope={'topic:' + area}>
-        <TopicDiscussionBrowser topicId={area} restoration={position} rememberPosition={remember} />
+        <TopicDiscussionBrowser
+          topicId={area}
+          restoration={position}
+          rememberPosition={remember}
+          positionRef={positionRef}
+        />
       </AuthorizationBoundary>
     </MemoryRouter>
   );
@@ -266,6 +274,61 @@ test('ordinary link activation remembers only the loaded extent and the row posi
     },
   ]);
   assert.ok(screen.getByText(`/loom/discussion/${opened.discussion_id}`));
+});
+
+test('a departure outside the list uses the first visible row and the accepted extent', async (t) => {
+  const { calls, respond } = fixture(t);
+  const positionRef = createRef<TopicDiscussionBrowserHandle>();
+  const recent = row('Above the viewport');
+  const visible = row('In the viewport');
+  const tail = row('Below the viewport');
+  render(
+    <Viewer
+      positionRef={positionRef}
+      position={{ discussionId: visible.discussion_id, offset: 130, pages: 5 }}
+    />,
+  );
+  assert.equal(positionRef.current?.captureReturnPosition(), undefined);
+  await respond(0, page([recent, visible], 'more'));
+  await respond(1, page([tail], 'still-restoring'));
+  assert.equal(calls[2]?.url.searchParams.get('cursor'), 'still-restoring');
+  const setRowTop = (title: string, top: number) =>
+    t.mock.method(
+      screen.getByRole('link', { name: title }),
+      'getBoundingClientRect',
+      () => new dom.window.DOMRect(0, top, 400, 60),
+    );
+  setRowTop(recent.title!, -20);
+  setRowTop(visible.title!, 48);
+  setRowTop(tail.title!, window.innerHeight + 20);
+  assert.deepEqual(positionRef.current?.captureReturnPosition(), {
+    discussionId: visible.discussion_id,
+    offset: 48,
+    pages: 2,
+    tailId: tail.discussion_id,
+  });
+});
+
+test('a departure with no visible discussion revalidates the extent and returns to the list controls', async (t) => {
+  const { calls, respond, scroll } = fixture(t);
+  const positionRef = createRef<TopicDiscussionBrowserHandle>();
+  const previous = render(<Viewer positionRef={positionRef} />);
+  await respond(0, page([], 'filtered-first'));
+  fireEvent.click(control('Load more discussions'));
+  await respond(1, page([], 'filtered-second'));
+  const position = positionRef.current?.captureReturnPosition();
+  assert.ok(position);
+  previous.unmount();
+
+  render(<Viewer position={position} />);
+  const available = row('Currently readable discussion');
+  await respond(2, page([available], 'fresh-continuation'));
+  assert.equal(calls[2]?.url.searchParams.get('cursor'), null);
+  assert.equal(calls[3]?.url.searchParams.get('cursor'), 'fresh-continuation');
+  await respond(3, page([], 'more-current'));
+  assert.ok(screen.getByRole('link', { name: available.title! }));
+  assert.equal(document.activeElement, control('Show latest discussions'));
+  assert.deepEqual(scroll, [{ block: 'start', behavior: 'instant' }]);
 });
 
 test('returning uses eight fresh pages, with explicit continuation and one anchor focus', async (t) => {

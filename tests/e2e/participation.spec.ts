@@ -641,8 +641,50 @@ test('topic discussion browser appends, returns and publishes without replacing 
     desktopTop: 295,
     mobileTop: 260,
   });
-  await open.click();
-  await expect(page.getByRole('heading', { name: draftTitle, exact: true })).toBeVisible();
+
+  async function returnFromConfirmation(
+    visibleAnchor: Locator,
+    titles: string[],
+    cursorPages: boolean[],
+  ) {
+    await open.focus();
+    await frameTopicRow(open);
+    await expect(visibleAnchor).toBeInViewport({ ratio: 1 });
+    const anchorOffset = await rowsTop(visibleAnchor);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${server.origin}/loom/discussion/${metadata.discussion_id}`);
+    await expect(page.getByRole('heading', { name: draftTitle, exact: true })).toBeVisible();
+    const before = collectionRequests.length;
+    await page.goBack();
+    await expect(page).toHaveURL(fixture.url);
+    await expect(links).toHaveCount(titles.length);
+    await expectTopicOrder(links, titles);
+    await expect(visibleAnchor).toBeFocused();
+    expect(Math.abs((await rowsTop(visibleAnchor)) - anchorOffset)).toBeLessThanOrEqual(24);
+    expect(collectionRequests.slice(before).map((url) => url.searchParams.has('cursor'))).toEqual(
+      cursorPages,
+    );
+    expect(posts).toBe(1);
+  }
+
+  const afterPublication = [draftTitle, ...fixture.titles];
+  // The new opening shifts the former 24th row onto a third authorized page.
+  await returnFromConfirmation(newest, afterPublication.slice(0, 36), [false, true, true]);
+  await expect(list.getByRole('link', { name: fixture.titles[23]!, exact: true })).toBeVisible();
+  await captureTopicDiscussions(page, 'returned-from-confirmed-publication', newest, {
+    desktopTop: 365,
+    mobileTop: 350,
+  });
+
+  // This history entry already has a deeper restoration record. The new
+  // confirmation departure must replace it after a deliberate fresh restart.
+  await showLatest.click();
+  await expectTopicOrder(links, afterPublication.slice(0, 12));
+  await openComposer.click();
+  await expect(open).toBeVisible();
+  const publishedRow = list.getByRole('link', { name: draftTitle, exact: true });
+  await returnFromConfirmation(publishedRow, afterPublication.slice(0, 12), [false]);
+  await expect(anchor).toHaveCount(0);
 });
 
 test('topic discussion browser bounds restoration and recovers from organization changes', async ({

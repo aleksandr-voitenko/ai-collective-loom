@@ -10,6 +10,8 @@ test('topic discussion return controls belong to a specific entry, topic and sto
   assert.equal(history.get('another-entry', 'first-topic'), undefined);
   assert.equal(history.get('entry', 'second-topic'), undefined);
   assert.equal(new TopicDiscussionNavigation().get('entry', 'first-topic'), undefined);
+  history.remember('entry', 'first-topic', undefined);
+  assert.equal(history.get('entry', 'first-topic'), undefined);
 });
 
 test('topic discussion return controls evict the oldest of more than sixteen saved entries', () => {

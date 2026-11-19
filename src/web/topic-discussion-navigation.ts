@@ -1,11 +1,22 @@
+import type { MouseEvent } from 'react';
+
 export const TOPIC_DISCUSSION_ORDER = 'created_desc';
 
 export type TopicDiscussionPosition = {
-  discussionId: string;
-  offset: number;
   pages: number;
   tailId?: string;
-};
+} & ({ discussionId: string; offset: number } | { discussionId?: undefined });
+
+export function isDiscussionNavigationClick(event: MouseEvent<HTMLAnchorElement>) {
+  return (
+    !event.defaultPrevented &&
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  );
+}
 
 const retainedEntries = 16;
 
@@ -17,9 +28,10 @@ export class TopicDiscussionNavigation {
     return this.positions.get(this.key(entry, topic));
   }
 
-  remember(entry: string, topic: string, position: TopicDiscussionPosition) {
+  remember(entry: string, topic: string, position: TopicDiscussionPosition | undefined) {
     const key = this.key(entry, topic);
     this.positions.delete(key);
+    if (!position) return;
     this.positions.set(key, position);
     if (this.positions.size > retainedEntries)
       this.positions.delete(this.positions.keys().next().value!);

@@ -1,4 +1,13 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type Ref,
+} from 'react';
 import { Link } from 'react-router';
 import { Page, type PageView, type ResourceView } from '../contracts/participation.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
@@ -6,6 +15,7 @@ import { ApiError, identityGeneration } from './participation-client.js';
 import { Avatar } from './participation-ui.js';
 import {
   TOPIC_DISCUSSION_ORDER,
+  isDiscussionNavigationClick,
   type TopicDiscussionPosition,
 } from './topic-discussion-navigation.js';
 
@@ -112,13 +122,18 @@ type Props = {
   topicId: string;
   restoration?: TopicDiscussionPosition | undefined;
   rememberPosition?: ((position: TopicDiscussionPosition) => void) | undefined;
+  positionRef?: Ref<TopicDiscussionBrowserHandle> | undefined;
+};
+
+export type TopicDiscussionBrowserHandle = {
+  captureReturnPosition: () => TopicDiscussionPosition | undefined;
 };
 
 export function TopicDiscussionBrowser(props: Props) {
   return <DiscussionList key={props.topicId} {...props} />;
 }
 
-function DiscussionList({ topicId, restoration, rememberPosition }: Props) {
+function DiscussionList({ topicId, restoration, rememberPosition, positionRef }: Props) {
   const authority = useAuthorization();
   const [view, setView] = useState<List>({ pending: 'initial', goal: restoration });
   const current = useRef(view);
@@ -175,7 +190,9 @@ function DiscussionList({ topicId, restoration, rememberPosition }: Props) {
         if (!live() || !authority.current(result.generation)) return;
         traversal = acceptPage(traversal, result.value, result.generation, topicId);
         const anchorFound =
-          goal && traversal.rows.some((row) => row.discussion_id === goal.discussionId);
+          goal &&
+          (!goal.discussionId ||
+            traversal.rows.some((row) => row.discussion_id === goal.discussionId));
         const extentReached =
           goal &&
           traversal.requested.size >= goal.pages &&
@@ -253,7 +270,7 @@ function DiscussionList({ topicId, restoration, rememberPosition }: Props) {
         )
           latestAction.current?.focus({ preventScroll: true });
         section.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
-      } else {
+      } else if (plan.target.discussionId) {
         const row = section.current?.querySelector<HTMLAnchorElement>(
           `[data-discussion-id="${plan.target.discussionId}"]`,
         );
@@ -262,12 +279,16 @@ function DiscussionList({ topicId, restoration, rememberPosition }: Props) {
           const top = row.getBoundingClientRect().top - plan.target.offset;
           if (Math.abs(top) > 1) window.scrollBy({ top, behavior: 'instant' });
         }
+      } else {
+        latestAction.current?.focus({ preventScroll: true });
+        section.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
       }
     }
     plan.interaction.stop();
   }, [authority, view]);
 
   const traversal = authority.current(view.traversal?.generation) ? view.traversal : undefined;
+  useImperativeHandle(positionRef, () => ({ captureReturnPosition: () => capturePosition() }));
   const pending = view.pending;
   const failure = view.failure;
   const needsRestore = !!view.goal && !!traversal?.next;
@@ -285,25 +306,29 @@ function DiscussionList({ topicId, restoration, rememberPosition }: Props) {
     else if (failure === 'initial') void load('initial', view.goal);
     else void load('append');
   }
-  function opening(event: MouseEvent<HTMLAnchorElement>, discussionId: string) {
-    if (
-      !traversal ||
-      !rememberPosition ||
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    const tailId = view.goal?.tailId ?? traversal.rows.at(-1)?.discussion_id;
-    rememberPosition({
-      discussionId,
-      offset: event.currentTarget.getBoundingClientRect().top,
-      pages: Math.max(traversal.requested.size, view.goal?.pages ?? 0),
+  function capturePosition(clickedRow?: HTMLAnchorElement): TopicDiscussionPosition | undefined {
+    if (!traversal || !authority.current(traversal.generation)) return;
+    const goal = clickedRow ? view.goal : undefined;
+    const tailId = goal?.tailId ?? traversal.rows.at(-1)?.discussion_id;
+    const extent = {
+      pages: Math.max(traversal.requested.size, goal?.pages ?? 0),
       ...(tailId ? { tailId } : {}),
-    });
+    };
+    const rows = clickedRow
+      ? [clickedRow]
+      : (section.current?.querySelectorAll<HTMLAnchorElement>('[data-discussion-id]') ?? []);
+    for (const row of rows) {
+      const { top, bottom } = row.getBoundingClientRect();
+      const discussionId = row.dataset.discussionId;
+      if (discussionId && (clickedRow || (top >= 0 && top < window.innerHeight && bottom > top)))
+        return { ...extent, discussionId, offset: top };
+    }
+    return extent;
+  }
+  function opening(event: MouseEvent<HTMLAnchorElement>) {
+    if (!isDiscussionNavigationClick(event)) return;
+    const position = capturePosition(event.currentTarget);
+    if (position) rememberPosition?.(position);
   }
 
   return (
@@ -387,7 +412,7 @@ function DiscussionListRow({
   opening,
 }: {
   row: DiscussionRow;
-  opening: (event: MouseEvent<HTMLAnchorElement>, discussionId: string) => void;
+  opening: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const titleId = useId(),
     metadataId = useId();
@@ -400,7 +425,7 @@ function DiscussionListRow({
         data-discussion-id={row.discussion_id}
         aria-labelledby={titleId}
         aria-describedby={metadataId}
-        onClick={(event) => opening(event, row.discussion_id)}
+        onClick={opening}
       >
         <span aria-hidden="true">
           <Avatar person={row.author} />

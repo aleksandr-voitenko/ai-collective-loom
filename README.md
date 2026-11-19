@@ -43,8 +43,9 @@ uncertain submissions retain their recovery controls. **Drafts** in navigation e
 local drafts and status recovery; save feedback confirms only writes on this device.
 Open a topic’s **Discussions** tab to browse compact rows with the original author
 and creation date. **Load more discussions** adds older rows beneath the list.
-After following a discussion link, browser Back reloads the earlier portion with
-current access checks and restores your place when the row is still reachable.
+After following a discussion row or the publication confirmation’s **Open discussion**
+link, browser Back reloads the earlier portion with current access checks and
+restores your place when the row is still reachable.
 Loom automatically reads up to eight pages on return and offers an explicit
 continuation when more are needed. **Show latest discussions** starts at the top
 and keeps the open composer and its draft. A confirmed publication offers

@@ -4,9 +4,11 @@ The topic discussion browser journeys in `e2e/participation.spec.ts` use compile
 React, isolated PostgreSQL, Chromium WebAuthn and ordinary authenticated publication.
 They exercise two appended pages, unchanged editor selection, retry, current reads
 on browser Back, the eight-read restoration budget, interruption by new interaction,
-late topic responses, real hierarchy invalidation and metadata-only recovery after a
-confirmed publication. The empty incomplete page deliberately clears only the first
-response’s items. `helpers/topic-discussion-review.ts` captures opt-in actual app
+late topic responses, real hierarchy invalidation, and metadata-only recovery after a
+confirmed publication. The confirmation journey verifies Back restores the visible
+row and loaded tail through fresh reads, then repeats after a deliberate list restart
+with the publication POST count still at one. The empty incomplete page clears only
+the first response’s items. `helpers/topic-discussion-review.ts` captures opt-in actual app
 viewports with `LOOM_TOPIC_DISCUSSION_REVIEW=1`, separately from diagnostics.
 `web/topic-discussion-browser.test.tsx` covers repeat identities, empty continuation,
 restart and keyboard focus, revalidation and request fences after topic, instance,

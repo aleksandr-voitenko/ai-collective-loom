@@ -24,7 +24,12 @@ import { ResourceContent } from './ParticipationResource.js';
 import {
   TopicDiscussionBrowser,
   watchTopicDiscussionInteraction,
+  type TopicDiscussionBrowserHandle,
 } from './TopicDiscussionBrowser.js';
+import {
+  isDiscussionNavigationClick,
+  type TopicDiscussionPosition,
+} from './topic-discussion-navigation.js';
 
 export function Topics({ context }: { context: Context }) {
   return (
@@ -63,6 +68,9 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
   const heading = useRef<HTMLHeadingElement>(null),
     [created, setCreated] = useState(false);
   const createButton = useRef<HTMLButtonElement>(null);
+  const discussionBrowser = useRef<TopicDiscussionBrowserHandle>(null);
+  const rememberDiscussionPosition = (position: TopicDiscussionPosition | undefined) =>
+    context.topicDiscussionNavigation?.remember(location.key, id, position);
   const [focusComposer, setFocusComposer] = useState(false);
   const [restoration, setRestoration] = useState(() =>
     navigationType === 'POP' ? context.topicDiscussionNavigation?.get(location.key, id) : undefined,
@@ -198,6 +206,9 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
                   <TopicDiscussionConfirmation
                     key={result.resource_id}
                     openingId={result.resource_id}
+                    onOpen={() =>
+                      rememberDiscussionPosition(discussionBrowser.current?.captureReturnPosition())
+                    }
                   />
                 )
               : undefined
@@ -208,9 +219,8 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
         <TopicDiscussionBrowser
           topicId={area.resource_id}
           restoration={restoration}
-          rememberPosition={(position) =>
-            context.topicDiscussionNavigation?.remember(location.key, id, position)
-          }
+          rememberPosition={rememberDiscussionPosition}
+          positionRef={discussionBrowser}
         />
       ) : (
         <Collection
@@ -229,7 +239,13 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
   );
 }
 
-function TopicDiscussionConfirmation({ openingId }: { openingId: string }) {
+function TopicDiscussionConfirmation({
+  openingId,
+  onOpen,
+}: {
+  openingId: string;
+  onOpen: () => void;
+}) {
   const target = new URLSearchParams({ kind: 'contribution', resource_id: openingId });
   const { data, error, refresh } = useQuery<ResolvedTargetView>(
     '/api/v1/references/target?' + target,
@@ -243,7 +259,13 @@ function TopicDiscussionConfirmation({ openingId }: { openingId: string }) {
     opening.discussion_id
   )
     return (
-      <Link className="button primary" to={`/loom/discussion/${opening.discussion_id}`}>
+      <Link
+        className="button primary"
+        to={`/loom/discussion/${opening.discussion_id}`}
+        onClick={(event) => {
+          if (isDiscussionNavigationClick(event)) onOpen();
+        }}
+      >
         Open discussion
       </Link>
     );
