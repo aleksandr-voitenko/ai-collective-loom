@@ -9,6 +9,15 @@ Keep durable setup/coverage commands in root README, decisions in `docs/adr`, an
 implementation constraints in scoped memory. Historical evidence remains in Git.
 The architecture is a proposal; its acceptance mappings are not executed results.
 
+Post-merge cleanup: track temporary paths and disposable resources for each PR.
+Once the merge is confirmed, reclaim its scratch files, temporary builds and
+dependency copies, raw coverage, browser traces, test output and fixtures. Use
+scoped teardown for owned containers, networks and volumes. Retire scratch
+worktrees once verified free of independent work, using managed cleanup where
+applicable. Preserve tracked and unmerged work, active or shared resources,
+retained installations and approved review evidence. Verify free disk space and
+report any temporary items kept because ownership or retention is unclear.
+
 Current implementation includes opt-in synthetic participation and an explicitly
 acknowledged localhost retained evaluation pilot (ADR-041), plus separate invitation-only
 non-sensitive VPS staging (ADR-042), on
