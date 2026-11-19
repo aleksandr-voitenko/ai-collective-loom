@@ -1,5 +1,19 @@
 # Browser test diagnostics
 
+The topic discussion browser journeys in `e2e/participation.spec.ts` use compiled
+React, isolated PostgreSQL, Chromium WebAuthn and ordinary authenticated publication.
+They exercise two appended pages, unchanged editor selection, retry, current reads
+on browser Back, the eight-read restoration budget, interruption by new interaction,
+late topic responses, real hierarchy invalidation and metadata-only recovery after a
+confirmed publication. The empty incomplete page deliberately clears only the first
+response’s items. `helpers/topic-discussion-review.ts` captures opt-in actual app
+viewports with `LOOM_TOPIC_DISCUSSION_REVIEW=1`, separately from diagnostics.
+`web/topic-discussion-browser.test.tsx` covers repeat identities, empty continuation,
+restart and keyboard focus, revalidation and request fences after topic, instance,
+identity and authorization changes. `integration/topic-discussion-order.test.ts`
+exercises microsecond ties and boundaries, the legacy API, committed-position races,
+populated migration, response limits and the indexed candidate and event probes.
+
 Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
 scope/token refusal, bounded shared/visibility continuation across decimal widths, restoration after
 suppressed-event consumption, no private reading writes and default ordinary
@@ -852,9 +866,8 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 179 collected tests and <17 MiB/candidate. The test count includes
-Community settings and Search indexing recovery, including two-tab exact retry on a
-25-row failed-job page, so coverage captures the complete suite;
+128 KiB/document, 193 collected tests and <17 MiB/candidate. The test count admits
+the complete current suite, including the topic discussion browser journeys;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe
 validated refusal record is the sole upload output in that case.

@@ -117,9 +117,10 @@ async function main() {
       '24',
       '25',
       '26',
+      '27',
     ].includes(community.guide_revision)
   )
-    throw new Error('This trial requires a synthetic agent and supported guide 2 through 26.');
+    throw new Error('This trial requires a synthetic agent and supported guide 2 through 27.');
   const scope = {
     origin: origin.origin,
     instance_id: community.instance_id,

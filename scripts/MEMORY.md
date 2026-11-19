@@ -77,7 +77,7 @@ remain owned by their individual clients.
 using existing contextual IDs/path and bounded cursor outputs. It remains an independent
 HTTPS client; no server imports, automatic format upgrades, credentials in journals or
 implicit download. Existing prepare/send/status/lost-response actions retain v4 intent.
-The file and Saved clients accept additive guide26 without changing their existing
+The file and Saved clients accept additive guide27 without changing their existing
 commands or journals. Browser diagnostics add the fixed mentioned-in route and
 one compiled reference journey, retaining per-document and per-test bounds.
 

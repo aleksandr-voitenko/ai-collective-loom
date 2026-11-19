@@ -23,6 +23,10 @@ import { captureMentionSelection } from '../helpers/mention-selection-review.js'
 import { captureContinuousDiscussion } from '../helpers/continuous-discussion-review.js';
 import { captureConfirmedReply } from '../helpers/confirmed-reply-review.js';
 import { captureDiscussionFreshness } from '../helpers/discussion-freshness-review.js';
+import {
+  baselineTopicDiscussionReview,
+  captureTopicDiscussions,
+} from '../helpers/topic-discussion-review.js';
 import { publicationJournalBytes } from '../helpers/publication-journal-snapshot.js';
 
 const authenticators = new WeakMap<Page, { cdp: CDPSession; id: string }>();
@@ -279,6 +283,557 @@ const text = (value: string) => ({
   format: 'loom-markdown-v1',
   text: value,
   mentions: [],
+});
+
+const longTopicTitle =
+  'How should we explain the trade-offs in the next community survey to first-time contributors and volunteer reviewers?';
+const topicAgentName = 'InterdisciplinaryReviewAgent2026';
+const topicTitles = [
+  'Notes from the spring survey',
+  'Questions about the shared reading group',
+  'Choosing a date for the open workshop',
+  'What belongs in the welcome guide?',
+  'Share an example of a useful project update',
+  'Reviewing the neighborhood archive',
+  'Ideas for the next volunteer session',
+  'A checklist for publishing meeting notes',
+  'How we can make feedback easier to find',
+];
+
+async function seedTopicBrowser(
+  page: Page,
+  context: BrowserContext,
+  server: Awaited<ReturnType<typeof syntheticServer>>,
+  count: number,
+) {
+  await enter(page, context, server.origin, server.ticket, true);
+  await setup(page);
+  const areas = await (await api(page, '/api/v1/areas')).json();
+  const area: string = areas.items.find((item: { title: string }) => item.title === 'General').id;
+  const agentClient = (await agent(page, server, topicAgentName)).client;
+  const titles: string[] = [];
+  for (let index = 1; index <= count; index++) {
+    const title =
+      index === count
+        ? longTopicTitle
+        : `${topicTitles[(index - 1) % topicTitles.length]} · ${index}`;
+    const body = { idempotency_key: randomUUID(), area_id: area, title, content: text(title) };
+    const status =
+      index % 3 === 0 || index === count
+        ? (await agentClient.call('/api/v1/discussions', body)).status
+        : (await api(page, '/api/v1/discussions', body)).status();
+    expect(status).toBe(201);
+    titles.unshift(title);
+  }
+  return {
+    titles,
+    area,
+    collection: '/api/v1/areas/' + area + '/discussions',
+    url: server.origin + '/loom/area/' + area,
+  };
+}
+
+const topicList = (page: Page) => page.getByRole('region', { name: 'Topic discussions' });
+const discussionLinks = (scope: Locator) => scope.locator('a[href^="/loom/discussion/"]');
+async function expectTopicOrder(links: Locator, titles: string[]) {
+  await expect
+    .poll(() =>
+      links.evaluateAll((nodes) =>
+        nodes.map(
+          (node) => document.getElementById(node.getAttribute('aria-labelledby')!)?.textContent,
+        ),
+      ),
+    )
+    .toEqual(titles);
+}
+const loadTopicDiscussions = (scope: Locator) =>
+  scope.getByRole('button', { name: 'Load more discussions', exact: true });
+const rowsTop = async (row: Locator) => row.evaluate((link) => link.getBoundingClientRect().top);
+const frameTopicRow = async (row: Locator) =>
+  row.evaluate((link) => window.scrollBy(0, link.getBoundingClientRect().top - 275));
+const listFailure = (route: Route) =>
+  route.fulfill({
+    status: 503,
+    json: {
+      error: {
+        code: 'temporarily_unavailable',
+        message: 'Temporarily unavailable',
+        request_id: randomUUID(),
+        recovery: { action: 'retry_same_request' },
+      },
+    },
+  });
+function topicSignal() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function setTopicDiscussionSuppression(page: Page, id: string, suppressed: boolean) {
+  const base = '/api/v1/admin/moderation';
+  const current = await (await api(page, `${base}/resources/${id}`)).json();
+  const updated = await api(page, `${base}/state`, {
+    idempotency_key: randomUUID(),
+    target: current.target,
+    expected_version: current.version,
+    suppressed,
+  });
+  expect(updated.ok()).toBe(true);
+}
+
+test('topic discussion browser appends, returns and publishes without replacing the list', async ({
+  page,
+  context,
+  server,
+}) => {
+  const fixture = await seedTopicBrowser(page, context, server, 39);
+  if (baselineTopicDiscussionReview) {
+    await page.goto(fixture.url);
+    const tabs = page.getByRole('group', { name: 'Topic content' });
+    await expect(page.getByRole('button', { name: 'Next →', exact: true })).toBeEnabled();
+    await captureTopicDiscussions(page, 'before-generic-collection', tabs, {
+      desktopTop: 420,
+      mobileTop: 160,
+    });
+    return;
+  }
+
+  const list = topicList(page);
+  const links = discussionLinks(list);
+  const newest = list.getByRole('link', { name: longTopicTitle, exact: true });
+  const showLatest = list.getByRole('button', { name: 'Show latest discussions', exact: true });
+  const loadMore = loadTopicDiscussions(list);
+  const draftTitle = 'Invite readers to the survey debrief';
+  const draftBody = 'I’ve drafted three questions for the debrief. What should we ask first?';
+  const openComposer = page.getByRole('button', { name: 'Start a discussion', exact: true });
+  const titleInput = page.getByLabel('Title', { exact: true });
+  const bodyInput = page.getByLabel('Text', { exact: true });
+  const collectionRequests: URL[] = [];
+  const contentReads: string[] = [];
+  let readingRequests = 0;
+  let posts = 0;
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === fixture.collection) collectionRequests.push(url);
+    if (url.pathname === '/api/v1/discussions' && request.method() === 'POST') posts++;
+    if (/^\/api\/v1\/(?:discussions|contributions|resources)\/[^/]+/.test(url.pathname))
+      contentReads.push(url.pathname);
+    if (url.pathname.startsWith('/api/v1/me/reading/')) readingRequests++;
+  });
+  let effect: ((route: Route) => Promise<void>) | undefined;
+  await page.route(
+    (url) => url.pathname === fixture.collection,
+    async (route) => {
+      const next = effect;
+      effect = undefined;
+      await (next ? next(route) : route.continue());
+    },
+  );
+  await page.goto(fixture.url);
+  await expect(list.getByText('Newest first', { exact: true })).toBeVisible();
+  await expectTopicOrder(links, fixture.titles.slice(0, 12));
+  await expect(list.getByText(topicAgentName, { exact: true }).first()).toBeVisible();
+  expect(collectionRequests.map((url) => url.searchParams.get('order'))).toEqual(['created_desc']);
+  expect(contentReads).toEqual([]);
+  const firstNode = await newest.elementHandle();
+  await captureTopicDiscussions(page, 'newest-first-overview', list.getByText('Newest first'), {
+    desktopTop: 420,
+    mobileTop: 240,
+  });
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const openedTab = context.waitForEvent('page');
+  await newest.click({ modifiers: ['ControlOrMeta'] });
+  const secondView = await openedTab;
+  try {
+    await expect(
+      secondView.getByRole('heading', { name: longTopicTitle, exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(fixture.url);
+  } finally {
+    await secondView.close();
+  }
+
+  await openComposer.click();
+  await expect(titleInput).toBeFocused();
+  await titleInput.fill(draftTitle);
+  await bodyInput.fill(draftBody);
+
+  effect = listFailure;
+  await loadMore.click();
+  const retry = list.getByRole('button', { name: 'Retry', exact: true });
+  await expect(retry).toBeVisible();
+  await expectTopicOrder(links, fixture.titles.slice(0, 12));
+  await expect(bodyInput).toHaveValue(draftBody);
+  await captureTopicDiscussions(page, 'continuation-retry', retry, {
+    desktopTop: 785,
+    mobileTop: 660,
+    injected: ['The first continuation received one synthetic HTTP 503.'],
+  });
+  await retry.click();
+  await expectTopicOrder(links, fixture.titles.slice(0, 24));
+  expect(await firstNode!.evaluate((node) => node.isConnected)).toBe(true);
+
+  const entered = topicSignal();
+  const release = topicSignal();
+  effect = async (route) => {
+    const response = await route.fetch();
+    entered.resolve();
+    await release.promise;
+    await route.fulfill({ response });
+  };
+  try {
+    await loadMore.click();
+    await entered.promise;
+    const requested = collectionRequests.length;
+    await loadMore.dispatchEvent('click');
+    const editorNode = await bodyInput.elementHandle();
+    await bodyInput.focus();
+    await bodyInput.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(2, 14));
+    const before = await page.evaluate(() => scrollY);
+    release.resolve();
+    await expectTopicOrder(links, fixture.titles.slice(0, 36));
+    expect(collectionRequests).toHaveLength(requested);
+    expect(await firstNode!.evaluate((node) => node.isConnected)).toBe(true);
+    expect(await editorNode!.evaluate((node) => node.isConnected)).toBe(true);
+    await expect(bodyInput).toBeFocused();
+    expect(
+      await bodyInput.evaluate((node: HTMLTextAreaElement) => [
+        node.selectionStart,
+        node.selectionEnd,
+      ]),
+    ).toEqual([2, 14]);
+    expect(Math.abs((await page.evaluate(() => scrollY)) - before)).toBeLessThanOrEqual(2);
+  } finally {
+    release.resolve();
+  }
+
+  const anchorTitle = fixture.titles[29]!;
+  const anchor = list.getByRole('link', { name: anchorTitle, exact: true });
+  const destination = await anchor.getAttribute('href');
+  const hiddenOnReturn = fixture.titles[12]!;
+  const hiddenPath = await list
+    .getByRole('link', { name: hiddenOnReturn, exact: true })
+    .getAttribute('href');
+  const hiddenId = hiddenPath!.split('/').at(-1)!;
+  expect(contentReads).toEqual([]);
+  expect(readingRequests).toBe(0);
+  await captureTopicDiscussions(page, 'older-discussions-appended', loadMore, {
+    desktopTop: 820,
+    mobileTop: 715,
+  });
+  await anchor.focus();
+  await frameTopicRow(anchor);
+  const offset = await rowsTop(anchor);
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(server.origin + destination);
+  await expect(page.getByRole('heading', { name: anchorTitle, exact: true })).toBeVisible();
+  await setTopicDiscussionSuppression(page, hiddenId, true);
+  const restoredTitles = fixture.titles.slice(0, 37).filter((name) => name !== hiddenOnReturn);
+  const beforeReturn = collectionRequests.length;
+  await page.goBack();
+  await expect(page).toHaveURL(fixture.url);
+  await expect(page.getByRole('button', { name: 'Discussions', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expectTopicOrder(links, restoredTitles);
+  await expect(list.getByRole('link', { name: hiddenOnReturn, exact: true })).toHaveCount(0);
+  await expect(anchor).toBeFocused();
+  expect(Math.abs((await rowsTop(anchor)) - offset)).toBeLessThanOrEqual(24);
+  const freshReturn = collectionRequests.slice(beforeReturn);
+  expect(freshReturn).toHaveLength(3);
+  expect(freshReturn.map((url) => url.searchParams.has('cursor'))).toEqual([false, true, true]);
+  await captureTopicDiscussions(page, 'returned-to-appended-discussion', anchor, {
+    desktopTop: 275,
+    mobileTop: 280,
+    injected: [
+      'One older discussion was suppressed through the real moderation API, and the restored list reflects current access.',
+    ],
+  });
+  await setTopicDiscussionSuppression(page, hiddenId, false);
+
+  await openComposer.click();
+  await expect(titleInput).toHaveValue(draftTitle);
+  await expect(bodyInput).toHaveValue(draftBody);
+  effect = listFailure;
+  await showLatest.click();
+  const latestFailure = list.getByRole('alert');
+  await expect(latestFailure).toContainText('The latest discussions could not be loaded.');
+  await expectTopicOrder(links, restoredTitles);
+  await expect(bodyInput).toHaveValue(draftBody);
+  await captureTopicDiscussions(page, 'latest-refresh-retry', latestFailure, {
+    desktopTop: 395,
+    mobileTop: 285,
+    injected: ['The first explicit restart received one synthetic HTTP 503.'],
+  });
+  const restartEntered = topicSignal();
+  const restartRelease = topicSignal();
+  effect = async (route) => {
+    const response = await route.fetch();
+    restartEntered.resolve();
+    await restartRelease.promise;
+    await route.fulfill({ response });
+  };
+  try {
+    await showLatest.click();
+    await restartEntered.promise;
+    await expectTopicOrder(links, restoredTitles);
+    await expect(bodyInput).toHaveValue(draftBody);
+    restartRelease.resolve();
+    await expectTopicOrder(links, fixture.titles.slice(0, 12));
+    await expect(bodyInput).toHaveValue(draftBody);
+  } finally {
+    restartRelease.resolve();
+  }
+  await bodyInput.focus();
+  await captureTopicDiscussions(page, 'open-composer-with-retained-draft', titleInput, {
+    desktopTop: 225,
+    mobileTop: 170,
+  });
+  await loadMore.click();
+  await expectTopicOrder(links, fixture.titles.slice(0, 24));
+  const beforePublish = await newest.elementHandle();
+
+  let targetReads = 0;
+  await page.route(
+    (url) =>
+      url.pathname === '/api/v1/references/target' &&
+      url.searchParams.get('kind') === 'contribution',
+    async (route) => {
+      targetReads++;
+      await (targetReads === 1 ? listFailure(route) : route.continue());
+    },
+  );
+  const published = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === '/api/v1/discussions' &&
+      response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  const committed = await published;
+  expect(committed.status()).toBe(201);
+  const opening = (await committed.json()).resource_id as string;
+  const publication = page.getByText('Your publication is saved.', { exact: true });
+  await expect(publication).toBeVisible();
+  const retryOpen = page.getByRole('button', { name: /retry.*discussion/i });
+  await expect(retryOpen).toBeVisible();
+  await captureTopicDiscussions(page, 'publication-link-retry', retryOpen, {
+    desktopTop: 360,
+    mobileTop: 240,
+    injected: ['The confirmed opening’s first destination lookup received one synthetic HTTP 503.'],
+  });
+  await retryOpen.click();
+  const open = page.getByRole('link', { name: 'Open discussion', exact: true });
+  await expect(open).toBeVisible();
+  const metadata = await (await api(page, '/api/v1/resources/' + opening)).json();
+  expect(metadata.discussion_id).not.toBe(opening);
+  await expect(open).toHaveAttribute('href', `/loom/discussion/${metadata.discussion_id}`);
+  await expectTopicOrder(links, fixture.titles.slice(0, 24));
+  await expect(list.getByRole('link', { name: draftTitle, exact: true })).toHaveCount(0);
+  expect(await beforePublish!.evaluate((node) => node.isConnected)).toBe(true);
+  expect(posts).toBe(1);
+  expect(targetReads).toBe(2);
+  await captureTopicDiscussions(page, 'publication-confirmed-and-list-retained', open, {
+    desktopTop: 295,
+    mobileTop: 260,
+  });
+  await open.click();
+  await expect(page.getByRole('heading', { name: draftTitle, exact: true })).toBeVisible();
+});
+
+test('topic discussion browser bounds restoration and recovers from organization changes', async ({
+  page,
+  context,
+  server,
+}) => {
+  const fixture = await seedTopicBrowser(page, context, server, 121);
+  const list = topicList(page),
+    links = discussionLinks(list),
+    more = loadTopicDiscussions(list),
+    continueRestoring = list.getByRole('button', { name: 'Continue restoring discussions' });
+  const collectionRequests: URL[] = [];
+  let hook: ((route: Route) => Promise<void>) | undefined = listFailure;
+  await page.route(
+    (url) => url.pathname === fixture.collection,
+    async (route) => {
+      collectionRequests.push(new URL(route.request().url()));
+      const next = hook;
+      hook = undefined;
+      await (next ? next(route) : route.continue());
+    },
+  );
+  await page.goto(fixture.url);
+  const retry = list.getByRole('button', { name: 'Retry', exact: true });
+  await expect(list.getByRole('alert')).toHaveText('Discussions could not be loaded.');
+  await expect(links).toHaveCount(0);
+  await captureTopicDiscussions(page, 'initial-list-retry', retry, {
+    desktopTop: 625,
+    mobileTop: 515,
+    injected: ['The initial discussion listing received one synthetic HTTP 503.'],
+  });
+  hook = async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    expect(response.status()).toBe(200);
+    expect(body.complete).toBe(false);
+    expect(body.next_cursor).toBeTruthy();
+    await route.fulfill({ response, json: { ...body, items: [] } });
+  };
+  await retry.click();
+  await expect(list.getByRole('status')).toHaveText('More discussions may be available.');
+  await expect(links).toHaveCount(0);
+  await more.click();
+  await expectTopicOrder(links, fixture.titles.slice(12, 24));
+
+  const version = (await (await api(page, '/api/v1/organization/children?limit=1')).json())
+    .hierarchy_version;
+  const created = await api(page, '/api/v1/organization/changes', {
+    idempotency_key: randomUUID(),
+    kind: 'area.create',
+    parent_id: null,
+    title: 'Workshop archive',
+    description: 'An independent topic for archived workshops.',
+    expected_hierarchy_version: version,
+  });
+  expect(created.ok()).toBeTruthy();
+  const otherTopic = (await created.json()).current.resource_id as string;
+  await more.click();
+  const changed = list.getByRole('alert');
+  await expect(changed).toHaveText(
+    'This discussion list changed. Show the latest discussions to continue.',
+  );
+  await expectTopicOrder(links, fixture.titles.slice(12, 24));
+  await captureTopicDiscussions(page, 'organization-change-recovery', changed, {
+    desktopTop: 730,
+    mobileTop: 615,
+    injected: [
+      'The earlier first page’s items were cleared to exercise an empty incomplete page. Its continuation and remaining response fields came from the real server.',
+      'A real organization command created another topic and invalidated the old continuation.',
+    ],
+  });
+  const restart = list.getByRole('button', { name: 'Restart from latest' });
+  await restart.focus();
+  await page.keyboard.press('Enter');
+  await expectTopicOrder(links, fixture.titles.slice(0, 12));
+  await expect(list.getByRole('button', { name: 'Show latest discussions' })).toBeFocused();
+  for (let count = 24; count <= 120; count += 12) {
+    await more.click();
+    await expect(links).toHaveCount(count);
+  }
+  const anchorTitle = fixture.titles[111]!;
+  const anchor = list.getByRole('link', { name: anchorTitle, exact: true });
+  await anchor.click();
+  await expect(page.getByRole('heading', { name: anchorTitle, exact: true })).toBeVisible();
+
+  const beforeReturn = collectionRequests.length;
+  await page.goBack();
+  await expect(continueRestoring).toBeEnabled();
+  await expect(list.getByText('Your previous place hasn’t been fully restored.')).toBeVisible();
+  expect(collectionRequests.slice(beforeReturn)).toHaveLength(8);
+  await expect(links).toHaveCount(96);
+  await expect(anchor).toHaveCount(0);
+  await captureTopicDiscussions(page, 'automatic-restore-budget', continueRestoring, {
+    desktopTop: 410,
+    mobileTop: 335,
+  });
+  await continueRestoring.click();
+  await expect(links).toHaveCount(120);
+  await expect(anchor).toBeFocused();
+  expect(collectionRequests.slice(beforeReturn)).toHaveLength(10);
+
+  const secondAnchorTitle = fixture.titles[7]!;
+  const recentlyLoaded = list.getByRole('link', { name: secondAnchorTitle, exact: true });
+  await recentlyLoaded.click();
+  await expect(page.getByRole('heading', { name: secondAnchorTitle, exact: true })).toBeVisible();
+  const held = topicSignal();
+  const unblock = topicSignal();
+  hook = async (route) => {
+    hook = async (continuation) => {
+      const response = await continuation.fetch();
+      held.resolve();
+      await unblock.promise;
+      await continuation.fulfill({ response });
+    };
+    await route.continue();
+  };
+  try {
+    const beforeInterrupt = collectionRequests.length;
+    await page.goBack();
+    await held.promise;
+    await expect(links).toHaveCount(12);
+    const newFocus = list.getByRole('link', { name: fixture.titles[1]!, exact: true });
+    await newFocus.focus();
+    await page.keyboard.press('ArrowDown');
+    unblock.resolve();
+    await expect(links).toHaveCount(24);
+    await expect(continueRestoring).toBeEnabled();
+    await expect(newFocus).toBeFocused();
+    expect(collectionRequests.slice(beforeInterrupt)).toHaveLength(2);
+  } finally {
+    unblock.resolve();
+  }
+
+  const stale = topicSignal();
+  const received = topicSignal();
+  hook = async (route) => {
+    const response = await route.fetch();
+    received.resolve();
+    await stale.promise;
+    await route.fulfill({ response });
+  };
+  try {
+    await continueRestoring.click();
+    await received.promise;
+    await page
+      .getByRole('navigation', { name: 'Topic ancestry' })
+      .getByRole('link', { name: 'Topics', exact: true })
+      .click();
+    await page.getByRole('link', { name: 'Workshop archive' }).click();
+    await expect(page).toHaveURL(server.origin + '/loom/area/' + otherTopic);
+    await expect(topicList(page).getByRole('status')).toHaveText('No discussions yet.');
+    stale.resolve();
+    await page.unrouteAll({ behavior: 'wait' });
+    await expect(discussionLinks(topicList(page))).toHaveCount(0);
+    await expect(topicList(page).getByRole('status')).toHaveText('No discussions yet.');
+  } finally {
+    stale.resolve();
+  }
+
+  const artifactEntry = `${fixture.url}?compose=artifacts`;
+  const artifactsTab = page.getByRole('button', { name: 'Artifacts', exact: true });
+  const discussionsTab = page.getByRole('button', { name: 'Discussions', exact: true });
+  const artifactComposer = page.getByRole('heading', { name: 'New text artifact', exact: true });
+  await page.goto(artifactEntry);
+  await expect(artifactsTab).toHaveAttribute('aria-pressed', 'true');
+  await expect(artifactComposer).toBeVisible();
+  await discussionsTab.click();
+  await expectTopicOrder(links, fixture.titles.slice(0, 12));
+  await list.getByRole('link', { name: longTopicTitle, exact: true }).click();
+  await expect(page.getByRole('heading', { name: longTopicTitle, exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(artifactEntry);
+  await expect(discussionsTab).toHaveAttribute('aria-pressed', 'true');
+  await expectTopicOrder(links, fixture.titles.slice(0, 12));
+  await expect(artifactComposer).toHaveCount(0);
+
+  const organization = await (
+    await api(page, `/api/v1/organization/resources/${fixture.area}`)
+  ).json();
+  const closed = await api(page, '/api/v1/organization/changes', {
+    idempotency_key: randomUUID(),
+    kind: 'area.close',
+    resource_id: fixture.area,
+    expected_version: organization.version,
+    expected_hierarchy_version: organization.hierarchy_version,
+  });
+  expect(closed.ok()).toBe(true);
+  await page.goto(fixture.url);
+  await expectTopicOrder(links, fixture.titles.slice(0, 12));
+  await expect(page.getByRole('button', { name: 'Start a discussion' })).toBeDisabled();
 });
 async function refreshList(scope: Locator, noun: 'comments' | 'replies') {
   const button = scope.getByRole('button', { name: `Refresh ${noun}`, exact: true }).first();

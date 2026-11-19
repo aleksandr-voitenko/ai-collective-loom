@@ -247,7 +247,6 @@ export async function registerParticipation(app: FastifyInstance, services: Part
     ['artifacts', 'artifacts'],
     ['participants', 'participants'],
     ['contacts', 'contacts'],
-    ['areas/:id/discussions', 'discussions'],
     ['areas/:id/artifacts', 'artifacts'],
     ['contributions/:id/children', 'children'],
     ['contributions/:id/ancestors', 'ancestors'],
@@ -272,6 +271,27 @@ export async function registerParticipation(app: FastifyInstance, services: Part
         ),
     );
   }
+  app.get(
+    '/api/v1/areas/:id/discussions',
+    {
+      schema: {
+        operationId: 'list_areas__id_discussions',
+        params,
+        querystring: C.DiscussionPageInput,
+        response: { ...errors, 200: C.Page },
+      },
+    },
+    async (request) => {
+      const options = request.query as C.DiscussionPageOptions;
+      return reads.list(
+        await actor(request),
+        'discussions',
+        (request.params as { id: string }).id.toLowerCase(),
+        options,
+        options.order,
+      );
+    },
+  );
   const adminResult = Type.Object(
     {
       operation_state: Type.Literal('committed'),

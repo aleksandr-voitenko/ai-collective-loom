@@ -499,6 +499,7 @@ test('populated 0028 upgrade preserves every old row, exact files, retry and pol
     ...before,
     revision_discussion_links: [],
     discussion_freshness_visibility: [],
+    topic_discussion_openings: [],
   });
   assert.equal((await f.admin.call(path + '/outcomes', {})).body.items.length, 0);
   assert.equal(

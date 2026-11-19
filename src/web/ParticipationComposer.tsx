@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   PublicationConfirmation,
   SubmissionRecovery,
@@ -8,7 +8,7 @@ import { usePublicationComposer, type ComposerOptions } from './usePublicationCo
 import { MentionEditor } from './MentionEditor.js';
 import { EditingIntent } from './EditingIntent.js';
 import { FileEditor } from './Files.js';
-import { Page, type PageView } from '../contracts/participation.js';
+import { Page, type CommittedView, type PageView } from '../contracts/participation.js';
 import { useQuery, SeparateDraft } from './participation-state.js';
 import { AuthoredText } from './AuthoredText.js';
 import { ChangeNoteEditor, ChangeAccountEditor } from './Changes.js';
@@ -16,7 +16,10 @@ import { ReferenceEditor } from './References.js';
 import { CoverageEditor } from './Summaries.js';
 import { Collection, ErrorText, Icon } from './participation-ui.js';
 
-export function Composer(props: ComposerOptions) {
+export function Composer({
+  confirmationAction,
+  ...props
+}: ComposerOptions & { confirmationAction?: ((result: CommittedView) => ReactNode) | undefined }) {
   const { context, heading, onClose } = props;
   const {
     reviewSeparate,
@@ -112,6 +115,7 @@ export function Composer(props: ComposerOptions) {
           result={record.result!}
           status={status}
           busy={busy}
+          action={confirmationAction?.(record.result!)}
           onStartNextRevision={
             ['summary.revise', 'revision.publish'].includes(kind)
               ? () => void startNextRevision()

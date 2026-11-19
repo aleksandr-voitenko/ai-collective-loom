@@ -14,7 +14,7 @@ import { join, resolve } from 'node:path';
 
 // This is a closed vocabulary, not a secret-pattern scrubber. Never add free text
 // (including reporter titles/errors/attachments) to an approved document.
-// Include the complete browser inventory, including Community settings and Search indexing recovery;
+// Include the complete browser inventory, including topic discussion browsing;
 // retain both byte envelopes and every per-test collection bound.
 export const limits = Object.freeze({
   events: 256,
@@ -22,7 +22,7 @@ export const limits = Object.freeze({
   contexts: 8,
   pending: 64,
   steps: 16,
-  tests: 191,
+  tests: 193,
   bytes: 131072,
   runBytes: 17 * 1024 * 1024,
 });

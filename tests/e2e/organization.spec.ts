@@ -200,7 +200,11 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   await view(page);
   expect((await api(page, '/api/v1/organization/resources/' + child)).local_open).toBe(false);
   await expect(page.getByRole('link', { name: 'Evidence reviews', exact: true })).toBeVisible();
-  await expect(page.getByText('Nothing here yet', { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'Topic discussions' })
+      .getByText('No discussions yet.', { exact: true }),
+  ).toBeVisible();
   await page.screenshot({ path: info.outputPath('organization-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Open navigation' }).click();
