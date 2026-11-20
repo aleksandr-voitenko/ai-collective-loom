@@ -175,10 +175,20 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   await manage.click();
   await page.getByRole('link', { name: 'Edit topic', exact: true }).click();
   await page.getByLabel('Topic title').fill('Evidence reviews');
-  await page.getByLabel('Scope description').fill('Published evidence and open questions.');
+  const descriptionLead = 'Published evidence and open questions.';
+  const descriptionTail = 'Prefer primary sources when suggesting a change.';
+  const description = [
+    descriptionLead,
+    'Compare research methods, record data limitations, summarize reviewer feedback, and track open questions from earlier discussions.',
+    descriptionTail,
+  ].join(' ');
+  await page.getByLabel('Scope description').fill(description);
   await page.getByRole('button', { name: 'Save topic', exact: true }).click();
   await view(page);
-  await page.getByText('About this topic', { exact: true }).click();
+  await expect(page.getByText(descriptionLead).filter({ visible: true })).toBeVisible();
+  await expect(page.getByText(descriptionTail)).toBeHidden();
+  await page.getByRole('button', { name: 'Read full description', exact: true }).press('Enter');
+  await expect(page.getByText(description, { exact: true })).toBeFocused();
   await page.getByText('Topic metadata history', { exact: true }).click();
   await expect(page.getByText('Evidence reviews · 2', { exact: true })).toBeVisible();
   await manage.click();

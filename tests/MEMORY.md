@@ -42,6 +42,8 @@ source and build provenance checks and runs separately from routine diagnostics.
 keeps raw Playwright output private and temporary for both phases.
 The browser journeys exercise keyboard and pointer disclosures, including dirty
 draft, loaded rows, pending notice and unsaved Follow settings across resizes.
+The administrator organization journey verifies the collapsed description preview
+and keyboard focus on the exact full text after opening it.
 The organization pagination journey checks a late Subtopics retry after closing
 the disclosure and confirms the response leaves focus on its summary.
 
