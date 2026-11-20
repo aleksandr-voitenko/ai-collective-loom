@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigationType } from 'react-router';
 import { type ResourceView, Onboarding } from '../contracts/participation.js';
+import { ResolvedTarget, type ResolvedTargetView } from '../contracts/references.js';
 import { type Context, useQuery } from './participation-state.js';
 import {
   OrganizationRecovery,
@@ -20,6 +21,15 @@ import { AuthorizationBoundary } from './AuthorizationBoundary.js';
 import { Collection, ErrorText, ResourceRow, Icon } from './participation-ui.js';
 import { Composer } from './ParticipationComposer.js';
 import { ResourceContent } from './ParticipationResource.js';
+import {
+  TopicDiscussionBrowser,
+  watchTopicDiscussionInteraction,
+  type TopicDiscussionBrowserHandle,
+} from './TopicDiscussionBrowser.js';
+import {
+  isDiscussionNavigationClick,
+  type TopicDiscussionPosition,
+} from './topic-discussion-navigation.js';
 
 export function Topics({ context }: { context: Context }) {
   return (
@@ -53,15 +63,25 @@ export function AreaPage({ id, context }: { id: string; context: Context }) {
 
 function AreaContent({ id, context }: { id: string; context: Context }) {
   const location = useLocation(),
+    navigationType = useNavigationType(),
     query = new URLSearchParams(location.search);
   const heading = useRef<HTMLHeadingElement>(null),
     [created, setCreated] = useState(false);
   const createButton = useRef<HTMLButtonElement>(null);
+  const discussionBrowser = useRef<TopicDiscussionBrowserHandle>(null);
+  const rememberDiscussionPosition = (position: TopicDiscussionPosition | undefined) =>
+    context.topicDiscussionNavigation?.remember(location.key, id, position);
   const [focusComposer, setFocusComposer] = useState(false);
-  const [create, setCreate] = useState(query.has('compose')),
+  const [restoration, setRestoration] = useState(() =>
+    navigationType === 'POP' ? context.topicDiscussionNavigation?.get(location.key, id) : undefined,
+  );
+  const artifactComposerRoute = query.get('compose') === 'artifacts';
+  const [create, setCreate] = useState(
+      query.has('compose') && !(restoration && artifactComposerRoute),
+    ),
     [reload, setReload] = useState(0),
     [tab, setTab] = useState<'discussions' | 'artifacts'>(
-      query.get('compose') === 'artifacts' ? 'artifacts' : 'discussions',
+      artifactComposerRoute && !restoration ? 'artifacts' : 'discussions',
     );
   const {
     data: area,
@@ -71,6 +91,12 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
     '/api/v1/organization/resources/' + id,
     OrganizationResource,
   );
+  useLayoutEffect(() => {
+    if (!area && restoration) {
+      const interaction = watchTopicDiscussionInteraction(() => setRestoration(undefined));
+      return interaction.stop;
+    }
+  }, [area, restoration]);
   useEffect(() => {
     const confirmation = location.state?.topicCreated;
     const remaining = Number(confirmation?.expiresAt) - Date.now();
@@ -152,6 +178,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
           onClick={() => {
             setTab('artifacts');
             setCreate(false);
+            setRestoration(undefined);
           }}
         >
           Artifacts
@@ -172,14 +199,36 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
             setCreate(false);
             createButton.current?.focus();
           }}
-          onCommitted={() => setReload((n) => n + 1)}
+          {...(tab === 'artifacts' ? { onCommitted: () => setReload((n) => n + 1) } : {})}
+          confirmationAction={
+            tab === 'discussions'
+              ? (result) => (
+                  <TopicDiscussionConfirmation
+                    key={result.resource_id}
+                    openingId={result.resource_id}
+                    onOpen={() =>
+                      rememberDiscussionPosition(discussionBrowser.current?.captureReturnPosition())
+                    }
+                  />
+                )
+              : undefined
+          }
         />
       )}
-      <Collection
-        key={tab + reload}
-        path={'/api/v1/areas/' + id + '/' + tab}
-        render={(item) => <ResourceRow resource={item as ResourceView} />}
-      />
+      {tab === 'discussions' ? (
+        <TopicDiscussionBrowser
+          topicId={area.resource_id}
+          restoration={restoration}
+          rememberPosition={rememberDiscussionPosition}
+          positionRef={discussionBrowser}
+        />
+      ) : (
+        <Collection
+          key={reload}
+          path={'/api/v1/areas/' + id + '/artifacts'}
+          render={(item) => <ResourceRow resource={item as ResourceView} />}
+        />
+      )}
       <details className="about" open={query.has('proposal')}>
         <summary>About this topic</summary>
         <p>{area?.description}</p>
@@ -188,6 +237,46 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
       </details>
     </>
   );
+}
+
+function TopicDiscussionConfirmation({
+  openingId,
+  onOpen,
+}: {
+  openingId: string;
+  onOpen: () => void;
+}) {
+  const target = new URLSearchParams({ kind: 'contribution', resource_id: openingId });
+  const { data, error, refresh } = useQuery<ResolvedTargetView>(
+    '/api/v1/references/target?' + target,
+    ResolvedTarget,
+  );
+  const opening = data?.representation;
+  if (
+    opening?.resource_id === openingId &&
+    opening.kind === 'contribution' &&
+    opening.parent_id === null &&
+    opening.discussion_id
+  )
+    return (
+      <Link
+        className="button primary"
+        to={`/loom/discussion/${opening.discussion_id}`}
+        onClick={(event) => {
+          if (isDiscussionNavigationClick(event)) onOpen();
+        }}
+      >
+        Open discussion
+      </Link>
+    );
+  if (error || data)
+    return (
+      <div className="topic-discussion-confirmation-retry">
+        <p role="status">Couldn’t load the discussion link.</p>
+        <button onClick={refresh}>Retry loading discussion link</button>
+      </div>
+    );
+  return <p role="status">Finding your discussion…</p>;
 }
 
 function Proposal({ context, areaId }: { context: Context; areaId?: string }) {

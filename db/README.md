@@ -161,3 +161,12 @@ checks. It extends the existing visibility invalidation trigger without changing
 old visibility values, shared publication positions, authored content, digests,
 or retained outcomes. Existing rows are not backfilled; an old comment restored
 after upgrade gets a new availability record when it becomes eligible.
+
+Migration `0032_topic_discussion_order.sql` backfills a topic-scoped index from the
+immutable opening IDs, contribution creation timestamps and first revision IDs.
+Initial opening revisions and discussion moves maintain the keys in the same
+transaction as the source change. The browse read uses the first revision ID to
+find its exact committed publication event and also checks current source authority.
+The migration changes no existing authored
+rows, publication positions or recovery records. `npm run test:participation:postgres`
+exercises the populated upgrade, bounded indexed plans and ordered HTTPS traversal.

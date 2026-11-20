@@ -51,15 +51,31 @@ reply controls. This additive route avoids changing the current/exact body endpo
 unavailable semantics. Reconsider structural disclosure if a future privacy model
 restricts contribution identity separately from the owning discussion.
 
-Other collections use stable UUID ordering for this slice; no alphabetical,
-recent-activity or relevance ordering is advertised. Revision numbers are supplied
+Default discussion browsing and other collections use stable UUID ordering.
+Revision numbers are supplied
 as decimal strings, but history pages currently use UUID order. Stable keys and
 explicit paging were selected over offset pages; concurrent insertions before a
 cursor may require a fresh traversal. These are bounded discovery views, not a
 complete catch-up feed or fixed activity interval.
 
+Guide 27 adds explicit `order=created_desc` to `/api/v1/areas/{id}/discussions`.
+This mode uses the opening's immutable creation timestamp and ID in descending
+order. It adds `discussion_created_at` while keeping `created_at` tied to the
+selected revision. Migration 0032 indexes current topic placement and those
+opening keys together so each request can seek to the cursor and read a capped
+range without sorting the whole topic. The immutable first revision ID keys an
+exact publication event lookup for each candidate. The first request captures
+`community_clocks.shared_position`. A candidate is eligible only when the
+opening's first publication event falls within that bound. A later publication
+can have an earlier creation timestamp. Skipping it consumes bounded candidate
+work and may leave an empty page with a continuation. The bound does not freeze
+authorization, availability or selected revision. Current checks apply on every
+request, including when an area is closed for publication. Omitted order
+preserves the previous row shape and ordering.
+
 Opaque AES-GCM continuations bind participant, collection and scope, hiding scanned
-protected IDs. They use an ephemeral process key. Restart, tampering or a different
+protected IDs. The newest-first order also binds the instance, order, item/byte
+controls, and existing hierarchy epoch. They use an ephemeral process key. Restart, tampering or a different
 participant/scope returns `invalid_cursor` with `replay_view`; clients start the
 view again while retaining publication intent. Deploying multiple API processes
 requires a reviewed shared cursor-key/rotation design or affinity. No such topology

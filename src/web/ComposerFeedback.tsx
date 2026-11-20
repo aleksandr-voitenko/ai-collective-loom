@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { Link } from 'react-router';
 import type { CommittedView, RevisionView } from '../contracts/participation.js';
 import type { ComposerOperation, draftCorrection } from './composer-draft.js';
@@ -12,6 +12,7 @@ export function PublicationConfirmation({
   result,
   status,
   busy,
+  action,
   onStartNextRevision,
   onWriteAnother,
   onClose,
@@ -20,6 +21,7 @@ export function PublicationConfirmation({
   result: CommittedView;
   status: string;
   busy: boolean;
+  action?: ReactNode;
   onStartNextRevision: (() => void) | undefined;
   onWriteAnother: (() => void) | undefined;
   onClose: (() => void) | undefined;
@@ -35,6 +37,7 @@ export function PublicationConfirmation({
           Inspect exact revision
         </Link>
       </p>
+      {action}
       {onStartNextRevision && (
         <>
           <button disabled={busy} onClick={onStartNextRevision}>

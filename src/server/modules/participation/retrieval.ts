@@ -8,6 +8,7 @@ import {
   type RevisionView,
   type PageView,
   type ContributionContextView,
+  type DiscussionPageOptions,
 } from '../../../contracts/participation.js';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import type { ActorContext } from '../publication/actor.js';
@@ -38,6 +39,8 @@ export type PageOptions = {
   limit?: string;
   max_response_bytes?: string;
 };
+type PagePosition = { after: string; through?: string };
+type PageCandidate = { id: string; discussion_created_at?: string; published_by_bound?: boolean };
 export function responseBudget(value?: string) {
   const budget = value === undefined ? limits.responseBytes : Number(value);
   if (
@@ -59,15 +62,15 @@ export class ParticipationRetrieval {
   // query capability; it never invalidates publication intent or exact resource IDs.
   private readonly cursorKey = randomBytes(32);
   constructor(private readonly database: Transactions) {}
-  private encode(binding: string, after: string) {
-    return encryptCursor(this.cursorKey, () => ({ binding, after }));
+  private encode(binding: string, position: PagePosition) {
+    return encryptCursor(this.cursorKey, () => ({ binding, ...position }));
   }
   private decode(binding: string, value?: string) {
     if (!value) return null;
     try {
-      const saved = decryptCursor(this.cursorKey, value) as { binding: string; after: string };
+      const saved = decryptCursor(this.cursorKey, value) as PagePosition & { binding: string };
       if (saved.binding !== binding || !/^[0-9a-f-]{36}$/.test(saved.after)) throw new Error();
-      return saved.after;
+      return saved;
     } catch {
       throw new RetrievalError('invalid_cursor');
     }
@@ -500,6 +503,7 @@ export class ParticipationRetrieval {
       | 'contacts',
     scope: string,
     options: PageOptions,
+    order?: DiscussionPageOptions['order'],
   ): Promise<PageView> {
     const pageSize = Number(options.limit ?? 12),
       budget = responseBudget(options.max_response_bytes);
@@ -508,6 +512,9 @@ export class ParticipationRetrieval {
     return this.run(async (tx) => {
       const actor = await lockActor(tx, actorContext);
       await structureGuard(tx);
+      const byCreation = kind === 'discussions' && order === 'created_desc';
+      if (byCreation) await lockContext(tx, scope, 'resolution', ['area']);
+      const orderState = byCreation ? await discussionOrderState(tx) : undefined;
       // Current-placement browsing explicitly restarts after organization changes;
       // a stale continuation cannot silently declare a moved population complete.
       const binding = JSON.stringify([
@@ -515,15 +522,28 @@ export class ParticipationRetrieval {
         kind,
         scope,
         ['areas', 'discussions', 'artifacts'].includes(kind) ? await hierarchyVersion(tx) : null,
+        ...(orderState ? [order, orderState.instance_id, pageSize, budget] : []),
       ]);
-      const after = this.decode(binding, options.cursor);
-      if (['discussions', 'artifacts'].includes(kind) && scope !== 'all')
+      const cursor = this.decode(binding, options.cursor),
+        after = cursor?.after ?? null;
+      if (
+        orderState &&
+        cursor &&
+        (!cursor.through ||
+          !/^\d{1,19}$/.test(cursor.through) ||
+          BigInt(cursor.through) > BigInt(orderState.position))
+      )
+        throw new RetrievalError('invalid_cursor');
+      const through = cursor?.through ?? orderState?.position;
+      if (!byCreation && ['discussions', 'artifacts'].includes(kind) && scope !== 'all')
         await lockContext(tx, scope, 'resolution', ['area']);
       if (kind === 'children' || kind === 'ancestors') await this.contributionOwner(tx, scope);
       if (kind === 'revisions') await lockContext(tx, scope, 'resolution');
-      let ids: { id: string }[],
+      let ids: PageCandidate[],
         ancestorNext: string | null = null;
-      if (kind === 'ancestors') {
+      if (through !== undefined) {
+        ids = await newestDiscussionCandidates(tx, scope, through, after);
+      } else if (kind === 'ancestors') {
         let next =
           after ??
           (
@@ -584,6 +604,11 @@ export class ParticipationRetrieval {
       let last = after,
         processed = 0;
       for (const row of ids.slice(0, limits.scanItems)) {
+        if (row.published_by_bound === false) {
+          last = row.id;
+          processed++;
+          continue;
+        }
         let item: PageView['items'][number] | undefined;
         try {
           if (kind === 'areas') {
@@ -613,6 +638,14 @@ export class ParticipationRetrieval {
               kind === 'revisions' ? scope : row.id,
               kind === 'revisions' ? row.id : undefined,
             );
+          if (row.discussion_created_at && 'area_id' in item) {
+            // Current context remains authoritative if indexed placement and the
+            // source ever disagree. The creation key never confers access.
+            item =
+              item.area_id === scope
+                ? { ...item, discussion_created_at: row.discussion_created_at }
+                : undefined;
+          }
         } catch (error) {
           if (!(error instanceof PublicationError) || error.code !== 'unavailable') throw error;
           if (kind === 'ancestors' || kind === 'children') {
@@ -638,7 +671,10 @@ export class ParticipationRetrieval {
       if (!page.complete) {
         const position = kind === 'ancestors' ? (ids[processed]?.id ?? ancestorNext) : last;
         if (!position) throw new RetrievalError('response_budget_too_small');
-        page.next_cursor = this.encode(binding, position);
+        page.next_cursor = this.encode(binding, {
+          after: position,
+          ...(through === undefined ? {} : { through }),
+        });
       }
       return fit(page, budget);
     });
@@ -669,4 +705,44 @@ export class ParticipationRetrieval {
       };
     });
   }
+}
+
+async function discussionOrderState(tx: SqlTransaction) {
+  const state = (
+    await tx.query<{ instance_id: string; position: string }>(
+      `SELECT s.instance_id,c.shared_position::text AS position
+       FROM loom.community_settings s CROSS JOIN loom.community_clocks c WHERE s.id=1 AND c.id=1`,
+      [],
+    )
+  ).rows[0];
+  if (!state) throw new PublicationError('service_unavailable');
+  return state;
+}
+
+async function newestDiscussionCandidates(
+  tx: SqlTransaction,
+  area: string,
+  through: string,
+  after: string | null,
+) {
+  // Resolve the key in PostgreSQL to retain microsecond precision. Apply the
+  // committed-position bound to the capped candidates, so publications that
+  // commit late with older timestamps cannot force an unbounded eligibility scan.
+  // The indexed first revision ID allows a unique event lookup even when an
+  // opening has many subsequent revisions and events.
+  return (
+    await tx.query<PageCandidate>(
+      `SELECT opening_id AS id,
+         to_char(opening_created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS discussion_created_at,
+         COALESCE((
+           SELECT e.position<=$2::bigint
+           FROM loom.shared_activity e
+           WHERE e.resource_id=c.opening_id AND e.revision_id=c.first_revision_id AND e.kind='revision.published'
+         ),false) AS published_by_bound
+       FROM loom.topic_discussion_openings c WHERE area_id=$1
+       ${after ? 'AND (opening_created_at,opening_id)<((SELECT created_at FROM loom.contributions WHERE id=$3),$3::uuid)' : ''}
+       ORDER BY opening_created_at DESC,opening_id DESC LIMIT ${limits.scanItems + 1}`,
+      after ? [area, through, after] : [area, through],
+    )
+  ).rows;
 }

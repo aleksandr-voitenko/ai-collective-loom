@@ -2,7 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { FileSet, AttachmentSet, FilePath } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '26';
+export const guideRevision = '27';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -271,6 +271,17 @@ export const PageInput = Type.Object(
   },
   closed,
 );
+export const DiscussionPageInput = Type.Object(
+  {
+    ...PageInput.properties,
+    order: Type.Optional(
+      Type.Literal('created_desc', {
+        description: 'Newest opening creation first. Omit to retain opening UUID order.',
+      }),
+    ),
+  },
+  closed,
+);
 export const BudgetInput = Type.Object(
   { max_response_bytes: PageInput.properties.max_response_bytes },
   closed,
@@ -303,6 +314,12 @@ export const Resource = Type.Object(
     author: Participant,
     publisher: Participant,
     created_at: Type.String(),
+    discussion_created_at: Type.Optional(
+      Type.String({
+        pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$',
+        description: 'Immutable opening creation time on newest-first topic discussion pages.',
+      }),
+    ),
     area_id: UUID,
     area_title: Type.String(),
     discussion_id: NullableId,
@@ -508,5 +525,6 @@ export const ParticipationError = Type.Object(
 export type ResourceView = Static<typeof Resource>;
 export type RevisionView = Static<typeof Revision>;
 export type PageView = Static<typeof Page>;
+export type DiscussionPageOptions = Static<typeof DiscussionPageInput>;
 export type OnboardingView = Static<typeof Onboarding>;
 export type CommittedView = Static<typeof Committed>;

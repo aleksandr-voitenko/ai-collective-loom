@@ -65,6 +65,20 @@ query edits from its provider key so persistent controls keep their lifetime.
 
 `ParticipationTopics.tsx` owns topics, proposals and overview composition. Overview
 embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundary.
+`TopicDiscussionBrowser.tsx` owns only the selected topic's discussion metadata.
+It requests the opt-in newest-first order, appends by stable discussion identity,
+and keeps the composer and accepted rows mounted during continuation or restart.
+The app's separate topic history keeps at most 16 entry-scoped return controls
+per participant, community and identity lifetime. Browser Back uses fresh authorized
+pages to recover the loaded extent and an approximate offset, up to eight pages
+before an explicit continuation. User input releases automatic position correction.
+The history holds no protected rows or cursors. After durable topic-discussion
+confirmation, the composer resolves the opening through the authorized contribution
+metadata resolver and offers its owning discussion link. Link recovery issues only
+a metadata read and the existing traversal remains in place. Same-window activation
+replaces that entry’s return controls with the current list extent and its first
+visible row, or the list toolbar when no row is visible. Ordinary row links use the
+activated row as their anchor.
 `ParticipationDiscussion.tsx` keeps discussion traversal, reply expansion and
 independent whole-comment collapse together. Task6 adds one
 `DiscussionFreshnessProvider` per active discussion, with a baseline before initial

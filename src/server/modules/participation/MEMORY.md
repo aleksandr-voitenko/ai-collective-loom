@@ -1,5 +1,20 @@
 # Participation boundary
 
+Guide27 adds `order=created_desc` to the selected topic's discussion collection.
+Omitting order retains opening UUID traversal. The opt-in page carries original
+opening `discussion_created_at` alongside the selected revision's `created_at`.
+Migration0032 gives `retrieval.ts` a topic-local index over opening creation time
+and descending opening ID. First revision insertion and discussion moves maintain
+transactional placement. The immutable first revision ID allows one exact event
+lookup per candidate even when the opening has a long revision history. Authorized
+resource reads still check live containment and visibility.
+The encrypted continuation binds participant, instance, topic, hierarchy, order,
+page/byte budgets and the opening boundary. SQL resolves the timestamp at its
+original precision. First-revision publication events must fall at or below the
+committed shared-clock position captured before page selection. This freezes
+creation eligibility only. Filtering can consume the existing 100-candidate budget
+without returning an item. Continuation and response overhead remain budgeted.
+
 Guide26 adds `discussion-freshness-1`, a separate authenticated read-only POST
 contract. Baseline captures the committed shared clock before initial discussion
 reads; owner/instance/epoch/discussion-bound encrypted cursors scan at most32
