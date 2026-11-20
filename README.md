@@ -41,8 +41,17 @@ requests retain their exact bytes. **Formatting help** explains the supported Ma
 Preview checks its rendering. Confirmed publications use a compact result row, while
 uncertain submissions retain their recovery controls. **Drafts** in navigation exposes
 local drafts and status recovery; save feedback confirms only writes on this device.
-Open a topic’s **Discussions** tab to browse compact rows with the original author
-and creation date. **Load more discussions** adds older rows beneath the list.
+Open a topic to see its ancestry and newest discussions. Use **Start a discussion**,
+**Search this topic** and **Follow** beside the topic title. **Artifacts** switches to
+the topic’s artifacts. The controls below the title open **Subtopics**, **About this
+topic**, **Follow settings** and **Routine attention** at any screen size. About
+contains the full description when the header shows a preview, organizational
+proposals, administrator contacts and metadata history. Administrators find topic
+creation, editing, moves and closure controls under **Manage topic**. Follow and
+attention controls flag changes that need review. Closed topics stay readable and
+display the reason when an ancestor prevents new contributions.
+Discussion rows show the original author and creation date. **Load more discussions**
+adds older rows beneath the list.
 While the list is open, visible and online, Loom checks for changes about every
 15 seconds. **New discussions available** signals a publication in this topic.
 **Discussions updated** signals other changes, such as an edited opening, a move

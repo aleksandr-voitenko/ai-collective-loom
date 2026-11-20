@@ -222,10 +222,12 @@ export function MuteControl({
   context,
   target,
   initial,
+  presentation,
 }: {
   context: Context;
   target: FollowTargetView;
   initial?: P.MuteItemView;
+  presentation?: 'topic-disclosure';
 }) {
   const key = contentKey(target);
   const [current, setCurrent] = useState<P.MuteItemView>(),
@@ -346,7 +348,7 @@ export function MuteControl({
     if (r) result(r);
   }
   const preview = session.authority.preview(target, authorizedPreview);
-  return (
+  const controls = (
     <div className="attention-control" data-mute-target={key}>
       <p>
         Routine {target.kind} updates ·{' '}
@@ -391,6 +393,24 @@ export function MuteControl({
       {message && <p role="status">{message}</p>}
       <Recovery session={session} onResult={result} />
     </div>
+  );
+  if (presentation !== 'topic-disclosure') return controls;
+  return (
+    <details className="topic-disclosure topic-attention">
+      <summary>
+        <span>Routine attention</span>
+        <span className="topic-disclosure-status" aria-live="polite">
+          {session.busy
+            ? 'Saving…'
+            : session.records.length
+              ? 'Review change'
+              : session.error
+                ? 'Review error'
+                : ''}
+        </span>
+      </summary>
+      <div className="topic-disclosure-panel">{controls}</div>
+    </details>
   );
 }
 export function DismissControl({

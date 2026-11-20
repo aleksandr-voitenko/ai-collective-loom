@@ -1171,6 +1171,167 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+.loom-app .selected-topic {
+  max-inline-size: 67rem;
+  overflow-wrap: anywhere;
+}
+.loom-app:has(.selected-topic) .account > div {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.loom-app:has(.selected-topic) .account > button {
+  flex-shrink: 0;
+}
+.loom-app .selected-topic-header .breadcrumb {
+  gap: 4px 9px;
+  margin-block-end: 14px;
+}
+.loom-app .selected-topic-header .breadcrumb > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.loom-app .selected-topic-header .breadcrumb a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  min-inline-size: 24px;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.loom-app .selected-topic-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 24px;
+}
+.loom-app .selected-topic-identity {
+  flex: 1 1 18rem;
+  min-inline-size: 0;
+}
+.loom-app .selected-topic-identity h1 {
+  margin-block-end: 0;
+}
+.loom-app .selected-topic-description {
+  max-inline-size: 68ch;
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.loom-app .selected-topic-description .text-button {
+  display: inline;
+  padding-inline: 2px;
+  min-block-size: 32px;
+  text-decoration: underline;
+}
+.loom-app .selected-topic-closed {
+  margin: 8px 0 0;
+  font-weight: 650;
+}
+.loom-app .selected-topic-actions,
+.loom-app .selected-topic-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.loom-app .selected-topic-actions > :is(button, .button) {
+  min-block-size: 44px;
+  padding-inline: 10px;
+  white-space: normal;
+}
+.loom-app .selected-topic-details {
+  margin-block-start: 12px;
+}
+.loom-app .selected-topic-details > .topic-disclosure {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.loom-app .selected-topic-details > .topic-disclosure[open] {
+  flex-basis: 100%;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--line);
+}
+.loom-app .selected-topic-details > .topic-disclosure > summary {
+  box-sizing: border-box;
+  min-block-size: 40px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: var(--side);
+}
+.loom-app .selected-topic-details > .topic-disclosure[open] > summary {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin-block-end: 12px;
+}
+.loom-app .selected-topic-details > .topic-disclosure > summary:hover {
+  background: #e6ece3;
+}
+.loom-app .selected-topic-details .topic-disclosure-status:not(:empty) {
+  display: inline-block;
+  margin-inline-start: 6px;
+  font-weight: 650;
+  color: var(--accent);
+}
+.loom-app .selected-topic-details .topic-directory,
+.loom-app .selected-topic-details .organization-actions {
+  margin-block: 0;
+}
+.loom-app .selected-topic-details :is(.pagination, .pagination > div) {
+  flex-wrap: wrap;
+}
+.loom-app .selected-topic-details .pagination {
+  padding-block: 8px 0;
+}
+.loom-app .selected-topic-about > p {
+  margin-block: 0 8px;
+}
+.loom-app .selected-topic-about > .text-button {
+  margin-inline-end: 16px;
+  min-block-size: 40px;
+  text-decoration: underline;
+}
+.loom-app .selected-topic-full-description {
+  white-space: pre-wrap;
+}
+.loom-app .topic-follow-settings fieldset {
+  max-inline-size: 34rem;
+  min-inline-size: 0;
+  margin-block: 10px;
+}
+.loom-app .topic-follow-settings label {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding-block: 5px;
+}
+.loom-app .topic-follow-settings input[type='checkbox'] {
+  flex-shrink: 0;
+  inline-size: auto;
+}
+.loom-app .topic-follow-confirmation {
+  margin-block: 8px 0;
+}
+.loom-app .topic-follow-confirmation:empty {
+  margin-block: 0;
+}
+.loom-app .selected-topic .topic-tabs {
+  margin-block: 12px;
+}
+.loom-app .selected-topic .topic-tabs button {
+  min-block-size: 44px;
+}
+@media (max-width: 760px) {
+  .loom-app .selected-topic-actions > :is(button, .button) {
+    padding-inline: 8px;
+  }
+  .loom-app .selected-topic-details > .topic-disclosure > summary {
+    min-block-size: 44px;
+    padding-block: 11px;
+  }
+}
 .loom-app .topic-tabs {
   display: flex;
   gap: 25px;
@@ -1403,9 +1564,6 @@
 .destination-id {
   display: block;
   overflow-wrap: anywhere;
-}
-.topic-state {
-  color: var(--text-muted, #546158);
 }
 .loom-app nav.breadcrumb {
   display: flex;

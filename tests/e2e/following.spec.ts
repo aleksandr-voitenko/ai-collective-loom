@@ -93,17 +93,56 @@ test('Follow/edit/unfollow preserves parent and same-name child choices, unavail
   await page.goto(server.origin + '/loom/following');
   await expect(page.getByRole('heading', { name: 'No explicit follows' })).toBeVisible();
   const areaAlias = f.area.toUpperCase();
+  await page.route(
+    '**/api/v1/me/following/private/lookup',
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: { code: 'service_unavailable', message: 'Follow lookup failed' } },
+      }),
+    { times: 1 },
+  );
   await page.goto(server.origin + '/loom/area/' + areaAlias);
   const parent = control(page, 'area', f.area);
+  const settings = parent.getByText('Follow settings', { exact: true });
+  await expect(parent.locator('summary').getByText('Review error')).toBeVisible();
+  await settings.click();
+  await expect(parent.getByRole('alert')).toContainText('Follow lookup failed');
+  await parent.getByRole('button', { name: 'Refresh follow state' }).click();
   await expect(parent.getByRole('button', { name: 'Follow', exact: true })).toBeEnabled();
+  await settings.click();
   await parent.getByRole('button', { name: 'Follow', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(parent.getByRole('button', { name: 'Unfollow', exact: true })).toBeEnabled();
-  await parent.getByText('Follow settings', { exact: true }).click();
-  await parent.getByLabel('Include subtopics').check();
-  await parent.getByLabel('Opening edits').uncheck();
+  await expect(parent.getByText(/Following settings saved/)).toBeVisible();
+
+  const preview = barrier();
+  const previewPath = '**/api/v1/me/attention/previews';
+  await page.route(previewPath, async (route) => {
+    await preview.promise;
+    await route.continue();
+  });
+  const descendants = parent.getByLabel('Include subtopics');
+  const openingEdits = parent.getByLabel('Opening edits');
+  try {
+    await page.reload();
+    await settings.click();
+    await descendants.check();
+    await openingEdits.uncheck();
+    await settings.click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(descendants).toBeHidden();
+  } finally {
+    preview.release();
+  }
+  await settings.click();
+  await expect(parent.getByRole('link', { name: 'View changes' })).toBeVisible();
+  await expect(descendants).toBeChecked();
+  await expect(openingEdits).not.toBeChecked();
+  await page.unroute(previewPath);
   await parent.getByRole('button', { name: 'Save follow settings' }).click();
   await expect(parent.getByRole('button', { name: 'Unfollow', exact: true })).toBeEnabled();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   for (const child of children)
     await api(page, '/api/v1/me/following/state', {
       target: { kind: 'area', resource_id: child },

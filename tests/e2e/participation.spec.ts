@@ -649,7 +649,8 @@ test('topic discussion browser appends, returns and publishes without replacing 
     cursorPages: boolean[],
   ) {
     await open.focus();
-    await frameTopicRow(open);
+    // Leave room for the anchor to reach the same offset after Back closes the composer.
+    await open.evaluate((link) => window.scrollBy(0, link.getBoundingClientRect().top - 140));
     await expect(visibleAnchor).toBeInViewport({ ratio: 1 });
     const anchorOffset = await rowsTop(visibleAnchor);
     await page.keyboard.press('Enter');
@@ -1011,6 +1012,33 @@ test('topic discussion freshness preserves reading and drafts through arrival, a
   expect(Math.abs((await rowsTop(firstRow)) - offset)).toBeLessThanOrEqual(1);
   expect(Math.abs((await page.evaluate(() => scrollY)) - scrollBefore)).toBeLessThanOrEqual(1);
   await captureTopicDiscussions(page, 'external-arrival-with-retained-draft', latest, review);
+
+  const about = page.getByText('About this topic', { exact: true });
+  const history = page.getByText('Topic metadata history', { exact: true });
+  await about.focus();
+  await page.keyboard.press('Enter');
+  await expect(history).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(history).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await about.click();
+  await expect(history).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await about.click();
+  await expect(history).toBeHidden();
+  await expect(notice).toBeVisible();
+  await expectTopicOrder(links, originalTitles);
+  expect(listRequests).toHaveLength(2);
+  expect(
+    await Promise.all(originalRows.map((row) => row.evaluate((node) => node.isConnected))),
+  ).toEqual(originalRows.map(() => true));
+  await expect(editor).toHaveValue(draftBody);
+  expect(await editor.evaluate((node, handle) => node === handle, originalEditor)).toBe(true);
+  expect(
+    await editor.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd]),
+  ).toEqual([5, 19]);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await editor.focus();
 
   try {
     failNextCheck = true;

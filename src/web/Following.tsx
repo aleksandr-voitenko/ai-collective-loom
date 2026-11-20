@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { MuteControl } from './Attention.js';
 import {
   AuthorizationBoundary,
@@ -65,12 +65,18 @@ export function FollowControl({
   initial,
   onState,
   onConfirmation,
+  renderTopicControls,
 }: {
   context: Context;
   target: C.FollowTargetView;
   initial?: FollowingItem;
   onState?: (item: FollowingItem) => void;
   onConfirmation?: (message: string) => void;
+  renderTopicControls?: (controls: {
+    followAction: ReactNode;
+    followSettings: ReactNode;
+    attention: ReactNode;
+  }) => ReactNode;
 }) {
   const authority = useAuthorization();
   const [item, setItem] = useState(initial),
@@ -78,7 +84,7 @@ export function FollowControl({
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
-    [message, setMessage] = useState(''),
+    [message, setMessage] = useState<{ text: string; needsReview?: boolean }>(),
     [descendants, setDescendants] = useState(initial?.settings.include_descendants ?? false),
     [preferences, setPreferences] = useState<C.FollowSettingsView['preferences']>(
       initial?.settings.preferences ?? [...C.eventPreferences],
@@ -92,7 +98,7 @@ export function FollowControl({
   const current = item?.settings,
     source = authority.preview(target, item?.preview?.generation)?.source;
   const active = () => live.current && owner.current === identityGeneration() && authority.active();
-  function accept(next: FollowingItem) {
+  function accept(next: FollowingItem, response: 'settings' | 'preview' = 'settings') {
     if (!active()) return latest.current;
     const fresh =
       next.preview && authority.current(next.preview.generation)
@@ -102,7 +108,12 @@ export function FollowControl({
       merged = mergeItem(previous, fresh);
     latest.current = merged;
     setItem(merged);
-    if (!previous || next.settings.version >= previous.settings.version) {
+    // Topic preferences can be edited after the private lookup while its
+    // independent preview is pending. That preview carries the same choices.
+    if (
+      (response !== 'preview' || !renderTopicControls) &&
+      (!previous || next.settings.version >= previous.settings.version)
+    ) {
       setDescendants(merged.settings.include_descendants);
       setPreferences(merged.settings.preferences);
     }
@@ -140,7 +151,7 @@ export function FollowControl({
           ? await authority.previewLookup(target, context.self, protectedRefresh)
           : undefined;
         if (mine === sequence.current && authority.current(generation))
-          accept({ settings, preview: { generation: generation! } });
+          accept({ settings, preview: { generation: generation! } }, 'preview');
       } else {
         const item = await authority.followingLookup(target, context.self);
         if (mine === sequence.current) accept(item);
@@ -187,7 +198,9 @@ export function FollowControl({
   ) {
     if (result.operation_state === 'not_recorded') {
       if (active())
-        setMessage('No decision is recorded yet. Keep the original intent; it may still complete.');
+        setMessage({
+          text: 'No decision is recorded yet. Keep the original intent; it may still complete.',
+        });
       return;
     }
     await context.store.complete(record);
@@ -202,7 +215,10 @@ export function FollowControl({
             : state.following
               ? 'Following settings saved. Existing change views keep their bound settings.'
               : 'Explicit follow removed. Other subscriptions, Saved items and direct attention are unchanged.';
-      setMessage(confirmation);
+      setMessage({
+        text: confirmation,
+        needsReview: result.operation_state === 'version_conflict',
+      });
       onConfirmation?.(confirmation);
     }
     // Completion can outlive the source view. Notify the same owner only, and
@@ -213,7 +229,7 @@ export function FollowControl({
     if (busy || (!retry && (!current || loading))) return;
     setBusy(true);
     setError('');
-    setMessage('');
+    setMessage(undefined);
     let retained: Intent | undefined;
     try {
       if (retry) retained = await context.store.prepareDispatch(retry, retry.body);
@@ -297,6 +313,160 @@ export function FollowControl({
     }
   }
   const disabled = busy || loading || !current || !!pending;
+  const followAction = !pending && (
+    <button
+      disabled={
+        disabled ||
+        (!current?.following && (!!error || !preferences.length || source?.state !== 'available'))
+      }
+      aria-pressed={current?.following ?? false}
+      onClick={() => void mutate(!current?.following)}
+    >
+      {busy
+        ? 'Saving follow…'
+        : loading && !current
+          ? 'Checking follow…'
+          : current?.following
+            ? 'Unfollow'
+            : 'Follow'}
+    </button>
+  );
+  const viewChanges = current && source?.state === 'available' && (
+    <Link to={changesUrl(target, current.include_descendants)}>View changes</Link>
+  );
+  const settings = current && !pending && (
+    <>
+      <fieldset disabled={disabled}>
+        <legend>Changes to include</legend>
+        {target.kind === 'area' && (
+          <label>
+            <input
+              type="checkbox"
+              checked={descendants}
+              onChange={(e) => setDescendants(e.target.checked)}
+            />
+            Include subtopics
+          </label>
+        )}
+        {C.eventPreferences.map((p) => (
+          <label key={p}>
+            <input
+              type="checkbox"
+              checked={preferences.includes(p)}
+              onChange={(e) =>
+                setPreferences(
+                  C.eventPreferences.filter((v) =>
+                    v === p ? e.target.checked : preferences.includes(v),
+                  ),
+                )
+              }
+            />
+            {preferenceLabels[p]}
+          </label>
+        ))}
+        <button
+          disabled={!preferences.length || source?.state !== 'available'}
+          onClick={() => void mutate(true)}
+        >
+          Save follow settings
+        </button>
+      </fieldset>
+      <p className="fineprint">
+        This is an explicit subscription. Parent and child choices remain separate.
+      </p>
+    </>
+  );
+  const recovery = pending && (
+    <div className="notice" aria-label="Following recovery">
+      <strong>
+        {pending.state === 'rejected'
+          ? 'This Following change was rejected.'
+          : 'Following change awaiting confirmation.'}
+      </strong>
+      <p>
+        {pending.body.following ? 'Follow' : 'Unfollow'} · {target.kind}
+      </p>
+      {pending.state === 'rejected' ? (
+        <button
+          disabled={busy}
+          onClick={() =>
+            void context.store
+              .remove(pending)
+              .then(() => {
+                changed(context);
+                if (active()) {
+                  setPending(undefined);
+                  void refresh();
+                }
+              })
+              .catch((e) => active() && setError(text(e)))
+          }
+        >
+          Dismiss rejected follow
+        </button>
+      ) : (
+        <>
+          <button disabled={busy} onClick={() => void status()}>
+            Check follow status
+          </button>
+          <button disabled={busy} onClick={() => void mutate(false, pending)}>
+            Retry same follow change
+          </button>
+        </>
+      )}
+    </div>
+  );
+  const failure = error && (
+    <div role="alert">
+      <p>{error}</p>
+      <button disabled={busy} onClick={() => void refresh(true)}>
+        Refresh follow state
+      </button>
+    </div>
+  );
+  const confirmation = message && (
+    <p role="status" className="fineprint">
+      {message.text}
+    </p>
+  );
+  if (renderTopicControls) {
+    return (
+      <div className="topic-follow-control" data-follow-target={key}>
+        {renderTopicControls({
+          followAction,
+          followSettings: (
+            <details className="topic-disclosure topic-follow-settings">
+              <summary>
+                <span>Follow settings</span>
+                <span className="topic-disclosure-status" aria-live="polite">
+                  {busy
+                    ? 'In progress…'
+                    : pending || message?.needsReview
+                      ? 'Review change'
+                      : error
+                        ? 'Review error'
+                        : ''}
+                </span>
+              </summary>
+              <div className="topic-disclosure-panel">
+                {!current && loading && !pending && <p role="status">Checking follow settings…</p>}
+                {viewChanges}
+                {settings}
+                {recovery}
+                {failure}
+              </div>
+            </details>
+          ),
+          attention: context.community.attention_contract && (
+            <MuteControl context={context} target={target} presentation="topic-disclosure" />
+          ),
+        })}
+        <p role="status" className="fineprint topic-follow-confirmation">
+          {message?.text}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="follow-control" data-follow-target={key}>
       {context.community.attention_contract && (
@@ -305,124 +475,17 @@ export function FollowControl({
           <MuteControl context={context} target={target} />
         </details>
       )}
-      {!pending && (
-        <button
-          disabled={
-            disabled ||
-            (!current?.following &&
-              (!!error || !preferences.length || source?.state !== 'available'))
-          }
-          aria-pressed={current?.following ?? false}
-          onClick={() => void mutate(!current?.following)}
-        >
-          {busy
-            ? 'Saving follow…'
-            : loading && !current
-              ? 'Checking follow…'
-              : current?.following
-                ? 'Unfollow'
-                : 'Follow'}
-        </button>
-      )}
-      {current && source?.state === 'available' && (
-        <Link to={changesUrl(target, current.include_descendants)}>View changes</Link>
-      )}
-      {current && !pending && (
+      {followAction}
+      {viewChanges}
+      {settings && (
         <details>
           <summary>Follow settings</summary>
-          <fieldset disabled={disabled}>
-            <legend>Changes to include</legend>
-            {target.kind === 'area' && (
-              <label>
-                <input
-                  type="checkbox"
-                  checked={descendants}
-                  onChange={(e) => setDescendants(e.target.checked)}
-                />
-                Include subtopics
-              </label>
-            )}
-            {C.eventPreferences.map((p) => (
-              <label key={p}>
-                <input
-                  type="checkbox"
-                  checked={preferences.includes(p)}
-                  onChange={(e) =>
-                    setPreferences(
-                      C.eventPreferences.filter((v) =>
-                        v === p ? e.target.checked : preferences.includes(v),
-                      ),
-                    )
-                  }
-                />
-                {preferenceLabels[p]}
-              </label>
-            ))}
-            <button
-              disabled={!preferences.length || source?.state !== 'available'}
-              onClick={() => void mutate(true)}
-            >
-              Save follow settings
-            </button>
-          </fieldset>
-          <p className="fineprint">
-            This is an explicit subscription. Parent and child choices remain separate.
-          </p>
+          {settings}
         </details>
       )}
-      {pending && (
-        <div className="notice" aria-label="Following recovery">
-          <strong>
-            {pending.state === 'rejected'
-              ? 'This Following change was rejected.'
-              : 'Following change awaiting confirmation.'}
-          </strong>
-          <p>
-            {pending.body.following ? 'Follow' : 'Unfollow'} · {target.kind}
-          </p>
-          {pending.state === 'rejected' ? (
-            <button
-              disabled={busy}
-              onClick={() =>
-                void context.store
-                  .remove(pending)
-                  .then(() => {
-                    changed(context);
-                    if (active()) {
-                      setPending(undefined);
-                      void refresh();
-                    }
-                  })
-                  .catch((e) => active() && setError(text(e)))
-              }
-            >
-              Dismiss rejected follow
-            </button>
-          ) : (
-            <>
-              <button disabled={busy} onClick={() => void status()}>
-                Check follow status
-              </button>
-              <button disabled={busy} onClick={() => void mutate(false, pending)}>
-                Retry same follow change
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {error && (
-        <div role="alert">
-          <p>{error}</p>
-          <button disabled={busy} onClick={() => void refresh(true)}>
-            Refresh follow state
-          </button>
-        </div>
-      )}
-      {message && (
-        <p role="status" className="fineprint">
-          {message}
-        </p>
-      )}
+      {recovery}
+      {failure}
+      {confirmation}
     </div>
   );
 }

@@ -161,6 +161,9 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
     });
   await page.clock.fastForward(6001);
   await expect(page.getByText('Topic created.', { exact: true })).toHaveCount(0);
+  const manage = page.getByText('Manage topic', { exact: true });
+  await manage.focus();
+  await page.keyboard.press('Enter');
   await page.getByRole('link', { name: 'Create subtopic', exact: true }).click();
   await page.getByLabel('Topic name').fill('Reviews');
   await expect(page.getByText('Inside Research', { exact: true })).toBeVisible();
@@ -169,14 +172,26 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   const child = page.url().split('/').at(-1)!;
   expect((await api(page, '/api/v1/organization/resources/' + child)).description).toBe('');
   await expect(page.getByRole('navigation', { name: 'Topic ancestry' })).toContainText('Research');
+  await manage.click();
   await page.getByRole('link', { name: 'Edit topic', exact: true }).click();
   await page.getByLabel('Topic title').fill('Evidence reviews');
-  await page.getByLabel('Scope description').fill('Published evidence and open questions.');
+  const descriptionLead = 'Published evidence and open questions.';
+  const descriptionTail = 'Prefer primary sources when suggesting a change.';
+  const description = [
+    descriptionLead,
+    'Compare research methods, record data limitations, summarize reviewer feedback, and track open questions from earlier discussions.',
+    descriptionTail,
+  ].join(' ');
+  await page.getByLabel('Scope description').fill(description);
   await page.getByRole('button', { name: 'Save topic', exact: true }).click();
   await view(page);
-  await page.getByText('About this topic', { exact: true }).click();
+  await expect(page.getByText(descriptionLead).filter({ visible: true })).toBeVisible();
+  await expect(page.getByText(descriptionTail)).toBeHidden();
+  await page.getByRole('button', { name: 'Read full description', exact: true }).press('Enter');
+  await expect(page.getByText(description, { exact: true })).toBeFocused();
   await page.getByText('Topic metadata history', { exact: true }).click();
   await expect(page.getByText('Evidence reviews · 2', { exact: true })).toBeVisible();
+  await manage.click();
   await page.getByRole('link', { name: 'Move topic', exact: true }).click();
   await page.getByRole('button', { name: 'Select General', exact: true }).focus();
   await page.keyboard.press('Enter');
@@ -189,22 +204,47 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   await page.keyboard.press('Enter');
   await view(page);
   expect((await api(page, '/api/v1/organization/resources/' + child)).parent_id).toBe(d.general);
-  await command(page, child, 'area.close');
+  const discussion = 'Evidence stays readable';
+  await api(page, '/api/v1/discussions', {
+    idempotency_key: randomUUID(),
+    area_id: child,
+    title: discussion,
+    content: content('Existing discussion in the child topic.'),
+  });
   await page.goto(server.origin + '/loom/area/' + d.general);
+  await manage.click();
   await page.getByRole('link', { name: 'Close topic', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm close', exact: true }).click();
   await view(page);
-  await expect(page.getByText('Closed to contributions', { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText('Closed to contributions', { exact: true }).filter({ visible: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start a discussion' })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const subtopics = page.locator('summary').filter({ hasText: /^Subtopics$/ });
+  await subtopics.click();
+  await page.getByRole('link', { name: 'Evidence reviews', exact: true }).click();
+  await expect(page.getByText(/Closed to contributions.*ancestor topic/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start a discussion' })).toBeDisabled();
+  await expect(page.getByRole('link', { name: discussion, exact: true })).toBeVisible();
+  await command(page, child, 'area.close');
+  await page
+    .getByRole('navigation', { name: 'Topic ancestry' })
+    .getByRole('link', { name: 'General', exact: true })
+    .click();
+  await manage.click();
   await page.getByRole('link', { name: 'Reopen topic', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm reopen', exact: true }).click();
   await view(page);
   expect((await api(page, '/api/v1/organization/resources/' + child)).local_open).toBe(false);
+  await subtopics.click();
   await expect(page.getByRole('link', { name: 'Evidence reviews', exact: true })).toBeVisible();
   await expect(
     page
       .getByRole('region', { name: 'Topic discussions' })
       .getByText('No discussions yet.', { exact: true }),
   ).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: info.outputPath('organization-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Open navigation' }).click();
@@ -213,6 +253,106 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('organization-mobile.png'), fullPage: true });
 });
+
+async function checkSubtopicPages(page: Page, origin: string, general: string) {
+  const subtopics = page.locator('summary').filter({ hasText: /^Subtopics$/ });
+  const directory = page.getByRole('region', { name: 'Subtopics', exact: true });
+  const firstPage = barrier(),
+    retryPage = barrier(),
+    lastPage = barrier();
+  const requested: Array<string | null> = [];
+  const continuation = 'synthetic-next-subtopics-page';
+  await page.route(
+    (url) =>
+      url.pathname === '/api/v1/organization/children' &&
+      url.searchParams.get('parent_id') === general,
+    async (route) => {
+      const url = new URL(route.request().url());
+      const cursor = url.searchParams.get('cursor');
+      requested.push(cursor);
+      const attempt = requested.length;
+      url.searchParams.delete('cursor');
+      const response = await route.fetch({ url: url.href });
+      if (attempt === 1) await firstPage.promise;
+      if (attempt === 6) await lastPage.promise;
+      if ([2, 5, 6].includes(attempt)) {
+        await route.fulfill({
+          response,
+          json: {
+            ...(await response.json()),
+            ...(attempt === 5 ? {} : { items: [] }),
+            complete: attempt === 6,
+            next_cursor: attempt === 6 ? null : continuation,
+          },
+        });
+      } else if (attempt === 3) {
+        await route.fulfill({
+          status: 503,
+          json: {
+            error: {
+              code: 'service_unavailable',
+              message: 'Subtopics are temporarily unavailable',
+            },
+          },
+        });
+      } else {
+        if (attempt === 4) await retryPage.promise;
+        await route.fulfill({ response });
+      }
+    },
+  );
+  try {
+    await page.goto(origin + '/loom/area/' + general);
+    await expect(directory).toBeHidden();
+    await subtopics.focus();
+    await page.keyboard.press('Enter');
+    await expect(directory.getByText('Loading subtopics…')).toBeVisible();
+    firstPage.release();
+    await expect(directory.getByText('No subtopics yet.')).toBeVisible();
+    const next = directory.getByRole('button', { name: 'Next topics' });
+    await expect(next).toHaveCount(0);
+    await expect(directory.getByRole('button', { name: 'Previous topics' })).toHaveCount(0);
+
+    const title = 'Field observations';
+    await create(page, title, general);
+    await directory.getByRole('button', { name: 'Refresh topics' }).click();
+    await expect(directory.getByText(/Continue to see more/)).toBeVisible();
+    await next.click();
+    await expect(directory.getByRole('alert')).toContainText(
+      'Subtopics are temporarily unavailable',
+    );
+    await directory.getByRole('button', { name: 'Retry topics page' }).click();
+    await expect.poll(() => requested).toEqual([null, null, continuation, continuation]);
+
+    await subtopics.focus();
+    await page.keyboard.press('Space');
+    await expect(directory).toBeHidden();
+    retryPage.release();
+    const child = page.getByRole('link', { name: title, exact: true, includeHidden: true });
+    await expect(child).toHaveCount(1);
+    await expect(subtopics).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(child).toBeVisible();
+
+    const previous = directory.getByRole('button', { name: 'Previous topics' });
+    await previous.press('Enter');
+    await expect(next).toBeEnabled();
+    await expect(directory.getByRole('heading', { name: 'Subtopics', exact: true })).toBeFocused();
+    await next.press('Enter');
+    const refresh = directory.getByRole('button', { name: 'Refresh topics' });
+    await refresh.focus();
+    lastPage.release();
+    await expect(directory.getByText('No subtopics on this page.')).toBeVisible();
+    await expect(refresh).toBeFocused();
+    await expect(previous).toBeEnabled();
+    await expect(next).toHaveCount(0);
+  } finally {
+    firstPage.release();
+    retryPage.release();
+    lastPage.release();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+}
 
 test('topic creation recovers a lost committed response without duplicate creation and allows a fresh form', async ({
   page,
@@ -571,7 +711,8 @@ test('proposal route changes and closure retain the ordinary draft, affected-are
       .rows[0].n,
   ).toBe(0);
   await page.goto(server.origin + '/loom/area/' + d.general);
-  await page.getByText('About this topic', { exact: true }).click();
+  const about = page.getByText('About this topic', { exact: true });
+  await about.click();
   const before = (await server.observer.query('SELECT count(*)::int AS n FROM loom.discussions'))
     .rows[0].n;
   await page.getByRole('button', { name: 'Suggest an organizational change' }).click();
@@ -591,7 +732,23 @@ test('proposal route changes and closure retain the ordinary draft, affected-are
   expect((record.body.proposal_context as any).affected_area_id).toBe(d.general);
   await page.goto(server.origin + '/loom/help');
   await page.getByRole('link').filter({ hasText: 'discussion.create · rejected' }).click();
-  await expect(page.getByLabel('Text', { exact: true })).toHaveValue('Please organize this area.');
+  await expect(page).toHaveURL(
+    server.origin + '/loom/area/' + d.general + '?proposal=1&intent=' + record.key,
+  );
+  const editor = page.getByLabel('Text', { exact: true });
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue('Please organize this area.');
+  const originalEditor = await editor.elementHandle();
+  await about.click();
+  await expect(editor).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(editor).toBeHidden();
+  await about.focus();
+  await page.keyboard.press('Enter');
+  await expect(editor).toBeVisible();
+  expect(await editor.evaluate((node, handle) => node === handle, originalEditor)).toBe(true);
+  await expect(editor).toHaveValue('Please organize this area.');
+  expect((await records(page)).find((r) => r.key === record.key)?.body).toEqual(record.body);
   await command(page, d.feedback, 'area.open');
   await command(page, d.feedback, 'area.edit', {
     title: 'Renamed feedback',
@@ -727,6 +884,8 @@ test('destination pagination fails explicitly after a hierarchy change and refre
   await expect(
     page.getByRole('heading', { name: 'Choose a destination', exact: true }),
   ).toBeFocused();
+  await test.step('Subtopics distinguishes page states and keeps focus when closed during retry', () =>
+    checkSubtopicPages(page, server.origin, d.general));
 });
 
 test('discussion close and reopen controls retain readable history and distinguish inherited closure', async ({

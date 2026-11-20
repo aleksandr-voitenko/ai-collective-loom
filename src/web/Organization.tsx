@@ -15,7 +15,13 @@ import { useQuery, useIntent, SeparateDraft, type Context } from './participatio
 function pathText(area: OrganizationResourceView) {
   return [...area.ancestors.map((a) => a.title), area.title].join(' › ');
 }
-export function TopicLocation({ area }: { area: OrganizationResourceView }) {
+export function TopicLocation({
+  area,
+  includeCurrent = true,
+}: {
+  area: OrganizationResourceView;
+  includeCurrent?: boolean;
+}) {
   return (
     <nav className="breadcrumb" aria-label="Topic ancestry">
       <Link to="/loom">Topics</Link>
@@ -25,7 +31,7 @@ export function TopicLocation({ area }: { area: OrganizationResourceView }) {
           › <Link to={'/loom/area/' + parent.id}>{parent.title}</Link>
         </span>
       ))}
-      <span> › {area.title}</span>
+      {includeCurrent && <span> › {area.title}</span>}
     </nav>
   );
 }
@@ -33,13 +39,16 @@ export function TopicDirectory({
   parent,
   select,
   selectionLabel = 'Choose a destination',
+  presentation,
 }: {
   parent?: string;
   select?: (area: OrganizationResourceView) => void;
   selectionLabel?: string;
+  presentation?: 'subtopics-disclosure';
 }) {
   const [cursor, setCursor] = useState(''),
     [previous, setPrevious] = useState<string[]>([]);
+  const subtopicsDisclosure = presentation === 'subtopics-disclosure' && !!parent && !select;
   const base = '/api/v1/organization/' + (select ? 'destinations' : 'children');
   const query = new URLSearchParams({
     ...(!select && parent ? { parent_id: parent } : {}),
@@ -50,9 +59,22 @@ export function TopicDirectory({
     heading = useRef<HTMLHeadingElement>(null);
   if (result.data) last.current = result.data;
   useEffect(() => {
-    if (result.data && previous.length) heading.current?.focus();
+    if (!subtopicsDisclosure && result.data && previous.length) heading.current?.focus();
   }, [result.data]);
+  function focusSubtopicsHeading() {
+    // The paging control can disappear or become disabled. Move focus during
+    // the action so a delayed response can't take it back from the reader.
+    if (subtopicsDisclosure) heading.current?.focus();
+  }
   const data = result.data ?? last.current;
+  const completeEmpty = !subtopicsDisclosure
+    ? 'No topics here yet.'
+    : previous.length
+      ? 'No subtopics on this page.'
+      : 'No subtopics yet.';
+  const incompleteEmpty = subtopicsDisclosure
+    ? 'This page has no subtopics. Continue to see more.'
+    : 'Continue to the next page of topics.';
   return (
     <section
       className="topic-directory"
@@ -61,9 +83,19 @@ export function TopicDirectory({
       <h2 tabIndex={-1} ref={heading}>
         {select ? selectionLabel : parent ? 'Subtopics' : 'Root topics'}
       </h2>
-      {result.error && <p role="alert">{result.error} The previous page may be out of date.</p>}
-      {!result.data && !result.error && <p role="status">Loading topics…</p>}
-      <div className="collection" aria-busy={!result.data && !result.error}>
+      {result.error && (
+        <p role="alert">
+          {result.error}
+          {(!subtopicsDisclosure || last.current) && ' The previous page may be out of date.'}
+        </p>
+      )}
+      {!result.data && !result.error && (
+        <p role="status">{subtopicsDisclosure ? 'Loading subtopics…' : 'Loading topics…'}</p>
+      )}
+      <div
+        className={!subtopicsDisclosure || data?.items.length ? 'collection' : undefined}
+        aria-busy={!result.data && !result.error}
+      >
         {data?.items.map((area) => (
           <div className="list-row" key={area.resource_id}>
             <div>
@@ -92,8 +124,8 @@ export function TopicDirectory({
             )}
           </div>
         ))}
-        {result.data && !data?.items.length && (
-          <p>{data?.complete ? 'No topics here yet.' : 'Continue to the next page of topics.'}</p>
+        {result.data && !result.data.items.length && (
+          <p>{result.data.complete ? completeEmpty : incompleteEmpty}</p>
         )}
       </div>
       <div className="pagination">
@@ -108,30 +140,42 @@ export function TopicDirectory({
           Refresh topics
         </button>
         {result.error && (
-          <button type="button" onClick={result.refresh}>
+          <button
+            type="button"
+            onClick={() => {
+              focusSubtopicsHeading();
+              result.refresh();
+            }}
+          >
             Retry topics page
           </button>
         )}
-        <button
-          type="button"
-          disabled={!previous.length || !result.data}
-          onClick={() => {
-            setCursor(previous.at(-1)!);
-            setPrevious((p) => p.slice(0, -1));
-          }}
-        >
-          Previous topics
-        </button>
-        <button
-          type="button"
-          disabled={!result.data?.next_cursor}
-          onClick={() => {
-            setPrevious((p) => [...p, cursor].slice(-100));
-            setCursor(result.data!.next_cursor!);
-          }}
-        >
-          Next topics
-        </button>
+        {(!subtopicsDisclosure || !!previous.length) && (
+          <button
+            type="button"
+            disabled={!previous.length || !result.data}
+            onClick={() => {
+              focusSubtopicsHeading();
+              setCursor(previous.at(-1)!);
+              setPrevious((p) => p.slice(0, -1));
+            }}
+          >
+            Previous topics
+          </button>
+        )}
+        {(!subtopicsDisclosure || data?.next_cursor) && (
+          <button
+            type="button"
+            disabled={!result.data?.next_cursor}
+            onClick={() => {
+              focusSubtopicsHeading();
+              setPrevious((p) => [...p, cursor].slice(-100));
+              setCursor(result.data!.next_cursor!);
+            }}
+          >
+            Next topics
+          </button>
+        )}
       </div>
     </section>
   );
