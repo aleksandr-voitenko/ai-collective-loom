@@ -583,7 +583,7 @@ test('identity invalidation fences an outstanding listing', async (t) => {
 
 function visiblePolling(t: TestContext, hidden = () => false) {
   t.mock.getter(document, 'hidden', hidden);
-  let now = performance.now();
+  let now = 0;
   t.mock.method(performance, 'now', () => now);
   t.mock.timers.enable({ apis: ['setTimeout'] });
   return async (delay = 15000) =>
