@@ -3,6 +3,7 @@ import type { TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import * as C from '../contracts/participation.js';
 import * as Fresh from '../contracts/discussion-freshness.js';
+import { TopicFreshnessResult } from '../contracts/topic-discussion-freshness.js';
 import * as A from '../contracts/attention.js';
 import * as F from '../contracts/following.js';
 import * as P from '../contracts/private-controls.js';
@@ -578,6 +579,14 @@ add(
   'read',
   sourceErrors,
   classified(Fresh.Freshness, ['displayed[].state']),
+);
+// Scope and session refusals withdraw through the existing boundary. Opaque
+// row tags and audit indexes are matched to exact held rows by the list owner.
+add(
+  ['POST /api/v1/areas/{id}/discussions/freshness'],
+  'read',
+  sourceErrors,
+  classified(TopicFreshnessResult, []),
 );
 add(
   ['POST /api/v1/me/notifications/query'],

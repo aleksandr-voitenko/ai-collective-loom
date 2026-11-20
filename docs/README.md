@@ -18,6 +18,7 @@
 | [Publication recovery decision](adr/015-publication-reconciliation.md) | Canonical scoped attempts, reference-only resolution, disclosure and retention limits. |
 | [Authored text](adr/011-authored-text.md) | Versioned safe Markdown/entity subset and candidate limits. |
 | [Bounded retrieval](adr/016-bounded-participation-retrieval.md) | Parentage, exact bodies, live authorization, continuations and setup states. |
+| [Topic discussion freshness](adr/044-topic-discussion-freshness.md) | Bounded change discovery for direct topic discussions, current authority and explicit application. |
 | [Browser recovery](adr/017-browser-participation-recovery.md) | Scoped durable intent, late responses, conflicts and reading independence. |
 | [Topic organization decision](adr/020-topic-organization.md) | Authoritative parentage, metadata history, versioned moves/closure and common event ordering. |
 | [Private Saved items decision](adr/013-private-saved-items.md) | Implemented owner-private bookmarks, version preconditions, retained decisions and synthetic bounds; reading remains independent. |

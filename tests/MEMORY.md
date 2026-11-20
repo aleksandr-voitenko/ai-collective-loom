@@ -15,6 +15,23 @@ restart and keyboard focus, revalidation and request fences after topic, instanc
 identity and authorization changes. `integration/topic-discussion-order.test.ts`
 exercises microsecond ties and boundaries, the legacy API, committed-position races,
 populated migration, response limits and the indexed candidate and event probes.
+`integration/topic-discussion-freshness.test.ts` covers a late commit with an older
+creation time, direct placement and exact authority, restored visibility, bounded
+catch-up and ordinary read accounting. The activity and visibility plans limit
+candidates before authorizing their sources, and the sparse audit fixture checks
+that opening and ancestor lookups avoid scanning unrelated resources. Mounted
+tests exercise observation recovery, withdrawal during a held page, restoration
+before the next page request, and Retry-After across overlapping reads.
+The compiled topic freshness journeys use real external and same-account HTTPS
+publications. They measure retained editor identity, selection, focus, reading
+position, row identities and continuation across quiet detection. Controlled list
+responses exercise the initial boundary, application failure and a commit during
+application. A separate confirmed suppression withdraws a row while an earlier
+successful list response is held, followed by real restoration and explicit
+application. Controlled browser timing exercises contention, Retry-After, hidden
+and offline checks, Artifacts and sign-out. Opt-in review frames use
+`LOOM_TOPIC_DISCUSSION_FRESHNESS_REVIEW=1` and identify injected conditions in the
+compiled application’s provenance manifest.
 
 Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
 scope/token refusal, bounded shared/visibility continuation across decimal widths, restoration after
@@ -868,7 +885,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 193 collected tests and <17 MiB/candidate. The test count admits
+128 KiB/document, 195 collected tests and <17 MiB/candidate. The test count admits
 the complete current suite, including the topic discussion browser journeys;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe

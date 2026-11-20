@@ -11,8 +11,12 @@ import {
 import { Link } from 'react-router';
 import { Page, type PageView, type ResourceView } from '../contracts/participation.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
-import { ApiError, identityGeneration } from './participation-client.js';
+import { ApiError, identityGeneration, type Self } from './participation-client.js';
 import { Avatar } from './participation-ui.js';
+import {
+  useTopicDiscussionFreshness,
+  watchedTopicDiscussionKey,
+} from './useTopicDiscussionFreshness.js';
 import {
   TOPIC_DISCUSSION_ORDER,
   isDiscussionNavigationClick,
@@ -20,6 +24,7 @@ import {
 } from './topic-discussion-navigation.js';
 
 const restorationPageBudget = 8;
+const maxOverlappingWithdrawalTags = 256;
 type DiscussionRow = ResourceView & { discussion_id: string; discussion_created_at: string };
 type Traversal = {
   rows: DiscussionRow[];
@@ -38,6 +43,7 @@ type List = {
   notice?: 'anchor-missing' | 'extent-changed' | undefined;
 };
 type Interaction = ReturnType<typeof watchTopicDiscussionInteraction>;
+type ListRequest = { controller: AbortController; withdrawn?: Set<string> };
 
 class ListChanged extends Error {}
 
@@ -84,6 +90,7 @@ function acceptPage(
       !('author' in item) ||
       !item.discussion_id ||
       !item.discussion_created_at ||
+      !item.discussion_observation_tags ||
       item.area_id !== topicId.toLowerCase() ||
       item.parent_id !== null
     )
@@ -105,14 +112,34 @@ function acceptPage(
   };
 }
 
-function listStatus(view: List, traversal: Traversal | undefined) {
+function withdrawRows(traversal: Traversal, tags: ReadonlySet<string>, before = 0) {
+  const revoked = (row: DiscussionRow) =>
+    row.discussion_observation_tags?.some((tag) => tags.has(tag)) ||
+    tags.has(watchedTopicDiscussionKey(row));
+  if (!tags.size || !traversal.rows.some(revoked)) return { traversal, removed: 0, before: 0 };
+  let removedBefore = 0;
+  const rows = traversal.rows.filter((row, index) => {
+    if (!revoked(row)) return true;
+    if (index < before) removedBefore++;
+    return false;
+  });
+  return {
+    traversal: { ...traversal, rows },
+    removed: traversal.rows.length - rows.length,
+    before: removedBefore,
+  };
+}
+
+function listStatus(view: List, traversal: Traversal | undefined, updatePending: boolean) {
   if (view.pending === 'latest') return 'Loading the latest discussions…';
   if (view.pending && view.goal) return 'Restoring your place…';
   if (view.pending === 'initial') return 'Loading discussions…';
   if (view.pending === 'append') return 'Loading more discussions…';
   if (!traversal) return null;
-  if (traversal.complete)
-    return traversal.rows.length ? 'End of discussions.' : 'No discussions yet.';
+  if (traversal.complete) {
+    if (traversal.rows.length) return 'End of discussions.';
+    return updatePending ? 'No discussions in this list.' : 'No discussions yet.';
+  }
   const count = traversal.rows.length;
   if (!count) return 'More discussions may be available.';
   return `${count} ${count === 1 ? 'discussion' : 'discussions'} loaded`;
@@ -120,6 +147,7 @@ function listStatus(view: List, traversal: Traversal | undefined) {
 
 type Props = {
   topicId: string;
+  self: Self;
   restoration?: TopicDiscussionPosition | undefined;
   rememberPosition?: ((position: TopicDiscussionPosition) => void) | undefined;
   positionRef?: Ref<TopicDiscussionBrowserHandle> | undefined;
@@ -133,11 +161,11 @@ export function TopicDiscussionBrowser(props: Props) {
   return <DiscussionList key={props.topicId} {...props} />;
 }
 
-function DiscussionList({ topicId, restoration, rememberPosition, positionRef }: Props) {
+function DiscussionList({ topicId, self, restoration, rememberPosition, positionRef }: Props) {
   const authority = useAuthorization();
   const [view, setView] = useState<List>({ pending: 'initial', goal: restoration });
   const current = useRef(view);
-  const request = useRef<AbortController | undefined>(undefined);
+  const request = useRef<ListRequest | undefined>(undefined);
   const interaction = useRef<Interaction | undefined>(undefined);
   const section = useRef<HTMLElement>(null),
     latestAction = useRef<HTMLButtonElement>(null),
@@ -157,6 +185,54 @@ function DiscussionList({ topicId, restoration, rememberPosition, positionRef }:
     current.current = value;
     setView(value);
   };
+  function interruptRead() {
+    if (!request.current) return;
+    const active = request.current;
+    request.current = undefined;
+    active.controller.abort();
+    interaction.current?.stop();
+    const { pending, goal, traversal } = current.current;
+    publish({
+      ...current.current,
+      pending: undefined,
+      failure: goal && traversal ? 'restore' : pending,
+    });
+  }
+  const freshness = useTopicDiscussionFreshness(topicId, self, {
+    rows: () => current.current.traversal?.rows ?? [],
+    interruptRead,
+    retag(updated) {
+      const traversal = current.current.traversal;
+      if (!traversal || !updated.size) return;
+      const rows = traversal.rows.map((row) => {
+        const tags = updated.get(watchedTopicDiscussionKey(row));
+        if (!tags || tags.every((tag, index) => tag === row.discussion_observation_tags?.[index]))
+          return row;
+        return { ...row, discussion_observation_tags: tags };
+      });
+      if (rows.some((row, index) => row !== traversal.rows[index]))
+        publish({ ...current.current, traversal: { ...traversal, rows } });
+    },
+    withdraw(tags, before) {
+      const withdrawn = request.current?.withdrawn;
+      if (withdrawn) {
+        // A held page may contain a source that has just lost authority. Keep
+        // bounded negative evidence until that read settles, including Back.
+        for (const tag of tags) {
+          withdrawn.add(tag);
+          if (withdrawn.size > maxOverlappingWithdrawalTags) {
+            interruptRead();
+            break;
+          }
+        }
+      }
+      const traversal = current.current.traversal;
+      if (!traversal) return { removed: 0, before: 0 };
+      const result = withdrawRows(traversal, tags, before);
+      if (result.removed) publish({ ...current.current, traversal: result.traversal });
+      return result;
+    },
+  });
 
   async function load(action: Action, goal?: TopicDiscussionPosition) {
     if (request.current || !authority.active()) return;
@@ -169,26 +245,43 @@ function DiscussionList({ topicId, restoration, rememberPosition, positionRef }:
     const controller = new AbortController(),
       owner = identityGeneration(),
       generation = authority.capture();
-    request.current = controller;
+    const active: ListRequest = { controller };
+    request.current = active;
     const live = () =>
-      request.current === controller &&
-      owner === identityGeneration() &&
-      authority.current(generation);
+      request.current === active && owner === identityGeneration() && authority.current(generation);
     const tracked = goal || action === 'latest' ? watchTopicDiscussionInteraction() : undefined;
     interaction.current = tracked;
     const hadFooterFocus = document.activeElement === footerAction.current;
     publish({ traversal: prior, pending: action, goal, restartRequired });
 
     try {
+      const baseline = fresh ? await freshness.prepare(controller.signal) : undefined;
+      if (!live()) return;
       for (let i = 0; i < (goal ? restorationPageBudget : 1); i++) {
         const cursor = traversal?.next;
+        // A newly dispatched page rechecks authority, including restorations.
+        const withdrawn = (active.withdrawn = new Set());
         const result = await authority.readAuthorized<PageView>(
           `/api/v1/areas/${topicId}/discussions?` +
-            new URLSearchParams({ order: TOPIC_DISCUSSION_ORDER, ...(cursor ? { cursor } : {}) }),
+            new URLSearchParams({
+              order: TOPIC_DISCUSSION_ORDER,
+              observe: '1',
+              ...(cursor ? { cursor } : {}),
+            }),
           { schema: Page, signal: controller.signal },
         );
         if (!live() || !authority.current(result.generation)) return;
-        traversal = acceptPage(traversal, result.value, result.generation, topicId);
+        const authorized = withdrawRows(
+          acceptPage(
+            cursor ? current.current.traversal : undefined,
+            result.value,
+            result.generation,
+            topicId,
+          ),
+          withdrawn,
+        );
+        traversal = authorized.traversal;
+        if (fresh && i === 0) freshness.accept(baseline, authorized.removed > 0);
         const anchorFound =
           goal &&
           (!goal.discussionId ||
@@ -229,13 +322,13 @@ function DiscussionList({ topicId, restoration, rememberPosition, positionRef }:
         error instanceof ListChanged ||
         (error instanceof ApiError && error.code === 'invalid_cursor');
       publish({
-        traversal: traversal ?? prior,
+        traversal: current.current.traversal,
         failure: changed ? 'changed' : goal && traversal ? 'restore' : action,
         restartRequired: changed || restartRequired,
         goal,
       });
     } finally {
-      if (request.current === controller) request.current = undefined;
+      if (request.current === active) request.current = undefined;
       if (positionPlan.current?.interaction !== tracked) tracked?.stop();
     }
   }
@@ -245,7 +338,7 @@ function DiscussionList({ topicId, restoration, rememberPosition, positionRef }:
   useEffect(() => {
     void load('initial', restoration);
     return () => {
-      request.current?.abort();
+      request.current?.controller.abort();
       request.current = undefined;
       interaction.current?.stop();
       positionPlan.current = undefined;
@@ -344,6 +437,20 @@ function DiscussionList({ topicId, restoration, rememberPosition, positionRef }:
         >
           Show latest discussions
         </button>
+        <p
+          className="topic-discussion-freshness"
+          role="status"
+          aria-label="Discussion list updates"
+        >
+          {freshness.change === 'new_discussions' && <strong>New discussions available</strong>}
+          {freshness.change === 'updated' && <strong>Discussions updated</strong>}
+          {freshness.failed && (
+            <>
+              {' '}
+              <span>Couldn’t check for updates. Retrying…</span>
+            </>
+          )}
+        </p>
       </div>
       {failure === 'latest' && (
         <p role="alert" className="notice error">
@@ -395,7 +502,7 @@ function DiscussionList({ topicId, restoration, rememberPosition, positionRef }:
           </p>
         )}
         <p ref={status} tabIndex={-1} role="status">
-          {listStatus(view, traversal)}
+          {listStatus(view, traversal, freshness.change !== 'none')}
         </p>
         {footerLabel && (
           <button ref={footerAction} type="button" aria-disabled={!!pending} onClick={footerClick}>

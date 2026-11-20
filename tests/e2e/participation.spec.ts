@@ -328,6 +328,7 @@ async function seedTopicBrowser(
   return {
     titles,
     area,
+    agentClient,
     collection: '/api/v1/areas/' + area + '/discussions',
     url: server.origin + '/loom/area/' + area,
   };
@@ -726,7 +727,9 @@ test('topic discussion browser bounds restoration and recovers from organization
     await route.fulfill({ response, json: { ...body, items: [] } });
   };
   await retry.click();
-  await expect(list.getByRole('status')).toHaveText('More discussions may be available.');
+  await expect(list.getByRole('status', { name: '', exact: true })).toHaveText(
+    'More discussions may be available.',
+  );
   await expect(links).toHaveCount(0);
   await more.click();
   await expectTopicOrder(links, fixture.titles.slice(12, 24));
@@ -836,11 +839,12 @@ test('topic discussion browser bounds restoration and recovers from organization
       .click();
     await page.getByRole('link', { name: 'Workshop archive' }).click();
     await expect(page).toHaveURL(server.origin + '/loom/area/' + otherTopic);
-    await expect(topicList(page).getByRole('status')).toHaveText('No discussions yet.');
+    const collectionStatus = topicList(page).getByRole('status', { name: '', exact: true });
+    await expect(collectionStatus).toHaveText('No discussions yet.');
     stale.resolve();
     await page.unrouteAll({ behavior: 'wait' });
     await expect(discussionLinks(topicList(page))).toHaveCount(0);
-    await expect(topicList(page).getByRole('status')).toHaveText('No discussions yet.');
+    await expect(collectionStatus).toHaveText('No discussions yet.');
   } finally {
     stale.resolve();
   }
@@ -877,6 +881,449 @@ test('topic discussion browser bounds restoration and recovers from organization
   await expectTopicOrder(links, fixture.titles.slice(0, 12));
   await expect(page.getByRole('button', { name: 'Start a discussion' })).toBeDisabled();
 });
+
+async function publishTopicDiscussion(
+  fixture: Awaited<ReturnType<typeof seedTopicBrowser>>,
+  title: string,
+) {
+  const result = await fixture.agentClient.call('/api/v1/discussions', {
+    idempotency_key: randomUUID(),
+    area_id: fixture.area,
+    title,
+    content: text(title),
+  });
+  expect(result.status).toBe(201);
+}
+
+test('topic discussion freshness preserves reading and drafts through arrival, application and retry', async ({
+  page,
+  context,
+  server,
+}) => {
+  const fixture = await seedTopicBrowser(page, context, server, 39);
+  const freshnessPath = fixture.collection + '/freshness';
+  const list = topicList(page);
+  const links = discussionLinks(list);
+  const more = loadTopicDiscussions(list);
+  const latest = list.getByRole('button', { name: 'Show latest discussions', exact: true });
+  const updates = list.getByRole('status', { name: 'Discussion list updates' });
+  const notice = updates.getByText('New discussions available', { exact: true });
+  const checkingFailure = updates.getByText('Couldn’t check for updates. Retrying…', {
+    exact: true,
+  });
+  const editor = page.getByLabel('Text', { exact: true });
+  const draftTitle = 'Plan the autumn reading group';
+  const draftBody =
+    'I’m looking for a few volunteers to help gather suggestions for the reading group.';
+  const firstArrival = 'A workshop invitation from another participant';
+  const racedArrival = 'Reading suggestions that arrived during the update';
+  const listRequests: Array<{ url: URL; next: string | null }> = [];
+  const requests: Request[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/v1/')) requests.push(request);
+  });
+  let onNextListing: ((route: Route) => Promise<void>) | undefined;
+  await page.route(
+    (url) => url.pathname === fixture.collection,
+    async (route) => {
+      const hook = onNextListing;
+      onNextListing = undefined;
+      if (hook) await hook(route);
+      else {
+        const response = await route.fetch();
+        listRequests.push({
+          url: new URL(route.request().url()),
+          next: (await response.json()).next_cursor,
+        });
+        await route.fulfill({ response });
+      }
+    },
+  );
+  const retryRelease = topicSignal();
+  const retryEntered = topicSignal();
+  let failNextCheck = false;
+  let holdNextCheck = false;
+  await page.route(
+    (url) => url.pathname === freshnessPath,
+    async (route) => {
+      if (route.request().postDataJSON().action === 'check') {
+        if (failNextCheck) {
+          failNextCheck = false;
+          holdNextCheck = true;
+          await route.abort('connectionfailed');
+          return;
+        }
+        if (holdNextCheck) {
+          holdNextCheck = false;
+          const response = await route.fetch();
+          retryEntered.resolve();
+          await retryRelease.promise;
+          await route.fulfill({ response });
+          return;
+        }
+      }
+      await route.continue();
+    },
+  );
+
+  await page.goto(fixture.url);
+  await expectTopicOrder(links, fixture.titles.slice(0, 12));
+  await more.click();
+  const originalTitles = fixture.titles.slice(0, 24);
+  await expectTopicOrder(links, originalTitles);
+  const originalContinuation = listRequests.at(-1)!.next;
+  expect(originalContinuation).toBeTruthy();
+  await page.getByRole('button', { name: 'Start a discussion', exact: true }).click();
+  await page.getByLabel('Title', { exact: true }).fill(draftTitle);
+  await editor.fill(draftBody);
+  await editor.focus();
+  await editor.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(5, 19));
+  const originalEditor = await editor.elementHandle();
+  const originalRows = await links.elementHandles();
+  const firstRow = links.first();
+  await firstRow.evaluate((node) => window.scrollBy(0, node.getBoundingClientRect().top - 710));
+  await expect(firstRow).toBeInViewport();
+  const review = { review: 'freshness', desktopTop: 725, mobileTop: 585 } as const;
+  await captureTopicDiscussions(page, 'before-external-arrival', latest, review);
+  const offset = await rowsTop(firstRow);
+  const scrollBefore = await page.evaluate(() => scrollY);
+  const beforeDiscovery = requests.length;
+
+  await publishTopicDiscussion(fixture, firstArrival);
+  // The normal schedule discovers the external publication with no focus or refresh trigger.
+  await expect(notice).toBeVisible({ timeout: 22000 });
+  const discoveredBy = requests.slice(beforeDiscovery);
+  expect(discoveredBy.length).toBeGreaterThan(0);
+  expect(discoveredBy.every((request) => new URL(request.url()).pathname === freshnessPath)).toBe(
+    true,
+  );
+  await expectTopicOrder(links, originalTitles);
+  expect(
+    await Promise.all(originalRows.map((row) => row.evaluate((node) => node.isConnected))),
+  ).toEqual(originalRows.map(() => true));
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue(draftBody);
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue(draftTitle);
+  expect(await editor.evaluate((node, handle) => node === handle, originalEditor)).toBe(true);
+  expect(
+    await editor.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd]),
+  ).toEqual([5, 19]);
+  expect(Math.abs((await rowsTop(firstRow)) - offset)).toBeLessThanOrEqual(1);
+  expect(Math.abs((await page.evaluate(() => scrollY)) - scrollBefore)).toBeLessThanOrEqual(1);
+  await captureTopicDiscussions(page, 'external-arrival-with-retained-draft', latest, review);
+
+  try {
+    failNextCheck = true;
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(checkingFailure).toBeVisible({ timeout: 22000 });
+    await expect(notice).toBeVisible();
+    await expectTopicOrder(links, originalTitles);
+    await expect(editor).toBeFocused();
+    await expect(editor).toHaveValue(draftBody);
+    await captureTopicDiscussions(page, 'temporarily-unable-to-check', latest, {
+      ...review,
+      injected: [
+        'One automatic check received a synthetic connection failure. Its real retry response was held until the screenshot was taken.',
+      ],
+    });
+    await retryEntered.promise;
+    retryRelease.resolve();
+    await expect(checkingFailure).toHaveCount(0);
+    await expect(notice).toBeVisible();
+  } finally {
+    retryRelease.resolve();
+  }
+
+  await more.click();
+  await expectTopicOrder(links, fixture.titles.slice(0, 36));
+  expect(listRequests.at(-1)!.url.searchParams.get('cursor')).toBe(originalContinuation);
+  onNextListing = listFailure;
+  await latest.focus();
+  await page.keyboard.press('Enter');
+  const applyFailure = list.getByRole('alert');
+  await expect(applyFailure).toContainText('The latest discussions could not be loaded.');
+  await expectTopicOrder(links, fixture.titles.slice(0, 36));
+  await expect(notice).toBeVisible();
+  await expect(latest).toBeFocused();
+  await expect(editor).toHaveValue(draftBody);
+  await captureTopicDiscussions(page, 'latest-application-failed', latest, {
+    ...review,
+    mobileTop: 575,
+    injected: ['The first explicit application received one synthetic HTTP 503.'],
+  });
+
+  const listingEntered = topicSignal();
+  const listingRelease = topicSignal();
+  onNextListing = async (route) => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    listingEntered.resolve();
+    await listingRelease.promise;
+    await route.fulfill({ response });
+  };
+  try {
+    await latest.click();
+    await listingEntered.promise;
+    await expectTopicOrder(links, fixture.titles.slice(0, 36));
+    // Playwright's independent HTTP client uses the same account, without going through the composer.
+    const fromSameAccount = await api(page, '/api/v1/discussions', {
+      idempotency_key: randomUUID(),
+      area_id: fixture.area,
+      title: racedArrival,
+      content: text(racedArrival),
+    });
+    expect(fromSameAccount.status()).toBe(201);
+    await editor.focus();
+    await page.keyboard.press('ArrowLeft');
+    const userScroll = await page.evaluate(() => scrollY);
+    listingRelease.resolve();
+    await expectTopicOrder(links, [firstArrival, ...fixture.titles.slice(0, 11)]);
+    await expect(editor).toBeFocused();
+    await expect(editor).toHaveValue(draftBody);
+    expect(Math.abs((await page.evaluate(() => scrollY)) - userScroll)).toBeLessThanOrEqual(1);
+    expect(await editor.evaluate((node, handle) => node === handle, originalEditor)).toBe(true);
+  } finally {
+    listingRelease.resolve();
+  }
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(notice).toBeVisible({ timeout: 22000 });
+  await expect(list.getByRole('link', { name: racedArrival, exact: true })).toHaveCount(0);
+
+  const restartedTitles = [racedArrival, firstArrival, ...fixture.titles];
+  await latest.click();
+  await expectTopicOrder(links, restartedTitles.slice(0, 12));
+  await expect(notice).toHaveCount(0);
+  await expect(editor).toHaveValue(draftBody);
+  expect(await editor.evaluate((node, handle) => node === handle, originalEditor)).toBe(true);
+  await captureTopicDiscussions(page, 'latest-discussions-applied', latest, {
+    ...review,
+    injected: [
+      'An earlier application response was held after its read so a real same-account publication could commit. The captured application used an ordinary list response.',
+    ],
+  });
+  const newContinuation = listRequests.at(-1)!.next;
+  expect(newContinuation).toBeTruthy();
+  expect(newContinuation).not.toBe(originalContinuation);
+  await more.click();
+  await expectTopicOrder(links, restartedTitles.slice(0, 24));
+  expect(listRequests.at(-1)!.url.searchParams.get('cursor')).toBe(newContinuation);
+});
+
+test('topic discussion freshness coordinates the first listing and pauses with the view', async ({
+  page,
+  context,
+  server,
+}) => {
+  const fixture = await seedTopicBrowser(page, context, server, 14);
+  const freshnessPath = fixture.collection + '/freshness';
+  const initialArrival = 'A discussion published between observation and listing';
+  const list = topicList(page);
+  const links = discussionLinks(list);
+  const latest = list.getByRole('button', { name: 'Show latest discussions', exact: true });
+  let baselines = 0;
+  let checks = 0;
+  let completed = 0;
+  let throttle = false;
+  let hold:
+    | { entered: ReturnType<typeof topicSignal>; release: ReturnType<typeof topicSignal> }
+    | undefined;
+  page.on('response', (response) => {
+    if (
+      new URL(response.url()).pathname === freshnessPath &&
+      response.request().postDataJSON().action === 'check' &&
+      response.ok()
+    )
+      completed++;
+  });
+
+  await page.route(
+    (url) => url.pathname === freshnessPath,
+    async (route) => {
+      const action = route.request().postDataJSON().action;
+      if (action === 'baseline') {
+        const response = await route.fetch();
+        expect(response.status()).toBe(200);
+        baselines++;
+        await route.fulfill({ response });
+        return;
+      }
+      if (action !== 'check') {
+        await route.continue();
+        return;
+      }
+      checks++;
+      if (throttle) {
+        throttle = false;
+        await route.fulfill({
+          status: 429,
+          headers: { 'retry-after': '5' },
+          json: {
+            error: {
+              code: 'temporarily_throttled',
+              message: 'Please retry shortly.',
+              request_id: randomUUID(),
+              recovery: { action: 'retry_after' },
+            },
+          },
+        });
+        return;
+      }
+      const pending = hold;
+      hold = undefined;
+      const response = await route.fetch();
+      if (pending) {
+        pending.entered.resolve();
+        await pending.release.promise;
+      }
+      await route.fulfill({ response });
+    },
+  );
+  await page.route(
+    (url) => url.pathname === fixture.collection,
+    async (route) => {
+      expect(baselines).toBeGreaterThan(0);
+      await publishTopicDiscussion(fixture, initialArrival);
+      await route.continue();
+    },
+    { times: 1 },
+  );
+  await page.clock.install();
+  await page.goto(fixture.url);
+  await expectTopicOrder(links, [initialArrival, ...fixture.titles.slice(0, 11)]);
+
+  const focusBurst = () =>
+    page.evaluate(() => {
+      for (let index = 0; index < 4; index++) window.dispatchEvent(new Event('focus'));
+    });
+  const oneCheck = async (stimulus: () => Promise<void>) => {
+    const before = { checks, completed };
+    await stimulus();
+    await expect.poll(() => completed).toBe(before.completed + 1);
+    expect(checks).toBe(before.checks + 1);
+  };
+  const setDocumentHidden = (hidden: boolean) =>
+    page.evaluate((hidden) => {
+      // Headless Chromium may keep every page visible. Drive the lifecycle event for this view.
+      if (hidden) Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      else Reflect.deleteProperty(document, 'hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+
+  await oneCheck(() => page.clock.fastForward(16_000));
+  throttle = true;
+  const beforeThrottle = checks;
+  const throttled = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === freshnessPath && response.status() === 429,
+  );
+  await focusBurst();
+  await throttled;
+  await expect(list.getByText(/Retrying/)).toBeVisible();
+  expect(checks).toBe(beforeThrottle + 1);
+  await focusBurst();
+  await page.clock.fastForward(3_000);
+  expect(checks).toBe(beforeThrottle + 1);
+  await oneCheck(() => page.clock.fastForward(3_000));
+
+  const pending = { entered: topicSignal(), release: topicSignal() };
+  hold = pending;
+  const beforePending = { checks, completed };
+  try {
+    await focusBurst();
+    await pending.entered.promise;
+    await focusBurst();
+    await page.clock.fastForward(8_000);
+    expect(checks).toBe(beforePending.checks + 1);
+    pending.release.resolve();
+    await expect.poll(() => completed).toBe(beforePending.completed + 1);
+  } finally {
+    pending.release.resolve();
+  }
+
+  await setDocumentHidden(true);
+  const whileHidden = checks;
+  await focusBurst();
+  await page.clock.fastForward(16_000);
+  expect(checks).toBe(whileHidden);
+  await oneCheck(async () => {
+    await setDocumentHidden(false);
+    await focusBurst();
+  });
+  await context.setOffline(true);
+  await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
+  const whileOffline = checks;
+  await focusBurst();
+  await page.clock.fastForward(16_000);
+  expect(checks).toBe(whileOffline);
+  await oneCheck(() => context.setOffline(false));
+
+  const withdrawn = list.getByRole('link', { name: initialArrival, exact: true });
+  const withdrawnId = (await withdrawn.getAttribute('href'))!.split('/').at(-1)!;
+  const stalePage = { entered: topicSignal(), release: topicSignal() };
+  await page.route(
+    (url) => url.pathname === fixture.collection,
+    async (route) => {
+      const response = await route.fetch();
+      expect((await response.json()).items[0].title).toBe(initialArrival);
+      stalePage.entered.resolve();
+      await stalePage.release.promise;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
+  try {
+    await latest.click();
+    await stalePage.entered.promise;
+    await setTopicDiscussionSuppression(page, withdrawnId, true);
+    await oneCheck(focusBurst);
+    await expect(withdrawn).toHaveCount(0);
+    stalePage.release.resolve();
+    await expect(latest).toBeEnabled();
+    await expect(list.getByRole('alert')).toHaveCount(0);
+  } finally {
+    stalePage.release.resolve();
+  }
+  await expectTopicOrder(links, fixture.titles.slice(0, 11));
+  const updated = list.getByText('Discussions updated', { exact: true });
+  await expect(updated).toBeVisible();
+  await captureTopicDiscussions(page, 'authority-withdrawal', updated, {
+    review: 'freshness',
+    desktopTop: 720,
+    mobileTop: 355,
+    injected: [
+      'The first list request was delayed after the observation baseline so an independently authenticated client could publish before listing.',
+      'Browser timing was controlled and a real earlier list response was delayed. A real moderation command withdrew the first discussion before that response was delivered.',
+    ],
+  });
+  await setTopicDiscussionSuppression(page, withdrawnId, false);
+  await oneCheck(focusBurst);
+  await expect(withdrawn).toHaveCount(0);
+  await latest.click();
+  await expect(withdrawn).toBeVisible();
+
+  const departing = { entered: topicSignal(), release: topicSignal() };
+  hold = departing;
+  try {
+    await focusBurst();
+    await departing.entered.promise;
+    await page.getByRole('button', { name: 'Artifacts', exact: true }).click();
+    await expect(list).toHaveCount(0);
+  } finally {
+    departing.release.resolve();
+  }
+  const artifactsChecks = checks;
+  await focusBurst();
+  await page.clock.fastForward(16_000);
+  expect(checks).toBe(artifactsChecks);
+  await page.getByRole('button', { name: 'Discussions', exact: true }).click();
+  await expect(withdrawn).toBeVisible();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Sign in with passkey' })).toBeVisible();
+  const afterSignOut = { checks, baselines };
+  await focusBurst();
+  await page.clock.fastForward(16_000);
+  expect({ checks, baselines }).toEqual(afterSignOut);
+});
+
 async function refreshList(scope: Locator, noun: 'comments' | 'replies') {
   const button = scope.getByRole('button', { name: `Refresh ${noun}`, exact: true }).first();
   if (!(await button.isVisible()))

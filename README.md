@@ -43,13 +43,21 @@ uncertain submissions retain their recovery controls. **Drafts** in navigation e
 local drafts and status recovery; save feedback confirms only writes on this device.
 Open a topic’s **Discussions** tab to browse compact rows with the original author
 and creation date. **Load more discussions** adds older rows beneath the list.
+While the list is open, visible and online, Loom checks for changes about every
+15 seconds. **New discussions available** signals a publication in this topic.
+**Discussions updated** signals other changes, such as an edited opening, a move
+or a restoration. Checking keeps your loaded rows, reading position, focus and
+unfinished writing in place. Loom withdraws content if access is lost. A temporary
+checking failure leaves the list available while Loom retries.
 After following a discussion row or the publication confirmation’s **Open discussion**
 link, browser Back reloads the earlier portion with current access checks and
 restores your place when the row is still reachable.
 Loom automatically reads up to eight pages on return and offers an explicit
 continuation when more are needed. **Show latest discussions** starts at the top
-and keeps the open composer and its draft. A confirmed publication offers
+with a fresh list and keeps the open composer and its draft. A confirmed publication offers
 **Open discussion** while the current list stays in place.
+The [topic discussion freshness decision](docs/adr/044-topic-discussion-freshness.md)
+describes the read-only API and its limits.
 Comments use compact author rows and connected reply guides. The minus/plus control
 collapses or expands a whole comment, including its body, actions, composer and
 descendants. **Show replies** / **Hide replies** controls only the reply list;

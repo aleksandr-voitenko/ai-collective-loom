@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { Type, type TSchema } from '@sinclair/typebox';
 import * as C from '../../contracts/participation.js';
 import * as Fresh from '../../contracts/discussion-freshness.js';
+import * as TopicFresh from '../../contracts/topic-discussion-freshness.js';
 import type { IdentityAuthentication } from '../modules/identity/authentication.js';
 import type { IdentityAdministration } from '../modules/identity/administration.js';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../modules/participation/publications.js';
 import { ParticipationRetrieval, type PageOptions } from '../modules/participation/retrieval.js';
 import { DiscussionFreshness } from '../modules/participation/discussion-freshness.js';
+import { TopicDiscussionFreshness } from '../modules/participation/topic-discussion-freshness.js';
 import { ParticipationAdministration } from '../modules/participation/administration.js';
 import type { Transactions } from '../db/postgres.js';
 import { registerIdentityRoutes } from './identity.js';
@@ -70,6 +72,7 @@ export async function registerParticipation(app: FastifyInstance, services: Part
     ),
     reads = new ParticipationRetrieval(services.database),
     freshness = new DiscussionFreshness(services.database),
+    topicFreshness = new TopicDiscussionFreshness(services.database),
     admin = new ParticipationAdministration(services.database);
   const empty = Type.Object({}, C.closed),
     params = Type.Object({ id: C.UUID }, C.closed);
@@ -291,6 +294,25 @@ export async function registerParticipation(app: FastifyInstance, services: Part
         options.order,
       );
     },
+  );
+  app.post(
+    '/api/v1/areas/:id/discussions/freshness',
+    {
+      bodyLimit: 4096,
+      schema: {
+        operationId: 'checkTopicDiscussionFreshness',
+        params,
+        body: TopicFresh.TopicFreshnessInput,
+        querystring: empty,
+        response: { ...errors, 200: TopicFresh.TopicFreshnessResult },
+      },
+    },
+    async (request) =>
+      topicFreshness.query(
+        await actor(request),
+        (request.params as { id: string }).id.toLowerCase(),
+        request.body as TopicFresh.TopicFreshnessInputView,
+      ),
   );
   const adminResult = Type.Object(
     {

@@ -24,7 +24,7 @@ non-sensitive VPS staging (ADR-042), on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`27`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`28`.
 Operational health (ADR-040/migration0029) composes existing administrator sources
 with bounded content-free request samples. Read-only HTTPS/browser inspection keeps
 readiness, worker observations, discovery, processing, capacity and request outcomes
@@ -80,7 +80,8 @@ Resource ownership remains authoritative; the existing exclusive structure guard
 serializes organization with publication, followed by the common clock/event tail.
 The selected topic's discussion browser opts into creation-order metadata. Its
 committed traversal bound and indexed placement are described in participation
-memory, with browser history controls in `src/web/MEMORY.md`.
+memory, with browser history controls in `src/web/MEMORY.md`. ADR-044 adds
+separate bounded topic-list observation and explicit application of updates.
 Exact recovery returns original and current state without reapplying earlier decisions.
 Proposal discussions bind their destination/settings; topic-specific suggestions
 also retain the stable affected-area ID. Organization decisions: `LC-20261014-IGI9`.

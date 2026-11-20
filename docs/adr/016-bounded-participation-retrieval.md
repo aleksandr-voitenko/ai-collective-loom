@@ -73,6 +73,10 @@ authorization, availability or selected revision. Current checks apply on every
 request, including when an area is closed for publication. Omitted order
 preserves the previous row shape and ordering.
 
+The browser can also opt into the topic-list observation contract described in
+[ADR-044](044-topic-discussion-freshness.md). Its observation cursor and this
+creation-ordered continuation have separate lifetimes and coverage.
+
 Opaque AES-GCM continuations bind participant, collection and scope, hiding scanned
 protected IDs. The newest-first order also binds the instance, order, item/byte
 controls, and existing hierarchy epoch. They use an ephemeral process key. Restart, tampering or a different

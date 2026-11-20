@@ -18,6 +18,7 @@ import { lockActor, lockContext, requireRevision } from '../publication/guards.j
 import { hasChangeSchema, hasAttachmentSchema } from '../../db/schema-capabilities.js';
 import { hierarchyVersion, structureGuard } from './organization-context.js';
 import { declaration, revisionReferences } from './reference-context.js';
+import { topicObservationState, topicWithdrawalTag } from './topic-discussion-observation.js';
 
 export class RetrievalError extends Error {
   constructor(
@@ -38,6 +39,7 @@ export type PageOptions = {
   cursor?: string;
   limit?: string;
   max_response_bytes?: string;
+  observe?: DiscussionPageOptions['observe'];
 };
 type PagePosition = { after: string; through?: string };
 type PageCandidate = { id: string; discussion_created_at?: string; published_by_bound?: boolean };
@@ -513,8 +515,10 @@ export class ParticipationRetrieval {
       const actor = await lockActor(tx, actorContext);
       await structureGuard(tx);
       const byCreation = kind === 'discussions' && order === 'created_desc';
+      if (options.observe && !byCreation) throw new PublicationError('invalid_input');
       if (byCreation) await lockContext(tx, scope, 'resolution', ['area']);
-      const orderState = byCreation ? await discussionOrderState(tx) : undefined;
+      const observation = options.observe ? await topicObservationState(tx) : undefined;
+      const orderState = observation ?? (byCreation ? await discussionOrderState(tx) : undefined);
       // Current-placement browsing explicitly restarts after organization changes;
       // a stale continuation cannot silently declare a moved population complete.
       const binding = JSON.stringify([
@@ -523,6 +527,7 @@ export class ParticipationRetrieval {
         scope,
         ['areas', 'discussions', 'artifacts'].includes(kind) ? await hierarchyVersion(tx) : null,
         ...(orderState ? [order, orderState.instance_id, pageSize, budget] : []),
+        ...(observation ? [options.observe] : []),
       ]);
       const cursor = this.decode(binding, options.cursor),
         after = cursor?.after ?? null;
@@ -641,9 +646,17 @@ export class ParticipationRetrieval {
           if (row.discussion_created_at && 'area_id' in item) {
             // Current context remains authoritative if indexed placement and the
             // source ever disagree. The creation key never confers access.
+            const tag = (revision: string | null) =>
+              topicWithdrawalTag(observation!, actor.participantId, scope, row.id, revision);
             item =
               item.area_id === scope
-                ? { ...item, discussion_created_at: row.discussion_created_at }
+                ? {
+                    ...item,
+                    discussion_created_at: row.discussion_created_at,
+                    ...(observation
+                      ? { discussion_observation_tags: [tag(null), tag(item.revision_id)] }
+                      : {}),
+                  }
                 : undefined;
           }
         } catch (error) {

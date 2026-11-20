@@ -22,7 +22,7 @@ export const limits = Object.freeze({
   contexts: 8,
   pending: 64,
   steps: 16,
-  tests: 193,
+  tests: 195,
   bytes: 131072,
   runBytes: 17 * 1024 * 1024,
 });
@@ -304,6 +304,7 @@ const routePatterns = [
   '/api/v1/editors',
   '/api/v1/areas/:id',
   '/api/v1/areas/:id/discussions',
+  '/api/v1/areas/:id/discussions/freshness',
   '/api/v1/areas/:id/artifacts',
   '/api/v1/discussions',
   '/api/v1/discussions/:id',
