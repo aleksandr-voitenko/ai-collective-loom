@@ -68,6 +68,8 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
   const heading = useRef<HTMLHeadingElement>(null),
     [created, setCreated] = useState(false);
   const createButton = useRef<HTMLButtonElement>(null);
+  const about = useRef<HTMLDetailsElement>(null);
+  const fullDescription = useRef<HTMLParagraphElement>(null);
   const discussionBrowser = useRef<TopicDiscussionBrowserHandle>(null);
   const rememberDiscussionPosition = (position: TopicDiscussionPosition | undefined) =>
     context.topicDiscussionNavigation?.remember(location.key, id, position);
@@ -122,47 +124,107 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
     );
   if (!area) return <p role="status">Opening topic…</p>;
   if (area.kind !== 'area') return <p role="alert">This topic is unavailable.</p>;
+  const description = [...(area.description ?? '')];
+  const shortened = description.length > 160;
+  const descriptionPreview = shortened
+    ? description.slice(0, 160).join('').trimEnd() + '…'
+    : area.description;
   return (
-    <>
-      <TopicLocation area={area} />
-      <p className="topic-created" role="status">
-        {created ? 'Topic created.' : null}
-      </p>
-      <div className="header-line">
-        <div>
-          <h1 ref={heading} tabIndex={-1}>
-            {area.title}
-          </h1>
-          <p className="subtitle">{area.description}</p>
-        </div>
-        <button
-          ref={createButton}
-          className="primary"
-          disabled={!area.publication_open}
-          onClick={() => {
-            setFocusComposer(true);
-            setCreate((value) => !value);
-          }}
-        >
-          <Icon name="plus" /> {tab === 'discussions' ? 'Start a discussion' : 'New text artifact'}
-        </button>
-      </div>
-      <p className="topic-state">
-        {area.publication_open ? 'Open to contributions' : 'Closed to contributions'}
-        {!area.publication_open && area.local_open ? ' by an ancestor topic' : ''}
-      </p>
-      <Link className="button" to={'/loom/search?topic=' + id}>
-        Search this topic
-      </Link>
-      {context.self.role === 'administrator' && (
-        <OrganizationActions id={id} kind="area" localOpen={area.local_open} />
-      )}
-      <FollowControl
-        key={'area:' + id}
-        context={context}
-        target={{ kind: 'area', resource_id: id }}
-      />
-      <TopicDirectory key={id} parent={id} />
+    <div className="selected-topic">
+      <header className="selected-topic-header">
+        <TopicLocation area={area} includeCurrent={false} />
+        <p className="topic-created" role="status">
+          {created ? 'Topic created.' : null}
+        </p>
+        <FollowControl
+          key={'area:' + id}
+          context={context}
+          target={{ kind: 'area', resource_id: id }}
+          renderTopicControls={({ followAction, followSettings, attention }) => (
+            <>
+              <div className="selected-topic-intro">
+                <div className="selected-topic-identity">
+                  <h1 ref={heading} tabIndex={-1}>
+                    {area.title}
+                  </h1>
+                  {descriptionPreview && (
+                    <p className="selected-topic-description">
+                      {descriptionPreview}{' '}
+                      {shortened && (
+                        <button
+                          className="text-button"
+                          onClick={() => {
+                            if (about.current) about.current.open = true;
+                            fullDescription.current?.focus();
+                          }}
+                        >
+                          Read full description
+                        </button>
+                      )}
+                    </p>
+                  )}
+                  {!area.publication_open && (
+                    <p className="selected-topic-closed">
+                      Closed to contributions{area.local_open ? ' by an ancestor topic' : ''}
+                    </p>
+                  )}
+                </div>
+                <div className="selected-topic-actions">
+                  <button
+                    ref={createButton}
+                    className="primary"
+                    disabled={!area.publication_open}
+                    aria-expanded={create}
+                    onClick={() => {
+                      setFocusComposer(true);
+                      setCreate((value) => !value);
+                    }}
+                  >
+                    <Icon name="plus" />
+                    {tab === 'discussions' ? 'Start a discussion' : 'New text artifact'}
+                  </button>
+                  <Link className="button" to={'/loom/search?topic=' + id}>
+                    Search this topic
+                  </Link>
+                  {followAction}
+                </div>
+              </div>
+              <div className="selected-topic-details">
+                <details className="topic-disclosure">
+                  <summary>Subtopics</summary>
+                  <TopicDirectory key={id} parent={id} presentation="subtopics-disclosure" />
+                </details>
+                <details
+                  className="topic-disclosure selected-topic-about"
+                  ref={about}
+                  open={query.has('proposal')}
+                >
+                  <summary>About this topic</summary>
+                  {shortened && (
+                    <p
+                      className="selected-topic-full-description"
+                      ref={fullDescription}
+                      tabIndex={-1}
+                    >
+                      {area.description}
+                    </p>
+                  )}
+                  <Proposal context={context} areaId={id} />
+                  <TopicMetadataHistory id={id} />
+                </details>
+                {followSettings}
+                {attention}
+                {context.self.role === 'administrator' && (
+                  <details className="topic-disclosure">
+                    <summary>Manage topic</summary>
+                    <OrganizationActions id={id} kind="area" localOpen={area.local_open} />
+                  </details>
+                )}
+              </div>
+            </>
+          )}
+        />
+      </header>
       <div className="topic-tabs" role="group" aria-label="Topic content">
         <button
           aria-pressed={tab === 'discussions'}
@@ -230,13 +292,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
           render={(item) => <ResourceRow resource={item as ResourceView} />}
         />
       )}
-      <details className="about" open={query.has('proposal')}>
-        <summary>About this topic</summary>
-        <p>{area?.description}</p>
-        <Proposal context={context} areaId={id} />
-        <TopicMetadataHistory id={id} />
-      </details>
-    </>
+    </div>
   );
 }
 

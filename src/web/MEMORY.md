@@ -65,6 +65,18 @@ query edits from its provider key so persistent controls keep their lifetime.
 
 `ParticipationTopics.tsx` owns topics, proposals and overview composition. Overview
 embeds `ResourceContent` from `ParticipationResource.tsx` inside its own boundary.
+The selected topic groups ancestry, creation, search and Follow above its content
+tabs. Secondary sections use native disclosures with one mounted tree at every
+width. About opens for proposal recovery URLs and keeps the retained editor
+mounted when collapsed. Metadata history still reads on explicit expansion.
+The selected-topic presentation of `FollowControl` places the primary action
+and settings separately while keeping one request owner. Follow and Routine
+attention summaries surface pending work and errors without opening themselves.
+Follow completion is announced outside the disclosure. A late source preview
+keeps topic preferences entered after the independent private settings read.
+The compact Subtopics directory keeps bounded navigation and retry available.
+Explicit paging and retry move focus to the directory heading before loading;
+responses do not move focus.
 `TopicDiscussionBrowser.tsx` owns only the selected topic's discussion metadata.
 It requests the opt-in newest-first order, appends by stable discussion identity,
 and keeps the composer and accepted rows mounted during continuation or restart.

@@ -33,6 +33,18 @@ and offline checks, Artifacts and sign-out. Opt-in review frames use
 `LOOM_TOPIC_DISCUSSION_FRESHNESS_REVIEW=1` and identify injected conditions in the
 compiled application’s provenance manifest.
 
+The selected-topic layout review in `review/` captures scroll-top compiled
+viewports for a WebAuthn participant before and after the change. It also captures
+administrator controls, a retained proposal, a dirty discussion with an activity
+notice, and long content on an inherited-closed topic. The review uses the same
+source and build provenance checks and runs separately from routine diagnostics.
+`review/run-topic-layout.mjs` checks the reviewed baseline for before captures and
+keeps raw Playwright output private and temporary for both phases.
+The browser journeys exercise keyboard and pointer disclosures, including dirty
+draft, loaded rows, pending notice and unsaved Follow settings across resizes.
+The organization pagination journey checks a late Subtopics retry after closing
+the disclosure and confirms the response leaves focus on its summary.
+
 Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
 scope/token refusal, bounded shared/visibility continuation across decimal widths, restoration after
 suppressed-event consumption, no private reading writes and default ordinary

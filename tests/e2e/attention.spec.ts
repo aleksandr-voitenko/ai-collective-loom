@@ -52,12 +52,34 @@ for (const kind of ['area', 'discussion', 'artifact', 'overview'] as const)
       await expect(
         page.getByRole('button', { name: 'Suggest an organizational change' }),
       ).toBeVisible();
-    await page.getByText('Routine attention', { exact: true }).click();
+    const routine = page.getByText('Routine attention', { exact: true });
+    const routineSummary = page.locator('summary').filter({ has: routine });
+    await routine.click();
     const control = page.locator('[data-mute-target]');
     await expect(control.getByRole('button', { name: 'Unmute routine updates' })).toHaveAttribute(
       'aria-disabled',
       'false',
     );
+    if (kind === 'area') {
+      await page.route(
+        '**' + endpoint + '/mutes/lookup',
+        (route) =>
+          route.fulfill({
+            status: 503,
+            json: { error: { code: 'service_unavailable', message: 'Mute lookup failed' } },
+          }),
+        { times: 1 },
+      );
+      const refreshMute = control.getByRole('button', { name: 'Refresh mute state' });
+      await refreshMute.click();
+      await routine.click();
+      await expect(routineSummary.getByText('Review error')).toBeVisible();
+      await expect(refreshMute).toBeHidden();
+      await routine.click();
+      await expect(control.getByRole('alert')).toContainText('Mute lookup failed');
+      await refreshMute.click();
+      await expect(routineSummary.getByText('Review error')).toBeHidden();
+    }
     const instance = (await api(page, '/api/v1/community')).instance_id,
       prefix = `loom.intent.v1:${server.origin}:${instance}:${f.person}:`;
     for (const transition of ['first', 'repeated'] as const) {
@@ -198,6 +220,11 @@ for (const kind of ['area', 'discussion', 'artifact', 'overview'] as const)
         if (path === 'status' || path === 'retry') {
           loseMutation = 'attention';
           await change.click();
+          if (kind === 'area') {
+            await routine.click();
+            await expect(routineSummary.getByText('Review change')).toBeVisible();
+            await routine.click();
+          }
           await expect(
             control.getByRole('button', { name: 'Check attention outcome' }),
           ).toBeVisible();
@@ -264,12 +291,20 @@ for (const kind of ['area', 'discussion', 'artifact', 'overview'] as const)
         }
       }
       const followControl = page.locator('[data-follow-target]');
+      const followSettings = followControl.getByText('Follow settings', { exact: true });
+      const followSummary = followControl
+        .locator('summary')
+        .filter({ hasText: /^Follow settings/ });
       for (const path of ['lookup', 'state', 'status', 'retry'] as const) {
         const change = followControl.getByRole('button', { name: /^(Unfollow|Follow)$/ });
         await expect(change).toBeEnabled();
         if (path === 'status' || path === 'retry') {
           loseMutation = 'following';
           await change.click();
+          if (kind === 'area') {
+            await expect(followSummary.getByText('Review change')).toBeVisible();
+            await followSettings.click();
+          }
           await expect(
             followControl.getByRole('button', { name: 'Check follow status' }),
           ).toBeVisible();
@@ -339,12 +374,17 @@ for (const kind of ['area', 'discussion', 'artifact', 'overview'] as const)
         await page.reload();
         await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
         if (retained) {
+          if (kind === 'area') {
+            await expect(followSummary.getByText('Review change')).toBeVisible();
+            await followSettings.click();
+          }
           const sent = page.waitForRequest((r) =>
             r.url().endsWith('/api/v1/me/following/private/state'),
           );
           await followControl.getByRole('button', { name: 'Retry same follow change' }).click();
           expect((await sent).postDataJSON()).toEqual(retained.body);
           await expect.poll(() => journal(page, 'following.set')).toBeUndefined();
+          if (kind === 'area') await followSettings.click();
         }
       }
       expect(captured).toBe(9);
