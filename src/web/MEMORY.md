@@ -79,6 +79,17 @@ a metadata read and the existing traversal remains in place. Same-window activat
 replaces that entry’s return controls with the current list extent and its first
 visible row, or the list toolbar when no row is visible. Ordinary row links use the
 activated row as their anchor.
+`useTopicDiscussionFreshness` checks the selected, visible, online list with one
+coalesced background request and honors Retry-After. A baseline precedes the first
+listing read and replaces the observation cursor only on acceptance. A later
+commit stays discoverable, even if the new traversal already included it. The
+reserved toolbar status and pending change survive check or application failure.
+Retry-After applies at wake-up and survives older successful checks. Matching
+withdrawal tags fence affected retained rows and overlapping page reads. Pages
+requested after withdrawal can admit current authorized restorations.
+Invalid cursor recovery keeps a broad notice and audits retained rows in bounded
+groups for current authority and fresh tags. Neither observation nor audit
+changes the list continuation or records any history controls.
 `ParticipationDiscussion.tsx` keeps discussion traversal, reply expansion and
 independent whole-comment collapse together. Task6 adds one
 `DiscussionFreshnessProvider` per active discussion, with a baseline before initial

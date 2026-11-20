@@ -52,6 +52,7 @@ add('retrieval', [
   'GET /api/v1/areas/:id',
   'GET /api/v1/areas/:id/artifacts',
   'GET /api/v1/areas/:id/discussions',
+  'POST /api/v1/areas/:id/discussions/freshness',
   'GET /api/v1/areas/:id/metadata-history',
   'GET /api/v1/areas/:id/proposal-route',
   'GET /api/v1/artifacts',

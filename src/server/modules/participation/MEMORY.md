@@ -1,5 +1,20 @@
 # Participation boundary
 
+Guide28/ADR-044 add `topic-discussion-freshness-1` for direct topic lists.
+Migration0033 records opening publications, revisions and direct moves at shared
+clock positions under a topic-local index. A second indexed scan follows whole
+discussion, opening and exact opening-revision visibility generations. Each scan
+processes at most 32 candidates and reads one lookahead. Current-source checks
+probe exact opening, ancestor and revision keys in one snapshot. `observe=1` on
+`created_desc` exposes scoped opaque
+tags for available rows, and check responses can withdraw known rows even after
+an authorized move. An indexed departure can raise a content-free notice after
+the moved source becomes unavailable. Observation tokens bind participant,
+instance, topic, contract, recovery epoch and API process lifetime. An exact
+audit refreshes authority and tags in batches of up to 32 on recovery. Ordinary
+pages and personal checkpoints retain their own contracts. No source mutation or
+recovery command is involved.
+
 Guide27 adds `order=created_desc` to the selected topic's discussion collection.
 Omitting order retains opening UUID traversal. The opt-in page carries original
 opening `discussion_created_at` alongside the selected revision's `created_at`.

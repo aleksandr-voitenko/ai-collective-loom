@@ -1211,6 +1211,17 @@
   min-height: 38px;
   text-decoration: underline;
 }
+.loom-app .topic-discussion-freshness {
+  flex: 0 0 100%;
+  min-block-size: 2lh;
+  margin: 0;
+  color: var(--accent);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.loom-app .topic-discussion-freshness strong + span {
+  display: block;
+}
 .loom-app .topic-discussion-rows {
   margin: 0;
   padding: 0;

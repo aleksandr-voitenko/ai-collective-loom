@@ -2,7 +2,7 @@ import { Type, type Static } from '@sinclair/typebox';
 import { FileSet, AttachmentSet, FilePath } from './files.js';
 
 export const contractVersion = 'participation-1';
-export const guideRevision = '27';
+export const guideRevision = '28';
 export const limits = Object.freeze({
   textBytes: 16384,
   mentions: 16,
@@ -279,6 +279,9 @@ export const DiscussionPageInput = Type.Object(
         description: 'Newest opening creation first. Omit to retain opening UUID order.',
       }),
     ),
+    observe: Type.Optional(
+      Type.Literal('1', { description: 'Include opaque freshness tags on newest-first rows.' }),
+    ),
   },
   closed,
 );
@@ -304,6 +307,11 @@ export const Participant = Type.Object(
   { id: UUID, nickname: Type.String(), kind: Type.String() },
   closed,
 );
+export const discussionObservationTag = Type.String({ pattern: '^[A-Za-z0-9_-]{43}$' });
+export const discussionObservationTags = Type.Array(discussionObservationTag, {
+  minItems: 2,
+  maxItems: 2,
+});
 export const Resource = Type.Object(
   {
     resource_id: UUID,
@@ -320,6 +328,7 @@ export const Resource = Type.Object(
         description: 'Immutable opening creation time on newest-first topic discussion pages.',
       }),
     ),
+    discussion_observation_tags: Type.Optional(discussionObservationTags),
     area_id: UUID,
     area_title: Type.String(),
     discussion_id: NullableId,

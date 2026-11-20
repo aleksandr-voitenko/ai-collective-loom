@@ -170,3 +170,11 @@ find its exact committed publication event and also checks current source author
 The migration changes no existing authored
 rows, publication positions or recovery records. `npm run test:participation:postgres`
 exercises the populated upgrade, bounded indexed plans and ordered HTTPS traversal.
+
+Migration `0033_topic_discussion_freshness.sql` adds a topic-local activity index
+for opening publications, revisions and direct discussion moves. A separate
+visibility index records whole-discussion and opening availability transitions
+at the existing committed visibility generation. Baselines start from current
+state, so the new indexes need no historical backfill. The migration leaves the
+existing contribution restoration stream in use. See
+[ADR-044](../docs/adr/044-topic-discussion-freshness.md).

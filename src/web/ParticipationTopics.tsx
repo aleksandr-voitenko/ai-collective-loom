@@ -218,6 +218,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
       {tab === 'discussions' ? (
         <TopicDiscussionBrowser
           topicId={area.resource_id}
+          self={context.self}
           restoration={restoration}
           rememberPosition={rememberDiscussionPosition}
           positionRef={discussionBrowser}

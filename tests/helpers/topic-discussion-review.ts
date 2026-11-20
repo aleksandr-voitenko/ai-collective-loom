@@ -9,27 +9,53 @@ import { applicationInputs } from '../../scripts/lib/release-identity.mjs';
 export const topicDiscussionReview = process.env.LOOM_TOPIC_DISCUSSION_REVIEW === '1';
 export const baselineTopicDiscussionReview =
   topicDiscussionReview && process.env.LOOM_TOPIC_DISCUSSION_BASELINE === '1';
+const freshnessReview = process.env.LOOM_TOPIC_DISCUSSION_FRESHNESS_REVIEW === '1';
 
-const directory =
-  process.env.LOOM_TOPIC_DISCUSSION_REVIEW_DIR ??
-  join(tmpdir(), 'loom-review-evidence', 'topic-discussions');
 const currentReproduction =
   'npm run app:build && LOOM_TOPIC_DISCUSSION_REVIEW=1 npm run test:e2e -- participation.spec.ts --grep "topic discussion browser"';
-const reproduction = baselineTopicDiscussionReview
+const browsingReproduction = baselineTopicDiscussionReview
   ? 'From a checkout of 30672f10d7b612c6a0fa73c08ed6123c283b6ff3, copy the review checkout’s tests/e2e/participation.spec.ts and tests/helpers/topic-discussion-review.ts. Then run npm run app:build && LOOM_TOPIC_DISCUSSION_REVIEW=1 LOOM_TOPIC_DISCUSSION_BASELINE=1 npm run test:e2e -- participation.spec.ts --grep "topic discussion browser appends"'
   : currentReproduction;
-const captures: unknown[] = [];
+const freshnessReproduction =
+  'npm run app:build && LOOM_TOPIC_DISCUSSION_FRESHNESS_REVIEW=1 npm run test:e2e -- --workers=1 participation.spec.ts --grep "topic discussion freshness"';
+const captureSets: Record<'browsing' | 'freshness', unknown[]> = { browsing: [], freshness: [] };
 
 export async function captureTopicDiscussions(
   page: Page,
   state: string,
   target: Locator,
-  options: { desktopTop?: number; mobileTop?: number; injected?: string[] } = {},
+  options: {
+    desktopTop?: number;
+    mobileTop?: number;
+    injected?: string[];
+    review?: 'freshness';
+  } = {},
 ) {
-  if (!topicDiscussionReview) return;
+  const freshness = options.review === 'freshness';
+  if (!(freshness ? freshnessReview : topicDiscussionReview)) return;
+  const directory =
+    (freshness
+      ? process.env.LOOM_TOPIC_DISCUSSION_FRESHNESS_REVIEW_DIR
+      : process.env.LOOM_TOPIC_DISCUSSION_REVIEW_DIR) ??
+    join(
+      tmpdir(),
+      'loom-review-evidence',
+      freshness ? 'topic-discussion-freshness' : 'topic-discussions',
+    );
+  const reproduction = freshness ? freshnessReproduction : browsingReproduction;
+  const captures = captureSets[freshness ? 'freshness' : 'browsing'];
   const inputs = applicationInputs(process.cwd());
   const build = JSON.parse(await readFile('dist/release.json', 'utf8'));
   if (inputs.sha256 !== build.sha256) throw new Error('Topic discussion source and build differ.');
+  const migration = 'db/migrations/0033_topic_discussion_freshness.sql';
+  const databaseMigration = freshness
+    ? {
+        path: migration,
+        sha256: createHash('sha256')
+          .update(await readFile(migration))
+          .digest('hex'),
+      }
+    : undefined;
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trimEnd();
   const status = git('status', '--porcelain');
@@ -70,6 +96,7 @@ export async function captureTopicDiscussions(
         application_input_sha256: inputs.sha256,
         build_sha256: build.sha256,
         build_node: build.node,
+        database_migration: databaseMigration,
         capture_node: process.version,
         route: location.pathname + location.search,
         viewport,
