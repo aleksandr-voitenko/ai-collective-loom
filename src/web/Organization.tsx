@@ -35,97 +35,59 @@ export function TopicLocation({
     </nav>
   );
 }
-export function TopicDirectory({
-  parent,
+export function TopicDestinationPicker({
   select,
   selectionLabel = 'Choose a destination',
-  presentation,
 }: {
-  parent?: string;
-  select?: (area: OrganizationResourceView) => void;
+  select: (area: OrganizationResourceView) => void;
   selectionLabel?: string;
-  presentation?: 'subtopics-disclosure';
 }) {
   const [cursor, setCursor] = useState(''),
     [previous, setPrevious] = useState<string[]>([]);
-  const subtopicsDisclosure = presentation === 'subtopics-disclosure' && !!parent && !select;
-  const base = '/api/v1/organization/' + (select ? 'destinations' : 'children');
-  const query = new URLSearchParams({
-    ...(!select && parent ? { parent_id: parent } : {}),
-    ...(cursor ? { cursor } : {}),
-  });
-  const result = useQuery<OrganizationPageView>(base + '?' + query, PageSchema),
+  const query = new URLSearchParams(cursor ? { cursor } : {});
+  const result = useQuery<OrganizationPageView>(
+      '/api/v1/organization/destinations?' + query,
+      PageSchema,
+    ),
     last = useRef<OrganizationPageView | undefined>(undefined),
     heading = useRef<HTMLHeadingElement>(null);
   if (result.data) last.current = result.data;
   useEffect(() => {
-    if (!subtopicsDisclosure && result.data && previous.length) heading.current?.focus();
+    if (result.data && previous.length) heading.current?.focus();
   }, [result.data]);
-  function focusSubtopicsHeading() {
-    // The paging control can disappear or become disabled. Move focus during
-    // the action so a delayed response can't take it back from the reader.
-    if (subtopicsDisclosure) heading.current?.focus();
-  }
   const data = result.data ?? last.current;
-  const completeEmpty = !subtopicsDisclosure
-    ? 'No topics here yet.'
-    : previous.length
-      ? 'No subtopics on this page.'
-      : 'No subtopics yet.';
-  const incompleteEmpty = subtopicsDisclosure
-    ? 'This page has no subtopics. Continue to see more.'
-    : 'Continue to the next page of topics.';
   return (
-    <section
-      className="topic-directory"
-      aria-label={select ? selectionLabel : parent ? 'Subtopics' : 'Root topics'}
-    >
+    <section className="topic-directory" aria-label={selectionLabel}>
       <h2 tabIndex={-1} ref={heading}>
-        {select ? selectionLabel : parent ? 'Subtopics' : 'Root topics'}
+        {selectionLabel}
       </h2>
-      {result.error && (
-        <p role="alert">
-          {result.error}
-          {(!subtopicsDisclosure || last.current) && ' The previous page may be out of date.'}
-        </p>
-      )}
-      {!result.data && !result.error && (
-        <p role="status">{subtopicsDisclosure ? 'Loading subtopics…' : 'Loading topics…'}</p>
-      )}
-      <div
-        className={!subtopicsDisclosure || data?.items.length ? 'collection' : undefined}
-        aria-busy={!result.data && !result.error}
-      >
+      {result.error && <p role="alert">{result.error} The previous page may be out of date.</p>}
+      {!result.data && !result.error && <p role="status">Loading topics…</p>}
+      <div className="collection" aria-busy={!result.data && !result.error}>
         {data?.items.map((area) => (
           <div className="list-row" key={area.resource_id}>
             <div>
-              <h3>
-                {select ? (
-                  pathText(area)
-                ) : (
-                  <Link to={'/loom/area/' + area.resource_id}>{area.title}</Link>
-                )}
-              </h3>
+              <h3>{pathText(area)}</h3>
               <p>{area.description}</p>
               <small>
                 {area.publication_open ? 'Open to contributions' : 'Closed to contributions'}
               </small>
-              {select && <small className="destination-id">Topic ID: {area.resource_id}</small>}
+              <small className="destination-id">Topic ID: {area.resource_id}</small>
             </div>
-            {select && (
-              <button
-                type="button"
-                disabled={!result.data}
-                onClick={() => select(area)}
-                aria-label={'Select ' + pathText(area)}
-              >
-                Select
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={!result.data}
+              onClick={() => select(area)}
+              aria-label={'Select ' + pathText(area)}
+            >
+              Select
+            </button>
           </div>
         ))}
         {result.data && !result.data.items.length && (
-          <p>{result.data.complete ? completeEmpty : incompleteEmpty}</p>
+          <p>
+            {result.data.complete ? 'No topics here yet.' : 'Continue to the next page of topics.'}
+          </p>
         )}
       </div>
       <div className="pagination">
@@ -140,42 +102,30 @@ export function TopicDirectory({
           Refresh topics
         </button>
         {result.error && (
-          <button
-            type="button"
-            onClick={() => {
-              focusSubtopicsHeading();
-              result.refresh();
-            }}
-          >
+          <button type="button" onClick={result.refresh}>
             Retry topics page
           </button>
         )}
-        {(!subtopicsDisclosure || !!previous.length) && (
-          <button
-            type="button"
-            disabled={!previous.length || !result.data}
-            onClick={() => {
-              focusSubtopicsHeading();
-              setCursor(previous.at(-1)!);
-              setPrevious((p) => p.slice(0, -1));
-            }}
-          >
-            Previous topics
-          </button>
-        )}
-        {(!subtopicsDisclosure || data?.next_cursor) && (
-          <button
-            type="button"
-            disabled={!result.data?.next_cursor}
-            onClick={() => {
-              focusSubtopicsHeading();
-              setPrevious((p) => [...p, cursor].slice(-100));
-              setCursor(result.data!.next_cursor!);
-            }}
-          >
-            Next topics
-          </button>
-        )}
+        <button
+          type="button"
+          disabled={!previous.length || !result.data}
+          onClick={() => {
+            setCursor(previous.at(-1)!);
+            setPrevious((p) => p.slice(0, -1));
+          }}
+        >
+          Previous topics
+        </button>
+        <button
+          type="button"
+          disabled={!result.data?.next_cursor}
+          onClick={() => {
+            setPrevious((p) => [...p, cursor].slice(-100));
+            setCursor(result.data!.next_cursor!);
+          }}
+        >
+          Next topics
+        </button>
       </div>
     </section>
   );
@@ -609,7 +559,7 @@ function OrganizationForm({
                     Use community root
                   </button>
                 )}
-                <TopicDirectory
+                <TopicDestinationPicker
                   select={(area) => {
                     setDestination(area);
                     void draft({ ...body, parent_id: area.resource_id });

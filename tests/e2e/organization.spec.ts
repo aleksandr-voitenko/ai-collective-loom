@@ -1,4 +1,4 @@
-import type { Page, BrowserContext } from '@playwright/test';
+import type { Page, BrowserContext, Route } from '@playwright/test';
 import { test, expect } from '../helpers/browser-fixtures.js';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { syntheticServer } from '../helpers/participation-server.js';
 import type { Intent } from '../../src/web/participation-client.js';
+import type { OrganizationPageView } from '../../src/contracts/organization.js';
 
 const changes = '/api/v1/organization/changes';
 const content = (text: string) => ({ format: 'loom-markdown-v1', text, mentions: [] });
@@ -255,52 +256,77 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
 });
 
 async function checkSubtopicPages(page: Page, origin: string, general: string) {
+  for (let i = 1; i <= 25; i++) await create(page, 'Field observations ' + i, general);
+  const publish = (title: string) =>
+    api(page, '/api/v1/discussions', {
+      idempotency_key: randomUUID(),
+      area_id: general,
+      title,
+      content: content('A discussion to keep beside the directory.'),
+    });
+  const existingDiscussion = 'Existing field discussion';
+  await publish(existingDiscussion);
+
+  const path = '/api/v1/organization/children';
+  const response: OrganizationPageView = await api(
+    page,
+    path + '?parent_id=' + general + '&limit=25',
+  );
+  const titles = response.items.map((item) => item.title);
   const subtopics = page.locator('summary').filter({ hasText: /^Subtopics$/ });
   const directory = page.getByRole('region', { name: 'Subtopics', exact: true });
-  const firstPage = barrier(),
-    retryPage = barrier(),
-    lastPage = barrier();
+  const rows = directory.locator('a[href^="/loom/area/"]');
+  const more = directory.getByRole('button', { name: 'Load more subtopics', exact: true });
+  const reload = directory.getByRole('button', { name: 'Reload subtopics', exact: true });
+  const list = page.getByRole('region', { name: 'Topic discussions', exact: true });
+  const notice = list.getByRole('status', { name: 'Discussion list updates' });
+  const firstPage = barrier();
+  const retryEntered = barrier();
+  const retryPage = barrier();
+  const reloadEntered = barrier();
+  const reloadPage = barrier();
+  const appendEntered = barrier();
+  const appendPage = barrier();
+  const departureEntered = barrier();
+  const departurePage = barrier();
   const requested: Array<string | null> = [];
-  const continuation = 'synthetic-next-subtopics-page';
-  await page.route(
-    (url) =>
-      url.pathname === '/api/v1/organization/children' &&
-      url.searchParams.get('parent_id') === general,
-    async (route) => {
-      const url = new URL(route.request().url());
-      const cursor = url.searchParams.get('cursor');
-      requested.push(cursor);
-      const attempt = requested.length;
-      url.searchParams.delete('cursor');
-      const response = await route.fetch({ url: url.href });
-      if (attempt === 1) await firstPage.promise;
-      if (attempt === 6) await lastPage.promise;
-      if ([2, 5, 6].includes(attempt)) {
-        await route.fulfill({
-          response,
-          json: {
-            ...(await response.json()),
-            ...(attempt === 5 ? {} : { items: [] }),
-            complete: attempt === 6,
-            next_cursor: attempt === 6 ? null : continuation,
-          },
-        });
-      } else if (attempt === 3) {
-        await route.fulfill({
-          status: 503,
-          json: {
-            error: {
-              code: 'service_unavailable',
-              message: 'Subtopics are temporarily unavailable',
-            },
-          },
-        });
-      } else {
-        if (attempt === 4) await retryPage.promise;
-        await route.fulfill({ response });
-      }
-    },
-  );
+  let onNextPage: ((route: Route) => Promise<void>) | undefined = async (route) => {
+    const response = await route.fetch();
+    await firstPage.promise;
+    // Keep the actual continuation to exercise a page that scanned work without visible rows.
+    await route.fulfill({ response, json: { ...(await response.json()), items: [] } });
+  };
+  const failPage = (route: Route) =>
+    route.fulfill({
+      status: 503,
+      json: {
+        error: {
+          code: 'temporarily_unavailable',
+          message: 'Temporarily unavailable',
+          request_id: randomUUID(),
+          recovery: { action: 'retry_same_request' },
+        },
+      },
+    });
+  const holdPage =
+    (entered: ReturnType<typeof barrier>, release: ReturnType<typeof barrier>) =>
+    async (route: Route) => {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      entered.release();
+      await release.promise;
+      await route.fulfill({ response });
+    };
+  const isDirectoryRequest = (url: URL) =>
+    url.pathname === path && url.searchParams.get('parent_id') === general;
+  await page.route(isDirectoryRequest, async (route) => {
+    const url = new URL(route.request().url());
+    requested.push(url.searchParams.get('cursor'));
+    const hook = onNextPage;
+    onNextPage = undefined;
+    if (hook) await hook(route);
+    else await route.continue();
+  });
   try {
     await page.goto(origin + '/loom/area/' + general);
     await expect(directory).toBeHidden();
@@ -308,48 +334,183 @@ async function checkSubtopicPages(page: Page, origin: string, general: string) {
     await page.keyboard.press('Enter');
     await expect(directory.getByText('Loading subtopics…')).toBeVisible();
     firstPage.release();
-    await expect(directory.getByText('No subtopics yet.')).toBeVisible();
-    const next = directory.getByRole('button', { name: 'Next topics' });
-    await expect(next).toHaveCount(0);
-    await expect(directory.getByRole('button', { name: 'Previous topics' })).toHaveCount(0);
+    await expect(more).toBeEnabled();
+    await expect(rows).toHaveCount(0);
+    await expect(
+      directory.getByText('More subtopics may be available.', { exact: true }),
+    ).toBeVisible();
+    await expect(directory.getByText('No subtopics yet.', { exact: true })).toHaveCount(0);
+    expect(requested).toEqual([null]);
+    await reload.click();
+    await expect(rows).toHaveText(titles.slice(0, 12));
+    const firstRow = await rows.first().elementHandle();
+    const discussionRow = list.getByRole('link', { name: existingDiscussion, exact: true });
+    const originalDiscussion = await discussionRow.elementHandle();
 
-    const title = 'Field observations';
-    await create(page, title, general);
-    await directory.getByRole('button', { name: 'Refresh topics' }).click();
-    await expect(directory.getByText(/Continue to see more/)).toBeVisible();
-    await next.click();
-    await expect(directory.getByRole('alert')).toContainText(
-      'Subtopics are temporarily unavailable',
-    );
-    await directory.getByRole('button', { name: 'Retry topics page' }).click();
-    await expect.poll(() => requested).toEqual([null, null, continuation, continuation]);
+    await page.getByRole('button', { name: 'Start a discussion', exact: true }).click();
+    const editor = page
+      .getByRole('region', { name: 'Start a discussion', exact: true })
+      .getByLabel('Text', { exact: true });
+    const discussionDraft = 'Keep this discussion draft while browsing nearby subtopics.';
+    await editor.fill(discussionDraft);
+    await editor.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(5, 16));
+
+    await page
+      .locator('summary')
+      .filter({ hasText: /^About this topic$/ })
+      .click();
+    await page.getByRole('button', { name: 'Suggest an organizational change' }).click();
+    const proposal = page
+      .getByRole('region', { name: 'Suggest an organizational change', exact: true })
+      .getByLabel('Text', { exact: true });
+    const proposalDraft = 'Keep this proposal while browsing the directory.';
+    await proposal.fill(proposalDraft);
+
+    await page
+      .locator('summary')
+      .filter({ hasText: /^Follow settings$/ })
+      .click();
+    const follow = page.getByRole('checkbox', { name: 'Include subtopics', exact: true });
+    await follow.check();
+    await page
+      .locator('summary')
+      .filter({ hasText: /^Routine attention$/ })
+      .click();
+    const mute = page.getByRole('checkbox', { name: 'Mute descendant topics', exact: true });
+    await mute.check();
+
+    const originalEditor = await editor.elementHandle();
+    const originalProposal = await proposal.elementHandle();
+    const originalFollow = await follow.elementHandle();
+    const originalMute = await mute.elementHandle();
+    await publish('A newly arrived field discussion');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(notice).toHaveText('New discussions available', { timeout: 22_000 });
+
+    onNextPage = failPage;
+    await more.press('Enter');
+    await expect(directory.getByRole('alert')).toContainText('More subtopics could not be loaded.');
+    await expect(rows).toHaveText(titles.slice(0, 12));
+    const continuation = requested.at(-1);
+    expect(continuation).toBeTruthy();
+    onNextPage = holdPage(retryEntered, retryPage);
+    await directory
+      .getByRole('button', { name: 'Retry loading more subtopics', exact: true })
+      .click();
+    await retryEntered.promise;
+    expect(requested).toEqual([null, null, continuation, continuation]);
+    await expect(rows).toHaveText(titles.slice(0, 12));
 
     await subtopics.focus();
     await page.keyboard.press('Space');
     await expect(directory).toBeHidden();
     retryPage.release();
-    const child = page.getByRole('link', { name: title, exact: true, includeHidden: true });
-    await expect(child).toHaveCount(1);
+    const appendedChild = page.getByRole('link', {
+      name: titles[12]!,
+      exact: true,
+      includeHidden: true,
+    });
+    await expect(appendedChild).toBeAttached();
+    await expect(appendedChild).toBeHidden();
     await expect(subtopics).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.keyboard.press('Space');
-    await expect(child).toBeVisible();
+    await expect(rows).toHaveText(titles.slice(0, 24));
+    expect(await rows.first().evaluate((node, before) => node === before, firstRow)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expect(rows).toHaveText(titles.slice(0, 24));
+    expect(requested).toHaveLength(4);
 
-    const previous = directory.getByRole('button', { name: 'Previous topics' });
-    await previous.press('Enter');
-    await expect(next).toBeEnabled();
-    await expect(directory.getByRole('heading', { name: 'Subtopics', exact: true })).toBeFocused();
-    await next.press('Enter');
-    const refresh = directory.getByRole('button', { name: 'Refresh topics' });
-    await refresh.focus();
-    lastPage.release();
-    await expect(directory.getByText('No subtopics on this page.')).toBeVisible();
-    await expect(refresh).toBeFocused();
-    await expect(previous).toBeEnabled();
-    await expect(next).toHaveCount(0);
+    const revised = 'Field notes after a real organization change';
+    await command(page, response.items[0]!.resource_id, 'area.edit', {
+      title: revised,
+      description: 'Updated scope.',
+    });
+    const rejectedPage = page.waitForResponse(
+      (response) => isDirectoryRequest(new URL(response.url())) && !response.ok(),
+    );
+    await more.press('Enter');
+    expect((await (await rejectedPage).json()).error.code).toBe('invalid_cursor');
+    await expect(directory.getByRole('alert')).toContainText(
+      'This list needs refreshing before more subtopics can be loaded.',
+    );
+    await expect(rows).toHaveText(titles.slice(0, 24));
+    expect(requested.at(-1)).toBeTruthy();
+    expect(requested.at(-1)).not.toBe(continuation);
+
+    onNextPage = failPage;
+    await reload.click();
+    await expect(directory.getByRole('alert')).toContainText('Subtopics could not be reloaded.');
+    await expect(rows).toHaveText(titles.slice(0, 24));
+    onNextPage = holdPage(reloadEntered, reloadPage);
+    await directory.getByRole('button', { name: 'Retry reloading subtopics', exact: true }).click();
+    await reloadEntered.promise;
+    await expect(rows).toHaveText(titles.slice(0, 24));
+    expect(requested.slice(-2)).toEqual([null, null]);
+    await editor.focus();
+    reloadPage.release();
+    await expect(rows).toHaveText([revised, ...titles.slice(1, 12)]);
+    await expect(editor).toBeFocused();
+    await expect(editor).toHaveValue(discussionDraft);
+    expect(await editor.evaluate((node, before) => node === before, originalEditor)).toBe(true);
+    expect(
+      await editor.evaluate((node: HTMLTextAreaElement) => [
+        node.selectionStart,
+        node.selectionEnd,
+      ]),
+    ).toEqual([5, 16]);
+    await expect(proposal).toHaveValue(proposalDraft);
+    expect(await proposal.evaluate((node, before) => node === before, originalProposal)).toBe(true);
+    await expect(follow).toBeChecked();
+    expect(await follow.evaluate((node, before) => node === before, originalFollow)).toBe(true);
+    await expect(mute).toBeChecked();
+    expect(await mute.evaluate((node, before) => node === before, originalMute)).toBe(true);
+    await expect(notice).toHaveText('New discussions available');
+    expect(
+      await discussionRow.evaluate((node, before) => node === before, originalDiscussion),
+    ).toBe(true);
+
+    onNextPage = holdPage(appendEntered, appendPage);
+    await more.press('Enter');
+    await appendEntered.promise;
+    await expect(directory.getByText('Loading more subtopics…', { exact: true })).toBeVisible();
+    const readingRow = rows.nth(4);
+    await readingRow.scrollIntoViewIfNeeded();
+    await expect(readingRow).toBeInViewport();
+    const rowTop = () => readingRow.evaluate((node) => node.getBoundingClientRect().top);
+    const anchor = await rowTop();
+    const scroll = await page.evaluate(() => window.scrollY);
+    appendPage.release();
+    await expect(rows).toHaveText([revised, ...titles.slice(1, 24)]);
+    expect(Math.abs((await rowTop()) - anchor)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await page.evaluate(() => window.scrollY)) - scroll)).toBeLessThanOrEqual(1);
+    await expect(more).toBeFocused();
+    await more.press('Enter');
+    await expect(rows).toHaveText([revised, ...titles.slice(1)]);
+    await expect(directory.getByText('All subtopics loaded.', { exact: true })).toBeFocused();
+    await expect(more).toHaveCount(0);
+    await expect(directory.getByRole('button', { name: 'Previous topics' })).toHaveCount(0);
+
+    onNextPage = holdPage(departureEntered, departurePage);
+    await reload.click();
+    await departureEntered.promise;
+    await rows.first().click();
+    await expect(page.getByRole('heading', { name: revised, exact: true })).toBeVisible();
+    await subtopics.click();
+    await expect(directory.getByText('No subtopics yet.', { exact: true })).toBeVisible();
+    departurePage.release();
+    await page.unrouteAll({ behavior: 'wait' });
+    await expect(directory.getByText('No subtopics yet.', { exact: true })).toBeVisible();
+    await expect(rows).toHaveCount(0);
   } finally {
     firstPage.release();
     retryPage.release();
-    lastPage.release();
+    reloadPage.release();
+    appendPage.release();
+    departurePage.release();
     await page.unrouteAll({ behavior: 'wait' });
   }
 }
@@ -865,7 +1026,7 @@ for (const availability of ['closed', 'unconfigured'] as const) {
   }
 }
 
-test('destination pagination fails explicitly after a hierarchy change and refresh retains the move form', async ({
+test('destination pagination stays bounded and Subtopics appends and recovers without disturbing topic controls', async ({
   page,
   context,
   server,
@@ -884,7 +1045,8 @@ test('destination pagination fails explicitly after a hierarchy change and refre
   await expect(
     page.getByRole('heading', { name: 'Choose a destination', exact: true }),
   ).toBeFocused();
-  await test.step('Subtopics distinguishes page states and keeps focus when closed during retry', () =>
+  await expect(page.getByRole('button', { name: 'Previous topics', exact: true })).toBeEnabled();
+  await test.step('Subtopics keeps its loaded rows, continuation, focus and surrounding topic state', () =>
     checkSubtopicPages(page, server.origin, d.general));
 });
 

@@ -5,11 +5,11 @@ import { ResolvedTarget, type ResolvedTargetView } from '../contracts/references
 import { type Context, useQuery } from './participation-state.js';
 import {
   OrganizationRecovery,
-  TopicDirectory,
   TopicLocation,
   OrganizationActions,
   TopicMetadataHistory,
 } from './Organization.js';
+import { TopicDirectory, topicDescriptionPreview } from './TopicDirectory.js';
 import {
   type OrganizationResourceView,
   OrganizationResource,
@@ -124,11 +124,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
     );
   if (!area) return <p role="status">Opening topic…</p>;
   if (area.kind !== 'area') return <p role="alert">This topic is unavailable.</p>;
-  const description = [...(area.description ?? '')];
-  const shortened = description.length > 160;
-  const descriptionPreview = shortened
-    ? description.slice(0, 160).join('').trimEnd() + '…'
-    : area.description;
+  const { text: descriptionPreview, shortened } = topicDescriptionPreview(area.description);
   return (
     <div className="selected-topic">
       <header className="selected-topic-header">
@@ -192,7 +188,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
               <div className="selected-topic-details">
                 <details className="topic-disclosure">
                   <summary>Subtopics</summary>
-                  <TopicDirectory key={id} parent={id} presentation="subtopics-disclosure" />
+                  <TopicDirectory parent={id} />
                 </details>
                 <details
                   className="topic-disclosure selected-topic-about"

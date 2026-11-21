@@ -2,7 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { api } from '../helpers/change-browser.js';
 import { syntheticServer } from '../helpers/participation-server.js';
-import { captureTopicDiscussions, topicLayoutReview } from '../helpers/topic-discussion-review.js';
+import {
+  captureTopicDiscussions,
+  enrollReviewAccount,
+  topicLayoutReview,
+} from '../helpers/topic-discussion-review.js';
 
 const topicTitle = 'Community gardens';
 const firstDiscussion = 'What should we plant this season?';
@@ -12,30 +16,6 @@ const description =
   'A place to swap growing advice, plan shared workdays, and welcome new gardeners.';
 const longDescription =
   'Plan the neighborhood seed exchange, review the welcome-day schedule, and coordinate supplies with the volunteer teams. Share accessibility requests, questions about borrowing tools, and suggestions for future events with the garden coordinators.';
-
-async function enter(page: Page, origin: string, ticket: string, setup = false) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('WebAuthn.enable');
-  await cdp.send('WebAuthn.addVirtualAuthenticator', {
-    options: {
-      protocol: 'ctap2',
-      transport: 'internal',
-      hasResidentKey: true,
-      hasUserVerification: true,
-      isUserVerified: true,
-      automaticPresenceSimulation: true,
-    },
-  });
-  await page.goto(origin + '/loom');
-  await page.getByText('Set up an admitted account', { exact: true }).click();
-  await page.getByLabel('Enrollment ticket', { exact: true }).fill(ticket);
-  await page.getByRole('button', { name: 'Create passkey', exact: true }).click();
-  await expect(page.getByText('Your passkey is ready. Sign in to continue.')).toBeVisible();
-  await page.getByRole('button', { name: 'Sign in with passkey' }).click();
-  await expect(
-    page.getByRole('heading', { name: setup ? 'Set up your community' : 'Topics', exact: true }),
-  ).toBeVisible();
-}
 
 async function createTopic(page: Page, parent_id: string, title: string, description: string) {
   const version = (await api(page, '/api/v1/organization/children?limit=1')).hierarchy_version;
@@ -83,7 +63,7 @@ test('selected topic review captures', async ({ browser, page: admin }) => {
     viewport: { width: 1440, height: 1000 },
   });
   try {
-    await enter(admin, server.origin, server.ticket, true);
+    await enrollReviewAccount(admin, server.origin, server.ticket, true);
     await admin.getByRole('button', { name: 'Create community', exact: true }).click();
     await expect(admin.getByRole('heading', { name: 'Topics', exact: true })).toBeVisible();
     const { items } = await api(admin, '/api/v1/areas');
@@ -109,7 +89,7 @@ test('selected topic review captures', async ({ browser, page: admin }) => {
       replace_credential_id: null,
     });
     const page = await participantContext.newPage();
-    await enter(page, server.origin, ticket.secret);
+    await enrollReviewAccount(page, server.origin, ticket.secret);
     const participant = { review: 'layout', role: 'participant' } as const;
     expect((await api(page, '/api/v1/identity/self')).role).toBe(participant.role);
     await publish(admin, topic, 'When is the next volunteer workday?');

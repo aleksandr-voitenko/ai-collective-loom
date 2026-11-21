@@ -41,6 +41,14 @@ requests retain their exact bytes. **Formatting help** explains the supported Ma
 Preview checks its rendering. Confirmed publications use a compact result row, while
 uncertain submissions retain their recovery controls. **Drafts** in navigation exposes
 local drafts and status recovery; save feedback confirms only writes on this device.
+
+On **Topics**, use **Load more topics** below the list to add another group of
+topics. Inside a topic, **Load more subtopics** works the same way. Closing
+**Subtopics** keeps the rows you’ve loaded. If loading fails, retry from the
+same place. If Loom asks you to refresh the list or you want a fresh view, choose
+**Reload topics** or **Reload subtopics**. The previous rows stay visible during
+reload while you still have access.
+
 Open a topic to see its ancestry and newest discussions. Use **Start a discussion**,
 **Search this topic** and **Follow** beside the topic title. **Artifacts** switches to
 the topic’s artifacts. The controls below the title open **Subtopics**, **About this

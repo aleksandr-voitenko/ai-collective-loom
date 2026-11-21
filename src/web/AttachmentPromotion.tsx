@@ -24,7 +24,7 @@ import {
   type Context,
 } from './participation-state.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
-import { TopicDirectory } from './Organization.js';
+import { TopicDestinationPicker } from './Organization.js';
 
 export function PromotionPage({ context }: { context: Context }) {
   const query = new URLSearchParams(useLocation().search),
@@ -301,7 +301,7 @@ function PromotionReview({
             Source contribution {data.contribution_id}, exact revision {data.revision_id}.
             Contributor {data.contributor_id}; revision publisher {data.revision_publisher_id}.
           </p>
-          <TopicDirectory
+          <TopicDestinationPicker
             selectionLabel="Choose artifact destination"
             select={(a) => {
               if (authority.current(result.generation)) choose(a.resource_id);

@@ -44,8 +44,16 @@ The browser journeys exercise keyboard and pointer disclosures, including dirty
 draft, loaded rows, pending notice and unsaved Follow settings across resizes.
 The administrator organization journey verifies the collapsed description preview
 and keyboard focus on the exact full text after opening it.
-The organization pagination journey checks a late Subtopics retry after closing
-the disclosure and confirms the response leaves focus on its summary.
+The organization pagination journey preserves destination page replacement and
+exercises ordinary Subtopics append, exact retry across collapse and resize,
+real hierarchy invalidation, failed and successful reload, and focus after late
+responses and route changes. It checks nearby discussion draft, update notice and
+private controls alongside those reads. `web/organization.test.tsx` covers root
+append order and row identity, empty incomplete pages, response validation,
+coalescing, explicit reload, and late parent, identity and authority results.
+After `npm run app:build`, `node tests/review/run-topic-layout.mjs after directory`
+captures opt-in topic directory review viewports and records the source and build
+digests. `before directory` captures the same routes for comparison from `263a319`.
 
 Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
 scope/token refusal, bounded shared/visibility continuation across decimal widths, restoration after

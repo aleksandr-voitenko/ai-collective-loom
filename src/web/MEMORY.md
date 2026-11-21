@@ -74,9 +74,17 @@ and settings separately while keeping one request owner. Follow and Routine
 attention summaries surface pending work and errors without opening themselves.
 Follow completion is announced outside the disclosure. A late source preview
 keeps topic preferences entered after the independent private settings read.
-The compact Subtopics directory keeps bounded navigation and retry available.
-Explicit paging and retry move focus to the directory heading before loading;
-responses do not move focus.
+`TopicDirectory.tsx` owns ordinary root and direct-child browsing. It appends
+bounded `/organization/children` pages in server order, keeping accepted rows and
+cursor history in the mounted directory and validating scope, direct placement,
+hierarchy version and continuation before adoption. Retry uses the accepted
+cursor. Explicit reload can supersede an append and replaces rows on success.
+The existing authorization boundary withdraws the list on access loss. Closing
+Subtopics keeps its traversal and pending request in the same mounted tree. The
+footer preserves focus during append and can transfer it locally if a focused
+control disappears while the disclosure is open. Discussion Back restoration
+owns its existing separate lifetime. `TopicDestinationPicker` in `Organization.tsx`
+uses the paged `/organization/destinations` flow with path labels and IDs.
 `TopicDiscussionBrowser.tsx` owns only the selected topic's discussion metadata.
 It requests the opt-in newest-first order, appends by stable discussion identity,
 and keeps the composer and accepted rows mounted during continuation or restart.

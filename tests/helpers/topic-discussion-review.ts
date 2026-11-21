@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Locator, Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { applicationInputs } from '../../scripts/lib/release-identity.mjs';
 
 export const topicDiscussionReview = process.env.LOOM_TOPIC_DISCUSSION_REVIEW === '1';
@@ -21,9 +21,48 @@ const freshnessReproduction =
 const layoutReproduction = 'npm run app:build && node tests/review/run-topic-layout.mjs after';
 const layoutBaselineReproduction =
   'From a checkout of efcbb96610d360ab54f5fd648066b158c638d5fe, copy the review checkout’s tests/review/ directory and tests/helpers/topic-discussion-review.ts. Run npm run app:build && node tests/review/run-topic-layout.mjs before';
+const directoryReproduction =
+  'npm run app:build && node tests/review/run-topic-layout.mjs after directory';
+const directoryBaselineReproduction =
+  'From a checkout of 263a319eebe75e6874abd986f1ce6459b5945ec9, copy the review checkout’s tests/review/ directory and tests/helpers/topic-discussion-review.ts. Run npm run app:build && node tests/review/run-topic-layout.mjs before directory';
 export const topicLayoutReview = process.env.LOOM_TOPIC_LAYOUT_REVIEW;
-type Review = 'browsing' | 'freshness' | 'layout';
-const captureSets: Record<Review, unknown[]> = { browsing: [], freshness: [], layout: [] };
+export const topicDirectoryReview = process.env.LOOM_TOPIC_DIRECTORY_REVIEW;
+type Review = 'browsing' | 'freshness' | 'layout' | 'directory';
+const captureSets: Record<Review, unknown[]> = {
+  browsing: [],
+  freshness: [],
+  layout: [],
+  directory: [],
+};
+
+export async function enrollReviewAccount(
+  page: Page,
+  origin: string,
+  ticket: string,
+  setup = false,
+) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+  await page.goto(origin + '/loom');
+  await page.getByText('Set up an admitted account', { exact: true }).click();
+  await page.getByLabel('Enrollment ticket', { exact: true }).fill(ticket);
+  await page.getByRole('button', { name: 'Create passkey', exact: true }).click();
+  await expect(page.getByText('Your passkey is ready. Sign in to continue.')).toBeVisible();
+  await page.getByRole('button', { name: 'Sign in with passkey' }).click();
+  await expect(
+    page.getByRole('heading', { name: setup ? 'Set up your community' : 'Topics', exact: true }),
+  ).toBeVisible();
+}
 
 type CaptureOptions = {
   desktopTop?: number;
@@ -34,6 +73,7 @@ type CaptureOptions = {
   visibleInViewport?: Locator[];
 } & (
   | { review: 'layout'; role: 'administrator' | 'participant' }
+  | { review: 'directory'; role: 'participant' }
   | { review?: 'freshness'; role?: 'administrator' | 'participant' }
 );
 
@@ -45,6 +85,7 @@ export async function captureTopicDiscussions(
 ) {
   const review = options.review ?? 'browsing';
   const phase = topicLayoutReview === 'before' ? 'before' : 'after';
+  const directoryPhase = topicDirectoryReview === 'before' ? 'before' : 'after';
   const profiles = {
     browsing: {
       enabled: topicDiscussionReview,
@@ -67,6 +108,14 @@ export async function captureTopicDiscussions(
       reproduction: phase === 'before' ? layoutBaselineReproduction : layoutReproduction,
       manifest: `manifest-${phase}.json`,
     },
+    directory: {
+      enabled: topicDirectoryReview === 'before' || topicDirectoryReview === 'after',
+      directory: process.env.LOOM_TOPIC_DIRECTORY_REVIEW_DIR,
+      name: 'topic-directory',
+      reproduction:
+        directoryPhase === 'before' ? directoryBaselineReproduction : directoryReproduction,
+      manifest: `manifest-${directoryPhase}.json`,
+    },
   };
   const profile = profiles[review];
   if (!profile.enabled) return;
@@ -74,8 +123,25 @@ export async function captureTopicDiscussions(
   const captures = captureSets[review];
   const inputs = applicationInputs(process.cwd());
   const build = JSON.parse(await readFile('dist/release.json', 'utf8'));
-  if (inputs.sha256 !== build.sha256) throw new Error('Topic discussion source and build differ.');
-  const migration = 'db/migrations/0033_topic_discussion_freshness.sql';
+  if (inputs.sha256 !== build.sha256) throw new Error('Topic review source and build differ.');
+  const compiledWebAssets =
+    review === 'directory'
+      ? await Promise.all(
+          [
+            'index.html',
+            ...(await readdir('dist/web/assets')).sort().map((name) => `assets/${name}`),
+          ].map(async (path) => ({
+            path,
+            sha256: createHash('sha256')
+              .update(await readFile(`dist/web/${path}`))
+              .digest('hex'),
+          })),
+        )
+      : undefined;
+  const migration =
+    review === 'directory'
+      ? 'db/migrations/0006_topic_organization.sql'
+      : 'db/migrations/0033_topic_discussion_freshness.sql';
   const databaseMigration =
     review !== 'browsing'
       ? {
@@ -136,6 +202,7 @@ export async function captureTopicDiscussions(
         application_input_sha256: inputs.sha256,
         build_sha256: build.sha256,
         build_node: build.node,
+        compiled_web_assets: compiledWebAssets,
         database_migration: databaseMigration,
         capture_node: process.version,
         route: location.pathname + location.search,
@@ -162,7 +229,9 @@ export async function captureTopicDiscussions(
         screenshots: captures,
         reproduction: profile.reproduction,
         isolation:
-          'Compiled Loom application, disposable PostgreSQL and HTTPS, actual Chromium WebAuthn, and synthetic participants publishing through ordinary authenticated routes. No authentication material was exported.',
+          review === 'directory'
+            ? 'Compiled Loom frontend served by the application API over HTTPS, disposable PostgreSQL, and synthetic Chromium WebAuthn accounts. A dedicated administrator seeds and mutates the hierarchy through authorized API writes. Every screenshot uses an ordinary participant. Authentication material stays in private test storage.'
+            : 'Compiled Loom application, disposable PostgreSQL and HTTPS, actual Chromium WebAuthn, and synthetic participants publishing through ordinary authenticated routes. No authentication material was exported.',
       },
       null,
       2,

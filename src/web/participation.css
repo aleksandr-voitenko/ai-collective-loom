@@ -1275,15 +1275,8 @@
   font-weight: 650;
   color: var(--accent);
 }
-.loom-app .selected-topic-details .topic-directory,
 .loom-app .selected-topic-details .organization-actions {
   margin-block: 0;
-}
-.loom-app .selected-topic-details :is(.pagination, .pagination > div) {
-  flex-wrap: wrap;
-}
-.loom-app .selected-topic-details .pagination {
-  padding-block: 8px 0;
 }
 .loom-app .selected-topic-about > p {
   margin-block: 0 8px;
@@ -1560,6 +1553,64 @@
 .topic-directory .list-row > div {
   min-width: 0;
   flex: 1;
+}
+.loom-app .topic-browser-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.loom-app .topic-browser-rows li {
+  padding: 10px clamp(12px, 2vw, 18px);
+  overflow-wrap: anywhere;
+}
+.loom-app .topic-browser-rows li + li {
+  border-block-start: 1px solid var(--line);
+}
+.loom-app .topic-browser-rows a {
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.loom-app .topic-browser-rows p {
+  max-inline-size: 70ch;
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+.loom-app .topic-browser-rows small {
+  display: block;
+  margin-block-start: 2px;
+  color: var(--muted);
+}
+.loom-app .topic-browser-footer,
+.loom-app .topic-browser-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.loom-app .topic-browser-footer {
+  justify-content: space-between;
+  padding-block: 8px;
+  color: var(--muted);
+  overflow-anchor: none;
+}
+.loom-app .topic-browser-footer p {
+  margin: 0;
+}
+.loom-app .topic-browser-footer [role='alert'] {
+  flex-basis: 100%;
+}
+.loom-app .topic-browser-footer .text-button {
+  min-block-size: 38px;
+  text-decoration: underline;
+}
+.loom-app .topic-browser-footer button[aria-disabled='true'] {
+  color: var(--muted);
+  cursor: default;
 }
 .destination-id {
   display: block;
