@@ -16,7 +16,7 @@ import {
   type SearchAuthorsView,
 } from '../contracts/search.js';
 import { OrganizationResource, type OrganizationResourceView } from '../contracts/organization.js';
-import { TopicDirectory } from './Organization.js';
+import { TopicDestinationPicker } from './Organization.js';
 import { identityGeneration } from './participation-client.js';
 import { useQuery, type Context } from './participation-state.js';
 
@@ -325,7 +325,7 @@ export function SearchPageViewComponent({ context: _context }: { context: Contex
           </label>
         )}
         {topics && (
-          <TopicDirectory
+          <TopicDestinationPicker
             selectionLabel="Choose a search topic"
             select={(area) => {
               setTopic(area.resource_id);

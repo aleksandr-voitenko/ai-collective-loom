@@ -23,7 +23,7 @@ import {
   type Intent,
 } from './participation-client.js';
 import { useQuery, useIntent, type Context } from './participation-state.js';
-import { TopicDirectory } from './Organization.js';
+import { TopicDestinationPicker } from './Organization.js';
 
 export function CoverageState({ value }: { value: CoverageView }) {
   return (
@@ -594,7 +594,7 @@ export function SummaryMaintenance({ context }: { context: Context }) {
         </>
       )}
       {chooseTopic && (
-        <TopicDirectory
+        <TopicDestinationPicker
           selectionLabel="Choose maintenance topic"
           select={(area) => {
             change('topic', area.resource_id);
