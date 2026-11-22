@@ -24,7 +24,7 @@ non-sensitive VPS staging (ADR-042), on
 one TypeScript/Fastify/React/Data Mode/Vite release. Default startup remains the
 operational foundation; `LOOM_PARTICIPATION_PROFILE=synthetic` plus exact HTTPS
 `LOOM_ORIGIN` registers identity/admin, publication and bounded retrieval routes.
-The browser is `/loom`; executable API/guide version is `participation-1`/`28`.
+The browser is `/loom`; executable API/guide version is `participation-1`/`29`.
 Operational health (ADR-040/migration0029) composes existing administrator sources
 with bounded content-free request samples. Read-only HTTPS/browser inspection keeps
 readiness, worker observations, discovery, processing, capacity and request outcomes
@@ -123,6 +123,8 @@ settings and exact shared-event/personal-delivery dismissal/restore. Stable nega
 fences and applied/conflict decisions survive short-lived grouping custody. Separate
 combined-updates-2 routine endpoints filter before highlights and require explicit
 same-view policy refresh; old combined, standalone and reading contracts stay intact.
+ADR-045 adds optional observation of both committed streams and explicit expansion
+of unfinished intervals in routine Updates. Only the human browser schedules checks.
 Complete retrieval bypasses private filters; current source/history checks still
 precede selection. Browser attention hosts require
 `web/AuthorizationBoundary.tsx`, backed by the identity-scoped

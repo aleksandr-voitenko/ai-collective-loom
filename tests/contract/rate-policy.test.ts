@@ -57,6 +57,7 @@ test('every actual participation route has one explicit rate meaning, including 
   for (const p of [
     'me/notes/query',
     'me/updates/query',
+    'me/routine-updates/observe',
     'me/attention/private/list',
     'me/reading/lookup',
   ])

@@ -400,12 +400,24 @@ checks verify the current administrator role before fresh protected reads; priva
 input and receipts never reauthorize content. Page/API limits are documented in
 `CommunitySettings.md`; no global query, authorization or server contract changes.
 
+Routine Updates observes from the accepted overview using `useUpdatesObservation.ts`.
+The separate in-memory continuation and pending notice survive navigation within
+the same fixed view and selection. Same-view policy changes require explicit
+attention refresh. Latest uses a genuine checkpoint or refresh_from_view and
+adopts the new observation boundary only after the authorized successor has
+been saved. A valid Retry-After for the same owner still delays the next check
+if it arrives after that replacement schedules its timer. The observer never
+edits recovery bytes.
+
 `Updates.tsx` keeps route/scope selection, the existing keyed view and rendered
 groups/member controls. `useUpdatesView.ts` owns overview/member reads, displayed
 recovery saves, retry/renewal actions, attention-change observations and focus refs.
 Keep its request/owner/authority fences and save-before-display order together;
 reason paging remains local to the stable `MatchingReasons` component. The pending
 expansion position stays above withdrawal in `UpdatesPage`, without source metadata.
+For focused Confirm and Undo actions, `DismissControl` reserves enough of its
+current height to preserve the viewport when a shorter receipt appears at the
+document end. A change of selection or authorization clears the reservation.
 
 `SearchAdministration.tsx` owns `/loom/admin/search`; the shared Administration navigation links to it.
 Health and the exact requested failed-job page load on entry and Refresh status.

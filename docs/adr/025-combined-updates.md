@@ -56,7 +56,9 @@ Highlights includes every direct-bearing group and the first three routine group
 with bounded pagination. A direct-only group/member selection provides a bounded
 path to additional signals. Complete selection retains exactly the original scope,
 definitions, reason and two intervals, restarting group pagination. It does not adopt
-later Following settings or arrivals. Newer activity is a separate checkpoint query.
+later Following settings or arrivals. A completed interval supports a separate
+checkpoint query. The later routine contract also supports observing arrivals and
+explicitly expanding an unfinished interval under [ADR-045](045-routine-updates-observation.md).
 
 Counts name unique shared events, source records, reply publications, reply revisions,
 summary publications/revisions, artifact publications/revisions, structural events

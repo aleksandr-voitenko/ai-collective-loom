@@ -228,6 +228,9 @@ function UpdatesView({
   expansionRetry: RefObject<ExpansionRetry | undefined>;
 }) {
   const {
+    observation,
+    canShowLatest,
+    showLatest,
     recover,
     retry,
     page,
@@ -271,15 +274,29 @@ function UpdatesView({
     </>
   );
   return (
-    <div ref={anchor} tabIndex={-1} aria-busy={busy}>
-      <div className="notification-toolbar">
+    <div
+      ref={anchor}
+      tabIndex={-1}
+      aria-busy={busy}
+      className={routine ? 'routine-updates-view' : undefined}
+    >
+      <div
+        className={routine ? 'notification-toolbar updates-view-toolbar' : 'notification-toolbar'}
+      >
         <button
           aria-disabled={busy}
           onClick={() => void load({ scope, reason }, [], undefined, true)}
         >
           Refresh scope from retained history
         </button>
-        {page?.checkpoint && (
+        {routine && (
+          <span className="updates-following-status" role="status">
+            {page &&
+              (!page.traversal.settings_current || observation.settingsChanged) &&
+              'Using earlier Following settings.'}
+          </span>
+        )}
+        {!routine && page?.checkpoint && (
           <button
             aria-disabled={busy}
             onClick={() =>
@@ -289,7 +306,7 @@ function UpdatesView({
             Check newer activity
           </button>
         )}
-        <label>
+        <label className={routine ? 'updates-size' : undefined}>
           Next page size{' '}
           <select value={size} onChange={(e) => setSize(Number(e.target.value))}>
             <option value={5}>5</option>
@@ -298,6 +315,83 @@ function UpdatesView({
           </select>
         </label>
       </div>
+      {routine && (
+        <div className="updates-freshness">
+          <button aria-disabled={!canShowLatest} onClick={showLatest}>
+            Show latest activity
+          </button>
+          <div
+            role="status"
+            aria-label="Updates activity"
+            aria-atomic="true"
+            className="updates-freshness-status"
+          >
+            {observation.pending && <strong>New activity available</strong>}
+            {observation.problem && page ? (
+              observation.problem.code === 'updates_descriptor_expired' ? (
+                <span>
+                  Check expired.{' '}
+                  <button
+                    className="text-button"
+                    aria-disabled={busy}
+                    onClick={() =>
+                      void load(
+                        {
+                          recovery: { action: 'renew', token: page.page_cursor },
+                          limit: page.limit,
+                          max_response_bytes: page.max_response_bytes,
+                        },
+                        past,
+                        expanded ? displayedRequest(expanded) : undefined,
+                      )
+                    }
+                  >
+                    Renew fixed Updates view
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  {observation.problem.code === 'unsupported_contract'
+                    ? 'Automatic checking is unsupported for this view.'
+                    : 'Invalid view token. Refresh scope to check again.'}
+                </span>
+              )
+            ) : observation.failed &&
+              (!attentionChanged || page?.traversal.selection === 'complete') ? (
+              <span>Couldn’t check for new activity. Retrying…</span>
+            ) : observation.unknown ? (
+              <span>Some activity has unknown coverage.</span>
+            ) : observation.catchingUp && !observation.pending ? (
+              <span>Checking more activity…</span>
+            ) : null}
+          </div>
+          <div className="updates-policy-status" role="status">
+            {page && attentionChanged && action !== 'attention_refresh' && (
+              <>
+                Attention choices changed.{' '}
+                <button
+                  className="text-button"
+                  aria-disabled={busy}
+                  onClick={() =>
+                    void load(
+                      {
+                        recovery: { action: 'attention_refresh', token: page.page_cursor },
+                        limit: page.limit,
+                        max_response_bytes: page.max_response_bytes,
+                      },
+                      [],
+                      undefined,
+                      false,
+                    )
+                  }
+                >
+                  Refresh attention selection
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {busy && <p role="status">Loading Updates…</p>}
       {failure && (
         <div role="alert" className="notice error" tabIndex={-1} ref={notice}>
@@ -343,31 +437,6 @@ function UpdatesView({
       )}
       {page && (
         <>
-          {routine && attentionChanged && (
-            <div className="notice">
-              <p>
-                Attention choices changed. Displayed cards retain their prior selection until
-                explicit refresh.
-              </p>
-              <button
-                aria-disabled={busy}
-                onClick={() =>
-                  void load(
-                    {
-                      recovery: { action: 'attention_refresh', token: page.page_cursor },
-                      limit: page.limit,
-                      max_response_bytes: page.max_response_bytes,
-                    },
-                    [],
-                    undefined,
-                    false,
-                  )
-                }
-              >
-                Refresh attention selection
-              </button>
-            </div>
-          )}
           {'attention' in page && (
             <p className="fineprint">
               {page.attention.selection === 'remaining_routine_inputs'
@@ -375,7 +444,7 @@ function UpdatesView({
                 : 'Complete retrieval includes all represented authorized inputs, including muted and dismissed ones.'}
             </p>
           )}
-          {!page.traversal.settings_current && (
+          {!routine && !page.traversal.settings_current && (
             <p className="notice">
               This interval retains earlier Following settings. Refresh scope to adopt current
               choices.

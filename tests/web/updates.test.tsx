@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test, type TestContext } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { JSDOM } from 'jsdom';
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { UpdatesPage } from '../../src/web/Updates.js';
@@ -160,9 +160,15 @@ function mount(t: TestContext, entry = '/loom/updates', routine = false) {
       self: { participant_id: participant, csrf: 'fixture' },
       store,
     } as Context;
+  let replaceContext!: (next: Context) => void;
+  function Host() {
+    const [current, setContext] = useState(context);
+    replaceContext = setContext;
+    return <UpdatesPage context={current} />;
+  }
   const router = createMemoryRouter(
     [
-      { path: '/loom/updates', element: <UpdatesPage context={context} /> },
+      { path: '/loom/updates', element: <Host /> },
       { path: '/other', element: <h1>Other view</h1> },
     ],
     { initialEntries: [entry] },
@@ -173,7 +179,7 @@ function mount(t: TestContext, entry = '/loom/updates', routine = false) {
       <RouterProvider router={router} />
     </StrictMode>,
   );
-  return { calls, router, context };
+  return { calls, router, context, replaceContext: (next: Context) => replaceContext(next) };
 }
 const records = () =>
   JSON.parse(
@@ -1164,4 +1170,422 @@ test('switching expanded Complete records to a routine source invalidates old di
     false,
     'the old shared+personal selection must not survive the now personal-only member',
   );
+});
+
+function watchRoutine(t: TestContext) {
+  invalidateIdentity();
+  let hidden = false,
+    online = true,
+    now = 0;
+  t.mock.getter(document, 'hidden', () => hidden);
+  t.mock.getter(navigator, 'onLine', () => online);
+  t.mock.method(performance, 'now', () => now);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = mount(t, '/loom/updates', true);
+  function tick(milliseconds = 15000) {
+    return act(async () => {
+      now += milliseconds;
+      t.mock.timers.tick(milliseconds);
+    });
+  }
+  const checks = () => f.calls.filter((c) => c.path.endsWith('/observe'));
+  return {
+    ...f,
+    checks,
+    tick,
+    button: (name: string) => screen.getByRole<HTMLButtonElement>('button', { name }),
+    respond: (call: (typeof f.calls)[number], response: Response) =>
+      act(async () => call.finish(response)),
+    latest: () => screen.getByRole<HTMLButtonElement>('button', { name: 'Show latest activity' }),
+    raw: () => Object.entries(localStorage).sort(),
+    connection: (visible: boolean, connected: boolean) => {
+      hidden = !visible;
+      online = connected;
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event(online ? 'online' : 'offline'));
+      window.dispatchEvent(new Event('focus'));
+    },
+  };
+}
+const observation = (cursor: string, changes: Record<string, unknown> = {}) =>
+  Response.json({
+    contract_version: 'combined-updates-2',
+    cursor,
+    new_activity: false,
+    coverage: 'known',
+    settings_current: true,
+    scan_complete: true,
+    ...changes,
+  });
+const checkFailure = (code: string, status = 409) =>
+  Response.json({ error: { code, message: code } }, { status });
+
+test('Highlights observes from its accepted overview, keeps its display on failure, and replaces the boundary only after saving latest', async (t) => {
+  const f = watchRoutine(t);
+  const page = routineResult();
+  page.max_response_bytes = 24000;
+  assert.equal(page.checkpoint, null);
+  await settleRoutine(f, page);
+  await act(async () => fireEvent.click(f.button('Inspect changes')));
+  await f.respond(
+    f.calls.at(-1)!,
+    Response.json({
+      ...expansion(),
+      contract_version: 'combined-updates-2',
+      attention: page.attention,
+    }),
+  );
+  await act(async () =>
+    fireEvent.change(screen.getByLabelText('Next page size'), { target: { value: '5' } }),
+  );
+  const control = f.button('Close changes'),
+    detail = screen.getByRole('complementary');
+  const card = screen.getByRole('heading', { name: 'Visible source' });
+  const open = screen.getByText('Attention controls').closest('details')!;
+  open.open = true;
+  control.focus();
+  localStorage.setItem('independent-journal', '{"verbatim":"bytes"}');
+  const saved = f.raw(),
+    first = f.calls.length;
+  await f.tick();
+  assert.deepEqual(f.checks()[0]?.body, { view: 'shown' });
+  await f.respond(f.checks()[0]!, observation('scan1', { scan_complete: false }));
+  assert.ok(screen.getByText('Checking more activity…'));
+  assert.equal(f.latest().getAttribute('aria-disabled'), 'true');
+  await f.tick(14999);
+  assert.equal(f.checks().length, 1);
+  await f.tick(1);
+  assert.deepEqual(f.checks()[1]?.body, { view: 'shown', cursor: 'scan1' });
+  await f.respond(f.checks()[1]!, observation('scan2', { new_activity: true }));
+  await f.tick();
+  await f.respond(f.checks()[2]!, checkFailure('service_unavailable', 503));
+  assert.ok(screen.getByText('Couldn’t check for new activity. Retrying…'));
+  assert.ok(screen.getByText('New activity available'));
+  assert.equal(document.activeElement, control);
+  assert.equal(f.button('Close changes').getAttribute('aria-disabled'), 'false');
+  assert.equal(screen.getByRole('complementary'), detail);
+  assert.equal(screen.getByRole('heading', { name: 'Visible source' }), card);
+  assert.equal(open.open, true);
+  assert.equal(screen.getByLabelText<HTMLSelectElement>('Next page size').value, '5');
+  assert.deepEqual(f.raw(), saved);
+  assert.deepEqual(
+    f.calls.slice(first).map((c) => c.path),
+    Array(3).fill('/api/v1/me/routine-updates/observe'),
+  );
+
+  const latest = f.latest();
+  latest.focus();
+  await act(async () => fireEvent.click(latest));
+  const application = { refresh_from_view: 'shown', limit: 5, max_response_bytes: 24000 };
+  assert.deepEqual(f.calls.at(-1)!.body, application);
+  await f.respond(f.calls.at(-1)!, checkFailure('service_unavailable', 503));
+  assert.ok(screen.getByRole('alert'));
+  assert.ok(screen.getByText('New activity available'));
+  assert.deepEqual(f.raw(), saved);
+  await act(async () => fireEvent.click(f.button('Retry Updates')));
+  assert.deepEqual(f.calls.at(-1)!.body, application);
+  const next = routineResult('accepted-preparation');
+  next.traversal.id = randomUUID();
+  next.stage = 'preparing';
+  next.items = [];
+  next.next_cursor = 'prepare-next';
+  next.max_response_bytes = 24000;
+  next.limit = 5;
+  const fault = t.mock.method(dom.window.Storage.prototype, 'setItem', () => {
+    throw new Error('Storage full');
+  });
+  await f.respond(f.calls.at(-1)!, Response.json(next));
+  fault.mock.restore();
+  assert.ok(screen.getByText(/Updates recovery could not be saved/));
+  assert.ok(screen.getByText('New activity available'));
+  assert.equal(screen.getByRole('complementary'), detail);
+  assert.deepEqual(f.raw(), saved);
+  await f.tick(30000);
+  const held = f.checks().at(-1)!;
+  assert.deepEqual(held.body, { view: 'shown', cursor: 'scan2' });
+  await act(async () => fireEvent.click(latest));
+  assert.deepEqual(f.calls.at(-1)!.body, {
+    cursor: next.page_cursor,
+    limit: 5,
+    max_response_bytes: 24000,
+  });
+  await f.respond(f.calls.at(-1)!, Response.json(next));
+  assert.equal(screen.queryByRole('complementary'), null);
+  assert.ok(f.button('Continue preparing Updates'));
+  assert.equal(f.latest(), latest);
+  assert.equal(document.activeElement, latest);
+  await f.respond(held, observation('obsolete', { new_activity: true }));
+  assert.equal(screen.queryByText('New activity available'), null);
+  await f.tick();
+  assert.deepEqual(f.checks().at(-1)!.body, { view: 'accepted-preparation' });
+  await f.respond(f.checks().at(-1)!, observation('during-application', { new_activity: true }));
+  assert.ok(screen.getByText('New activity available'));
+  await act(async () => fireEvent.click(f.latest()));
+  assert.deepEqual(f.calls.at(-1)!.body, {
+    refresh_from_view: 'accepted-preparation',
+    limit: 5,
+    max_response_bytes: 24000,
+  });
+});
+
+test('Complete applies a genuine checkpoint; intervening reader focus survives replacement', async (t) => {
+  const f = watchRoutine(t),
+    p = routineResult();
+  p.traversal.selection = 'complete';
+  p.checkpoint = 'genuine-checkpoint';
+  p.max_response_bytes = 8600;
+  await settleRoutine(f, p);
+  await f.tick();
+  await f.respond(f.checks()[0]!, checkFailure('updates_descriptor_expired'));
+  assert.ok(f.button('Renew fixed Updates view'));
+  const latest = f.latest();
+  assert.equal(latest.getAttribute('aria-disabled'), 'false');
+  latest.focus();
+  await act(async () => fireEvent.click(latest));
+  assert.deepEqual(f.calls.at(-1)!.body, {
+    checkpoint: 'genuine-checkpoint',
+    limit: 12,
+    max_response_bytes: 8600,
+  });
+  const size = screen.getByLabelText('Next page size');
+  size.focus();
+  const next = routineResult('newer');
+  next.traversal.id = randomUUID();
+  await f.respond(f.calls.at(-1)!, Response.json(next));
+  assert.equal(document.activeElement, size);
+});
+
+test('Complete reports a temporary check failure beside changed attention choices and retains a confirmed arrival', async (t) => {
+  const f = watchRoutine(t);
+  const page = routineResult();
+  page.traversal.selection = 'complete';
+  await settleRoutine(f, page);
+  await f.tick();
+  await f.respond(f.checks()[0]!, observation('found', { new_activity: true }));
+  await act(async () =>
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key:
+          new AttentionRecovery(f.context.community.instance_id, f.context.self.participant_id)
+            .prefix + 'other-tab',
+      }),
+    ),
+  );
+  await f.tick();
+  await f.respond(f.checks()[1]!, checkFailure('service_unavailable', 503));
+  assert.ok(screen.getByText(/Attention choices changed/));
+  assert.ok(screen.getByText('New activity available'));
+  assert.ok(screen.getByText(/Couldn’t check for new activity. Retrying/));
+  assert.equal(f.latest().getAttribute('aria-disabled'), 'false');
+});
+
+test('hidden and offline Checks pause, resume once, honor Retry-After, and stop at an explicit policy change', async (t) => {
+  const f = watchRoutine(t);
+  await settleRoutine(f);
+  const saved = f.raw();
+  f.connection(false, true);
+  await f.tick(100000);
+  f.connection(true, false);
+  await f.tick(100000);
+  assert.deepEqual(f.checks(), []);
+  f.connection(true, true);
+  await f.tick(0);
+  assert.equal(f.checks().length, 1);
+  f.connection(true, true);
+  await f.tick(100000);
+  assert.equal(f.checks().length, 1);
+  await f.respond(
+    f.checks()[0]!,
+    Response.json(
+      { error: { code: 'rate_limited', message: 'Try later' } },
+      { status: 429, headers: { 'retry-after': '55' } },
+    ),
+  );
+  f.connection(true, true);
+  await f.tick(54999);
+  assert.equal(f.checks().length, 1);
+  await f.tick(1);
+  assert.equal(f.checks().length, 2);
+  await f.respond(
+    f.checks()[1]!,
+    observation('visible', { new_activity: true, settings_current: false }),
+  );
+  assert.ok(screen.getByText('Using earlier Following settings.'));
+  await f.tick();
+  await f.respond(f.checks()[2]!, checkFailure('updates_attention_refresh_required'));
+  assert.ok(screen.getByText(/Attention choices changed/));
+  assert.ok(screen.getByText(/New activity available/));
+  assert.equal(f.latest().getAttribute('aria-disabled'), 'true');
+  f.connection(true, true);
+  await f.tick(180000);
+  assert.equal(f.checks().length, 3);
+  assert.deepEqual(f.raw(), saved);
+  await act(async () => fireEvent.click(f.button('Refresh attention selection')));
+  assert.equal(f.calls.at(-1)!.body.recovery.token, 'shown');
+});
+
+for (const code of ['unavailable', 'updates_visibility_replay_required']) {
+  test(`an observation reporting ${code} fences an overlapping page and retains saved recovery`, async (t) => {
+    const f = watchRoutine(t);
+    await settleRoutine(f);
+    const raw = f.raw();
+    await f.tick();
+    await act(async () => fireEvent.click(f.button('Continue this interval')));
+    const held = f.calls.at(-1)!;
+    await f.respond(f.checks()[0]!, checkFailure(code, code === 'unavailable' ? 404 : 409));
+    assert.equal(screen.queryByText('Visible source'), null);
+    assert.ok(screen.getByRole('alert'));
+    await f.respond(held, Response.json(routineResult('withdrawn')));
+    assert.equal(screen.queryByText('Visible source'), null);
+    assert.deepEqual(f.raw(), raw);
+    if (code === 'updates_visibility_replay_required') {
+      await act(async () => fireEvent.click(f.button('Replay both retained streams')));
+      assert.deepEqual(f.calls.at(-1)!.body, {
+        recovery: { action: 'replay', token: 'shown' },
+        limit: 12,
+        max_response_bytes: 131072,
+      });
+    }
+  });
+}
+
+test('an empty or failed check leaves a foreground retry intact; fixed-interval paging keeps a positive notice', async (t) => {
+  const f = watchRoutine(t);
+  await settleRoutine(f);
+  await act(async () => fireEvent.click(f.button('Continue this interval')));
+  const continuation = f.calls.at(-1)!.body,
+    before = f.raw();
+  await f.respond(f.calls.at(-1)!, checkFailure('updates_work_limit', 503));
+  for (const response of [
+    observation('empty'),
+    checkFailure('service_unavailable', 503),
+    observation('positive', { new_activity: true }),
+  ]) {
+    await f.tick(30000);
+    await f.respond(f.checks().at(-1)!, response);
+    assert.ok(screen.getByRole('alert').textContent?.includes('updates_work_limit'));
+    assert.deepEqual(f.raw(), before);
+  }
+  await act(async () => fireEvent.click(f.button('Retry Updates')));
+  assert.deepEqual(f.calls.at(-1)!.body, continuation);
+  const next = routineResult('next-page');
+  await f.respond(f.calls.at(-1)!, Response.json(next));
+  assert.ok(screen.getByText('New activity available'));
+  await f.tick();
+  assert.deepEqual(f.checks().at(-1)!.body, { view: 'shown', cursor: 'positive' });
+  await act(async () => fireEvent.click(f.latest()));
+  assert.deepEqual(f.calls.at(-1)!.body, {
+    refresh_from_view: 'next-page',
+    limit: 12,
+    max_response_bytes: 131072,
+  });
+});
+
+test('a check held across an attention change cannot clear the new policy notice or announce an old-policy match', async (t) => {
+  const f = watchRoutine(t);
+  await settleRoutine(f);
+  await f.tick();
+  await act(async () =>
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key:
+          new AttentionRecovery(f.context.community.instance_id, f.context.self.participant_id)
+            .prefix + 'other-tab',
+      }),
+    ),
+  );
+  assert.ok(screen.getByText(/Attention choices changed/));
+  await f.respond(f.checks()[0]!, observation('old-match', { new_activity: true }));
+  assert.equal(screen.queryByText('New activity available'), null);
+  assert.ok(screen.getByText(/Attention choices changed/));
+  const count = f.calls.length;
+  await f.tick(180000);
+  assert.equal(f.calls.length, count);
+});
+
+for (const change of [
+  'scope',
+  'reason',
+  'legacy',
+  'selection',
+  'instance',
+  'participant',
+  'identity',
+  'leave',
+]) {
+  test(`a held observation cannot announce an arrival after a change of ${change}`, async (t) => {
+    const f = watchRoutine(t);
+    await settleRoutine(f);
+    await f.tick();
+    const old = f.checks()[0]!;
+    if (change === 'selection') {
+      await act(async () => fireEvent.click(f.button('Show direct attention groups')));
+      const direct = routineResult('direct-page');
+      direct.traversal.selection = 'direct';
+      await f.respond(f.calls.at(-1)!, Response.json(direct));
+    } else if (change === 'identity') {
+      await act(async () => invalidateIdentity());
+    } else if (change === 'instance' || change === 'participant') {
+      await act(async () =>
+        f.replaceContext({
+          ...f.context,
+          ...(change === 'instance'
+            ? { community: { ...f.context.community, instance_id: randomUUID() } }
+            : { self: { ...f.context.self, participant_id: randomUUID() } }),
+        }),
+      );
+    } else {
+      const to =
+        change === 'leave'
+          ? '/other'
+          : change === 'legacy'
+            ? '/loom/updates?contract=legacy'
+            : change === 'reason'
+              ? '/loom/updates?reason=reply'
+              : '/loom/updates?kind=personal';
+      await act(async () => f.router.navigate(to));
+    }
+    const raw = f.raw();
+    await f.respond(old, observation('late-positive', { new_activity: true }));
+    assert.equal(screen.queryByText('New activity available'), null);
+    assert.deepEqual(f.raw(), raw);
+    if (change === 'selection') {
+      await f.tick();
+      assert.deepEqual(f.checks().at(-1)!.body, { view: 'direct-page' });
+    } else {
+      await f.tick(180000);
+      assert.equal(f.checks().length, 1);
+    }
+  });
+}
+
+test('a late Retry-After from the previous view delays observation of the accepted replacement', async (t) => {
+  const f = watchRoutine(t);
+  await settleRoutine(f);
+  await f.tick();
+  await f.respond(f.checks()[0]!, observation('pending', { new_activity: true }));
+  await f.tick();
+  const held = f.checks()[1]!;
+  await act(async () => fireEvent.click(f.latest()));
+  const replacement = routineResult('replacement');
+  replacement.traversal.id = randomUUID();
+  await f.respond(f.calls.at(-1)!, Response.json(replacement));
+  await f.respond(
+    held,
+    Response.json(
+      { error: { code: 'rate_limited', message: 'Try later' } },
+      { status: 429, headers: { 'retry-after': '55' } },
+    ),
+  );
+  await f.tick();
+  assert.equal(f.checks().length, 2, 'the timer set when the new view was accepted must defer');
+  f.connection(true, true);
+  await f.tick(39999);
+  assert.equal(f.checks().length, 2);
+  await f.tick(1);
+  assert.deepEqual(
+    f.checks().map((check) => check.body),
+    [{ view: 'shown' }, { view: 'shown', cursor: 'pending' }, { view: 'replacement' }],
+  );
+  assert.equal(screen.queryByText('New activity available'), null);
 });

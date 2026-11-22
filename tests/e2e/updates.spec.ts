@@ -7,6 +7,10 @@ import { test, expect } from '../helpers/browser-fixtures.js';
 import { setup, api } from '../helpers/change-browser.js';
 import { authored } from '../helpers/references.js';
 import { mentioned } from '../helpers/notifications.js';
+import {
+  captureUpdatesBaseline,
+  captureUpdatesFreshness,
+} from '../helpers/updates-freshness-review.js';
 import { NativeSearchWorker } from '../../scripts/lib/native-search-worker.js';
 import { syntheticServer } from '../helpers/participation-server.js';
 import { editUpdatesToken } from '../helpers/updates-token.js';
@@ -174,7 +178,7 @@ for (const kind of ['personal', 'artifact'] as const)
       ).rows,
       deliveries = (await server.observer.query('SELECT id,position FROM loom.personal_deliveries'))
         .rows;
-    await page.getByRole('button', { name: 'Check newer activity' }).click();
+    await page.getByRole('button', { name: 'Show latest activity' }).click();
     await ready(page);
     await expect(page.locator('.updates-list h2')).toHaveText(
       kind === 'personal' ? 'Personal recovery mention' : 'Recovered target',
@@ -263,7 +267,7 @@ upgradeTest(
         'Historical shared coverage is unknown. No complete combined checkpoint is issued.',
       ),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Check newer activity' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Show latest activity' })).toBeDisabled();
     const clocks = (
       await server.observer.query('SELECT shared_position FROM loom.community_clocks')
     ).rows;
@@ -299,7 +303,7 @@ upgradeTest(
       (await server.observer.query('SELECT shared_position FROM loom.community_clocks')).rows,
     ).toEqual(clocks);
     await move(child, f.area);
-    await page.getByRole('button', { name: 'Check newer activity' }).click();
+    await page.getByRole('button', { name: 'Show latest activity' }).click();
     await ready(page);
     await expect(page.locator('.updates-list > li')).toHaveCount(1);
     await expect(page.locator('.update-counts')).toHaveText('1 structural change');
@@ -401,7 +405,7 @@ test('AC07 compact discussion, exact direct source, attributed note, bounded exp
       .rows,
     deliveries = (await server.observer.query('SELECT id,position FROM loom.personal_deliveries'))
       .rows;
-  await page.getByRole('button', { name: 'Check newer activity' }).click();
+  await page.getByRole('button', { name: 'Show latest activity' }).click();
   await ready(page);
   await expect(page.locator('.updates-list > li')).toHaveCount(1);
   await expect(page.locator('.update-counts')).toHaveText(
@@ -724,4 +728,319 @@ test('retry after an expansion race restores the fixed overview and unseen succe
     release.release();
     await page.unrouteAll({ behavior: 'wait' });
   }
+});
+
+test('ordinary Highlights automatically discovers a delayed delivery and explicitly shows latest activity', async ({
+  page,
+  context,
+  server,
+}) => {
+  const f = await setup(page, context, server);
+  const initialTitle = 'River habitat field notes';
+  const mentionTitle = 'Volunteer rota for the next survey';
+  const notes = await f.admin.call('/api/v1/artifacts', {
+    idempotency_key: randomUUID(),
+    area_id: f.area,
+    title: initialTitle,
+    content: authored('Sampling sites and observations from the latest river walk.'),
+  });
+  expect(notes.status).toBe(201);
+  await api(page, '/api/v1/me/following/private/state', {
+    target: { kind: 'artifact', resource_id: notes.body.resource_id },
+    include_descendants: false,
+    preferences: ['artifact_revisions'],
+    following: true,
+    expected_version: 0,
+    idempotency_key: randomUUID(),
+  });
+  // This unfollowed publication is already behind the first shared upper bound.
+  // The real notifications worker will deliver its mention after the view opens.
+  expect(
+    (
+      await f.admin.call('/api/v1/artifacts', {
+        idempotency_key: randomUUID(),
+        area_id: f.area,
+        title: mentionTitle,
+        content: mentioned(f.person),
+        change_note: null,
+        change_account: null,
+      })
+    ).status,
+  ).toBe(201);
+  const sharedClock = async () =>
+    (await server.observer.query('SELECT shared_position FROM loom.community_clocks')).rows[0]
+      .shared_position;
+  const start = await sharedClock();
+  const view = observeUpdates(page);
+  await page.clock.install();
+  await page.getByRole('link', { name: 'Updates', exact: true }).click();
+  await ready(page);
+  const oldView = await view();
+  expect(oldView.traversal.selection).toBe('highlights');
+  expect(oldView.checkpoint).toBeNull();
+  const titles = page.locator('.updates-list h2');
+  await expect(titles).toHaveText([initialTitle]);
+  const toolbar = page.getByRole('button', { name: 'Refresh scope from retained history' });
+  const inspect = page.getByRole('button', { name: 'Inspect changes', exact: true });
+  await inspect.click();
+  const expansion = page.getByRole('complementary', { name: 'Expanded changes' });
+  const reasons = expansion.getByText('Why this shared change is included', { exact: true });
+  const attention = page.getByText('Attention controls', { exact: true });
+  await reasons.click();
+  await attention.click();
+  const mute = page.getByRole('button', { name: 'Mute routine updates', exact: true });
+  await expect(mute).toBeEnabled();
+  await expect(expansion.getByText('Matching reasons complete for this source.')).toBeVisible();
+  // Real keyboard focus and a native text selection are independent reader state.
+  await reasons.focus();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(reasons).toBeFocused();
+  const explanation = expansion.getByText('Matching reasons complete for this source.');
+  await explanation.evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  if (captureUpdatesBaseline) {
+    await captureUpdatesFreshness(
+      page,
+      'before',
+      toolbar,
+      'Previous Updates toolbar on an expanded ordinary Highlights view with no completion checkpoint.',
+    );
+    return;
+  }
+  const status = page.getByText('New activity available', { exact: true });
+  const latest = page.getByRole('button', { name: 'Show latest activity', exact: true });
+  const observePath = '/api/v1/me/routine-updates/observe';
+  const calls: string[] = [];
+  page.on('request', (r) => {
+    const path = new URL(r.url()).pathname;
+    if (path.startsWith('/api/v1/')) calls.push(path);
+  });
+  const check = async (milliseconds: number) => {
+    const observed = page.waitForResponse((r) => new URL(r.url()).pathname === observePath);
+    await page.clock.fastForward(milliseconds);
+    return observed;
+  };
+  const stored = () =>
+    page.evaluate(() => Object.entries(localStorage).sort(([a], [b]) => a.localeCompare(b)));
+  const storageBefore = await stored();
+  const custody = async () =>
+    (await server.observer.query('SELECT * FROM loom.updates_views ORDER BY id')).rows;
+  const custodyBefore = await custody();
+  const card = await titles.elementHandle();
+  // Document coordinates catch cards moving even when scroll anchoring keeps
+  // the viewport still. Include the open matching-reasons disclosure as well.
+  const readingPositions = async () => {
+    const viewport = page.viewportSize()!;
+    const scroll = await page.evaluate(() => scrollY);
+    const positions = [];
+    try {
+      for (const size of [
+        { width: 1440, height: 1000 },
+        { width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize(size);
+        positions.push(
+          await titles.first().evaluate((node) => node.getBoundingClientRect().top + scrollY),
+        );
+        if (await reasons.count())
+          positions.push(
+            await reasons.evaluate((node) => node.getBoundingClientRect().top + scrollY),
+          );
+      }
+    } finally {
+      await page.setViewportSize(viewport);
+      await page.evaluate((top) => scrollTo(0, top), scroll);
+    }
+    return positions;
+  };
+  const originalPositions = await readingPositions();
+  const scroll = await page.evaluate(() => scrollY);
+  expect(scroll).toBeGreaterThan(0);
+  const assertRetained = async () => {
+    await expect(titles).toHaveText([initialTitle]);
+    expect(await card!.evaluate((node) => node.isConnected)).toBe(true);
+    await expect(inspect).toHaveAttribute('aria-expanded', 'true');
+    await expect(expansion.getByText('Matching reasons complete for this source.')).toBeVisible();
+    await expect(mute).toBeEnabled();
+    await expect(reasons).toBeFocused();
+    expect(await page.evaluate(() => getSelection()?.toString())).toBe(
+      'Matching reasons complete for this source.',
+    );
+    expect(Math.abs((await page.evaluate(() => scrollY)) - scroll)).toBeLessThanOrEqual(1);
+    expect(await stored()).toEqual(storageBefore);
+    expect(await custody()).toEqual(custodyBefore);
+    expect(await readingPositions()).toEqual(originalPositions);
+  };
+  const settled = await check(16_000);
+  expect((await settled.json()).new_activity).toBe(false);
+  await expect(status).toHaveCount(0);
+  await assertRetained();
+  const worker = new NativeSearchWorker(server.configuration, 'notifications');
+  await worker.start();
+  try {
+    await worker.observeUntil(
+      async () =>
+        (
+          await server.observer.query(
+            'SELECT id FROM loom.personal_deliveries WHERE recipient_id=$1',
+            [f.person],
+          )
+        ).rowCount === 1,
+    );
+  } finally {
+    await worker.stop();
+  }
+  expect(await sharedClock()).toBe(start);
+  const arrived = await check(16_000);
+  expect((await arrived.json()).new_activity).toBe(true);
+  await expect(status).toBeVisible();
+  await assertRetained();
+  await captureUpdatesFreshness(
+    page,
+    'new-activity',
+    toolbar,
+    'A delayed personal delivery is available. The reader’s existing Highlights card and open attention controls remain.',
+  );
+  await captureUpdatesFreshness(
+    page,
+    'expanded-details',
+    expansion,
+    'The original group, expanded source and open matching reasons while new activity awaits application.',
+  );
+  await page.route(
+    '**' + observePath,
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: {
+          error: { code: 'service_unavailable', message: 'Synthetic temporary check failure' },
+        },
+      }),
+    { times: 1 },
+  );
+  expect((await check(16_000)).status()).toBe(503);
+  await expect(page.getByText(/Couldn’t check for new activity/)).toBeVisible();
+  await expect(status).toBeVisible();
+  await assertRetained();
+  await captureUpdatesFreshness(
+    page,
+    'temporary-check-failure',
+    toolbar,
+    'The background check failed, a previously confirmed arrival and the open group remain available.',
+    [
+      'One automatic observation POST received a synthetic HTTP 503 before dispatch to the service.',
+    ],
+  );
+  expect((await check(31_000)).status()).toBe(200);
+  await expect(page.getByText(/Couldn’t check for new activity/)).toHaveCount(0);
+  await expect(status).toBeVisible();
+  await assertRetained();
+  expect(calls.length).toBeGreaterThan(0);
+  expect(new Set(calls)).toEqual(new Set([observePath]));
+  await api(page, '/api/v1/me/following/private/state', {
+    target: { kind: 'artifact', resource_id: notes.body.resource_id },
+    include_descendants: false,
+    preferences: ['artifact_revisions', 'change_notes'],
+    following: true,
+    expected_version: 1,
+    idempotency_key: randomUUID(),
+  });
+  expect((await (await check(16_000)).json()).settings_current).toBe(false);
+  await expect(page.getByText('Using earlier Following settings.')).toBeVisible();
+  await assertRetained();
+  const latestPath = '**/api/v1/me/routine-updates/query';
+  // Failure in the foreground has its own exact retry. A later observation
+  // must preserve both that action and the recoverable, expanded display.
+  await page.route(
+    latestPath,
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: {
+          error: { code: 'service_unavailable', message: 'Latest activity could not be loaded.' },
+        },
+      }),
+    { times: 1 },
+  );
+  await latest.focus();
+  await page.keyboard.press('Enter');
+  const retry = page.getByRole('button', { name: 'Retry Updates', exact: true });
+  await expect(retry).toBeVisible();
+  expect((await check(16_000)).status()).toBe(200);
+  await expect(retry).toBeVisible();
+  await expect(status).toBeVisible();
+  await expect(titles).toHaveText([initialTitle]);
+  await expect(inspect).toHaveAttribute('aria-expanded', 'true');
+  expect(await stored()).toEqual(storageBefore);
+  const captured = barrier(),
+    release = barrier();
+  let application: unknown;
+  await page.route(latestPath, async (route) => {
+    const body = route.request().postDataJSON();
+    if (!body.refresh_from_view) return route.continue();
+    application = body;
+    const response = await route.fetch();
+    captured.release();
+    await release.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await retry.focus();
+    await page.keyboard.press('Enter');
+    await captured.promise;
+    expect(application).toMatchObject({ refresh_from_view: oldView.page_cursor });
+    expect(application).not.toHaveProperty('checkpoint');
+    await expect(inspect).toHaveAttribute('aria-expanded', 'true');
+    expect(await stored()).toEqual(storageBefore);
+    const revision = await f.admin.call('/api/v1/revisions', {
+      idempotency_key: randomUUID(),
+      resource_id: notes.body.resource_id,
+      expected_revision_id: notes.body.revision_id,
+      title: initialTitle,
+      content: authored('The upstream sampling site is now included.'),
+    });
+    expect(revision.status).toBe(201);
+  } finally {
+    release.release();
+  }
+  await ready(page);
+  await expect(titles).toHaveText([mentionTitle, initialTitle]);
+  await expect(expansion).toHaveCount(0);
+  await expect(status).toHaveCount(0);
+  await captureUpdatesFreshness(
+    page,
+    'latest-applied',
+    toolbar,
+    'After explicit application, the delayed personal mention appears beside the earlier field notes.',
+  );
+  // Advancing the browser clock also advances the 15-second HTTP timeout.
+  // Let the replacement cards finish their ordinary mute lookups first.
+  for (const group of await page.locator('.updates-list > li').all())
+    await expect(
+      group.getByRole('button', { name: 'Mute routine updates', exact: true, includeHidden: true }),
+    ).toBeEnabled();
+  const raced = await check(16_000);
+  expect((await raced.json()).new_activity).toBe(true);
+  await expect(status).toBeVisible();
+  const oldCard = page
+    .locator('.updates-list > li')
+    .filter({ has: page.getByRole('heading', { name: initialTitle }) });
+  await oldCard.getByText('Attention controls', { exact: true }).click();
+  const beforePolicy = await readingPositions();
+  await oldCard.getByRole('button', { name: 'Mute routine updates', exact: true }).click();
+  await expect(page.getByText(/Attention choices changed/)).toBeVisible();
+  await expect(status).toBeVisible();
+  expect(await readingPositions()).toEqual(beforePolicy);
+  await captureUpdatesFreshness(
+    page,
+    'attention-and-activity',
+    toolbar,
+    'The later field-note revision is pending and a deliberate mute separately requires an explicit attention refresh.',
+  );
 });

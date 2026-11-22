@@ -14,7 +14,7 @@ import { join, resolve } from 'node:path';
 
 // This is a closed vocabulary, not a secret-pattern scrubber. Never add free text
 // (including reporter titles/errors/attachments) to an approved document.
-// Include the complete browser inventory, including topic discussion browsing;
+// Include the complete browser inventory, including routine Updates observation;
 // retain both byte envelopes and every per-test collection bound.
 export const limits = Object.freeze({
   events: 256,
@@ -22,7 +22,7 @@ export const limits = Object.freeze({
   contexts: 8,
   pending: 64,
   steps: 16,
-  tests: 195,
+  tests: 196,
   bytes: 131072,
   runBytes: 17 * 1024 * 1024,
 });
@@ -216,6 +216,7 @@ const routePatterns = [
   '/api/v1/me/attention/status',
   '/api/v1/me/attention/list',
   '/api/v1/me/routine-updates/query',
+  '/api/v1/me/routine-updates/observe',
   '/api/v1/me/routine-updates/members',
   '/api/v1/me/routine-updates/reasons',
   '/api/v1/me/routine-updates/selection',

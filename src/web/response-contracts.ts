@@ -654,6 +654,12 @@ add(
   classified(U.UpdatesPage, groupDenials, groupLocal),
 );
 add(
+  ['POST /api/v1/me/routine-updates/observe'],
+  'read',
+  sourceErrors,
+  classified(V.RoutineObservation, []),
+);
+add(
   ['POST /api/v1/me/routine-updates/query'],
   'read',
   sourceErrors,

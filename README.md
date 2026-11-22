@@ -285,6 +285,17 @@ preserve delayed personal deliveries. Missing or unknown history has an explicit
 incomplete-baseline recovery path that preserves scope and personal reasons.
 See the [Updates decision](docs/adr/025-combined-updates.md).
 
+Leave the normal Updates page open to discover newer activity. While the page
+is visible and online, it checks about every 15 seconds. **New activity available**
+leaves your cards and expanded details in place. Choose **Show latest activity**
+when you are ready. In Highlights or an unfinished interval, the refreshed view
+includes earlier activity you could still visit. After a completed interval, the
+action opens the newer interval. A large interval offers **Continue preparing Updates**.
+Attention and Following changes keep their separate refresh controls.
+
+API clients can call the observation operation selectively using their displayed
+overview token. See the [routine Updates observation decision](docs/adr/045-routine-updates-observation.md).
+
 The notifications, shared-changes and Updates command-line readers use private
 `.lock.sqlite` journal sidecars. Ownership releases automatically if a reader
 crashes; keep the sidecar in place and retry with the same journal. Use separate

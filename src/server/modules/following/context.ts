@@ -60,17 +60,22 @@ export async function followingOwner(tx: SqlTransaction, owner: string, write = 
 }
 export type Authority = Awaited<ReturnType<typeof lockActor>>;
 
+export async function requireFollowTarget(tx: SqlTransaction, target: FollowTargetView) {
+  const chain = await lockContext(tx, target.resource_id, 'resolution', [target.kind]);
+  const table =
+    target.kind === 'area' ? 'areas' : target.kind === 'discussion' ? 'discussions' : 'artifacts';
+  if (!(await tx.query(`SELECT id FROM loom.${table} WHERE id=$1`, [target.resource_id])).rowCount)
+    throw new PublicationError('unavailable');
+  return chain;
+}
+
 /** A target can remain readable through history even when its current title is
  * suppressed. Never substitute that older title as current display metadata. */
 export async function followSource(
   tx: SqlTransaction,
   target: FollowTargetView,
 ): Promise<FollowSourceView> {
-  const chain = await lockContext(tx, target.resource_id, 'resolution', [target.kind]);
-  const table =
-    target.kind === 'area' ? 'areas' : target.kind === 'discussion' ? 'discussions' : 'artifacts';
-  if (!(await tx.query(`SELECT id FROM loom.${table} WHERE id=$1`, [target.resource_id])).rowCount)
-    throw new PublicationError('unavailable');
+  const chain = await requireFollowTarget(tx, target);
   let title: string | null = null;
   if (target.kind === 'area')
     title = (

@@ -135,3 +135,20 @@ pending/unconfirmed choice when the shared/personal input set changes, even with
 the same event ID and no group cursor. Same-identity late attention completion still
 notifies newly mounted views; sign-out/identity changes suppress that notification.
 See sibling attention memory for command retention and selection envelopes.
+
+Guide29 / ADR-045 adds routine-only `observe`. The accepted overview token
+provides both starting upper bounds, even during preparation. A separate
+view-derived key protects a small continuation with independent positions and
+cumulative found/unknown evidence. `candidates.ts` provides the paired scan
+and source lock plan for preparation and observation. `observation.ts` applies
+the frozen selection to arrivals without writing custody or constructing groups.
+The read-only observer uses snapshot reads for retained custody, Following and
+private policy, so it avoids contending on preparation progress or private
+owner guards. Actor and source access keep their locking checks. An ambiguous
+source/actor conflict gets one fresh binding check with zero candidate scans.
+Confirmed access or another timeout leaves the cursor retryable at its original
+position. A confirmed access or continuity refusal reaches its own boundary.
+Read-only checks work at the owner view limit. `refresh_from_view` creates new
+bounded custody, preserves both lower bounds and history qualifications, and
+captures new uppers. Its preparation state is independent of the old baseline
+flag. A checkpoint still starts strictly after its completed bounds.

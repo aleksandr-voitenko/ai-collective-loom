@@ -88,11 +88,16 @@ export async function attentionOwner(tx: SqlTransaction, owner: string, write = 
     [JSON.stringify(['loom.attention.owner', owner])],
   );
 }
-export async function attentionPolicy(tx: SqlTransaction, owner: string) {
+export async function attentionPolicy(
+  tx: SqlTransaction,
+  owner: string,
+  consistency: 'guarded' | 'snapshot' = 'guarded',
+) {
   const version =
     (
       await tx.query<{ version: number }>(
-        'SELECT version FROM loom.attention_owners WHERE participant_id=$1 FOR SHARE',
+        'SELECT version FROM loom.attention_owners WHERE participant_id=$1' +
+          (consistency === 'guarded' ? ' FOR SHARE' : ''),
         [owner],
       )
     ).rows[0]?.version ?? 0;

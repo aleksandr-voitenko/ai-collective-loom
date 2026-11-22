@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import * as C from '../contracts/updates.js';
 import * as R from '../contracts/routine-updates.js';
 import { useAuthorization } from './AuthorizationBoundary.js';
+import { useUpdatesObservation } from './useUpdatesObservation.js';
 import { ApiError, identityGeneration } from './participation-client.js';
 import type { Context } from './participation-state.js';
 import { UpdatesRecovery, displayedRequest, type UpdatesPageRequest } from './updates-recovery.js';
@@ -64,6 +65,7 @@ export function useUpdatesView({
     anchor = useRef<HTMLDivElement>(null),
     expansionAnchor = useRef<HTMLElement>(null),
     attempted = useRef<R.RoutineOptions>({ scope, reason }),
+    latestAttempt = useRef<R.RoutineOptions>(undefined),
     memberAttempt = useRef<C.UpdatesMembersOptions | undefined>(undefined),
     memberFailure = useRef(false),
     lastControl = useRef<HTMLButtonElement | null>(null);
@@ -139,6 +141,9 @@ export function useUpdatesView({
       });
       if (!active() || mine !== requestSequence.current) return;
       attempted.current = displayedRequest(value);
+      // A replacement view already exists. Retry its exact page and budgets
+      // if persistence fails, including a retry through Show latest activity.
+      if (latestAttempt.current === options) latestAttempt.current = attempted.current;
       // A retried expansion may be an unseen successor. Keep its last displayed
       // position until the member response has also been reauthorized and saved.
       const saved = await recovery.save(
@@ -153,8 +158,16 @@ export function useUpdatesView({
       // An older response cannot acknowledge a policy event observed during its
       // read or recovery save, even when that response is otherwise still current.
       sequence.current = saved.sequence;
+      latestAttempt.current = undefined;
       setPage(value);
-      setAttentionChanged(policyAtStart !== attentionChanges.current);
+      setAttentionChanged(
+        (prior) =>
+          policyAtStart !== attentionChanges.current ||
+          (prior &&
+            page?.traversal.id === value.traversal.id &&
+            options.recovery?.action !== 'attention_refresh' &&
+            value.traversal.selection !== 'complete'),
+      );
       setPast(history.slice(-8));
       setExpanded(undefined);
       setSize(value.limit);
@@ -330,6 +343,7 @@ export function useUpdatesView({
   const token =
     attempted.current.cursor ??
     attempted.current.checkpoint ??
+    attempted.current.refresh_from_view ??
     attempted.current.switch?.token ??
     attempted.current.recovery?.token;
   const action =
@@ -378,7 +392,7 @@ export function useUpdatesView({
     else
       void load(
         attempted.current,
-        past,
+        latestAttempt.current === attempted.current ? [] : past,
         memberAttempt.current
           ? {
               cursor: memberAttempt.current.cursor,
@@ -388,7 +402,50 @@ export function useUpdatesView({
           : undefined,
       );
   }
+  const observation = useUpdatesObservation(
+    context.self,
+    page && 'attention' in page ? page : undefined,
+    attentionChanged,
+    () => attentionChanges.current,
+    (error) => {
+      if (error.code === 'updates_attention_refresh_required') {
+        attentionChanges.current++;
+        setAttentionChanged(true);
+        return true;
+      }
+      if (!page || !withdraw.has(error.code)) return false;
+      // Continuity was lost on the displayed view. A pending page or save
+      // cannot reauthorize it. Explicit recovery uses its original budgets.
+      attempted.current = displayedRequest(page);
+      memberAttempt.current = expanded ? displayedRequest(expanded) : undefined;
+      report(error);
+      return true;
+    },
+  );
+  // An ordinary completed checkpoint has independent custody. Expiry of the
+  // observed page can stop checks without blocking its supported newer interval.
+  const canShowLatest = Boolean(
+    page &&
+    !busy &&
+    (page.checkpoint || (observation.pending && !observation.problem)) &&
+    (!attentionChanged || page.traversal.selection === 'complete'),
+  );
+  function showLatest() {
+    if (!page || !canShowLatest) return;
+    const bounds = page.checkpoint
+      ? { checkpoint: page.checkpoint }
+      : { refresh_from_view: page.page_cursor };
+    const next =
+      failure && !memberFailure.current && latestAttempt.current === attempted.current
+        ? attempted.current
+        : { ...bounds, limit: size, max_response_bytes: page.max_response_bytes };
+    latestAttempt.current = next;
+    void load(next, []);
+  }
   return {
+    observation,
+    canShowLatest,
+    showLatest,
     recover,
     retry,
     page,

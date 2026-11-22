@@ -108,6 +108,7 @@ function fixture(t: TestContext, kind: 'area.edit' | 'area.create' = 'area.edit'
       attention_url: '/api/v1/me/attention/list',
       routine_updates_contract: 'combined-updates-2',
       routine_updates_url: '/api/v1/me/routine-updates/query',
+      routine_updates_observation_url: '/api/v1/me/routine-updates/observe',
       reading_contract: 'reading-state-1',
       reading_url: '/api/v1/me/reading/lookup',
       updates_contract: 'combined-updates-1',
