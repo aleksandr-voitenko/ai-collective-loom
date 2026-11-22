@@ -23,15 +23,36 @@ import { Composer } from './ParticipationComposer.js';
 import { ResourceContent } from './ParticipationResource.js';
 import {
   TopicDiscussionBrowser,
-  watchTopicDiscussionInteraction,
   type TopicDiscussionBrowserHandle,
 } from './TopicDiscussionBrowser.js';
 import {
-  isDiscussionNavigationClick,
+  isTopicNavigationClick,
+  watchTopicNavigationInteraction,
+  type TopicDirectoryPosition,
   type TopicDiscussionPosition,
-} from './topic-discussion-navigation.js';
+} from './topic-navigation.js';
+
+function useTopicReturn(context: Context, source: string | null) {
+  const entry = useLocation().key;
+  const navigationType = useNavigationType();
+  const history = context.topicNavigation;
+  const [restoration, setRestoration] = useState(() =>
+    navigationType === 'POP' ? history?.get(entry, source) : undefined,
+  );
+  const directory = {
+    restoration: restoration?.kind === 'directory' ? restoration.position : undefined,
+    rememberPosition: (position: TopicDirectoryPosition) =>
+      history?.remember(entry, source, { kind: 'directory', position }),
+    onReload: () => {
+      if (history?.get(entry, source)?.kind === 'directory')
+        history.remember(entry, source, undefined);
+    },
+  };
+  return { directory, restoration, setRestoration };
+}
 
 export function Topics({ context }: { context: Context }) {
+  const { directory } = useTopicReturn(context, null);
   return (
     <>
       <div className="header-line">
@@ -48,7 +69,7 @@ export function Topics({ context }: { context: Context }) {
           <OrganizationRecovery context={context} />
         </>
       )}
-      <TopicDirectory />
+      <TopicDirectory {...directory} />
     </>
   );
 }
@@ -63,7 +84,6 @@ export function AreaPage({ id, context }: { id: string; context: Context }) {
 
 function AreaContent({ id, context }: { id: string; context: Context }) {
   const location = useLocation(),
-    navigationType = useNavigationType(),
     query = new URLSearchParams(location.search);
   const heading = useRef<HTMLHeadingElement>(null),
     [created, setCreated] = useState(false);
@@ -72,18 +92,22 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
   const fullDescription = useRef<HTMLParagraphElement>(null);
   const discussionBrowser = useRef<TopicDiscussionBrowserHandle>(null);
   const rememberDiscussionPosition = (position: TopicDiscussionPosition | undefined) =>
-    context.topicDiscussionNavigation?.remember(location.key, id, position);
+    context.topicNavigation?.remember(
+      location.key,
+      id,
+      position && { kind: 'discussions', position },
+    );
   const [focusComposer, setFocusComposer] = useState(false);
-  const [restoration, setRestoration] = useState(() =>
-    navigationType === 'POP' ? context.topicDiscussionNavigation?.get(location.key, id) : undefined,
-  );
+  const { directory, restoration, setRestoration } = useTopicReturn(context, id);
+  const discussionReturn = restoration?.kind === 'discussions' ? restoration.position : undefined;
+  const earlyInput = useRef(false);
   const artifactComposerRoute = query.get('compose') === 'artifacts';
   const [create, setCreate] = useState(
-      query.has('compose') && !(restoration && artifactComposerRoute),
+      query.has('compose') && !(discussionReturn && artifactComposerRoute),
     ),
     [reload, setReload] = useState(0),
     [tab, setTab] = useState<'discussions' | 'artifacts'>(
-      artifactComposerRoute && !restoration ? 'artifacts' : 'discussions',
+      artifactComposerRoute && !discussionReturn ? 'artifacts' : 'discussions',
     );
   const {
     data: area,
@@ -93,12 +117,20 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
     '/api/v1/organization/resources/' + id,
     OrganizationResource,
   );
+  // Keep the already-armed scrollbar listener across the metadata-to-directory
+  // transition. Starting its Back-scroll grace period again could miss user input.
+  const watchedReturn = !area || restoration?.kind === 'directory' ? restoration : undefined;
   useLayoutEffect(() => {
-    if (!area && restoration) {
-      const interaction = watchTopicDiscussionInteraction(() => setRestoration(undefined));
+    if (watchedReturn) {
+      const interaction = watchTopicNavigationInteraction(() => {
+        // The directory still owes the saved extent after input, but loses its
+        // automatic paging and position adjustment before its first mount.
+        earlyInput.current = true;
+        if (watchedReturn.kind === 'discussions') setRestoration(undefined);
+      });
       return interaction.stop;
     }
-  }, [area, restoration]);
+  }, [watchedReturn]);
   useEffect(() => {
     const confirmation = location.state?.topicCreated;
     const remaining = Number(confirmation?.expiresAt) - Date.now();
@@ -111,7 +143,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
       remaining <= 6000;
     setCreated(visible);
     if (!visible) return;
-    heading.current?.focus();
+    if (!restoration) heading.current?.focus();
     const timer = window.setTimeout(() => setCreated(false), remaining);
     return () => window.clearTimeout(timer);
   }, [area?.resource_id, id, context.self.participant_id, location.key]);
@@ -186,9 +218,13 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
                 </div>
               </div>
               <div className="selected-topic-details">
-                <details className="topic-disclosure">
+                <details className="topic-disclosure" open={!!directory.restoration}>
                   <summary>Subtopics</summary>
-                  <TopicDirectory parent={id} />
+                  <TopicDirectory
+                    parent={id}
+                    {...directory}
+                    interrupted={() => earlyInput.current}
+                  />
                 </details>
                 <details
                   className="topic-disclosure selected-topic-about"
@@ -236,7 +272,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
           onClick={() => {
             setTab('artifacts');
             setCreate(false);
-            setRestoration(undefined);
+            if (discussionReturn) setRestoration(undefined);
           }}
         >
           Artifacts
@@ -277,7 +313,7 @@ function AreaContent({ id, context }: { id: string; context: Context }) {
         <TopicDiscussionBrowser
           topicId={area.resource_id}
           self={context.self}
-          restoration={restoration}
+          restoration={discussionReturn}
           rememberPosition={rememberDiscussionPosition}
           positionRef={discussionBrowser}
         />
@@ -316,7 +352,7 @@ function TopicDiscussionConfirmation({
         className="button primary"
         to={`/loom/discussion/${opening.discussion_id}`}
         onClick={(event) => {
-          if (isDiscussionNavigationClick(event)) onOpen();
+          if (isTopicNavigationClick(event)) onOpen();
         }}
       >
         Open discussion

@@ -18,13 +18,19 @@ const reviews = {
     commit: '263a319eebe75e6874abd986f1ce6459b5945ec9',
     applicationHash: '7ead4b152cc31e7781805dc0c52cea10b6c5df52c2dd87d09e744e1074cd5981',
   },
+  returns: {
+    spec: 'topic-directory.spec.ts',
+    flag: 'LOOM_TOPIC_RETURN_REVIEW',
+    commit: 'cb0f2a38276f0ee30ee07ecd81bb0f62ff4c59ec',
+    applicationHash: '2815249c55d8b81815ce072ab94f19f00281579efef18402db73e8b1724492d3',
+  },
 };
 
 function run(phase, name = 'layout') {
   requireRepositoryRuntime();
   if ((phase !== 'before' && phase !== 'after') || !Object.hasOwn(reviews, name))
     throw new Error(
-      'Usage: node tests/review/run-topic-layout.mjs before|after [layout|directory]',
+      'Usage: node tests/review/run-topic-layout.mjs before|after [layout|directory|returns]',
     );
   const review = reviews[name];
 

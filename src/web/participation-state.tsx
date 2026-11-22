@@ -1,5 +1,5 @@
 import type { DiscussionNavigationState } from './discussion-navigation.js';
-import type { TopicDiscussionNavigation } from './topic-discussion-navigation.js';
+import type { TopicNavigation } from './topic-navigation.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import {
@@ -81,7 +81,7 @@ export function useQuery<T>(path: string, schema?: import('@sinclair/typebox').T
 }
 export interface Context {
   discussionNavigation?: DiscussionNavigationState;
-  topicDiscussionNavigation?: TopicDiscussionNavigation;
+  topicNavigation?: TopicNavigation;
   controlsProjection?: 'private-controls-1';
   self: Self;
   community: OnboardingView;

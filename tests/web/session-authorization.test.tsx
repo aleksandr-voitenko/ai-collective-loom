@@ -20,6 +20,12 @@ import { FollowPage } from '../../src/contracts/private-controls.js';
 import { useQuery } from '../../src/web/participation-state.js';
 import { Value } from '@sinclair/typebox/value';
 import { AccountInput } from '../../src/server/modules/identity/contracts.js';
+import {
+  holdReads,
+  organizationContext,
+  topic,
+  topicPage,
+} from '../helpers/topic-directory-fixtures.js';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: 'https://loom.example/',
@@ -1444,3 +1450,65 @@ for (const state of ['fresh', 'draft', 'rejected', 'uncertain'] as const)
     assert.deepEqual(store.all().find((r) => r.key === key)!.body, request.body);
     assert.equal(store.all().find((r) => r.key === key)!.state, 'uncertain');
   });
+
+for (const changed of ['participant', 'instance'] as const) {
+  test(`the production shell discards a held topic return when route discovery changes the ${changed}`, async (t) => {
+    const { latest, respond, calls } = holdReads(t);
+    const original = organizationContext('participant'),
+      replacement = organizationContext('participant');
+    const cursorPath = '/api/v1/organization/children';
+    const first = topic('First entry'),
+      anchor = topic('Activated on the second page');
+    const scroll = t.mock.method(window, 'scrollBy', () => {});
+    const router = createMemoryRouter([{ path: '/loom/*', element: <ParticipationApp /> }], {
+      initialEntries: ['/loom'],
+    });
+    t.after(() => router.dispose());
+    await act(async () => {
+      render(
+        <StrictMode>
+          <RouterProvider router={router} />
+        </StrictMode>,
+      );
+    });
+    const selfPath = '/api/v1/identity/self',
+      communityPath = '/api/v1/community';
+    await respond(Response.json(original.self), latest(selfPath));
+    await respond(Response.json(original.community), latest(communityPath));
+    await respond(topicPage([first], 'original-next'), latest(cursorPath));
+    fireEvent.click(screen.getByRole('button', { name: 'Load more topics' }));
+    await respond(topicPage([anchor]), latest(cursorPath));
+    fireEvent.click(screen.getByRole('link', { name: anchor.title }));
+    assert.equal(router.state.location.pathname, '/loom/area/' + anchor.resource_id);
+    await act(async () => {
+      await router.navigate(-1);
+    });
+
+    await respond(topicPage([first], 'held-return'), latest(cursorPath));
+    const held = latest(cursorPath);
+    assert.equal(held.url.searchParams.get('cursor'), 'held-return');
+    await respond(
+      Response.json(changed === 'participant' ? replacement.self : original.self),
+      latest(selfPath),
+    );
+    await respond(
+      Response.json(changed === 'instance' ? replacement.community : original.community),
+      latest(communityPath),
+    );
+
+    assert.ok(held.signal.aborted);
+    assert.ok(!screen.queryByRole('link', { name: first.title }));
+    const current = latest(cursorPath),
+      count = calls.length;
+    assert.equal(current.url.searchParams.has('cursor'), false);
+    const other = topic('Freshly authorized directory');
+    await respond(topicPage([other], 'current-next'), current);
+    await respond(topicPage([anchor]), held);
+    assert.equal(calls.length, count);
+    assert.ok(screen.getByRole('link', { name: other.title }));
+    assert.ok(!screen.queryByRole('link', { name: anchor.title }));
+    assert.ok(screen.getByRole('button', { name: 'Load more topics' }));
+    assert.ok(!screen.queryByRole('button', { name: 'Continue restoring topics' }));
+    assert.equal(scroll.mock.callCount(), 0);
+  });
+}

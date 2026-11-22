@@ -1,5 +1,5 @@
 import type { DiscussionNavigationState } from './discussion-navigation.js';
-import { TopicDiscussionNavigation } from './topic-discussion-navigation.js';
+import { TopicNavigation } from './topic-navigation.js';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, Link, NavLink } from 'react-router';
 import { type OnboardingView, Onboarding } from '../contracts/participation.js';
@@ -57,10 +57,10 @@ export function ParticipationApp() {
   const navigationKey = `${self?.participant_id}:${community?.instance_id}:${location.pathname}`;
   if (discussionNavigation.current.key !== navigationKey)
     discussionNavigation.current = { key: navigationKey, value: { branches: new Map() } };
-  const topicNavigation = useRef<{ owner: string; value: TopicDiscussionNavigation }>(null);
+  const topicNavigation = useRef<{ owner: string; value: TopicNavigation }>(null);
   const topicOwner = `${identityGeneration()}:${self?.participant_id}:${community?.instance_id}`;
   if (topicNavigation.current?.owner !== topicOwner)
-    topicNavigation.current = { owner: topicOwner, value: new TopicDiscussionNavigation() };
+    topicNavigation.current = { owner: topicOwner, value: new TopicNavigation() };
   useEffect(() => {
     const media = window.matchMedia(`(max-width: ${administration ? 960 : 760}px)`);
     const changed = () => {
@@ -575,7 +575,7 @@ export function ParticipationApp() {
                 context={{
                   controlsProjection: 'private-controls-1',
                   discussionNavigation: discussionNavigation.current.value,
-                  topicDiscussionNavigation: topicNavigation.current.value,
+                  topicNavigation: topicNavigation.current.value,
                   self,
                   community,
                   store,

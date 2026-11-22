@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import type {
   OrganizationPageView,
@@ -10,6 +10,7 @@ import {
   captureTopicDiscussions as captureDirectory,
   enrollReviewAccount,
   topicDirectoryReview,
+  topicReturnReview,
 } from '../helpers/topic-discussion-review.js';
 
 const rootTopics = [
@@ -98,8 +99,137 @@ async function arrangeTopics(
   return resources;
 }
 
+async function openLaterTopic(directory: Locator, noun: string, pages: number, index: number) {
+  const links = directory.getByRole('link');
+  await expect(links).toHaveCount(12);
+  for (let i = 1; i < pages; i++) {
+    await directory.getByRole('button', { name: `Load more ${noun}`, exact: true }).click();
+    await expect(links.nth(i * 12)).toBeVisible();
+  }
+  const extent = await links.count();
+  const anchor = links.nth(index);
+  const title = await anchor.innerText();
+  const href = (await anchor.getAttribute('href'))!;
+  await anchor.focus();
+  const offset = await anchor.evaluate((link) => {
+    scrollBy(0, link.getBoundingClientRect().top - innerHeight / 2);
+    return link.getBoundingClientRect().top;
+  });
+  await anchor.press('Enter');
+  await expect(directory.page().getByRole('heading', { name: title, exact: true })).toBeVisible();
+  return { title, href, extent, offset };
+}
+
+async function captureDirectoryReturns(page: Page, admin: Page, origin: string, gardenId: string) {
+  const before = topicReturnReview === 'before';
+  const root = page.getByRole('region', { name: 'Root topics', exact: true });
+  const subtopics = page.getByRole('region', { name: 'Subtopics', exact: true });
+  const summary = page.locator('summary').filter({ hasText: /^Subtopics$/ });
+  const gardenPath = `/loom/area/${gardenId}`;
+  const phase = before ? 'before' : 'after';
+  for (const viewport of ['desktop', 'mobile'] as const) {
+    await page.setViewportSize(
+      viewport === 'desktop' ? { width: 1440, height: 1000 } : { width: 390, height: 844 },
+    );
+    const options = {
+      review: 'returns',
+      role: 'participant',
+      viewport,
+      scroll: 'preserve',
+    } as const;
+    for (const child of [false, true]) {
+      const directory = child ? subtopics : root;
+      const noun = child ? 'subtopics' : 'topics';
+      await page.goto(origin + (child ? gardenPath : '/loom'));
+      if (child) await summary.click();
+      const visit = await openLaterTopic(directory, noun, 3, child ? 24 : 30);
+      const anchor = directory.getByRole('link', { name: visit.title, exact: true });
+      await page.goBack();
+      const beforeDescription = child
+        ? 'Back returned to the parent with Subtopics collapsed.'
+        : 'Back returned to the first 12 root topics.';
+      if (child) {
+        await expect(page.getByText('No discussions yet.', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Follow', exact: true })).toBeEnabled();
+      }
+      if (before) {
+        await expect(anchor).toHaveCount(0);
+        if (child) {
+          await expect(summary).toBeVisible();
+          await expect(summary.locator('..')).not.toHaveAttribute('open', '');
+        } else await expect(directory.getByRole('link')).toHaveCount(12);
+      } else {
+        await expect(directory.getByRole('link')).toHaveCount(visit.extent);
+        await expect(anchor).toBeFocused();
+        await expect(anchor).toBeInViewport();
+        expect(Math.abs((await anchor.boundingBox())!.y - visit.offset)).toBeLessThan(25);
+      }
+      await captureDirectory(
+        page,
+        `${phase}-back-to-${noun}`,
+        before ? (child ? summary : root) : anchor,
+        {
+          ...options,
+          visibleInViewport: before ? [] : [anchor],
+          description: before
+            ? `Opened “${visit.title}” from ${visit.extent} loaded ${noun}. ${beforeDescription}`
+            : `Back recovered ${visit.extent} ${noun}${child ? ' and reopened Subtopics' : ''}. The activated link “${visit.title}” has focus at ${Math.round((await anchor.boundingBox())!.y)} px from the top, previously ${Math.round(visit.offset)} px.`,
+        },
+      );
+    }
+    if (before) continue;
+
+    await page.goto(origin + '/loom');
+    await openLaterTopic(root, 'topics', 9, 100);
+    await page.goBack();
+    const more = root.getByRole('button', { name: 'Continue restoring topics', exact: true });
+    await expect(more).toBeInViewport();
+    await expect(root.getByRole('link')).toHaveCount(96);
+    await captureDirectory(page, 'after-eight-pages', more, {
+      ...options,
+      visibleInViewport: [more, root.getByRole('status')],
+      description:
+        'Back accepted eight fresh pages (96 topics) of the previous nine-page extent. The local continuation recovers the remaining page.',
+    });
+    await more.click();
+    await expect(root.getByRole('link')).toHaveCount(108);
+
+    await page.goto(origin + gardenPath);
+    await summary.click();
+    const visit = await openLaterTopic(subtopics, 'subtopics', 3, 24);
+    const resourcePath = '/api/v1/organization/resources/' + visit.href.split('/').at(-1);
+    const move = async (parent_id: string | null) => {
+      const source = (await api(admin, resourcePath)) as OrganizationResourceView;
+      await api(admin, changesPath, {
+        kind: 'area.move',
+        resource_id: source.resource_id,
+        expected_version: source.version,
+        expected_hierarchy_version: source.hierarchy_version,
+        idempotency_key: randomUUID(),
+        parent_id,
+      });
+    };
+    await move(null);
+    await page.goBack();
+    const status = subtopics.getByRole('status');
+    await expect(status).toContainText(/previous place is no longer/i);
+    await expect(subtopics.getByRole('link', { name: visit.title, exact: true })).toHaveCount(0);
+    await expect(subtopics.getByRole('link')).toHaveCount(visit.extent - 1);
+    await captureDirectory(page, 'after-subtopic-moved', status, {
+      ...options,
+      visibleInViewport: [status],
+      description: `An administrator moved “${visit.title}” to the root through the organization API while the participant was away. Back reopened Subtopics and reached the current end with ${visit.extent - 1} entries and a local explanation.`,
+    });
+    await move(gardenId);
+  }
+}
+
 test('ordinary topic directory review captures', async ({ browser, page: admin }) => {
-  test.skip(!['before', 'after'].includes(topicDirectoryReview ?? ''), 'Opt-in review capture');
+  const returns = ['before', 'after'].includes(topicReturnReview ?? '');
+  test.skip(
+    !returns && !['before', 'after'].includes(topicDirectoryReview ?? ''),
+    'Opt-in review capture',
+  );
   const phase = topicDirectoryReview === 'before' ? 'before' : 'after';
   const server = await syntheticServer({ workloadRates: true });
   const participantContext = await browser.newContext({
@@ -110,10 +240,34 @@ test('ordinary topic directory review captures', async ({ browser, page: admin }
     await enrollReviewAccount(admin, server.origin, server.ticket, true);
     await admin.getByRole('button', { name: 'Create community', exact: true }).click();
     await expect(admin.getByRole('heading', { name: 'Topics', exact: true })).toBeVisible();
-    const roots = await arrangeTopics(admin, null, rootTopics);
+    const neighborhoods = [
+      'Riverside',
+      'Oak Hill',
+      'Parkside',
+      'East End',
+      'Southbank',
+      'Brookside',
+      'Hillcrest',
+    ];
+    const roots = await arrangeTopics(
+      admin,
+      null,
+      returns
+        ? [
+            ...rootTopics,
+            ...neighborhoods.flatMap((area) =>
+              rootTopics.map(([title, text]) => [`${area} ${title.toLowerCase()}`, text] as const),
+            ),
+          ]
+        : rootTopics,
+    );
     const gardens = roots[0]!,
       toolLibrary = roots[1]!;
-    await arrangeTopics(admin, gardens.resource_id, childTopics);
+    await arrangeTopics(
+      admin,
+      gardens.resource_id,
+      returns ? [...childTopics, ...rootTopics] : childTopics,
+    );
     const closed = (await api(
       admin,
       `/api/v1/organization/resources/${toolLibrary.resource_id}`,
@@ -143,6 +297,10 @@ test('ordinary topic directory review captures', async ({ browser, page: admin }
     await enrollReviewAccount(page, server.origin, ticket.secret);
     const options = { review: 'directory', role: 'participant' } as const;
     expect((await api(page, '/api/v1/identity/self')).role).toBe(options.role);
+    if (returns) {
+      await captureDirectoryReturns(page, admin, server.origin, gardens.resource_id);
+      return;
+    }
 
     const topics = page.getByRole('region', { name: 'Root topics', exact: true });
     const title = page.getByRole('heading', { name: 'Topics', exact: true });
