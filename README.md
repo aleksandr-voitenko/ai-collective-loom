@@ -49,6 +49,15 @@ same place. If Loom asks you to refresh the list or you want a fresh view, choos
 **Reload topics** or **Reload subtopics**. The previous rows stay visible during
 reload while you still have access.
 
+After you open a topic from either list, browser Back rebuilds the portion you
+had loaded using current access checks. Subtopics reopens when you return from
+a child. If the title is still in the list, Loom focuses it near its former
+position. Scrolling, typing or moving focus gives you control of the page.
+Loom reads up to eight pages automatically. Choose **Continue restoring topics**
+or **Continue restoring subtopics** if more are needed. Topics can move while
+you’re away. If the current list ends without the title, Loom keeps the rows
+you can browse and tells you that your previous place is no longer in the list.
+
 Open a topic to see its ancestry and newest discussions. Use **Start a discussion**,
 **Search this topic** and **Follow** beside the topic title. **Artifacts** switches to
 the topic’s artifacts. The controls below the title open **Subtopics**, **About this

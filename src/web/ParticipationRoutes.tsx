@@ -82,7 +82,7 @@ function RouteView({ context }: { context: Context }) {
     path = location.pathname.split('/').filter(Boolean).slice(1),
     kind = path[0],
     id = path[1];
-  if (!kind) return <Topics context={context} />;
+  if (!kind) return <Topics key={location.key} context={context} />;
   if (kind === 'drafts') return <Drafts key={context.self.participant_id} context={context} />;
   if (kind === 'notes')
     return <PrivateNotesPage key={location.pathname + location.search} context={context} />;
@@ -115,7 +115,7 @@ function RouteView({ context }: { context: Context }) {
       />
     );
   if (kind === 'summaries') return <SummaryMaintenance context={context} />;
-  if (kind === 'area' && id) return <AreaPage id={id} context={context} />;
+  if (kind === 'area' && id) return <AreaPage key={location.key} id={id} context={context} />;
   if (kind === 'discussion' && id) return <DiscussionPage id={id} context={context} />;
   if (kind === 'resource' && id)
     return <ResourcePage id={id} revision={path[2]} context={context} />;

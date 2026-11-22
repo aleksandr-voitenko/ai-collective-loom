@@ -19,11 +19,12 @@ import {
 } from './useTopicDiscussionFreshness.js';
 import {
   TOPIC_DISCUSSION_ORDER,
-  isDiscussionNavigationClick,
+  isTopicNavigationClick,
+  restorationPageBudget,
+  watchTopicNavigationInteraction,
   type TopicDiscussionPosition,
-} from './topic-discussion-navigation.js';
+} from './topic-navigation.js';
 
-const restorationPageBudget = 8;
 const maxOverlappingWithdrawalTags = 256;
 type DiscussionRow = ResourceView & { discussion_id: string; discussion_created_at: string };
 type Traversal = {
@@ -42,37 +43,10 @@ type List = {
   goal?: TopicDiscussionPosition | undefined;
   notice?: 'anchor-missing' | 'extent-changed' | undefined;
 };
-type Interaction = ReturnType<typeof watchTopicDiscussionInteraction>;
+type Interaction = ReturnType<typeof watchTopicNavigationInteraction>;
 type ListRequest = { controller: AbortController; withdrawn?: Set<string> };
 
 class ListChanged extends Error {}
-
-export function watchTopicDiscussionInteraction(onInterrupt?: () => void) {
-  let interrupted = false;
-  let frame: number | undefined;
-  const events = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
-  const stop = () => {
-    for (const event of events) window.removeEventListener(event, interrupt, true);
-    window.removeEventListener('scroll', interrupt);
-    if (frame !== undefined) window.cancelAnimationFrame(frame);
-  };
-  function interrupt() {
-    interrupted = true;
-    stop();
-    onInterrupt?.();
-  }
-  for (const event of events)
-    window.addEventListener(event, interrupt, { capture: true, passive: true });
-  // Browsers may apply their own Back position during the first render. Keep
-  // input listeners active, then also detect scrolling through the scrollbar.
-  if (window.requestAnimationFrame)
-    frame = window.requestAnimationFrame(() => {
-      frame = window.requestAnimationFrame(() => {
-        window.addEventListener('scroll', interrupt, { passive: true });
-      });
-    });
-  return { interrupted: () => interrupted, stop };
-}
 
 function acceptPage(
   previous: Traversal | undefined,
@@ -249,7 +223,7 @@ function DiscussionList({ topicId, self, restoration, rememberPosition, position
     request.current = active;
     const live = () =>
       request.current === active && owner === identityGeneration() && authority.current(generation);
-    const tracked = goal || action === 'latest' ? watchTopicDiscussionInteraction() : undefined;
+    const tracked = goal || action === 'latest' ? watchTopicNavigationInteraction() : undefined;
     interaction.current = tracked;
     const hadFooterFocus = document.activeElement === footerAction.current;
     publish({ traversal: prior, pending: action, goal, restartRequired });
@@ -419,7 +393,7 @@ function DiscussionList({ topicId, self, restoration, rememberPosition, position
     return extent;
   }
   function opening(event: MouseEvent<HTMLAnchorElement>) {
-    if (!isDiscussionNavigationClick(event)) return;
+    if (!isTopicNavigationClick(event)) return;
     const position = capturePosition(event.currentTarget);
     if (position) rememberPosition?.(position);
   }

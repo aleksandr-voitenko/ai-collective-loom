@@ -82,17 +82,27 @@ cursor. Explicit reload can supersede an append and replaces rows on success.
 The existing authorization boundary withdraws the list on access loss. Closing
 Subtopics keeps its traversal and pending request in the same mounted tree. The
 footer preserves focus during append and can transfer it locally if a focused
-control disappears while the disclosure is open. Discussion Back restoration
-owns its existing separate lifetime. `TopicDestinationPicker` in `Organization.tsx`
+control disappears while the disclosure is open. `TopicDestinationPicker` in `Organization.tsx`
 uses the paged `/organization/destinations` flow with path labels and IDs.
+
+`TopicNavigation` keeps one return target per browser history entry, at most 16
+entries per participant, instance and identity lifetime. The source is the root
+or the normalized topic ID. An ordinary title-link departure saves the active
+collection, accepted page count, tail ID, activated ID and viewport offset.
+Browser Back or Forward starts that collection from a fresh authorized first page.
+Only a subtopic target opens Subtopics. Only a discussion target selects the
+discussion return behavior for an artifact composer URL.
+Directory reconstruction counts empty pages toward each eight-read batch. If
+the extent or anchor is still outstanding, the footer offers explicit continuation.
+Another directory departure carries the unfinished extent. Reload abandons it.
+A completed traversal distinguishes a missing anchor from a changed extent.
+The parent watches for input during its metadata read, then the directory checks
+interaction and disclosure visibility before continuing or positioning.
 `TopicDiscussionBrowser.tsx` owns only the selected topic's discussion metadata.
 It requests the opt-in newest-first order, appends by stable discussion identity,
 and keeps the composer and accepted rows mounted during continuation or restart.
-The app's separate topic history keeps at most 16 entry-scoped return controls
-per participant, community and identity lifetime. Browser Back uses fresh authorized
-pages to recover the loaded extent and an approximate offset, up to eight pages
-before an explicit continuation. User input releases automatic position correction.
-The history holds no protected rows or cursors. After durable topic-discussion
+Its Back restoration uses the same entry owner and eight-page budget. History
+holds no protected rows or cursors. After durable topic-discussion
 confirmation, the composer resolves the opening through the authorized contribution
 metadata resolver and offers its owning discussion link. Link recovery issues only
 a metadata read and the existing traversal remains in place. Same-window activation

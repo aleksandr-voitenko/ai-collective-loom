@@ -687,6 +687,55 @@ test('topic discussion browser appends, returns and publishes without replacing 
   const publishedRow = list.getByRole('link', { name: draftTitle, exact: true });
   await returnFromConfirmation(publishedRow, afterPublication.slice(0, 12), [false]);
   await expect(anchor).toHaveCount(0);
+
+  // A later subtopic departure replaces the discussion return. Reopening the
+  // settled publication must then replace that directory return on this entry.
+  let version = (await (await api(page, '/api/v1/organization/children?limit=1')).json())
+    .hierarchy_version;
+  for (let i = 1; i <= 13; i++) {
+    const child = await api(page, '/api/v1/organization/changes', {
+      idempotency_key: randomUUID(),
+      kind: 'area.create',
+      parent_id: fixture.area,
+      title: 'Workshop group ' + i,
+      description: 'Planning for the workshop.',
+      expected_hierarchy_version: version,
+    });
+    expect(child.ok()).toBe(true);
+    version = (await child.json()).current.hierarchy_version;
+  }
+  const summary = page.locator('summary').filter({ hasText: /^Subtopics$/ });
+  await summary.click();
+  const directory = page.getByRole('region', { name: 'Subtopics', exact: true });
+  await directory.getByRole('button', { name: 'Reload subtopics' }).click();
+  await directory.getByRole('button', { name: 'Load more subtopics' }).click();
+  const children = directory.getByRole('link');
+  await expect(children).toHaveCount(13);
+  await children.last().press('Enter');
+  await expect(page).not.toHaveURL(fixture.url);
+  const beforeDirectoryReturn = collectionRequests.length;
+  await page.goBack();
+  await expect(children.last()).toBeFocused();
+  await expect(children).toHaveCount(13);
+  await expectTopicOrder(links, afterPublication.slice(0, 12));
+  expect(
+    collectionRequests.slice(beforeDirectoryReturn).map((url) => url.searchParams.has('cursor')),
+  ).toEqual([false]);
+  await summary.click();
+  await openComposer.click();
+  await expect(open).toBeVisible();
+  const childReads: boolean[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (
+      url.pathname === '/api/v1/organization/children' &&
+      url.searchParams.get('parent_id') === fixture.area
+    )
+      childReads.push(url.searchParams.has('cursor'));
+  });
+  await returnFromConfirmation(publishedRow, afterPublication.slice(0, 12), [false]);
+  await expect(directory).toBeHidden();
+  expect(childReads).toEqual([false]);
 });
 
 test('topic discussion browser bounds restoration and recovers from organization changes', async ({

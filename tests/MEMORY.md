@@ -55,6 +55,20 @@ After `npm run app:build`, `node tests/review/run-topic-layout.mjs after directo
 captures opt-in topic directory review viewports and records the source and build
 digests. `before directory` captures the same routes for comparison from `263a319`.
 
+The organization Back journey follows later root and child links, changes their
+metadata through the API, and checks the fresh page sequence, row order, focus
+and viewport offset. It invalidates a real continuation during a return and
+moves a child while away. The publication journey also returns from a child and
+then reopens the settled discussion on the same history entry.
+`web/topic-directory-return.test.tsx` uses controlled reads under StrictMode
+to exercise empty-page budgets, interrupted and repeated returns, Reload,
+entry ownership, source loss and the selected topic's independent controls.
+`web/session-authorization.test.tsx` changes the participant or instance through
+route discovery while the production shell has a directory continuation in flight.
+The opt-in `before returns` and `after returns` profiles of the same review
+runner capture the returned viewport and local recovery states. The before
+profile requires the application inputs from PR #66 (`cb0f2a3`).
+
 Task6's `integration/discussion-freshness.test.ts` checks committed-order races,
 scope/token refusal, bounded shared/visibility continuation across decimal widths, restoration after
 suppressed-event consumption, no private reading writes and default ordinary

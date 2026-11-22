@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { afterEach, test, type TestContext } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { createRef, StrictMode, type Ref } from 'react';
-import { MemoryRouter, useLocation } from 'react-router';
+import { Link, MemoryRouter, useLocation } from 'react-router';
 import type { PageView, ResourceView } from '../../src/contracts/participation.js';
 import {
   topicFreshnessContract,
@@ -13,10 +13,13 @@ import { AuthorizationBoundary, useAuthorization } from '../../src/web/Authoriza
 import { invalidateIdentity } from '../../src/web/participation-client.js';
 import {
   TopicDiscussionBrowser,
-  watchTopicDiscussionInteraction,
   type TopicDiscussionBrowserHandle,
 } from '../../src/web/TopicDiscussionBrowser.js';
-import type { TopicDiscussionPosition } from '../../src/web/topic-discussion-navigation.js';
+import {
+  isTopicNavigationClick,
+  watchTopicNavigationInteraction,
+  type TopicDiscussionPosition,
+} from '../../src/web/topic-navigation.js';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: 'https://loom.example/',
@@ -312,6 +315,27 @@ test('an observed page without row withdrawal evidence leaves the prior traversa
   assert.equal(titles().length, 2);
 });
 
+test('a link targeting another tab cannot capture the place of the current tab', async () => {
+  const activations: boolean[] = [];
+  await mount(
+    <MemoryRouter>
+      {['_blank', '_self'].map((target) => (
+        <Link
+          key={target}
+          to="/destination"
+          target={target}
+          onClick={(event) => activations.push(isTopicNavigationClick(event))}
+        >
+          {target}
+        </Link>
+      ))}
+    </MemoryRouter>,
+  );
+  fireEvent.click(screen.getByRole('link', { name: '_blank' }));
+  fireEvent.click(screen.getByRole('link', { name: '_self' }));
+  assert.deepEqual(activations, [false, true]);
+});
+
 test('ordinary link activation remembers only the loaded extent and the row position', async (t) => {
   const { respond } = fixture(t);
   const remember = t.mock.fn<(position: TopicDiscussionPosition) => void>();
@@ -491,7 +515,7 @@ test('a vanished anchor leaves an explicit fallback after authorized pages finis
 
 test('the early interaction witness fires once and releases all input listeners', () => {
   let interruptions = 0;
-  const witness = watchTopicDiscussionInteraction(() => {
+  const witness = watchTopicNavigationInteraction(() => {
     interruptions++;
   });
   assert.equal(witness.interrupted(), false);
@@ -499,7 +523,7 @@ test('the early interaction witness fires once and releases all input listeners'
   window.dispatchEvent(new Event('keydown'));
   assert.equal(witness.interrupted(), true);
   assert.equal(interruptions, 1);
-  const disposed = watchTopicDiscussionInteraction(() => {
+  const disposed = watchTopicNavigationInteraction(() => {
     interruptions++;
   });
   disposed.stop();

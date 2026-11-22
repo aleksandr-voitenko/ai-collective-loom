@@ -1048,7 +1048,121 @@ test('destination pagination stays bounded and Subtopics appends and recovers wi
   await expect(page.getByRole('button', { name: 'Previous topics', exact: true })).toBeEnabled();
   await test.step('Subtopics keeps its loaded rows, continuation, focus and surrounding topic state', () =>
     checkSubtopicPages(page, server.origin, d.general));
+  await test.step('Back restores the activated topic from fresh root and direct-subtopic pages', () =>
+    checkDirectoryReturns(page, server.origin, d));
 });
+
+async function checkDirectoryReturns(
+  page: Page,
+  origin: string,
+  { general, feedback }: { general: string; feedback: string },
+) {
+  // The pagination journey already populated the children and two root pages.
+  for (let i = 0; i < 12; ++i) await create(page, 'Field guide ' + i);
+  const childrenPath = '/api/v1/organization/children';
+  const writes: string[] = [];
+  const reads: URL[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === childrenPath) reads.push(url);
+    if (
+      request.method() === 'POST' &&
+      (url.pathname === '/api/v1/discussions' ||
+        (url.pathname.startsWith('/api/v1/me/') && url.pathname.endsWith('/state')))
+    )
+      writes.push(url.pathname);
+  });
+  for (const parent of [null, general]) {
+    const noun = parent ? 'subtopics' : 'topics';
+    const source = origin + (parent ? '/loom/area/' + parent : '/loom');
+    await page.goto(source);
+    const summary = page.locator('summary').filter({ hasText: /^Subtopics$/ });
+    const directory = page.getByRole('region', {
+      name: parent ? 'Subtopics' : 'Root topics',
+      exact: true,
+    });
+    if (parent) {
+      await expect(directory).toBeHidden();
+      await summary.press('Enter');
+    }
+    const links = directory.getByRole('link');
+    const more = directory.getByRole('button', { name: 'Load more ' + noun });
+    await expect(links).toHaveCount(12);
+    await more.click();
+    await expect(links).toHaveCount(24);
+    await more.click();
+    await expect(more).toHaveCount(0);
+    const titles = await links.allTextContents();
+    const anchor = links.nth(18);
+    await anchor.focus();
+    await anchor.evaluate((link) => link.scrollIntoView({ block: 'center' }));
+    const offset = await anchor.evaluate((link) => link.getBoundingClientRect().top);
+    const path = await anchor.getAttribute('href');
+    const id = path!.split('/').at(-1)!;
+    await anchor.press('Enter');
+    await expect(page).toHaveURL(origin + path);
+    await expect(page.getByRole('heading', { name: titles[18]!, exact: true })).toBeVisible();
+    const revised = 'Revised field guide for ' + noun;
+    await command(page, id, 'area.edit', {
+      title: revised,
+      description: 'Updated before returning.',
+    });
+    titles[18] = revised;
+    const before = reads.length;
+    await page.goBack();
+    await expect(page).toHaveURL(source);
+    await expect(links).toHaveText(titles);
+    await expect(anchor).toBeFocused();
+    expect(
+      Math.abs((await anchor.evaluate((link) => link.getBoundingClientRect().top)) - offset),
+    ).toBeLessThanOrEqual(24);
+    expect(
+      reads
+        .slice(before)
+        .filter((url) => url.searchParams.get('parent_id') === parent)
+        .map((url) => url.searchParams.has('cursor')),
+    ).toEqual([false, true, true]);
+    await expect(directory.getByText('Updated before returning.', { exact: true })).toBeVisible();
+    if (parent) {
+      // An actual move while away makes the anchor unreachable in this parent.
+      await anchor.press('Enter');
+      await expect(page).toHaveURL(origin + path);
+      await command(page, id, 'area.move', { parent_id: feedback });
+      await page.goBack();
+      await expect(
+        directory.getByText('Your previous place is no longer in this list.'),
+      ).toBeFocused();
+      await expect(links).toHaveText(titles.filter((name) => name !== revised));
+      await expect(page).toHaveURL(source);
+    } else {
+      // Change the live hierarchy between the fresh first page and its continuation.
+      await anchor.press('Enter');
+      await expect(page).toHaveURL(origin + path);
+      const continuation = (url: URL) =>
+        url.pathname === childrenPath &&
+        !url.searchParams.has('parent_id') &&
+        url.searchParams.has('cursor');
+      await page.route(
+        continuation,
+        async (route) => {
+          await create(page, 'New field guide');
+          await route.continue();
+        },
+        { times: 1 },
+      );
+      const rejection = page.waitForResponse((response) => continuation(new URL(response.url())));
+      await page.goBack();
+      expect((await (await rejection).json()).error.code).toBe('invalid_cursor');
+      await expect(links).toHaveText(titles.slice(0, 12));
+      await expect(directory.getByRole('alert')).toContainText('This list needs refreshing');
+      await directory.getByRole('button', { name: 'Reload topics' }).click();
+      await expect(more).toBeEnabled();
+      await expect(directory.getByRole('alert')).toHaveCount(0);
+      await expect(links).toHaveCount(12);
+    }
+  }
+  expect(writes).toEqual([]);
+}
 
 test('discussion close and reopen controls retain readable history and distinguish inherited closure', async ({
   page,
