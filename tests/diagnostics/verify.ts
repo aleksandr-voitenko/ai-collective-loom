@@ -314,6 +314,7 @@ for (const path of [
   '/api/v1/me/attention/status',
   '/api/v1/me/attention/list',
   '/api/v1/me/routine-updates/query',
+  '/api/v1/me/routine-updates/observe',
   '/api/v1/me/routine-updates/members',
   '/api/v1/me/routine-updates/reasons',
   '/api/v1/me/routine-updates/selection',

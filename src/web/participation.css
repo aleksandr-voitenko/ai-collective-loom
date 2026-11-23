@@ -2219,3 +2219,90 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.loom-app .updates-size {
+  white-space: nowrap;
+}
+.loom-app .routine-updates-view {
+  container-type: inline-size;
+}
+.loom-app .updates-view-toolbar {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+}
+.loom-app .updates-following-status,
+.loom-app .updates-policy-status {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.loom-app .updates-following-status {
+  align-content: center;
+  min-block-size: 2lh;
+}
+.loom-app .updates-freshness {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.85rem;
+  margin-block: -0.75rem 0.75rem;
+}
+.loom-app .updates-freshness-status {
+  color: var(--muted);
+  font-size: 0.875rem;
+  min-block-size: calc(1lh + max(24px, 1lh));
+  align-content: center;
+}
+.loom-app .updates-freshness-status > * {
+  display: block;
+}
+.loom-app .updates-policy-status {
+  grid-column: 2;
+  min-block-size: max(24px, 1lh);
+}
+.loom-app .updates-freshness .text-button {
+  min-height: 24px;
+  padding: 0;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.loom-app .updates-freshness button[aria-disabled='true'] {
+  color: var(--muted);
+  background: var(--bg);
+  opacity: 1;
+  cursor: default;
+}
+.loom-app .updates-freshness-status strong {
+  color: var(--accent);
+}
+@container (max-width: 38rem) {
+  .loom-app .updates-view-toolbar {
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+  }
+  .loom-app .updates-view-toolbar > button {
+    grid-column: 1 / -1;
+  }
+  .loom-app .updates-view-toolbar .updates-size {
+    flex-direction: row;
+    align-items: center;
+  }
+  .loom-app .updates-freshness {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .loom-app .updates-policy-status {
+    grid-column: 1;
+  }
+}
+@container (max-width: 19rem) {
+  .loom-app .updates-following-status {
+    min-block-size: 3lh;
+  }
+  .loom-app .updates-freshness-status {
+    min-block-size: calc(2lh + max(24px, 1lh));
+  }
+  .loom-app .updates-policy-status {
+    min-block-size: calc(1lh + max(24px, 1lh));
+  }
+}

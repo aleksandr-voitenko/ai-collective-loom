@@ -3,7 +3,13 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import { CreateBucketCommand, PutBucketVersioningCommand } from '@aws-sdk/client-s3';
+import {
+  CreateBucketCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutBucketVersioningCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { FileStorage } from '../../src/server/modules/participation/file-storage.js';
 import { localDockerEndpoint } from '../../scripts/lib/local-config.mjs';
 
@@ -64,17 +70,44 @@ export async function isolatedFileStorage(
       '-s3.port=8333',
     ]);
   };
+  const probeKey = 'fixture-only-readiness/' + randomUUID();
+  const probes: Array<{ Bucket: string; Key: string; VersionId: string }> = [];
+  const stop = async () => {
+    assert.ok(storage);
+    const { stagingBucket, finalBucket } = storage.configuration;
+    const abortSignal = AbortSignal.timeout(90000);
+    for (const Bucket of [stagingBucket, finalBucket]) {
+      const { VersionId } = await storage.client.send(
+        new PutObjectCommand({ Bucket, Key: probeKey, Body: 'x' }),
+        { abortSignal },
+      );
+      assert.ok(VersionId && VersionId !== 'null');
+      probes.push({ Bucket, Key: probeKey, VersionId });
+    }
+    docker(['stop', name]);
+  };
   const ready = async () => {
     const end = Date.now() + 90000;
+    const abortSignal = AbortSignal.timeout(90000);
     while (true) {
       try {
         await storage!.check();
-        return;
+        // Bucket versioning can answer while retained data volumes still return HTTP 500.
+        for (const probe of probes) {
+          const result = await storage!.client.send(new GetObjectCommand(probe), { abortSignal });
+          assert.equal(result.VersionId, probe.VersionId);
+          assert.equal(await result.Body?.transformToString(), 'x');
+        }
+        break;
       } catch {
         if (Date.now() > end) throw new Error('Isolated native storage readiness timed out.');
         await delay(200);
       }
     }
+    // Remove only fixture versions. The product buckets retain their exact prior inventories.
+    for (const probe of probes)
+      await storage!.client.send(new DeleteObjectCommand(probe), { abortSignal });
+    probes.length = 0;
   };
   const close = async () => {
     storage?.client.destroy();
@@ -143,13 +176,13 @@ export async function isolatedFileStorage(
     return {
       storage,
       close,
-      stop: () => docker(['stop', name]),
+      stop,
       start: async () => {
         docker(['start', name]);
         await ready();
       },
       recreate: async () => {
-        docker(['stop', name]);
+        await stop();
         docker(['rm', name]);
         await createProvider();
         await ready();

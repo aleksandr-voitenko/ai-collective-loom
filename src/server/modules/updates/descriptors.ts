@@ -199,7 +199,11 @@ export function intervalBinding(
     if (state.personal_floor !== '0') throw new UpdatesError('updates_personal_history_gap');
   }
   const fresh =
-    !saved || saved.kind === 'checkpoint' || action === 'replay' || action === 'resynchronize';
+    !saved ||
+    saved.kind === 'checkpoint' ||
+    action === 'replay' ||
+    action === 'resynchronize' ||
+    ('refresh_from_view' in options && !!options.refresh_from_view);
   const resync = action === 'resynchronize',
     replay = action === 'replay';
   return { definitions, settingsCurrent, fresh, resync, replay };
@@ -235,6 +239,13 @@ export function newBound({
 }): Bound {
   const resync = action === 'resynchronize',
     replay = action === 'replay';
+  const preceding = (component: 'shared' | 'personal') => {
+    if (resync) return state[`${component}_position`];
+    if (replay || !saved) return '0';
+    return 'refresh_from_view' in options && options.refresh_from_view
+      ? saved[`${component}_lower`]
+      : saved[`${component}_upper`];
+  };
   return {
     purpose: contractFor(mode),
     ...(mode === 'routine' ? { policy: policy! } : {}),
@@ -250,13 +261,9 @@ export function newBound({
     scope,
     definitions,
     reason,
-    shared_lower: resync ? state.shared_position : replay ? '0' : (saved?.shared_upper ?? '0'),
+    shared_lower: preceding('shared'),
     shared_upper: state.shared_position,
-    personal_lower: resync
-      ? state.personal_position
-      : replay
-        ? '0'
-        : (saved?.personal_upper ?? '0'),
+    personal_lower: preceding('personal'),
     personal_upper: state.personal_position,
     shared_history: resync ? 'incomplete' : (saved?.shared_history ?? 'retained'),
     personal_history: resync ? 'incomplete' : (saved?.personal_history ?? 'retained'),
@@ -266,6 +273,8 @@ export function newBound({
     group: null,
     direct: false,
     expires,
+    // Only the explicitly empty resynchronization interval starts ready.
+    // Its later extensions keep both history labels and prepare the enlarged range.
     baseline: resync,
   };
 }

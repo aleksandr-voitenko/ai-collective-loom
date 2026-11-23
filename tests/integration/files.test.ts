@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  PutObjectCommand,
+  DeleteObjectCommand,
+  ListObjectVersionsCommand,
+} from '@aws-sdk/client-s3';
 import { isolatedPublicationPostgres } from '../helpers/publication-postgres.js';
 import { isolatedFileStorage } from '../helpers/file-storage.js';
 import { ArtifactFiles } from '../../src/server/modules/participation/files.js';
@@ -44,8 +48,31 @@ test('native storage fixture owns its port throughout startup and provider recre
   const endpoint = native.storage.configuration.endpoint;
   await native.stop();
   await claim(endpoint);
+  let reads = 0;
+  native.storage.client.middlewareStack.add(
+    (next, context) => async (args) => {
+      if (context.commandName === 'GetObjectCommand' && ++reads === 1)
+        throw new Error('Injected native data-plane startup delay');
+      return next(args);
+    },
+    { step: 'initialize', name: 'delayFirstNativeRead' },
+  );
   await native.start();
+  assert.ok(reads > 1, 'Restart waited for readable bytes after the first probe failed');
+  const afterStart = reads;
   await native.recreate();
+  assert.ok(reads > afterStart, 'A newly created provider also served a retained probe');
+  for (const Bucket of [
+    native.storage.configuration.stagingBucket,
+    native.storage.configuration.finalBucket,
+  ]) {
+    const objects = await native.storage.client.send(
+      new ListObjectVersionsCommand({ Bucket, MaxKeys: 1 }),
+    );
+    assert.deepEqual(objects.Versions ?? [], []);
+    assert.deepEqual(objects.DeleteMarkers ?? [], []);
+    assert.equal(objects.IsTruncated, false);
+  }
   assert.equal(native.storage.configuration.endpoint, endpoint);
   assert.equal(
     contenders.some((server) => server.listening),

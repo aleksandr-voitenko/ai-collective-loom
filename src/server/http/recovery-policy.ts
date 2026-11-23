@@ -125,6 +125,7 @@ add('retrieval', [
   'POST /api/v1/me/reading/lookup',
   'POST /api/v1/me/reading/status',
   'POST /api/v1/me/routine-updates/members',
+  'POST /api/v1/me/routine-updates/observe',
   'POST /api/v1/me/routine-updates/query',
   'POST /api/v1/me/routine-updates/reasons',
   'POST /api/v1/me/routine-updates/selection',

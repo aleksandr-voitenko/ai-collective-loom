@@ -52,7 +52,7 @@ async function injectedApplication(t: TestContext, failure: () => Error | undefi
 
 test('routine Updates server failures retry retrieval without claiming an uncertain mutation', async (t) => {
   const { app } = await injectedApplication(t, () => new PublicationError('service_unavailable'));
-  for (const suffix of ['query', 'members', 'reasons', 'selection']) {
+  for (const suffix of ['query', 'members', 'reasons', 'selection', 'observe']) {
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/me/routine-updates/' + suffix,

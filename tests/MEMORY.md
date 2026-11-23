@@ -298,8 +298,10 @@ owns the loopback port while the native provider stops/starts/recreates; never
 remove an initial provider merely to rebind its ephemeral port. The real-listener
 regression takes that released port before the old fixture's second launch. Its
 beforeProviderStart barrier checks ownership during startup/recreation, and failed
-startup/normal cleanup must release the port. Readiness deadlines/retries and
-browser policies remain unchanged. Never reuse dev data.
+startup/normal cleanup must release the port. Before stopping, the fixture writes
+an independent one-byte version in each bucket. Restart/recreation waits for those
+exact bytes within the existing readiness loop, then deletes just those versions.
+Bucket metadata alone can become available before retained data. Never reuse dev data.
 Exact-byte assertions cover snapshots, reuse, overwrite/lost finalization response,
 expiry, both cleanup orderings, owner/global byte and retained-identity frontiers,
 lost staging/database acknowledgements, page budgets and missing exact versions.
@@ -673,6 +675,14 @@ case still exercises Chromium hidden/frozen state;
 running hidden/unfocused logic has separate stubbed tests. Neither is an OS or
 physical-device usability trial. Preserve existing sign-out cleanup message order.
 
+Routine observation tests exercise delayed deliveries, bound selection, partial
+scans, unchanged custody at quota and explicit application from unfinished
+intervals against PostgreSQL. The compiled Updates journey produces a delayed
+delivery from a second participant and reads the actual browser journal before
+and after observation. Set `LOOM_UPDATES_FRESHNESS_REVIEW=after` for full
+viewports and the source/build manifest in `/tmp/loom-review-evidence/updates-freshness`.
+The manifest explains the corresponding baseline checkout and before capture.
+
 Combined Updates uses `integration/updates*.test.ts` for independent expected
 event/delivery sets, bounded preparation/expansion, highlights→complete fixed bounds,
 late personal repair, visibility replay before completed floors, both guard orders,
@@ -921,7 +931,7 @@ The schema allows fixed categories/counts, route templates, version/commit metad
 source locations and hashed test IDs. No arbitrary error text, titles, attachments,
 headers, cookies, bodies, storage, DOM, input values, screenshots or traces. Bounds:
 256 events, 8 contexts, 16 pages, 64 pending descriptors, 16 reporter steps,
-128 KiB/document, 195 collected tests and <17 MiB/candidate. The test count admits
+128 KiB/document, 196 collected tests and <17 MiB/candidate. The test count admits
 the complete current suite, including the topic discussion browser journeys;
 the per-test and candidate byte limits remain unchanged. Omissions and incomplete
 capture are explicit. The entire candidate fails closed on invalid input; a safe

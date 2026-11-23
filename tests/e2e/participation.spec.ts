@@ -711,8 +711,10 @@ test('topic discussion browser appends, returns and publishes without replacing 
   await directory.getByRole('button', { name: 'Load more subtopics' }).click();
   const children = directory.getByRole('link');
   await expect(children).toHaveCount(13);
+  const childTitle = await children.last().innerText();
   await children.last().press('Enter');
   await expect(page).not.toHaveURL(fixture.url);
+  await expect(page.getByRole('heading', { name: childTitle, exact: true })).toBeVisible();
   const beforeDirectoryReturn = collectionRequests.length;
   await page.goBack();
   await expect(children.last()).toBeFocused();
@@ -5017,6 +5019,11 @@ async function reviewAgentAccess(page: Page, server: Awaited<ReturnType<typeof s
   await expect(
     credentials.getByText('Credentials for @corrected_agent', { exact: true }),
   ).toBeVisible();
+  const refreshCredentials = credentials.getByRole('button', {
+    name: 'Refresh credentials',
+    exact: true,
+  });
+  await expect(refreshCredentials).toBeEnabled();
   await page.route(
     '**/api/v1/identity/credentials/query',
     (route) =>
@@ -5033,7 +5040,7 @@ async function reviewAgentAccess(page: Page, server: Awaited<ReturnType<typeof s
       }),
     { times: 1 },
   );
-  await credentials.getByRole('button', { name: 'Refresh credentials', exact: true }).focus();
+  await refreshCredentials.focus();
   await page.keyboard.press('Enter');
   await expect(
     credentials.getByText('Synthetic credential read unavailable', { exact: true }),

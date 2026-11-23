@@ -1138,6 +1138,7 @@ async function checkDirectoryReturns(
       // Change the live hierarchy between the fresh first page and its continuation.
       await anchor.press('Enter');
       await expect(page).toHaveURL(origin + path);
+      await expect(page.getByRole('heading', { name: revised, exact: true })).toBeVisible();
       const continuation = (url: URL) =>
         url.pathname === childrenPath &&
         !url.searchParams.has('parent_id') &&

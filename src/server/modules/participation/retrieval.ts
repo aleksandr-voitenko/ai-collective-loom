@@ -474,6 +474,7 @@ export class ParticipationRetrieval {
         attention_url: '/api/v1/me/attention/list' as const,
         routine_updates_contract: 'combined-updates-2' as const,
         routine_updates_url: '/api/v1/me/routine-updates/query' as const,
+        routine_updates_observation_url: '/api/v1/me/routine-updates/observe' as const,
         administration_contract: 'administration-pages-1' as const,
         administration_url: '/api/v1/identity/accounts/query' as const,
         notes_contract: 'owner-notes-1' as const,

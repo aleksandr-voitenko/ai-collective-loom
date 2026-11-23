@@ -284,6 +284,7 @@ test('session and command APIs reject protected reads before dispatch and preser
     '/api/v1/me/following/private',
     '/api/v1/shared-changes/query',
     '/api/v1/me/attention/previews',
+    '/api/v1/me/routine-updates/observe',
     '/api/v1/new-protected-read',
   ]) {
     await assert.rejects(sessionRequest(path), /authorization boundary/);

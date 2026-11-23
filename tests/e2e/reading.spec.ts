@@ -784,6 +784,7 @@ test('reading storage failure leaves full text and recovery visible without disp
     if (request.url().endsWith(endpoint + '/state')) writes.push(request.postDataJSON());
   });
   const button = control(page, a.revision_id).getByRole('button', { name: 'Mark unread' });
+  await expect(button).toBeEnabled();
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(control(page, a.revision_id).getByRole('alert')).toContainText('could not be saved');

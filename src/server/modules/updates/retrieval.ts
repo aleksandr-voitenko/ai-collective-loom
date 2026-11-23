@@ -15,12 +15,17 @@ import {
 import type { FollowTargetView } from '../../../contracts/following.js';
 import type { SqlTransaction, Transactions } from '../../db/postgres.js';
 import type { ActorContext } from '../publication/actor.js';
-import { lockActor, lockContext, requireRevision } from '../publication/guards.js';
+import { lockActor } from '../publication/guards.js';
 import { safeError, PublicationError } from '../publication/errors.js';
 import { fit, RetrievalError } from '../participation/retrieval.js';
 import { lockReferencePlan } from '../participation/reference-context.js';
 import { followingDefinitions } from '../following/subscriptions.js';
-import { followingOwner, followSource, unavailable } from '../following/context.js';
+import {
+  followingOwner,
+  followSource,
+  requireFollowTarget,
+  unavailable,
+} from '../following/context.js';
 import {
   SharedChanges,
   sharedCandidatesSql,
@@ -29,6 +34,13 @@ import {
 } from '../following/retrieval.js';
 import { PersonalNotifications, type PersonalCandidate } from '../notifications/retrieval.js';
 
+import {
+  authorizeEvent,
+  personalSql,
+  scanCandidates,
+  includesPersonalReason,
+} from './candidates.js';
+import { observeCandidates } from './observation.js';
 import { UpdatesError } from './errors.js';
 import type {
   UpdatesMode,
@@ -60,10 +72,12 @@ import {
 
 const L = C.updatesLimits;
 type Authority = Awaited<ReturnType<typeof lockActor>>;
-const personalSql = `SELECT d.id,d.signal_id,d.position::text,d.available_at,s.resource_id,s.revision_id,s.source_event_id,c.parent_id,
-  COALESCE(c.discussion_id,CASE WHEN r.kind='summary' THEN r.owner_resource_id END) AS discussion_id
-  FROM loom.personal_deliveries d JOIN loom.notification_signals s ON s.id=d.signal_id JOIN loom.resources r ON r.id=s.resource_id
-  LEFT JOIN loom.contributions c ON c.id=s.resource_id`;
+
+function retained<T extends { retain_until: Date }>(view: T | undefined): T {
+  if (!view || view.retain_until.getTime() <= Date.now())
+    throw new UpdatesError('updates_state_unavailable');
+  return view;
+}
 
 export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
   private readonly shared: SharedChanges;
@@ -126,11 +140,9 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
         [bound.id, bound.owner],
       )
     ).rows[0];
-    if (!view || view.retain_until.getTime() <= Date.now())
-      throw new UpdatesError('updates_state_unavailable');
-    return view;
+    return retained(view);
   }
-  private async create(tx: SqlTransaction, bound: Bound) {
+  private async create(tx: SqlTransaction, bound: Bound, unknownShared = false) {
     // A conflicting write forces an older RR snapshot to retry. An advisory lock
     // alone serializes execution but leaves the quota count on that old snapshot.
     // This custody guard precedes source guards and never touches either clock.
@@ -153,9 +165,16 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
     if (caps.total >= L.views || caps.own >= L.ownerViews)
       throw new UpdatesError('updates_capacity');
     await tx.query(
-      `INSERT INTO loom.updates_views(id,participant_id,shared_after,personal_after,ready)
-      VALUES($1,$2,$3,$4,$5)`,
-      [bound.id, bound.owner, bound.shared_lower, bound.personal_lower, bound.baseline],
+      `INSERT INTO loom.updates_views(id,participant_id,shared_after,personal_after,ready,unknown_shared)
+      VALUES($1,$2,$3,$4,$5,$6)`,
+      [
+        bound.id,
+        bound.owner,
+        bound.shared_lower,
+        bound.personal_lower,
+        bound.baseline,
+        unknownShared,
+      ],
     );
   }
   private memberColumns(bound: Bound) {
@@ -255,7 +274,7 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
       const event = events.find((e) => e.id === m.event_id)!;
       let eligible = true;
       try {
-        await this.authorize(tx, event);
+        await authorizeEvent(tx, event);
       } catch (error) {
         if (!unavailable(error)) throw error;
         eligible = false;
@@ -297,16 +316,6 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
       );
     return { ...view, scanned, ready };
   }
-  private async authorize(tx: SqlTransaction, row: SharedCandidate) {
-    await lockContext(tx, row.resource_id, 'resolution', [
-      'area',
-      'discussion',
-      'contribution',
-      'artifact',
-      'summary',
-    ]);
-    if (row.revision_id) await requireRevision(tx, row.resource_id, row.revision_id);
-  }
   private async prepare(
     tx: SqlTransaction,
     actor: Authority,
@@ -322,71 +331,38 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
       return view;
     }
     if (view.steps >= L.steps) throw new UpdatesError('updates_capacity');
-    const shared = bound.definitions.length
-      ? (
-          await tx.query<SharedCandidate>(
-            `${sharedCandidatesSql}
-      WHERE e.position>$1 AND e.position<=$2 ORDER BY e.position LIMIT 101`,
-            [view.shared_after, bound.shared_upper],
-          )
-        ).rows
-      : [];
-    const personal = (
-      await tx.query<PersonalCandidate>(
-        `${personalSql} WHERE d.recipient_id=$1 AND d.position>$2 AND d.position<=$3
-      ORDER BY d.position LIMIT 101`,
-        [actor.participantId, view.personal_after, bound.personal_upper],
-      )
-    ).rows;
-    const personalEvents = (
-      await tx.query<SharedCandidate>(`${sharedCandidatesSql} WHERE e.id=ANY($1::uuid[])`, [
-        personal.slice(0, L.scan).map((p) => p.source_event_id),
-      ])
-    ).rows;
-    if (personalEvents.length !== personal.slice(0, L.scan).length)
-      throw new UpdatesError('updates_personal_history_gap');
-    await lockReferencePlan(tx, [
-      ...statusSources.map((r) => r.id),
-      ...bound.definitions.map((d) => d.target.resource_id),
-      ...shared
-        .slice(0, L.scan)
-        .flatMap((r) => [r.resource_id, ...(r.discussion_id ? [r.discussion_id] : [])]),
-      ...personal
-        .slice(0, L.scan)
-        .flatMap((r) =>
-          [r.resource_id, r.parent_id, r.discussion_id].filter((v): v is string => !!v),
-        ),
-    ]);
-    if (
-      bound.scope === 'explicit' &&
-      (await followSource(tx, bound.definitions[0]!.target)).state === 'unavailable'
-    )
-      throw new PublicationError('unavailable');
+    const batch = await scanCandidates(
+      tx,
+      bound,
+      {
+        shared_lower: view.shared_after,
+        shared_upper: bound.shared_upper,
+        personal_lower: view.personal_after,
+        personal_upper: bound.personal_upper,
+      },
+      statusSources,
+      'prepare',
+    );
+    const { shared, personal, personalEvents } = batch;
     const rows = new Map<
       string,
       { event: SharedCandidate; shared: boolean; delivery: PersonalCandidate | null }
     >();
     let unknown = view.unknown_shared;
-    for (const row of shared.slice(0, L.scan))
+    for (const row of shared)
       if (row.actor_kind !== 'internal')
         try {
-          await this.authorize(tx, row);
+          await authorizeEvent(tx, row);
           const match = sharedMatches(row, bound.definitions);
           unknown ||= match.unknown;
           if (match.reasons.length) rows.set(row.id, { event: row, shared: true, delivery: null });
         } catch (error) {
           if (!unavailable(error)) throw error;
         }
-    for (const row of personal.slice(0, L.scan))
+    for (const row of personal)
       try {
         const reasons = await this.personal.reasons(tx, row.signal_id);
-        if (
-          bound.reason !== 'all' &&
-          !reasons.some((r) =>
-            bound.reason === 'reply' ? r.kind === 'direct_reply' : r.kind !== 'direct_reply',
-          )
-        )
-          continue;
+        if (!includesPersonalReason(bound.reason, reasons)) continue;
         // Reuse personal exact-source/owner policy, including real parent provenance.
         await this.personal.item(tx, actor, row, reasons);
         const event = personalEvents.find((e) => e.id === row.source_event_id)!;
@@ -430,9 +406,7 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
       sizes.reduce((a, s) => a + s.n, 0) > L.members
     )
       throw new UpdatesError('updates_capacity');
-    const sa = shared.length <= L.scan ? bound.shared_upper : shared[L.scan - 1]!.position;
-    const pa = personal.length <= L.scan ? bound.personal_upper : personal[L.scan - 1]!.position;
-    const ready = sa === bound.shared_upper && pa === bound.personal_upper;
+    const { shared_after: sa, personal_after: pa, complete: ready } = batch;
     await tx.query(
       `UPDATE loom.updates_views SET shared_after=$2,personal_after=$3,ready=$4,unknown_shared=$5,steps=steps+1 WHERE id=$1`,
       [bound.id, sa, pa, ready, unknown],
@@ -471,14 +445,91 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
       steps: view.steps + 1,
     };
   }
+  private async observationContext(tx: SqlTransaction, context: ActorContext, token: string) {
+    const actor = await lockActor(tx, context);
+    const state = await this.state(tx, actor.participantId);
+    const bound = decodeDescriptor('routine', state, token, actor.participantId);
+    if (bound.kind !== 'prepare' && bound.kind !== 'groups')
+      throw new UpdatesError('updates_token_invalid');
+    checkContinuity(state, bound);
+    // Private choices and custody are read as of this RR snapshot. A later
+    // preparation step changes progress in-place; locking that row would turn
+    // ordinary foreground progress into a spurious source withdrawal.
+    const policy =
+      bound.selection === 'complete'
+        ? undefined
+        : await attentionPolicy(tx, bound.owner, 'snapshot');
+    if (policy && policy.version !== bound.policy)
+      throw new UpdatesError('updates_attention_refresh_required');
+    const current =
+      bound.scope === 'following' ? await followingDefinitions(tx, bound.owner) : undefined;
+    retained(
+      (
+        await tx.query<{ retain_until: Date }>(
+          'SELECT retain_until FROM loom.updates_views WHERE id=$1 AND participant_id=$2',
+          [bound.id, bound.owner],
+        )
+      ).rows[0],
+    );
+    return {
+      state,
+      bound,
+      policy,
+      settingsCurrent: !current || JSON.stringify(current) === JSON.stringify(bound.definitions),
+    };
+  }
+  async observe(context: ActorContext, options: R.RoutineObservationOptions) {
+    if (this.mode !== 'routine' || !Value.Check(R.RoutineObservationQuery, options))
+      throw new PublicationError('invalid_input');
+    try {
+      return await this.run(async (tx) => {
+        const { state, bound, policy, settingsCurrent } = await this.observationContext(
+          tx,
+          context,
+          options.view,
+        );
+        return observeCandidates(
+          tx,
+          state,
+          bound,
+          policy,
+          this.personal,
+          settingsCurrent,
+          options.cursor,
+        );
+      });
+    } catch (error) {
+      if (!(error instanceof UpdatesError) || error.code !== 'updates_view_changed') throw error;
+      // A locked source may have acquired an ordinary new revision or may
+      // actually have been withdrawn. Classify once under fresh authority.
+      // Never rescan candidates or advance the cursor from the failed snapshot.
+      try {
+        await this.run(async (tx) => {
+          const { bound } = await this.observationContext(tx, context, options.view);
+          if (bound.scope === 'explicit')
+            await requireFollowTarget(tx, bound.definitions[0]!.target);
+        });
+      } catch (recheck) {
+        // A second lock conflict is still inconclusive. Return no observation
+        // and retry the same position. Propagate an actual binding or access refusal.
+        if (!(recheck instanceof UpdatesError) || recheck.code !== 'updates_view_changed')
+          throw recheck;
+      }
+      throw new UpdatesError('updates_work_limit');
+    }
+  }
   query(
     context: ActorContext,
     options: C.UpdatesOptions | R.RoutineOptions,
   ): Promise<Mode extends 'routine' ? R.RoutinePageView : C.UpdatesPageView> {
+    if (!Value.Check(this.mode === 'routine' ? R.RoutineQuery : C.UpdatesQuery, options))
+      throw new PublicationError('invalid_input');
+    const refresh = 'refresh_from_view' in options ? options.refresh_from_view : undefined;
     if (
-      !Value.Check(this.mode === 'routine' ? R.RoutineQuery : C.UpdatesQuery, options) ||
-      [options.cursor, options.checkpoint, options.switch, options.recovery].filter(Boolean)
-        .length > 1 ||
+      [options.cursor, options.checkpoint, options.switch, options.recovery, refresh].filter(
+        Boolean,
+      ).length > 1 ||
+      (refresh && (options.scope || options.reason || options.selection)) ||
       (options.recovery && !options.recovery.token && options.recovery.action !== 'resynchronize')
     )
       throw new PublicationError('invalid_input');
@@ -490,12 +541,18 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
         this.mode === 'routine' ? await attentionPolicy(tx, actor.participantId) : undefined;
       const state = await this.state(tx, actor.participantId),
         token =
-          options.cursor ?? options.checkpoint ?? options.switch?.token ?? options.recovery?.token;
+          options.cursor ??
+          options.checkpoint ??
+          options.switch?.token ??
+          options.recovery?.token ??
+          refresh;
       const saved = token
           ? decodeDescriptor(this.mode, state, token, actor.participantId)
           : undefined,
         action = options.recovery?.action;
       if (saved) checkContinuity(state, saved, action);
+      if (refresh && saved && saved.kind !== 'prepare' && saved.kind !== 'groups')
+        throw new UpdatesError('updates_token_invalid');
       const { scope, reason } = queryBinding(options, saved);
       const current =
         scope === 'following' ? await followingDefinitions(tx, actor.participantId) : undefined;
@@ -514,7 +571,7 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
             owner: actor.participantId,
             options,
             saved,
-            policy: policy?.version,
+            policy: refresh ? saved!.policy : policy?.version,
             scope,
             reason,
             definitions,
@@ -525,7 +582,7 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
         : { ...saved! };
       if (
         this.mode === 'routine' &&
-        !fresh &&
+        (!fresh || refresh) &&
         action !== 'attention_refresh' &&
         (options.switch?.selection ?? bound.selection) !== 'complete' &&
         bound.policy !== policy!.version
@@ -540,7 +597,10 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
           group: null,
           direct: false,
         };
-      if (fresh) await this.create(tx, bound);
+      if (fresh) {
+        const previous = refresh ? await this.view(tx, saved!) : undefined;
+        await this.create(tx, bound, previous?.unknown_shared);
+      }
       let view = await this.view(tx, bound, bound.kind === 'prepare');
       // Explicit attention refresh must also recover an expired descriptor when
       // ordinary renewal requires a policy refresh. Custody and bounds stay fixed.
@@ -813,7 +873,7 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
               )
             ).rows.flatMap((m) => events.filter((e) => e.revision_id === m.target_revision_id));
         if (!coverage.length) continue;
-        await this.authorize(tx, row);
+        await authorizeEvent(tx, row);
         return {
           form: note ? 'revision_note' : 'change_account',
           resource_id: row.resource_id,
@@ -894,7 +954,7 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
     for (const member of members) {
       const event = events.find((e) => e.id === member.event_id)!;
       try {
-        await this.authorize(tx, event);
+        await authorizeEvent(tx, event);
         eligible.push(event);
       } catch (error) {
         if (!unavailable(error)) throw error;
@@ -1104,7 +1164,7 @@ export class CombinedUpdates<Mode extends UpdatesMode = 'combined'> {
       );
       const inputs: A.AttentionInputView[] = [];
       for (const m of members) {
-        await this.authorize(
+        await authorizeEvent(
           tx,
           events.find((e) => e.id === m.event_id)!,
         );

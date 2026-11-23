@@ -457,6 +457,7 @@ export function DismissControl({
   // Expanded sources have no group cursor: their shared/personal identity set
   // must fence preparation too, including a lookup still in flight.
   useEffect(() => {
+    root.current?.style.removeProperty('min-block-size');
     setPreparing(false);
     setChosen(undefined);
     setSelection(undefined);
@@ -464,6 +465,17 @@ export function DismissControl({
       prepareSequence.current++;
     };
   }, [selectionKey, session.authority.capture()]);
+  // A receipt can be shorter than its form. At the document end, preventScroll
+  // on the focus transfer cannot stop the browser clamping the scroll offset.
+  function reserveFocusedSpace() {
+    const panel = root.current;
+    if (!panel?.contains(document.activeElement)) return;
+    const roomBelow = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight - window.scrollY,
+    );
+    panel.style.minBlockSize = Math.max(0, panel.getBoundingClientRect().height - roomBelow) + 'px';
+  }
   async function prepare() {
     if (preparing || session.busy || session.records.length) return;
     setPreparing(true);
@@ -526,6 +538,7 @@ export function DismissControl({
   }
   async function dismiss() {
     if (!chosen || session.busy || session.records.length) return;
+    reserveFocusedSpace();
     const r = await session.submit({
       kind: 'dismissal',
       ...(groupId ? { group_id: groupId } : {}),
@@ -544,6 +557,7 @@ export function DismissControl({
   }
   async function restore() {
     if (!saved || preparing || session.busy) return;
+    reserveFocusedSpace();
     setPreparing(true);
     try {
       // Undo belongs to this applied decision. Even an exact retry may report a

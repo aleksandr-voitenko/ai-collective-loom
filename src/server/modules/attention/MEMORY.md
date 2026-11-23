@@ -38,7 +38,10 @@ Lock order: attempt → current actor → attention owner → structure/full sor
 resource plan → exact revisions → state/outcome/counters. Routine retrieval adds
 Following before attention and grouping custody before source plans. Writes use
 READ COMMITTED after the exclusive owner guard; avoid stale RR quota counts. Shared
-owner guards protect reads; no network/storage locks span browser requests. Entire
+owner guards protect management reads and foreground selection. Routine Updates
+observation reads policy version and mutes at one REPEATABLE READ snapshot. It
+retains actor/source guards and never prepares selection custody (ADR-045).
+No network/storage locks span browser requests. Entire
 response fit is inside the transaction so oversize output rolls back mutation.
 
 Quotas per owner:64 active/500 retained mutes,10000 input identities,50000 decisions,

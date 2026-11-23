@@ -153,6 +153,23 @@ export function registerAttention(
     async (request) => routine.query(await actor(request), request.body as R.RoutineOptions),
   );
   app.post(
+    '/api/v1/me/routine-updates/observe',
+    {
+      bodyLimit: 32768,
+      onRequest: async (_request, reply) => {
+        reply.header('Cache-Control', 'private, no-store');
+      },
+      schema: {
+        operationId: 'observeRoutineUpdates',
+        querystring: empty,
+        body: R.RoutineObservationQuery,
+        response: { ...errors, 200: R.RoutineObservation },
+      },
+    },
+    async (request) =>
+      routine.observe(await actor(request), request.body as R.RoutineObservationOptions),
+  );
+  app.post(
     '/api/v1/me/routine-updates/members',
     {
       bodyLimit: 32768,
