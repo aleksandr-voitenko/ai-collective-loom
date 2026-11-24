@@ -144,6 +144,8 @@ test('identical error codes have endpoint-specific session, authority, source an
     ['POST', '/api/v1/identity/accounts', 'forbidden', 'withdraw-source'],
     ['POST', '/api/v1/replies', 'forbidden', 'local'],
     ['POST', '/api/v1/organization/changes', 'forbidden', 'withdraw-source'],
+    ['GET', '/api/v1/organization/children/observation', 'unavailable', 'withdraw-source'],
+    ['GET', '/api/v1/organization/children/observation', 'unauthenticated', 'revoke-owner'],
     ['POST', '/api/v1/operations/status', 'unavailable', 'withdraw-source'],
     ['GET', '/api/v1/community', 'invalid_actor', 'revoke-owner'],
     ['GET', '/api/v1/community', 'unavailable', 'withdraw-source'],

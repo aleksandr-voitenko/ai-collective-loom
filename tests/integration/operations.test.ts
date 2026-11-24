@@ -502,6 +502,9 @@ test('populated 0028 upgrade preserves every old row, exact files, retry and pol
     topic_discussion_openings: [],
     topic_discussion_activity: [],
     topic_discussion_visibility: [],
+    topic_directory_state: [f.area, f.other, 'root'].sort().map((scope) => ({
+      row: JSON.stringify({ scope, directory_version: 0, open_children: scope === 'root' ? 2 : 0 }),
+    })),
   });
   assert.equal((await f.admin.call(path + '/outcomes', {})).body.items.length, 0);
   assert.equal(

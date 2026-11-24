@@ -1,5 +1,22 @@
 # Browser test diagnostics
 
+Directory discovery coverage pairs the populated migration and indexed query plans in
+`integration/organization-directory-observation.test.ts` with held listing responses
+on both sides of a commit. Mounted directory tests use a zero-based clock, real
+native details events, and separate observation and traversal responses. They cover
+sticky notices, scoped cancellation, same-owner throttling, exact staged-cursor retry,
+eight-page continuation, missing anchors and navigation after replacement.
+The organization browser journey exercises an independent administrator and a
+WebAuthn reader with live drafts and preferences. It verifies that reverse Tab
+exposes a link beneath the sticky controls. A description edit changes the height
+of an earlier row while the multi-page reading anchor keeps its viewport offset.
+At narrow phone and tablet
+widths it checks the list and composer positions with overlapping failure messages.
+After building, reproduce the full viewports with
+`LOOM_TOPIC_DIRECTORY_FRESHNESS_REVIEW=1 npm run test:e2e -- organization.spec.ts --grep "administrator creates and edits nested topics"`.
+The review helper records source, asset and PNG digests and intentional response
+barriers/failures under the temporary `loom-review-evidence/topic-directory-freshness`.
+
 The topic discussion browser journeys in `e2e/participation.spec.ts` use compiled
 React, isolated PostgreSQL, Chromium WebAuthn and ordinary authenticated publication.
 They exercise two appended pages, unchanged editor selection, retry, current reads
@@ -195,7 +212,8 @@ cache and module URLs stay private to the historical source. Never link the whol
 node_modules directory: that aliases old source into the current coverage inventory.
 The additive case asserts the actual compiler-cache path remains isolated. It
 populates schema0028 through normal HTTPS, interrupts after the observed cold-backup
-journal barrier and explicitly resumes to0029. A separate no-op update case is not
+journal barrier and resumes through 0034, checking the existing root directory backfill.
+A separate no-op update case is not
 historical compatibility evidence. Hosted CI already fetches complete history.
 
 `integration/staging.test.ts` separately exercises the actual staging Compose and

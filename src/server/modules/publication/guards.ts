@@ -37,10 +37,13 @@ export async function lockContext(
     structureNamespace,
     structureGuard,
   ]);
+  // Correlate each parent lookup to its exact key. A plain recursive join can
+  // scan all resources at each level even with a bounded output limit.
   const discovered = await tx.query<{ id: string }>(
     `WITH RECURSIVE owners AS (
     SELECT id, owner_resource_id FROM loom.resources WHERE id = $1
-    UNION SELECT parent.id, parent.owner_resource_id FROM loom.resources parent JOIN owners child ON parent.id = child.owner_resource_id
+    UNION SELECT parent.id, parent.owner_resource_id FROM owners child
+      CROSS JOIN LATERAL (SELECT id, owner_resource_id FROM loom.resources WHERE id=child.owner_resource_id LIMIT 1) parent
   ) SELECT id FROM owners LIMIT $2`,
     [targetId, maxResources === undefined ? null : maxResources + 1],
   );

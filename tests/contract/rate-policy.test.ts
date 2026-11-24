@@ -69,6 +69,10 @@ test('every actual participation route has one explicit rate meaning, including 
     'admin/participation-rates/state',
   ])
     assert.equal(participationRateRoute('POST', '/api/v1/' + p), 'recovery_control');
+  assert.equal(
+    participationRateRoute('GET', '/api/v1/organization/children/observation'),
+    'ordinary_requests',
+  );
   assert.equal(participationRateRoute('GET', '/api/v1/search/files/status'), 'ordinary_requests');
   assert.equal(participationRateRoute('POST', '/api/v1/identity/signin/start'), 'excluded');
   assert.equal(participationRateRoute('GET', '/unclassified'), undefined);

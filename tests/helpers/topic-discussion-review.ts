@@ -28,13 +28,15 @@ const directoryBaselineReproduction =
 export const topicLayoutReview = process.env.LOOM_TOPIC_LAYOUT_REVIEW;
 export const topicDirectoryReview = process.env.LOOM_TOPIC_DIRECTORY_REVIEW;
 export const topicReturnReview = process.env.LOOM_TOPIC_RETURN_REVIEW;
-type Review = 'browsing' | 'freshness' | 'layout' | 'directory' | 'returns';
+export const directoryFreshnessReview = process.env.LOOM_TOPIC_DIRECTORY_FRESHNESS_REVIEW;
+type Review = 'browsing' | 'freshness' | 'layout' | 'directory' | 'returns' | 'directory-freshness';
 const captureSets: Record<Review, unknown[]> = {
   browsing: [],
   freshness: [],
   layout: [],
   directory: [],
   returns: [],
+  'directory-freshness': [],
 };
 
 export async function enrollReviewAccount(
@@ -76,7 +78,7 @@ type CaptureOptions = {
   visibleInViewport?: Locator[];
 } & (
   | { review: 'layout'; role: 'administrator' | 'participant' }
-  | { review: 'directory' | 'returns'; role: 'participant' }
+  | { review: 'directory' | 'returns' | 'directory-freshness'; role: 'participant' }
   | { review?: 'freshness'; role?: 'administrator' | 'participant' }
 );
 
@@ -120,6 +122,20 @@ export async function captureTopicDiscussions(
         directoryPhase === 'before' ? directoryBaselineReproduction : directoryReproduction,
       manifest: `manifest-${directoryPhase}.json`,
     },
+    'directory-freshness': {
+      enabled: directoryFreshnessReview === 'before' || directoryFreshnessReview === '1',
+      directory:
+        process.env.LOOM_TOPIC_DIRECTORY_FRESHNESS_REVIEW_DIR ??
+        '/tmp/loom-review-evidence/topic-directory-freshness',
+      name: 'topic-directory-freshness',
+      reproduction:
+        (directoryFreshnessReview === 'before'
+          ? 'From b5c2aa6, copy the review checkout’s tests/e2e/organization.spec.ts, tests/helpers/topic-directory-discovery.ts and tests/helpers/topic-discussion-review.ts. '
+          : '') +
+        `With Node 24.19.0 run npm run app:build && LOOM_TOPIC_DIRECTORY_FRESHNESS_REVIEW=${directoryFreshnessReview} npm run test:e2e -- organization.spec.ts --grep "administrator creates and edits nested topics"`,
+      manifest:
+        directoryFreshnessReview === 'before' ? 'manifest-before.json' : 'manifest-after.json',
+    },
     returns: {
       enabled: topicReturnReview === 'before' || topicReturnReview === 'after',
       directory: process.env.LOOM_TOPIC_RETURN_REVIEW_DIR,
@@ -138,7 +154,20 @@ export async function captureTopicDiscussions(
   const inputs = applicationInputs(process.cwd());
   const build = JSON.parse(await readFile('dist/release.json', 'utf8'));
   if (inputs.sha256 !== build.sha256) throw new Error('Topic review source and build differ.');
-  const directoryReview = review === 'directory' || review === 'returns';
+  const directoryReview = ['directory', 'returns', 'directory-freshness'].includes(review);
+  if (
+    review === 'directory-freshness' &&
+    directoryFreshnessReview === 'before' &&
+    (inputs.sha256 !== '8bbb3f73fb24807cf8c168c0ee4a88df87f9bd842d2e6a82afed3d185042552d' ||
+      execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !==
+        'b5c2aa6c55c57347fa4da5c6ff82f9ed98be00e0' ||
+      execFileSync('git', ['status', '--porcelain', '--', 'db/migrations'], {
+        encoding: 'utf8',
+      }).trim())
+  )
+    throw new Error(
+      'The before profile requires the unmodified PR #68 application and migrations.',
+    );
   const compiledWebAssets = directoryReview
     ? await Promise.all(
         [
@@ -152,9 +181,12 @@ export async function captureTopicDiscussions(
         })),
       )
     : undefined;
-  const migration = directoryReview
-    ? 'db/migrations/0006_topic_organization.sql'
-    : 'db/migrations/0033_topic_discussion_freshness.sql';
+  const migration =
+    review === 'directory-freshness' && directoryFreshnessReview !== 'before'
+      ? 'db/migrations/0034_topic_directory_observation.sql'
+      : directoryReview
+        ? 'db/migrations/0006_topic_organization.sql'
+        : 'db/migrations/0033_topic_discussion_freshness.sql';
   const databaseMigration =
     review !== 'browsing'
       ? {
@@ -225,6 +257,10 @@ export async function captureTopicDiscussions(
         authentication: 'Ordinary synthetic WebAuthn',
         demonstrated_state: options.description ?? state,
         mocked_responses_and_injected_failures: options.injected ?? [],
+        ...(review === 'directory-freshness' && {
+          clock:
+            'Playwright advances browser observation intervals. Database transactions and server clocks run normally.',
+        }),
         reproduction: profile.reproduction,
         full_viewport: true,
         scroll_y: await page.evaluate(() => scrollY),
@@ -241,6 +277,15 @@ export async function captureTopicDiscussions(
       {
         screenshots: captures,
         reproduction: profile.reproduction,
+        ...(review === 'directory-freshness' &&
+          directoryFreshnessReview === '1' && {
+            test_conditions: [
+              'Chromium advances its observation timers. The server and database use real clocks.',
+              'The third root replacement page is held after its authorized read while the administrator renames another topic.',
+              'One explicit child-list application receives HTTP 503. After the failure screenshot, one observation also receives HTTP 503 to measure the combined message.',
+              'The successful child-list retry response is held while the reader moves focus back to the draft.',
+            ],
+          }),
         isolation: directoryReview
           ? 'Compiled Loom frontend served by the application API over HTTPS, disposable PostgreSQL, and synthetic Chromium WebAuthn accounts. A dedicated administrator seeds and mutates the hierarchy through authorized API writes. Every screenshot uses an ordinary participant. Authentication material stays in private test storage.'
           : 'Compiled Loom application, disposable PostgreSQL and HTTPS, actual Chromium WebAuthn, and synthetic participants publishing through ordinary authenticated routes. No authentication material was exported.',

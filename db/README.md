@@ -178,3 +178,16 @@ at the existing committed visibility generation. Baselines start from current
 state, so the new indexes need no historical backfill. The migration leaves the
 existing contribution restoration stream in use. See
 [ADR-044](../docs/adr/044-topic-discussion-freshness.md).
+
+Migration `0034_topic_directory_observation.sql` initializes one observation row
+for the root and each typed topic. It counts existing locally open, active direct
+children and starts each directory version at zero. Later topic inserts, metadata
+edits, placement, availability and local closure changes update the affected
+direct directories in the source transaction. This includes the two topics
+created by community setup. Parentage remains in `resources.owner_resource_id`.
+When a move or restriction changes an area's effective contribution state, the
+same transaction advances affected descendant directory versions along indexed
+open area edges. A close and reopen between observations therefore stays visible.
+Observation reads combine the scope row with the current authorized parent chain.
+Run `npm run test:organization:postgres` for the populated upgrade, bounded read
+plans and real HTTPS directory changes.

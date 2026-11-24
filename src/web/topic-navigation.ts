@@ -32,7 +32,10 @@ export function isTopicNavigationClick(event: MouseEvent<HTMLAnchorElement>) {
   );
 }
 
-export function watchTopicNavigationInteraction(onInterrupt?: () => void) {
+export function watchTopicNavigationInteraction(
+  onInterrupt?: () => void,
+  positioning: 'history' | 'update' = 'history',
+) {
   let interrupted = false;
   let frame: number | undefined;
   const events = ['wheel', 'touchstart', 'pointerdown', 'keydown', 'focusin', 'input', 'click'];
@@ -50,7 +53,8 @@ export function watchTopicNavigationInteraction(onInterrupt?: () => void) {
     window.addEventListener(event, interrupt, { capture: true, passive: true });
   // Browsers may apply their own Back position during the first render. Keep
   // input listeners active, then also detect scrolling through the scrollbar.
-  if (window.requestAnimationFrame)
+  if (positioning === 'update') window.addEventListener('scroll', interrupt, { passive: true });
+  else if (window.requestAnimationFrame)
     frame = window.requestAnimationFrame(() => {
       frame = window.requestAnimationFrame(() => {
         window.addEventListener('scroll', interrupt, { passive: true });

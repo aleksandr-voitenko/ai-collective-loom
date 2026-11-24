@@ -5,7 +5,10 @@ import { JSDOM } from 'jsdom';
 import { StrictMode } from 'react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
-import type { OrganizationResourceView } from '../../src/contracts/organization.js';
+import type {
+  DirectoryObservationView,
+  OrganizationResourceView,
+} from '../../src/contracts/organization.js';
 import type { PageView, ResourceView } from '../../src/contracts/participation.js';
 import { topicFreshnessContract } from '../../src/contracts/topic-discussion-freshness.js';
 import { ActiveView } from '../../src/web/ParticipationRoutes.js';
@@ -100,12 +103,16 @@ async function browse(
     cursor: string | null,
     rows: OrganizationResourceView[],
     next: string | null = null,
+    observation?: DirectoryObservationView,
   ) {
     const call = pending();
     assert.equal(call.url.searchParams.get('cursor'), cursor);
     assert.equal(call.url.searchParams.get('parent_id'), parent?.resource_id ?? null);
     await reads.respond(
-      topicPage(rows, next, { scope: 'children:' + (parent?.resource_id ?? 'root') }),
+      topicPage(rows, next, {
+        scope: 'children:' + (parent?.resource_id ?? 'root'),
+        ...(observation ? { hierarchy_version: observation.hierarchy_version, observation } : {}),
+      }),
       call,
     );
   }
@@ -598,4 +605,322 @@ test('a first-page refusal can be retried, and incompatible restoration stops at
   assert.ok(view.directory().getByRole('link', { name: 'Anchor' }));
   assert.ok(!view.directory().queryByRole('link', { name: 'Accepted prefix' }));
   assert.ok(view.directory().getByRole('button', { name: 'Load more topics' }));
+});
+
+function directoryClock(t: TestContext) {
+  t.mock.getter(document, 'hidden', () => false);
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  return async (delay = 15000) =>
+    act(async () => {
+      now += delay;
+      t.mock.timers.tick(delay);
+    });
+}
+
+const observationPath = '/api/v1/organization/children/observation';
+const rootBoundary = (
+  directory_version: number,
+  hierarchy_version = 1,
+): DirectoryObservationView => ({
+  parent_id: null,
+  directory_version,
+  inherited_closure: false,
+  hierarchy_version,
+});
+const directoryFailure = () =>
+  Response.json(
+    { error: { code: 'service_unavailable', message: 'Temporary directory failure.' } },
+    { status: 503 },
+  );
+
+test('directory checks keep the accepted first boundary through append and show commits during replacement after it is adopted', async (t) => {
+  const tick = directoryClock(t);
+  const view = await browse(t);
+  assert.equal(view.pending().url.searchParams.get('observe'), '1');
+  const first = topic('First row');
+  const tail = topic('Earlier tail');
+  // The server committed v2 after capturing this first page and before delivery.
+  await view.page(null, [first], 'old-tail', rootBoundary(1));
+  const original = view.directory().getByRole('link', { name: first.title });
+  original.focus();
+  const load = view.directory().getByRole('button', { name: 'Load more topics' });
+  fireEvent.click(load);
+  const append = view.pending();
+  await tick();
+  await view.respond(Response.json(rootBoundary(2, 2)), view.last(observationPath));
+  assert.equal(document.activeElement, original);
+  assert.equal(view.directory().getByRole('link', { name: first.title }), original);
+  await view.respond(topicPage([tail]), append);
+  assert.ok(view.directory().getByText('Topics updated'));
+  assert.ok(view.directory().getByText('2 topics shown'));
+  await tick();
+  await view.respond(directoryFailure(), view.last(observationPath));
+  assert.ok(view.directory().getByText(/Couldn’t check for updates/));
+  assert.ok(view.directory().getByText('Topics updated'));
+
+  fireEvent.click(view.directory().getByRole('button', { name: 'Show updated topics' }));
+  await view.respond(directoryFailure(), view.pending());
+  assert.ok(view.directory().getByText(/list is still here/));
+  assert.ok(view.directory().getByText(/Couldn’t check for updates/));
+  assert.equal(view.directory().getByRole('link', { name: first.title }), original);
+  fireEvent.click(view.directory().getByRole('button', { name: 'Retry updating topics' }));
+  const later = rootBoundary(2, 2);
+  const after = (row: OrganizationResourceView) => ({ ...row, hierarchy_version: 2 });
+  await view.page(null, [after(first)], 'fresh-tail', later);
+  assert.equal(
+    view.directory().getByRole('link', { name: tail.title }).dataset.topicId,
+    tail.resource_id,
+  );
+  const waiting = view.pending();
+  // A v3 change happens while the replacement's response is still on the wire.
+  await tick(30000);
+  await view.respond(Response.json(rootBoundary(3, 3)), view.last(observationPath));
+  await view.respond(topicPage([after(tail)], 'fresh-next', { hierarchy_version: 2 }), waiting);
+  assert.equal(view.directory().getByRole('link', { name: first.title }), original);
+  assert.ok(view.directory().getByText('Topics updated'));
+  assert.ok(view.directory().getByText('2 topics loaded'));
+  assert.equal(
+    view
+      .directory()
+      .getByRole('button', { name: 'Load more topics' })
+      .getAttribute('aria-disabled'),
+    'true',
+  );
+  await tick();
+  await view.respond(directoryFailure(), view.last(observationPath));
+  assert.ok(view.directory().getByText(/Couldn’t check for updates/));
+  assert.ok(view.directory().getByText('Topics updated'));
+  assert.equal(
+    view
+      .directory()
+      .getByRole('button', { name: 'Load more topics' })
+      .getAttribute('aria-disabled'),
+    'true',
+  );
+});
+
+test('directory application counts empty pages, retries the exact failed cursor and records its accepted extent for Back', async (t) => {
+  const view = await browse(t);
+  const first = topic('Initial title');
+  const tail = topic('Tail title');
+  const later = topic('Fresh continuation');
+  await view.page(null, [first], 'old');
+  fireEvent.click(view.directory().getByRole('button', { name: 'Load more topics' }));
+  await view.page('old', [tail]);
+  const original = view.directory().getByRole('link', { name: first.title });
+  fireEvent.click(view.directory().getByRole('button', { name: 'Show updated topics' }));
+  const startCount = view.count();
+  await view.page(null, [{ ...first, title: 'Updated title' }], 'fresh-1');
+  for (let i = 1; i < 8; i++) await view.page('fresh-' + i, [], 'fresh-' + (i + 1));
+  assert.equal(view.count(), startCount + 7);
+  assert.equal(view.directory().getByRole('link', { name: first.title }), original);
+  assert.ok(!view.directory().queryByRole('link', { name: 'Updated title' }));
+  fireEvent.click(view.directory().getByRole('button', { name: 'Continue updating topics' }));
+  assert.equal(view.pending().url.searchParams.get('cursor'), 'fresh-8');
+  await view.respond(directoryFailure(), view.pending());
+  assert.ok(view.directory().getByText(/list is still here/));
+  assert.equal(view.directory().getByRole('link', { name: first.title }), original);
+  fireEvent.click(view.directory().getByRole('button', { name: 'Retry updating topics' }));
+  await view.page('fresh-8', [tail], 'fresh-9');
+  assert.equal(view.directory().getByRole('link', { name: 'Updated title' }), original);
+  assert.ok(!view.directory().queryByText('All topics loaded.'));
+  fireEvent.click(view.directory().getByRole('button', { name: 'Load more topics' }));
+  await view.page('fresh-9', [later]);
+  await view.open(later.title);
+  await view.back();
+  const backStart = view.count();
+  await view.page(null, [first, tail, later], 'return-1');
+  for (let i = 1; i < 8; i++) await view.page('return-' + i, [], 'return-' + (i + 1));
+  assert.equal(view.count(), backStart + 7);
+  fireEvent.click(view.directory().getByRole('button', { name: 'Continue restoring topics' }));
+  await view.page('return-8', [], 'return-9');
+  await view.page('return-9', [], 'return-10');
+  assert.ok(!view.directory().queryByRole('button', { name: 'Continue restoring topics' }));
+  assert.ok(view.directory().getByRole('button', { name: 'Load more topics' }));
+});
+
+test('an incompatible update prefix is discarded only for the explicit restart while the original list remains visible', async (t) => {
+  const view = await browse(t);
+  const tail = topic('Original tail');
+  await view.page(null, [tail]);
+  fireEvent.click(view.directory().getByRole('button', { name: 'Show updated topics' }));
+  const provisional = topic('First replacement prefix');
+  await view.page(null, [provisional], 'incompatible');
+  const beforeFailure = view.count();
+  await view.page('incompatible', [{ ...tail, hierarchy_version: 2 }], null, rootBoundary(2, 2));
+  assert.equal(view.count(), beforeFailure);
+  assert.ok(view.directory().getByText(/Organization changed again/));
+  assert.ok(view.directory().queryByRole('link', { name: tail.title }));
+  assert.ok(!view.directory().queryByRole('link', { name: provisional.title }));
+  fireEvent.click(view.directory().getByRole('button', { name: 'Restart update' }));
+  assert.equal(view.pending().url.searchParams.get('cursor'), null);
+  await view.page(null, [{ ...tail, title: 'From the valid restart' }]);
+  assert.ok(view.directory().getByRole('link', { name: 'From the valid restart' }));
+  assert.ok(!view.directory().queryByRole('link', { name: provisional.title }));
+});
+
+for (const interrupted of [false, true]) {
+  test(
+    'a moved update anchor ' +
+      (interrupted
+        ? 'yields positioning to later reader input'
+        : 'focuses a surviving neighbor near its former offset'),
+    async (t) => {
+      const view = await browse(t);
+      const lost = topic('Topic that moved');
+      const neighbor = topic('Nearby topic');
+      await view.page(null, [lost, neighbor]);
+      const retained = view.directory().getByRole('link', { name: neighbor.title });
+      t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+        const top =
+          this.dataset.topicId === lost.resource_id
+            ? 80
+            : this.dataset.topicId === neighbor.resource_id
+              ? 205
+              : 0;
+        return new dom.window.DOMRect(0, top, 180, 30);
+      });
+      const lostLink = view.directory().getByRole('link', { name: lost.title });
+      lostLink.focus();
+      fireEvent.click(view.directory().getByRole('button', { name: 'Show updated topics' }));
+      if (interrupted) {
+        fireEvent.scroll(window);
+        retained.focus();
+      }
+      await view.page(null, [neighbor]);
+      assert.equal(view.directory().getByRole('link', { name: neighbor.title }), retained);
+      assert.equal(document.activeElement, retained);
+      assert.ok(view.directory().getByText('Your previous place is no longer in this list.'));
+      if (interrupted) assert.deepEqual(view.scroll, []);
+      else assert.deepEqual(view.scroll, [{ top: 125, behavior: 'instant' }]);
+    },
+  );
+}
+
+test('applying preserves a partly read description even when its title is behind the sticky controls', async (t) => {
+  const view = await browse(t);
+  const row = topic('Above the sticky controls');
+  await view.page(null, [row]);
+  const link = view.directory().getByRole('link', { name: row.title });
+  const apply = view.directory().getByRole('button', { name: 'Show updated topics' });
+  t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+    const start = link.textContent === row.title ? 12 : 152;
+    if (this === link) return new dom.window.DOMRect(0, start, 120, 18);
+    if (this === link.closest('li')) return new dom.window.DOMRect(0, start - 8, 200, 130);
+    if (this === apply.parentElement) return new dom.window.DOMRect(0, 0, 300, 64);
+    return new dom.window.DOMRect();
+  });
+  apply.focus();
+  fireEvent.click(apply);
+  await view.page(null, [{ ...row, title: 'Same topic below the controls' }]);
+  assert.deepEqual(view.scroll, [{ top: 140, behavior: 'instant' }]);
+  assert.equal(document.activeElement, apply);
+});
+
+test('applying an empty replacement keeps the directory in reach when the whole visible extent moved away', async (t) => {
+  const view = await browse(t);
+  const row = topic('Previously visible');
+  await view.page(null, [row]);
+  const apply = view.directory().getByRole('button', { name: 'Show updated topics' });
+  const link = view.directory().getByRole('link', { name: row.title });
+  t.mock.method(HTMLElement.prototype, 'getBoundingClientRect', function (this: HTMLElement) {
+    return new dom.window.DOMRect(
+      0,
+      this === link || this === link.closest('li') ? 150 : 0,
+      160,
+      32,
+    );
+  });
+  const revealed: HTMLElement[] = [];
+  t.mock.method(HTMLElement.prototype, 'scrollIntoView', function (this: HTMLElement) {
+    revealed.push(this);
+  });
+  apply.focus();
+  fireEvent.click(apply);
+  await view.page(null, []);
+  assert.equal(revealed.length, 1);
+  assert.equal(revealed[0], view.directory().getByText('No topics here yet.').closest('section'));
+  assert.equal(document.activeElement, apply);
+  assert.ok(view.directory().getByText('Your previous place is no longer in this list.'));
+});
+
+test('a late foreground throttle defers the timer already scheduled for the new traversal', async (t) => {
+  const tick = directoryClock(t);
+  const view = await browse(t);
+  await view.page(null, [topic('Previous directory')]);
+  await tick(5000);
+  fireEvent.click(view.directory().getByRole('button', { name: 'Show updated topics' }));
+  const held = view.pending();
+  fireEvent.click(view.directory().getByRole('button', { name: 'Reload topics' }));
+  assert.equal(held.signal.aborted, true);
+  await view.page(null, [topic('Replacement directory')]);
+  await view.respond(
+    Response.json(
+      { error: { code: 'temporarily_throttled', message: 'Synthetic read limit.' } },
+      {
+        status: 429,
+        headers: { 'Retry-After': '42' },
+      },
+    ),
+    held,
+  );
+  const checks = () => view.calls.filter((call) => call.url.pathname === observationPath);
+  await tick(10000);
+  assert.equal(checks().length, 0);
+  await tick(31999);
+  assert.equal(checks().length, 0);
+  await tick(1);
+  assert.equal(checks().length, 1);
+  assert.ok(view.directory().getByRole('link', { name: 'Replacement directory' }));
+  assert.ok(!view.directory().queryByText(/couldn’t check for updates/i));
+});
+
+test('an explicitly requested append finishes behind closed Subtopics, and reopening resumes observation from the original baseline', async (t) => {
+  const tick = directoryClock(t);
+  const parent = topic('Main topic');
+  const view = await browse(t, { parent });
+  await view.metadata();
+  const child = topic('First child', { parent_id: parent.resource_id });
+  const nextChild = topic('Next child', { parent_id: parent.resource_id });
+  await view.page(null, [child], 'one-more-child');
+  const summary = view.summary();
+  const details = summary.closest('details')!;
+  fireEvent.click(summary);
+  details.dispatchEvent(new Event('toggle'));
+  await tick(0);
+  const boundary = {
+    parent_id: parent.resource_id,
+    directory_version: 1,
+    hierarchy_version: 1,
+    inherited_closure: false,
+  };
+  await view.respond(Response.json(boundary), view.last(observationPath));
+  assert.ok(view.directory().getByText('Subtopics updated'));
+  fireEvent.click(view.directory().getByRole('button', { name: 'Load more subtopics' }));
+  const next = view.pending();
+  assert.equal(next.url.searchParams.get('cursor'), 'one-more-child');
+  fireEvent.click(summary);
+  details.dispatchEvent(new Event('toggle'));
+  assert.equal(details.open, false);
+  assert.equal(next.signal.aborted, false);
+  await view.page('one-more-child', [nextChild]);
+  const checks = () => view.calls.filter((call) => call.url.pathname === observationPath);
+  await tick(60000);
+  assert.equal(checks().length, 1);
+  assert.ok(details.textContent?.includes(nextChild.title));
+  fireEvent.click(summary);
+  details.dispatchEvent(new Event('toggle'));
+  window.dispatchEvent(new Event('online'));
+  window.dispatchEvent(new Event('focus'));
+  await tick(0);
+  assert.equal(checks().length, 2);
+  await view.respond(
+    Response.json({ ...boundary, directory_version: 0 }),
+    view.last(observationPath),
+  );
+  assert.ok(view.directory().getByText('Subtopics updated'));
+  assert.ok(view.directory().getByRole('link', { name: nextChild.title }));
+  assert.ok(view.directory().getByText('2 subtopics shown'));
 });

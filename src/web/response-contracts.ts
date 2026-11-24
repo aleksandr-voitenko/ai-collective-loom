@@ -303,6 +303,7 @@ add(
     'GET /api/v1/discussions/{id}',
     'GET /api/v1/areas/{id}',
     'GET /api/v1/organization/children',
+    'GET /api/v1/organization/children/observation',
     'GET /api/v1/organization/destinations',
     'GET /api/v1/organization/resources/{id}',
     'GET /api/v1/areas/{id}/metadata-history',

@@ -663,7 +663,7 @@ test(
 );
 
 test(
-  'pilot updates populated actual 0028 source to 0033 and resumes an interrupted controller after verified backup',
+  'pilot updates populated actual 0028 source to 0034 and resumes an interrupted controller after verified backup',
   { timeout: 240000 },
   async (t) => {
     const { historicalPilot, previousPilotSource, interruptAfterBackup } =
@@ -700,7 +700,14 @@ test(
     await pilotCommand('start', f.path);
     const next = f.instance();
     assert.notEqual(next.release.applicationSource, p.d.release.applicationSource);
-    assert.equal(sql(next, 'SELECT max(version) FROM loom_migrations.history'), '0033');
+    assert.equal(sql(next, 'SELECT max(version) FROM loom_migrations.history'), '0034');
+    assert.equal(
+      sql(
+        next,
+        "SELECT open_children FROM loom.topic_directory_state WHERE scope='root' AND directory_version=0",
+      ),
+      '2',
+    );
     assert.equal(sql(next, 'SELECT count(*) FROM loom.revision_discussion_links'), '0');
     assert.equal(sql(next, 'SELECT count(*) FROM loom.discussion_freshness_visibility'), '0');
     assert.equal(sql(next, 'SELECT count(*) FROM loom.topic_discussion_activity'), '0');

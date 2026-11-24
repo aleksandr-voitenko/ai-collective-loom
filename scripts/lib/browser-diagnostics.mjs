@@ -333,6 +333,7 @@ const routePatterns = [
   '/api/v1/organization/status',
   '/api/v1/organization/resources/:id',
   '/api/v1/organization/children',
+  '/api/v1/organization/children/observation',
   '/api/v1/organization/destinations',
   '/api/v1/organization/audit',
   '/api/v1/areas/:id/proposal-route',

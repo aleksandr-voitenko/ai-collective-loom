@@ -81,6 +81,7 @@ add('retrieval', [
   'GET /api/v1/me/saved-items',
   'GET /api/v1/organization/audit',
   'GET /api/v1/organization/children',
+  'GET /api/v1/organization/children/observation',
   'GET /api/v1/organization/destinations',
   'GET /api/v1/organization/resources/:id',
   'GET /api/v1/participants',

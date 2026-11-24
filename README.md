@@ -45,9 +45,20 @@ local drafts and status recovery; save feedback confirms only writes on this dev
 On **Topics**, use **Load more topics** below the list to add another group of
 topics. Inside a topic, **Load more subtopics** works the same way. Closing
 **Subtopics** keeps the rows you’ve loaded. If loading fails, retry from the
-same place. If Loom asks you to refresh the list or you want a fresh view, choose
-**Reload topics** or **Reload subtopics**. The previous rows stay visible during
-reload while you still have access.
+same place. While Topics is visible and online, Loom checks about every 15 seconds.
+Subtopics checks while its disclosure is open. **Topics updated** or **Subtopics
+updated** means the directory changed. If organization changed elsewhere and
+invalidated the next page, Loom asks you to update the list to continue.
+
+Choose **Show updated topics** or **Show updated subtopics** to rebuild the portion
+you’ve loaded. The current list stays readable while Loom prepares the replacement.
+It keeps your visible topic near its previous position where possible. You can keep
+typing or scrolling, and your drafts and unsaved settings stay in place. If more
+than eight pages are needed, choose **Continue updating** for another batch. You
+can retry a temporary failure or restart the update if organization changes again.
+**Reload topics** and **Reload subtopics** start over at the first page.
+The [directory observation decision](docs/adr/046-topic-directory-observation.md)
+describes the optional shared API and its bounds.
 
 After you open a topic from either list, browser Back rebuilds the portion you
 had loaded using current access checks. Subtopics reopens when you return from

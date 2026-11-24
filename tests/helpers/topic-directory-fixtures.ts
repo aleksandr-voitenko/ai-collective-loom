@@ -87,7 +87,14 @@ export function topicPage(
   next: string | null = null,
   extra: Partial<OrganizationPageView> = {},
 ) {
+  const parent = (extra.scope ?? 'children:root').split(':')[1];
   return Response.json({
+    observation: {
+      parent_id: !parent || parent === 'root' ? null : parent,
+      directory_version: 0,
+      hierarchy_version: extra.hierarchy_version ?? 1,
+      inherited_closure: false,
+    },
     items,
     next_cursor: next,
     hierarchy_version: 1,
