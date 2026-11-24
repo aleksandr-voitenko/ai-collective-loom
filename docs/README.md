@@ -18,6 +18,7 @@
 | [Publication recovery decision](adr/015-publication-reconciliation.md) | Canonical scoped attempts, reference-only resolution, disclosure and retention limits. |
 | [Authored text](adr/011-authored-text.md) | Versioned safe Markdown/entity subset and candidate limits. |
 | [Bounded retrieval](adr/016-bounded-participation-retrieval.md) | Parentage, exact bodies, live authorization, continuations and setup states. |
+| [Topic directory observation](adr/046-topic-directory-observation.md) | Bounded direct-directory change detection and explicit replacement of the loaded extent. |
 | [Routine Updates observation](adr/045-routine-updates-observation.md) | Paired-stream change discovery and explicit application from an unfinished or completed interval. |
 | [Topic discussion freshness](adr/044-topic-discussion-freshness.md) | Bounded change discovery for direct topic discussions, current authority and explicit application. |
 | [Browser recovery](adr/017-browser-participation-recovery.md) | Scoped durable intent, late responses, conflicts and reading independence. |

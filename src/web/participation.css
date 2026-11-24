@@ -1554,6 +1554,75 @@
   min-width: 0;
   flex: 1;
 }
+.loom-app .topic-browser {
+  container: topic-directory / inline-size;
+}
+.loom-app .topic-directory-updates {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 1rem;
+  padding: 4px 2px;
+  border-block-end: 1px solid var(--line);
+  background: var(--bg);
+  overflow-anchor: none;
+}
+.loom-app .topic-directory-updates .text-button {
+  justify-self: start;
+  min-block-size: 36px;
+  padding-inline: 3px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.loom-app .topic-directory-update-status {
+  align-content: center;
+  min-block-size: 2lh;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.loom-app .topic-directory-update-status strong,
+.loom-app .topic-directory-update-status span {
+  display: block;
+}
+.loom-app .topic-directory-update-status strong {
+  color: var(--accent);
+}
+.loom-app .topic-directory-updates button[aria-disabled='true'] {
+  color: var(--muted);
+  cursor: default;
+}
+@media (max-width: 600px) {
+  .loom-app .topic-directory-updates {
+    column-gap: 8px;
+    grid-template-columns: minmax(7rem, 36%) minmax(0, 1fr);
+  }
+  .loom-app .topic-directory-updates .text-button {
+    text-align: start;
+    min-block-size: 44px;
+  }
+}
+/* Reserve both a directory notice and an independent check failure. The
+   sidebar can leave tablet directories narrower than some phone layouts. */
+@container topic-directory (max-width: 40rem) {
+  .loom-app .topic-directory-update-status {
+    min-block-size: 3lh;
+  }
+}
+@container topic-directory (max-width: 26rem) {
+  .loom-app .topic-directory-update-status {
+    min-block-size: 4lh;
+  }
+}
+@container topic-directory (max-width: 20rem) {
+  .loom-app .topic-directory-update-status {
+    min-block-size: 5lh;
+  }
+}
 .loom-app .topic-browser-rows {
   margin: 0;
   padding: 0;
@@ -1570,6 +1639,9 @@
   border-block-start: 1px solid var(--line);
 }
 .loom-app .topic-browser-rows a {
+  /* Native keyboard focus must clear the sticky controls, including the
+     five-line status space reserved in a narrow directory. */
+  scroll-margin-block-start: 7rem;
   font-size: 15px;
   font-weight: 650;
   text-decoration: underline;

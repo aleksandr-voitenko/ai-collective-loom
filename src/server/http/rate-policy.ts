@@ -11,6 +11,7 @@ function add(policy: RateRoutePolicy, routes: readonly string[]) {
 }
 
 add('ordinary_requests', [
+  'GET /api/v1/organization/children/observation',
   'GET /api/v1/areas',
   'GET /api/v1/areas/:id',
   'GET /api/v1/areas/:id/artifacts',

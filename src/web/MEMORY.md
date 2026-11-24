@@ -85,6 +85,20 @@ footer preserves focus during append and can transfer it locally if a focused
 control disappears while the disclosure is open. `TopicDestinationPicker` in `Organization.tsx`
 uses the paged `/organization/destinations` flow with path labels and IDs.
 
+The first authorized page opts into ADR-046's directory boundary. Preserve that
+object through append. `useTopicDirectoryObservation` watches its nearest
+native disclosure’s toggle event and keeps a single visible/online check in flight.
+An accepted replacement acknowledges observations through its own directory and
+hierarchy versions. Evidence of a later commit stays pending across adoption.
+A newer hierarchy version blocks a retained continuation even if this directory
+has no direct changes.
+Show updated keeps the accepted view mounted, stages fresh pages in eight-read
+batches, and retries from the staged cursor. A version conflict requires an explicit
+restart. The visible row can still anchor its description after the title scrolls
+behind the sticky controls. A disappearing anchor falls back to a surviving
+neighbor or the empty directory. Position correction yields to input and
+ordinary application keeps editor focus in place.
+
 `TopicNavigation` keeps one return target per browser history entry, at most 16
 entries per participant, instance and identity lifetime. The source is the root
 or the normalized topic ID. An ordinary title-link departure saves the active

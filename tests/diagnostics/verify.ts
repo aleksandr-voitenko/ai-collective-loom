@@ -197,6 +197,7 @@ for (const path of [
   '/api/v1/organization/changes',
   '/api/v1/organization/status',
   '/api/v1/organization/children',
+  '/api/v1/organization/children/observation',
   '/api/v1/organization/destinations',
   '/api/v1/organization/audit',
 ]) {

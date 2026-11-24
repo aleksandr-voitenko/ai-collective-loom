@@ -1,5 +1,17 @@
 # Participation boundary
 
+Guide30/ADR-046 adds a coherent opt-in boundary to organization children and
+an authenticated 256-byte observation read. Migration0034 keeps one derived
+row per direct directory and the implicit root. Area membership, title/description
+and local availability changes touch the affected scope within the writer’s
+transaction. Writers compare old/new effective closure on bounded parent paths
+and advance affected directory versions through indexed active, locally open
+area edges. This preserves close/reopen and move round trips between polls.
+Locally open child counts and the authorized parent chain give the live inherited
+state. Keeping global hierarchy
+version separate lets clients identify stale continuations without a false direct
+change notice. No poll scans children or writes publication or private state.
+
 Guide28/ADR-044 add `topic-discussion-freshness-1` for direct topic lists.
 Migration0033 records opening publications, revisions and direct moves at shared
 clock positions under a topic-local index. A second indexed scan follows whole

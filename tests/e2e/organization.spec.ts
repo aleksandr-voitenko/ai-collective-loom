@@ -1,6 +1,7 @@
 import type { Page, BrowserContext, Route } from '@playwright/test';
 import { test, expect } from '../helpers/browser-fixtures.js';
 import { randomUUID } from 'node:crypto';
+import { checkDirectoryDiscovery } from '../helpers/topic-directory-discovery.js';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -124,6 +125,8 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   page,
   context,
   server,
+  browser,
+  diagnostics,
 }, info) => {
   const d = await setup(page, context, server);
   await page.getByRole('link', { name: 'Topics', exact: true }).first().click();
@@ -253,6 +256,14 @@ test('administrator creates and edits nested topics, moves a subtree, closes/reo
   await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('organization-mobile.png'), fullPage: true });
+  await test.step('An ordinary reader discovers and applies changes to both directories', async () => {
+    const reader = diagnostics.track(await browser.newContext({ ignoreHTTPSErrors: true }));
+    try {
+      await checkDirectoryDiscovery(page, await reader.newPage(), server.origin);
+    } finally {
+      await reader.close();
+    }
+  });
 });
 
 async function checkSubtopicPages(page: Page, origin: string, general: string) {

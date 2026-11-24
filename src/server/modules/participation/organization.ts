@@ -446,10 +446,64 @@ export class TopicOrganization {
       [randomUUID(), id, version, title, description, actor.participantId],
     );
   }
+  private async directoryBoundary(
+    tx: SqlTransaction,
+    parent: string | null,
+    parentOpen: boolean,
+    hierarchy: number,
+  ): Promise<C.DirectoryObservationView> {
+    const row = (
+      await tx.query<{ directory_version: number; open_children: number }>(
+        'SELECT directory_version,open_children FROM loom.topic_directory_state WHERE scope=$1',
+        [parent ?? 'root'],
+      )
+    ).rows[0];
+    if (!row) throw new PublicationError('service_unavailable');
+    return {
+      parent_id: parent,
+      directory_version: row.directory_version,
+      inherited_closure: !parentOpen && row.open_children > 0,
+      hierarchy_version: hierarchy,
+    };
+  }
+  observe(context: ActorContext, parentId?: string) {
+    return this.run(async (tx) => {
+      await lockActor(tx, context);
+      await structureGuard(tx);
+      const parent = parentId?.toLowerCase() ?? null;
+      let parentOpen = true;
+      if (parent) {
+        // A discussion below a depth-twelve topic is a permanently invalid
+        // directory, even though its ownership chain would exceed the area bound.
+        if (!(await tx.query('SELECT id FROM loom.areas WHERE id=$1', [parent])).rowCount)
+          throw new PublicationError('unavailable');
+        const chain = await lockContext(
+          tx,
+          parent,
+          'resolution',
+          ['area'],
+          C.organizationLimits.areaDepth,
+        );
+        // The organization listing requires a typed topic throughout the path.
+        // Check the remaining exact companion keys without hydrating any rows.
+        const typed = await tx.query(
+          `SELECT topic.id FROM unnest($1::uuid[]) AS candidate(id)
+           CROSS JOIN LATERAL (SELECT id FROM loom.areas WHERE id=candidate.id LIMIT 1) topic`,
+          [chain.slice(1).map((item) => item.id)],
+        );
+        if (typed.rows.length !== chain.length - 1) throw new PublicationError('unavailable');
+        parentOpen = chain.every((item) => item.publication_open);
+      }
+      return fit(
+        await this.directoryBoundary(tx, parent, parentOpen, await hierarchyVersion(tx)),
+        C.directoryObservationBytes,
+      );
+    });
+  }
   list(
     context: ActorContext,
     kind: 'children' | 'destinations',
-    options: PageOptions & { parent_id?: string },
+    options: PageOptions & { parent_id?: string; observe?: '1' },
   ) {
     const size = this.size(options),
       budget = responseBudget(options.max_response_bytes);
@@ -458,7 +512,8 @@ export class TopicOrganization {
       await structureGuard(tx);
       const hierarchy = await hierarchyVersion(tx),
         parent = options.parent_id?.toLowerCase() ?? null;
-      if (parent && (await this.projection(tx, actor, parent)).kind !== 'area')
+      const parentResource = parent ? await this.projection(tx, actor, parent) : null;
+      if (parentResource && parentResource.kind !== 'area')
         throw new PublicationError('unavailable');
       const binding = JSON.stringify([actor.participantId, kind, parent, hierarchy]);
       const after = this.decode(binding, options.cursor);
@@ -470,6 +525,18 @@ export class TopicOrganization {
         )
       ).rows;
       const page: C.OrganizationPageView = {
+        // Shared structure ownership keeps the baseline and the returned rows on
+        // the same side of every organization commit, including empty first pages.
+        ...(kind === 'children' && options.observe === '1'
+          ? {
+              observation: await this.directoryBoundary(
+                tx,
+                parent,
+                parentResource?.publication_open ?? true,
+                hierarchy,
+              ),
+            }
+          : {}),
         items: [],
         hierarchy_version: hierarchy,
         next_cursor: null,

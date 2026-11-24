@@ -173,6 +173,7 @@ async function main() {
       '27',
       '28',
       '29',
+      '30',
     ].includes(community.guide_revision)
   )
     throw new Error();

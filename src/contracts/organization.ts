@@ -94,8 +94,21 @@ export const OrganizationReconciled = Type.Union([
   Type.Object({ operation_state: Type.Literal('not_recorded') }, closed),
 ]);
 export type OrganizationResult = Static<typeof OrganizationCommitted>;
+export const directoryObservationBytes = 256;
+export const DirectoryObservation = Type.Object(
+  {
+    parent_id: NullableId,
+    directory_version: version,
+    inherited_closure: Type.Boolean(),
+    hierarchy_version: version,
+  },
+  closed,
+);
+export type DirectoryObservationView = Static<typeof DirectoryObservation>;
+export const DirectoryObservationInput = Type.Object({ parent_id: Type.Optional(UUID) }, closed);
 export const OrganizationPage = Type.Object(
   {
+    observation: Type.Optional(DirectoryObservation),
     items: Type.Array(OrganizationResource, { maxItems: 25 }),
     hierarchy_version: version,
     next_cursor: Type.Union([Type.String(), Type.Null()]),
@@ -109,7 +122,15 @@ export const OrganizationPage = Type.Object(
 );
 export type OrganizationPageView = Static<typeof OrganizationPage>;
 export const OrganizationPageInput = Type.Object(
-  { ...PageInput.properties, parent_id: Type.Optional(UUID) },
+  {
+    ...PageInput.properties,
+    ...DirectoryObservationInput.properties,
+    observe: Type.Optional(
+      Type.Literal('1', {
+        description: 'Include a coherent direct-directory observation boundary.',
+      }),
+    ),
+  },
   closed,
 );
 export const ProposalRoute = Type.Object(

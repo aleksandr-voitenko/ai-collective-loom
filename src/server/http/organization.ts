@@ -49,6 +49,18 @@ export function registerOrganization(
     },
     async (request) => service.status(await actor(request), request.body),
   );
+  app.get(
+    '/api/v1/organization/children/observation',
+    {
+      schema: {
+        operationId: 'observeTopicDirectory',
+        querystring: C.DirectoryObservationInput,
+        response: { ...errors, 200: C.DirectoryObservation },
+      },
+    },
+    async (request) =>
+      service.observe(await actor(request), (request.query as { parent_id?: string }).parent_id),
+  );
   for (const kind of ['children', 'destinations'] as const)
     app.get(
       '/api/v1/organization/' + kind,
@@ -63,7 +75,7 @@ export function registerOrganization(
         service.list(
           await actor(request),
           kind,
-          request.query as PageOptions & { parent_id?: string },
+          request.query as PageOptions & { parent_id?: string; observe?: '1' },
         ),
     );
   app.get(
